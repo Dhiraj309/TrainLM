@@ -9,8 +9,7 @@ LOCKFILE_NAME = "lock.json"
 class Store:
     """
     Manages local aipm storage paths.
-
-    Does NOT perform installs or validation.
+    Does NOT perform src/aipm/registry/ or validation.
     Only handles filesystem structure.
     """
 

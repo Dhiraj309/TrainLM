@@ -10,3 +10,4 @@ src/aipm/manifest/errors.py
 src/aipm/manifest/loader.py
 src/aipm/manifest/models.py
 src/aipm/manifest/validator.py
+src/aipm/registry/store.py
