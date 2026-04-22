@@ -1,0 +1,17 @@
+name: http_fetch
+version: 0.1.0
+
+tools:
+  - name: fetch
+    description: Fetch a URL
+    input_schema:
+      type: object
+      properties:
+        url:
+          type: string
+      required: [url]
+
+permissions:
+  network: true
+
+entrypoint: tool.py

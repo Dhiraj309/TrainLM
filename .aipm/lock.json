@@ -3,7 +3,7 @@
     {
       "name": "http_fetch",
       "path": "/content/drive/MyDrive/aipm/.aipm/packages/http_fetch",
-      "source": "github:org/http_fetch",
+      "source": "/content/drive/MyDrive/aipm/packages/builtin/http_fetch",
       "version": "0.1.0"
     }
   ],
