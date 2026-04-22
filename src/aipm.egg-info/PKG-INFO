@@ -1,0 +1,13 @@
+Metadata-Version: 2.4
+Name: aipm
+Version: 0.1.0
+Summary: AI Package Manager: capability runtime and registry for LLM systems
+Author: AIPM Team
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: pyyaml>=6.0
+Requires-Dist: jsonschema>=4.0
+Dynamic: license-file
+
+# aipm
