@@ -1,0 +1,105 @@
+# =========================
+# Python Core
+# =========================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*$py.class
+
+# =========================
+# C extensions
+# =========================
+*.so
+
+# =========================
+# Build / Packaging
+# =========================
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+MANIFEST
+
+# =========================
+# Virtual Environments
+# =========================
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# =========================
+# AIPM (CRITICAL)
+# =========================
+.aipm/               # local capability store (DO NOT COMMIT)
+
+# =========================
+# Installer / Logs
+# =========================
+pip-log.txt
+pip-delete-this-directory.txt
+*.log
+
+# =========================
+# Testing / Coverage
+# =========================
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.cache/
+.mypy_cache/
+.ruff_cache/
+
+# =========================
+# Jupyter / Interactive
+# =========================
+.ipynb_checkpoints/
+
+# =========================
+# OS / Editor Noise
+# =========================
+.DS_Store
+Thumbs.db
+
+# VSCode (optional)
+.vscode/
+
+# =========================
+# Environment Files
+# =========================
+.env
+.envrc
+
+# =========================
+# Python packaging tools
+# =========================
+.pdm-python
+.pdm-build/
+__pypackages__/
+
+# =========================
+# Docs build
+# =========================
+docs/_build/
+site/
+
+# =========================
+# Misc
+# =========================
+*.manifest
+*.spec
+
+# =========================
+# AIPM SAFETY (IMPORTANT)
+# =========================
+# Prevent accidental large/unrelated directories
+drive/
+sample_data/
+
+# Prevent accidental cache nesting anywhere
+**/__pycache__/
