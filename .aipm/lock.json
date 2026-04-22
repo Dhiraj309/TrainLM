@@ -1,0 +1,11 @@
+{
+  "capabilities": [
+    {
+      "name": "http_fetch",
+      "path": "/content/drive/MyDrive/aipm/.aipm/packages/http_fetch",
+      "source": "github:org/http_fetch",
+      "version": "0.1.0"
+    }
+  ],
+  "version": "1"
+}
