@@ -9,8 +9,16 @@ LOCKFILE_NAME = "lock.json"
 class Store:
     """
     Manages local aipm storage paths.
-    Does NOT perform src/aipm/registry/ or validation.
-    Only handles filesystem structure.
+
+    Responsibilities:
+    - Define filesystem layout
+    - Provide paths for packages and lockfile
+    - Ensure required directories exist
+
+    Does NOT:
+    - install packages
+    - validate manifests
+    - resolve dependencies
     """
 
     def __init__(self, root: str | Path = "."):
@@ -28,7 +36,7 @@ class Store:
 
     def package_path(self, name: str) -> Path:
         """
-        Get path to a specific installed package.
+        Path to a specific installed package.
         """
         return self.packages / name
 
