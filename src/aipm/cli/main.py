@@ -1,6 +1,7 @@
 import sys
 
 from aipm.cli.add import run_add
+from aipm.cli.list import run_list
 
 
 def main():
@@ -16,6 +17,10 @@ def main():
             return
 
         run_add(sys.argv[2])
+        return
+
+    if command == "list":
+        run_list()
         return
 
     print(f"Unknown command: {command}")
