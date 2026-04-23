@@ -1,7 +1,6 @@
 import json
-import re
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 
 class ToolCallParseError(Exception):
@@ -15,16 +14,34 @@ class ToolCall:
     arguments: Dict[str, Any]
 
 
-def extract_json_blocks(text: str) -> list[str]:
+def extract_json_blocks(text: str) -> List[str]:
     """
-    Extract candidate JSON objects from text.
+    Extract ALL JSON blocks from text using stack-based parsing.
 
-    This is a heuristic:
-    - finds {...} blocks
-    - does NOT guarantee validity
+    Handles:
+    - nested JSON
+    - multiple JSON objects
+    - noisy model output
     """
-    pattern = r"\{.*?\}"
-    return re.findall(pattern, text, re.DOTALL)
+
+    stack = []
+    start = None
+    candidates = []
+
+    for i, char in enumerate(text):
+        if char == "{":
+            if not stack:
+                start = i
+            stack.append(char)
+
+        elif char == "}":
+            if stack:
+                stack.pop()
+                if not stack and start is not None:
+                    candidates.append(text[start:i + 1])
+                    start = None
+
+    return candidates
 
 
 def try_parse_json(candidate: str) -> Optional[Dict[str, Any]]:
@@ -60,10 +77,18 @@ def parse_tool_call(text: str) -> Optional[ToolCall]:
     """
     Extract a tool call from model output.
 
-    Returns:
-        ToolCall or None (if no valid call found)
+    Strategy:
+    - Extract ALL JSON blocks
+    - Parse each
+    - Return FIRST valid tool-call structure
 
-    Never raises unless something fundamentally breaks.
+    This avoids:
+    - picking inner JSON (like arguments only)
+    - picking incomplete blocks
+    - dependency on size heuristics
+
+    Returns:
+        ToolCall or None
     """
 
     candidates = extract_json_blocks(text)
