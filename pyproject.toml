@@ -3,22 +3,48 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "aipm"
+name = "laughlm"
 version = "0.1.0"
-description = "AI Package Manager: capability runtime and registry for LLM systems"
+description = "Config-driven LLM training system using JAX/Flax and Hugging Face"
 authors = [
-    { name = "AIPM Team" }
+    { name = "LaughLM" }
 ]
 readme = "README.md"
 requires-python = ">=3.10"
 
 dependencies = [
+    # Core
     "pyyaml>=6.0",
-    "jsonschema>=4.0"
+    "pydantic>=2.6",
+
+    # JAX / Flax stack
+    "jax>=0.4.30",
+    "flax>=0.8.0",
+    "optax>=0.2.2",
+
+    # Hugging Face
+    "transformers==4.57.6",
+    "datasets>=2.18.0",
+
+    # Checkpointing
+    "orbax-checkpoint>=0.5.0",
+
+    # Utilities
+    "tqdm>=4.66.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "black>=24.0",
+    "ruff>=0.3.0",
 ]
 
 [project.scripts]
-aipm = "aipm.cli.main:main"
+laughlm-train = "scripts.train:main"
+laughlm-resume = "scripts.resume:main"
+laughlm-eval = "scripts.eval:main"
+laughlm-export = "scripts.export:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
