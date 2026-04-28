@@ -365,4 +365,4 @@ class Trainer:
             f"[eval] loss={_scalar(metrics['loss']):.4f} "
             f"cross_entropy={_scalar(metrics.get('cross_entropy')):.4f} "
             f"z_loss={_scalar(metrics.get('z_loss')):.4f}"
-        )
+            )
