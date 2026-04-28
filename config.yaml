@@ -1,0 +1,55 @@
+model:
+  model_type: llama
+
+  hidden_size: 768
+  num_hidden_layers: 10
+  num_attention_heads: 12
+  num_key_value_heads: 4
+
+  intermediate_size: 3072
+  vocab_size: 49152
+  max_position_embeddings: 2048
+
+optimizer:
+  type: adamw
+  learning_rate: 0.0003
+  beta1: 0.9
+  beta2: 0.95
+  eps: 1e-8
+  weight_decay: 0.1
+  grad_clip: 1.0
+
+scheduler:
+  type: cosine
+  warmup_steps: 1000
+  min_lr_ratio: 0.1
+
+runtime:
+  seq_len: 128
+  micro_batch_per_device: 2
+  gradient_accumulation: 4
+
+  total_tokens: 100000000
+
+  log_interval: 10
+  eval_interval: 100
+
+  checkpoint_interval: 500
+  checkpoint_max_to_keep: 3
+  checkpoint_dir: "checkpoints"
+
+data:
+  sources:
+    - "/root/.cache/huggingface/hub/datasets--LaughTaleAI--LaughLM-Tokenized/snapshots/abd90becc64c1af991c44edb4c13f1410360fcdf/fineweb-edu/fineweb-edu_shard_00000.bin"
+
+parallelism:
+  strategy: pmap
+  compute_dtype: bfloat16
+  param_dtype: bfloat16
+
+hardware:
+  accelerator: gpu
+
+monitoring:
+  tensorboard: false
+  rich_terminal: true

@@ -1,48 +1,55 @@
 from flax import struct
-from typing import Any, Callable
+from typing import Any
 
 import optax
+import jax
 
 
 @struct.dataclass
 class TrainState:
     """
-    Full training state (Flax-compatible, checkpointable).
+    Training state for distributed (pmap) training.
+
+    Notes
+    -----
+    - params / opt_state are replicated across devices
+    - tx is static (not part of pytree)
+    - step is global optimizer step
     """
+
+    # ------------------------------------------------------------
+    # Core state
+    # ------------------------------------------------------------
 
     step: int
 
     params: Any
     opt_state: optax.OptState
 
+    # Optimizer (static, not replicated as pytree node)
     tx: optax.GradientTransformation = struct.field(pytree_node=False)
-    apply_fn: Callable = struct.field(pytree_node=False)
 
+    # RNG
     rng_key: Any
+
+    # Tracking
     tokens_processed: int = 0
 
-    def apply_gradients(self, grads):
-        updates, new_opt_state = self.tx.update(
-            grads,
-            self.opt_state,
-            self.params,
-        )
-
-        new_params = optax.apply_updates(self.params, updates)
-
-        return self.replace(
-            step=self.step + 1,
-            params=new_params,
-            opt_state=new_opt_state,
-        )
+    # ------------------------------------------------------------
+    # Utilities
+    # ------------------------------------------------------------
 
     def update_tokens(self, num_tokens: int):
+        """
+        Update token counter.
+        """
         return self.replace(
             tokens_processed=self.tokens_processed + num_tokens
         )
 
     def next_rng(self):
-        import jax
-
+        """
+        Split RNG safely.
+        """
         new_key, subkey = jax.random.split(self.rng_key)
         return self.replace(rng_key=new_key), subkey
