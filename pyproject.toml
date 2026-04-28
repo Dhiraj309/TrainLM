@@ -16,17 +16,26 @@ dependencies = [
     # ------------------------------------------------------------
     # Core config
     # ------------------------------------------------------------
-    "pyyaml==6.0.3",
-    "pydantic==2.13.2",
+    "pyyaml>=6.0",
+    "pydantic>=2.6,<2.13",
 
     # ------------------------------------------------------------
     # Hugging Face (Flax-compatible)
     # ------------------------------------------------------------
-    "transformers==4.57.6",
+    "transformers>=4.40,<5",
+
+    # ------------------------------------------------------------
+    # JAX ecosystem (NO jax here — install separately!)
+    # ------------------------------------------------------------
+    "jax>=0.4.20",
+    "flax>=0.7.0",
+    "optax>=0.1.7",
+    "numpy>=1.24",
+
     # ------------------------------------------------------------
     # Utilities
     # ------------------------------------------------------------
-    "tqdm==4.67.3",
+    "tqdm>=4.65",
 ]
 
 [project.optional-dependencies]
@@ -45,7 +54,8 @@ dev = [
 # Install manually:
 #
 # TPU (Kaggle / Colab TPU):
-# pip install "jax[tpu]" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
+# pip install -U "jax[tpu]" \
+#   -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
 #
 # GPU (CUDA 12 example):
 # pip install "jax[cuda12]"
