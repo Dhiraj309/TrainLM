@@ -4,7 +4,7 @@ from typing import Iterator, Optional
 
 import numpy as np
 
-from data.dataset import MemmapTokenDataset
+from trainlm.data.dataset import MemmapTokenDataset
 
 
 # ------------------------------------------------------------

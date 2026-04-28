@@ -7,12 +7,12 @@ import jax
 import jax.numpy as jnp
 from flax.training import checkpoints
 
-from config.schema import TrainConfig
-from model.model_factory import build_model
-from train.optimizer import build_optimizer
-from train.scheduler import build_scheduler, compute_total_steps
-from train.step import create_train_step, create_eval_step
-from train.state import TrainState
+from trainlm.config.schema import TrainConfig
+from trainlm.model.model_factory import build_model
+from trainlm.train.optimizer import build_optimizer
+from trainlm.train.scheduler import build_scheduler, compute_total_steps
+from trainlm.train.step import create_train_step, create_eval_step
+from trainlm.train.state import TrainState
 
 
 # ------------------------------------------------------------

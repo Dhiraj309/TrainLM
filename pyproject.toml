@@ -3,34 +3,30 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "laughlm"
+name = "trainlm"
 version = "0.1.0"
 description = "Config-driven LLM training system using JAX/Flax and Hugging Face"
 authors = [
-    { name = "LaughLM" }
+    { name = "TrainLM" }
 ]
 readme = "README.md"
 requires-python = ">=3.10"
 
 dependencies = [
-    # Core
-    "pyyaml>=6.0",
-    "pydantic>=2.6",
+    # ------------------------------------------------------------
+    # Core config
+    # ------------------------------------------------------------
+    "pyyaml==6.0.3",
+    "pydantic==2.13.2",
 
-    # JAX / Flax stack
-    "jax>=0.4.30",
-    "flax>=0.8.0",
-    "optax>=0.2.2",
-
-    # Hugging Face
+    # ------------------------------------------------------------
+    # Hugging Face (Flax-compatible)
+    # ------------------------------------------------------------
     "transformers==4.57.6",
-    "datasets>=2.18.0",
-
-    # Checkpointing
-    "orbax-checkpoint>=0.5.0",
-
+    # ------------------------------------------------------------
     # Utilities
-    "tqdm>=4.66.0",
+    # ------------------------------------------------------------
+    "tqdm==4.67.3",
 ]
 
 [project.optional-dependencies]
@@ -40,11 +36,24 @@ dev = [
     "ruff>=0.3.0",
 ]
 
-[project.scripts]
-laughlm-train = "scripts.train:main"
-laughlm-resume = "scripts.resume:main"
-laughlm-eval = "scripts.eval:main"
-laughlm-export = "scripts.export:main"
+# NOTE:
+# ------------------------------------------------------------
+# JAX / TPU / GPU INSTALLATION (IMPORTANT)
+# ------------------------------------------------------------
+# JAX is NOT included here because it depends on hardware.
+#
+# Install manually:
+#
+# TPU (Kaggle / Colab TPU):
+# pip install "jax[tpu]" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
+#
+# GPU (CUDA 12 example):
+# pip install "jax[cuda12]"
+#
+# CPU:
+# pip install jax
+#
+# ------------------------------------------------------------
 
 [tool.setuptools]
 package-dir = {"" = "src"}

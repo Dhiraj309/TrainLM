@@ -5,7 +5,7 @@ from typing import Any, Dict, Iterator, Optional
 import jax
 import jax.numpy as jnp
 
-from train.state import TrainState
+from trainlm.train.state import TrainState
 
 
 # ------------------------------------------------------------

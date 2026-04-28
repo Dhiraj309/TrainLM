@@ -211,7 +211,7 @@ def build_wsd_scheduler(config, num_devices: int) -> Callable:
 
 def build_scheduler(config, num_devices: int) -> Callable:
     """
-    Build learning-rate schedule from config.
+    Build learning-rate schedule from trainlm.config.
     """
     sched_type = config.scheduler.type
 

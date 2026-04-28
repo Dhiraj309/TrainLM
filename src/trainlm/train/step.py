@@ -4,8 +4,8 @@ import jax
 import jax.numpy as jnp
 import optax
 
-from train.loss import shift_tokens, compute_loss
-from train.state import TrainState
+from trainlm.train.loss import shift_tokens, compute_loss
+from trainlm.train.state import TrainState
 
 
 Params = Any

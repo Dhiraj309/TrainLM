@@ -8,7 +8,7 @@ from transformers import (
     OPTConfig,
 )
 
-from src.registry.model_registry import get_model_class
+from trainlm.registry.model_registry import get_model_class
 
 
 # ------------------------------------------------------------
