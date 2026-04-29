@@ -87,58 +87,21 @@ class Trainer:
 
         self.rng = jax.random.PRNGKey(seed)
 
-        # --------------------------------------------------------
-        # Model
-        # --------------------------------------------------------
-        self.model, params = build_model(
-            model_cfg=config.model,
-            parallel_cfg=config.parallelism,
-            checkpoint_dir=None,
-        )
-
-        # --------------------------------------------------------
-        # Optimizer + scheduler
-        # --------------------------------------------------------
-        self.schedule = build_scheduler(config, num_devices=self.num_devices)
-        self.optimizer = build_optimizer(
-            config.optimizer,
-            self.schedule,
-            params,
-        )
-
-        opt_state = self.optimizer.init(params)
-
-        # --------------------------------------------------------
-        # State
-        # --------------------------------------------------------
-        state = TrainState(
-            step=0,
-            params=params,
-            opt_state=opt_state,
-            tx=self.optimizer,
-            rng_key=self.rng,
-            tokens_processed=0,
-        )
-
-        self.state = _replicate(state, self.devices)
-
-        # --------------------------------------------------------
-        # PMAP steps (CORRECT SIGNATURE)
-        # --------------------------------------------------------
-        self.train_step = create_train_step(
-            model=self.model,
-            grad_accum=config.runtime.gradient_accumulation,
-        )
-
-        self.eval_step = create_eval_step(self.model)
+        # 🔥 LAZY INIT (critical)
+        self.model = None
+        self.state = None
+        self.train_step = None
+        self.eval_step = None
+        self.schedule = None
+        self.optimizer = None
 
         # --------------------------------------------------------
         # Checkpoint
         # --------------------------------------------------------
         self.checkpoint_dir = Path(
             resume_dir or config.runtime.checkpoint_dir
-        ).resolve()   # ✅ THIS LINE
-        
+        ).resolve()
+
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
         self.checkpoint_interval = config.runtime.checkpoint_interval
@@ -151,6 +114,58 @@ class Trainer:
         if not config_path.exists():
             with open(config_path, "w") as f:
                 json.dump(config.model_dump(), f, indent=2)
+
+    # ------------------------------------------------------------
+    # Setup (LAZY INIT)
+    # ------------------------------------------------------------
+
+    def setup(self):
+        print("[setup] building model...")
+
+        self.model, params = build_model(
+            model_cfg=self.config.model,
+            parallel_cfg=self.config.parallelism,
+            checkpoint_dir=None,
+        )
+
+        print("[setup] building optimizer...")
+
+        self.schedule = build_scheduler(
+            self.config,
+            num_devices=self.num_devices,
+        )
+
+        self.optimizer = build_optimizer(
+            self.config.optimizer,
+            self.schedule,
+            params,
+        )
+
+        print("[setup] initializing optimizer state...")
+
+        opt_state = self.optimizer.init(params)
+
+        state = TrainState(
+            step=0,
+            params=params,
+            opt_state=opt_state,
+            tx=self.optimizer,
+            rng_key=self.rng,
+            tokens_processed=0,
+        )
+
+        print("[setup] replicating state...")
+        self.state = _replicate(state, self.devices)
+
+        print("[setup] creating train step...")
+        self.train_step = create_train_step(
+            model=self.model,
+            grad_accum=self.config.runtime.gradient_accumulation,
+        )
+
+        self.eval_step = create_eval_step(self.model)
+
+        print("[setup] done")
 
     # ------------------------------------------------------------
     # Checkpoint
@@ -172,6 +187,10 @@ class Trainer:
     # ------------------------------------------------------------
 
     def train(self, dataloader, num_steps=None):
+
+        # 🔥 ensure setup is called only when needed
+        if self.state is None:
+            self.setup()
 
         cfg = self.config
 
@@ -216,15 +235,9 @@ class Trainer:
 
             step_time = time.time() - step_start
 
-            # ----------------------------------------------------
-            # Throughput
-            # ----------------------------------------------------
             steps_per_sec = 1.0 / step_time
             tokens_per_sec = tokens_per_step * steps_per_sec
 
-            # ----------------------------------------------------
-            # Logging
-            # ----------------------------------------------------
             if int(state.step) % cfg.runtime.log_interval == 0:
 
                 lr = _scalar(self.schedule(int(state.step)))

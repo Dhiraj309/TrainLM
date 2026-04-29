@@ -4,10 +4,10 @@ from typing import List, Union
 
 class MemmapTokenDataset:
     """
-    Frontier-grade memmap dataset:
-    - single contiguous token buffer
-    - fully vectorized sampling
-    - no Python loops in hot path
+    Safe memmap dataset:
+    - NO full concatenation (avoids RAM explosion)
+    - supports multiple shards
+    - mostly vectorized sampling
     """
 
     def __init__(
@@ -20,13 +20,15 @@ class MemmapTokenDataset:
         if isinstance(paths, str):
             paths = [paths]
 
-        # 🔥 concatenate shards ONCE (huge speed win)
-        arrays = [
+        # ✅ keep memmaps separate (NO concatenate)
+        self.arrays = [
             np.memmap(p, dtype=np.uint16, mode="r")
             for p in paths
         ]
 
-        self.tokens = np.concatenate(arrays)
+        self.lengths = [len(a) for a in self.arrays]
+        self.cum_lengths = np.cumsum(self.lengths)
+        self.total_tokens = self.cum_lengths[-1]
 
         self.seq_len = seq_len
         self.batch_size = global_batch_size
@@ -34,26 +36,36 @@ class MemmapTokenDataset:
 
         self._offsets = np.arange(self.seq_len)
 
-        print(f"[dataset] total tokens: {len(self.tokens):,}")
+        print(f"[dataset] total tokens: {self.total_tokens:,}")
         print(f"[dataset] global_batch_size = {self.batch_size:,}")
 
     # ------------------------------------------------------------
-    # Sampling (fully vectorized)
+    # Sampling
     # ------------------------------------------------------------
 
     def sample(self) -> np.ndarray:
         ix = self.rng.integers(
             0,
-            len(self.tokens) - self.seq_len - 1,
+            self.total_tokens - self.seq_len - 1,
             size=self.batch_size,
         )
 
-        indices = ix[:, None] + self._offsets[None, :]
+        batch = np.empty((self.batch_size, self.seq_len), dtype=np.uint16)
 
-        # 🔥 single vectorized gather
-        batch = self.tokens[indices]
+        for i, start in enumerate(ix):
+            shard_idx = np.searchsorted(
+                self.cum_lengths, start, side="right"
+            )
 
-        # no extra copy if already int32-compatible
+            if shard_idx == 0:
+                local_start = start
+            else:
+                local_start = start - self.cum_lengths[shard_idx - 1]
+
+            arr = self.arrays[shard_idx]
+
+            batch[i] = arr[local_start : local_start + self.seq_len]
+
         return batch.astype(np.int32, copy=False)
 
     # ------------------------------------------------------------

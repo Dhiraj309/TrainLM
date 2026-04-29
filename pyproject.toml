@@ -25,12 +25,11 @@ dependencies = [
     "transformers>=4.40,<5",
 
     # ------------------------------------------------------------
-    # JAX ecosystem (NO jax here — install separately!)
+    # JAX ecosystem (JAX NOT INCLUDED — install manually!)
     # ------------------------------------------------------------
-    "jax>=0.4.20",
-    "flax>=0.7.0",
-    "optax>=0.1.7",
-    "numpy>=1.24",
+    # "flax>=0.7.0,<0.8",
+    # "optax>=0.1.7,<0.2",
+    # "numpy>=1.24",
 
     # ------------------------------------------------------------
     # Utilities
@@ -49,19 +48,19 @@ dev = [
 # ------------------------------------------------------------
 # JAX / TPU / GPU INSTALLATION (IMPORTANT)
 # ------------------------------------------------------------
-# JAX is NOT included here because it depends on hardware.
+# JAX is NOT included because it depends on hardware.
 #
-# Install manually:
+# Install AFTER installing this package:
 #
-# TPU (Kaggle / Colab TPU):
-# pip install -U "jax[tpu]" \
-#   -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
+# TPU (Colab / Kaggle TPU):
+#   pip install -U "jax[tpu]" \
+#     -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
 #
 # GPU (CUDA 12 example):
-# pip install "jax[cuda12]"
+#   pip install "jax[cuda12]"
 #
 # CPU:
-# pip install jax
+#   pip install jax
 #
 # ------------------------------------------------------------
 

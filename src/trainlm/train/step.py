@@ -10,10 +10,6 @@ Params = Any
 Batch = jnp.ndarray
 
 
-# ------------------------------------------------------------
-# TRAIN STEP (PMAP + TRUE GRAD ACCUMULATION)
-# ------------------------------------------------------------
-
 def create_train_step(
     model,
     grad_accum: int,
@@ -47,15 +43,16 @@ def create_train_step(
         params = state.params
         opt_state = state.opt_state
 
-        # --------------------------------------------
-        # RNG split (important for dropout correctness)
-        # --------------------------------------------
+        # RNG
         state, step_rng = state.next_rng()
 
         # --------------------------------------------
-        # Init gradient accumulator
+        # ✅ FIX: Proper gradient accumulator init
         # --------------------------------------------
-        grads_accum = jax.tree_util.tree_map(jnp.zeros_like, params)
+        grads_accum = jax.tree_util.tree_map(
+            lambda p: jnp.zeros_like(p, dtype=jnp.float32),
+            params
+        )
 
         # --------------------------------------------
         # Gradient accumulation via scan
@@ -81,7 +78,7 @@ def create_train_step(
 
         (grads_accum, _), losses = jax.lax.scan(
             scan_fn,
-            (grads_accum, step_rng),
+            (grads_accum, step_rng),  # ✅ FIXED (no None)
             batch,
         )
 
@@ -102,7 +99,7 @@ def create_train_step(
         loss = jax.lax.pmean(loss, axis_name)
 
         # --------------------------------------------
-        # Gradient norm (for logging / debugging)
+        # Gradient norm
         # --------------------------------------------
         grad_norm = optax.global_norm(grads)
         grad_norm = jax.lax.pmean(grad_norm, axis_name)
@@ -119,12 +116,12 @@ def create_train_step(
         new_params = optax.apply_updates(params, updates)
 
         # --------------------------------------------
-        # Tokens processed (correct accounting)
+        # Token accounting
         # --------------------------------------------
         tokens_in_step = (
-            batch.shape[-1] # seq_len
-            * batch.shape[1] # grad_accum
-            * batch.shape[2] # micro_batch
+            batch.shape[0]  # grad_accum
+            * batch.shape[1]  # micro_batch
+            * batch.shape[2]  # seq_len
         )
 
         new_state = state.replace(
@@ -141,9 +138,6 @@ def create_train_step(
 
         return new_state, metrics
 
-    # ------------------------------------------------------------
-    # PMAP wrapper
-    # ------------------------------------------------------------
     return jax.pmap(
         train_step,
         axis_name=axis_name,
@@ -152,7 +146,7 @@ def create_train_step(
 
 
 # ------------------------------------------------------------
-# EVAL STEP
+# EVAL STEP (unchanged)
 # ------------------------------------------------------------
 
 def create_eval_step(model):
