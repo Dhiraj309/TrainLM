@@ -183,6 +183,7 @@ Phase 7 — Validation
 
 Planned Project Structure
 
+```text
 src/trainlm/
 ├── model/
 │   ├── config.py
@@ -216,7 +217,7 @@ src/trainlm/
 └── utils/
     ├── dtype.py
     └── mesh.py
-
+```
 ---
 
 Configuration Philosophy
