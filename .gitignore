@@ -103,4 +103,5 @@ sample_data/
 
 # Prevent accidental cache nesting anywhere
 **/__pycache__/
-.aipm/
+
+.env
