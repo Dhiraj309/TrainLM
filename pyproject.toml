@@ -1,24 +1,43 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=69.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "aipm"
+name = "trainlm"
 version = "0.1.0"
-description = "AI Package Manager: capability runtime and registry for LLM systems"
-authors = [
-    { name = "AIPM Team" }
-]
+description = "A research-oriented, production-quality Large Language Model training framework built with PyTorch."
 readme = "README.md"
 requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
 
-dependencies = [
-    "pyyaml>=6.0",
-    "jsonschema>=4.0"
+authors = [
+    { name = "TrainLM Contributors" }
 ]
 
-[project.scripts]
-aipm = "aipm.cli.main:main"
+keywords = [
+    "machine-learning",
+    "deep-learning",
+    "llm",
+    "transformers",
+    "pytorch",
+    "training",
+    "nlp"
+]
+
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence"
+]
+
+dependencies = [
+    "torch>=2.5",
+    "transformers>=4.56",
+]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
