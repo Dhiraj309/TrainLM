@@ -21,6 +21,26 @@ def test_default_embedding_configuration():
     assert config.vocab_size == 32000
     assert config.tie_word_embeddings is True
 
+def test_default_core_architecture():
+    config = TrainLMConfig()
+
+    assert config.hidden_size == 768
+    assert config.num_hidden_layers == 12
+
+
+def test_invalid_hidden_size():
+    import pytest
+
+    with pytest.raises(ValueError):
+        TrainLMConfig(hidden_size=0)
+
+
+def test_invalid_num_hidden_layers():
+    import pytest
+
+    with pytest.raises(ValueError):
+        TrainLMConfig(num_hidden_layers=0)
+
 
 def test_invalid_vocab_size():
     import pytest

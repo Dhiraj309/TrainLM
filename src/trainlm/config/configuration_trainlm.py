@@ -1,6 +1,5 @@
 from transformers import PretrainedConfig
 
-
 class TrainLMConfig(PretrainedConfig):
     """
     Configuration class for TrainLM.
@@ -11,7 +10,14 @@ class TrainLMConfig(PretrainedConfig):
     """
 
     model_type = "trainlm"
-    def __init__(self, vocab_size: int = 32000, tie_word_embeddings: bool = True, **kwargs) -> None:
+    def __init__(
+        self,
+        vocab_size: int = 32000,
+        tie_word_embeddings: bool = True,
+        hidden_size: int = 768,
+        num_hidden_layers: int = 12,
+        **kwargs
+    ) -> None:
         super().__init__(tie_word_embeddings=tie_word_embeddings ,**kwargs)
 
         if vocab_size <= 0:
@@ -20,4 +26,12 @@ class TrainLMConfig(PretrainedConfig):
         if not tie_word_embeddings:
             raise ValueError(f"TrainLM v1 requires 'tie_world_embeddings=True'.")
 
+        if hidden_size <= 0:
+            raise ValueError(f"hidden_size must be greater than 0, got {hidden_size}.")
+
+        if num_hidden_layers <= 0:
+            raise ValueError(f"num_hidden_layers must be greater than 0, got {num_hidden_layers}.")
+
         self.vocab_size=vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
