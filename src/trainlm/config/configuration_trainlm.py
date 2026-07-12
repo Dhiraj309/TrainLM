@@ -11,5 +11,13 @@ class TrainLMConfig(PretrainedConfig):
     """
 
     model_type = "trainlm"
-    def __init__(self, **kwargs) -> None:
-        super().__init__(**kwargs)
+    def __init__(self, vocab_size: int = 32000, tie_word_embeddings: bool = True, **kwargs) -> None:
+        super().__init__(tie_word_embeddings=tie_word_embeddings ,**kwargs)
+
+        if vocab_size <= 0:
+            raise ValueError(f"vocab_size must be greater than 0, got {vocab_size}.")
+
+        if not tie_word_embeddings:
+            raise ValueError(f"TrainLM v1 requires 'tie_world_embeddings=True'.")
+
+        self.vocab_size=vocab_size
