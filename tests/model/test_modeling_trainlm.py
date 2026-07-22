@@ -138,3 +138,48 @@ def test_input_validation():
 
     with pytest.raises(ValueError):
         model()
+
+
+from transformers.modeling_outputs import CausalLMOutputWithPast
+
+from trainlm.config import TrainLMConfig
+from trainlm.model import TrainLMForCausalLM
+
+
+def test_causal_lm_construction():
+    config = TrainLMConfig()
+
+    model = TrainLMForCausalLM(config)
+
+    assert model.model is not None
+    assert model.lm_head is not None
+
+
+def test_causal_lm_forward():
+    config = TrainLMConfig()
+
+    model = TrainLMForCausalLM(config)
+
+    input_ids = torch.randint(
+        0,
+        config.vocab_size,
+        (2, 8),
+    )
+
+    outputs = model(input_ids=input_ids)
+
+    assert isinstance(outputs, CausalLMOutputWithPast)
+
+    assert outputs.logits.shape == (
+        2,
+        8,
+        config.vocab_size,
+    )
+
+
+def test_output_embeddings():
+    config = TrainLMConfig()
+
+    model = TrainLMForCausalLM(config)
+
+    assert model.get_output_embeddings() is model.lm_head
