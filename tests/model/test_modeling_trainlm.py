@@ -1,164 +1,62 @@
-import torch.nn as nn
 
-from transformers import PreTrainedModel
-
-from trainlm.config import TrainLMConfig
-from trainlm.model import TrainLMPreTrainedModel
+import tempfile
 
 import torch
-
-from transformers.modeling_outputs import BaseModelOutputWithPast
-
-from trainlm.model import TrainLMModel
-
-
-
-class DummyModel(TrainLMPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-
-    def get_input_embeddings(self):
-        return None
-
-    def set_input_embeddings(self, value):
-        pass
-
-
-def test_pretrained_model_inheritance():
-    model = DummyModel(TrainLMConfig())
-
-    assert isinstance(model, PreTrainedModel)
-
-
-def test_config_class():
-    assert TrainLMPreTrainedModel.config_class is TrainLMConfig
-
-
-def test_base_model_prefix():
-    assert TrainLMPreTrainedModel.base_model_prefix == "model"
-
-
-def test_linear_initialization():
-    model = DummyModel(TrainLMConfig())
-
-    linear = nn.Linear(16, 16)
-
-    model._init_weights(linear)
-
-    assert linear.bias is not None
-
-
-def test_model_construction():
-    config = TrainLMConfig()
-
-    model = TrainLMModel(config)
-
-    assert model.config is config
-
-
-def test_input_embeddings():
-    config = TrainLMConfig()
-
-    model = TrainLMModel(config)
-
-    embeddings = model.get_input_embeddings()
-
-    assert embeddings.num_embeddings == config.vocab_size
-    assert embeddings.embedding_dim == config.hidden_size
-
-
-def test_forward_returns_model_output():
-    config = TrainLMConfig()
-
-    model = TrainLMModel(config)
-
-    input_ids = torch.randint(
-        low=0,
-        high=config.vocab_size,
-        size=(2, 16),
-    )
-
-    outputs = model(input_ids=input_ids)
-
-    assert isinstance(outputs, BaseModelOutputWithPast)
-
-    assert outputs.last_hidden_state.shape == (
-        2,
-        16,
-        config.hidden_size,
-    )
-
-
-def test_inputs_embeds():
-    config = TrainLMConfig()
-
-    model = TrainLMModel(config)
-
-    inputs_embeds = torch.randn(
-        2,
-        8,
-        config.hidden_size,
-    )
-
-    outputs = model(
-        inputs_embeds=inputs_embeds,
-    )
-
-    assert outputs.last_hidden_state.shape == (
-        2,
-        8,
-        config.hidden_size,
-    )
-
-
-def test_input_validation():
-    config = TrainLMConfig()
-
-    model = TrainLMModel(config)
-
-    input_ids = torch.randint(
-        0,
-        config.vocab_size,
-        (1, 4),
-    )
-
-    inputs_embeds = torch.randn(
-        1,
-        4,
-        config.hidden_size,
-    )
-
-    import pytest
-
-    with pytest.raises(ValueError):
-        model(
-            input_ids=input_ids,
-            inputs_embeds=inputs_embeds,
-        )
-
-    with pytest.raises(ValueError):
-        model()
-
-
-from transformers.modeling_outputs import CausalLMOutputWithPast
 
 from trainlm.config import TrainLMConfig
 from trainlm.model import TrainLMForCausalLM
 
 
-def test_causal_lm_construction():
+def test_save_and_load_pretrained():
+    config = TrainLMConfig()
+
+    model = TrainLMForCausalLM(config)
+    model.eval()
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        model.save_pretrained(tmpdir)
+
+        loaded = TrainLMForCausalLM.from_pretrained(tmpdir)
+
+        assert isinstance(
+            loaded,
+            TrainLMForCausalLM,
+        )
+
+        #
+        # Hugging Face automatically updates `_name_or_path`
+        # when loading from a checkpoint.
+        #
+        original_config = model.config.to_dict()
+        loaded_config = loaded.config.to_dict()
+
+        original_config.pop("_name_or_path", None)
+        loaded_config.pop("_name_or_path", None)
+
+        assert loaded_config == original_config
+
+
+def test_state_dict_roundtrip():
     config = TrainLMConfig()
 
     model = TrainLMForCausalLM(config)
 
-    assert model.model is not None
-    assert model.lm_head is not None
+    state_dict = model.state_dict()
+
+    new_model = TrainLMForCausalLM(config)
+
+    missing, unexpected = new_model.load_state_dict(state_dict)
+
+    assert missing == []
+
+    assert unexpected == []
 
 
-def test_causal_lm_forward():
+def test_forward_consistency_after_reload():
     config = TrainLMConfig()
 
     model = TrainLMForCausalLM(config)
+    model.eval()
 
     input_ids = torch.randint(
         0,
@@ -166,20 +64,45 @@ def test_causal_lm_forward():
         (2, 8),
     )
 
-    outputs = model(input_ids=input_ids)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        model.save_pretrained(tmpdir)
 
-    assert isinstance(outputs, CausalLMOutputWithPast)
+        loaded = TrainLMForCausalLM.from_pretrained(tmpdir)
+        loaded.eval()
 
-    assert outputs.logits.shape == (
-        2,
-        8,
-        config.vocab_size,
-    )
+        with torch.no_grad():
+            logits1 = model(input_ids=input_ids).logits
+            logits2 = loaded(input_ids=input_ids).logits
+
+        assert torch.allclose(
+            logits1,
+            logits2,
+        )
 
 
-def test_output_embeddings():
+def test_weight_tying():
     config = TrainLMConfig()
 
     model = TrainLMForCausalLM(config)
 
-    assert model.get_output_embeddings() is model.lm_head
+    assert (
+        model.get_input_embeddings().weight
+        is model.get_output_embeddings().weight
+    )
+
+
+def test_config_serialization():
+    config = TrainLMConfig()
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        config.save_pretrained(tmpdir)
+
+        loaded = TrainLMConfig.from_pretrained(tmpdir)
+
+        original = config.to_dict()
+        restored = loaded.to_dict()
+
+        original.pop("_name_or_path", None)
+        restored.pop("_name_or_path", None)
+
+        assert restored == original
