@@ -5,6 +5,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 from transformers import PreTrainedModel
+from transformers.modeling_outputs import BaseModelOutputWithPast
 
 from trainlm.config import TrainLMConfig
 
@@ -101,3 +102,132 @@ class TrainLMPreTrainedModel(PreTrainedModel):
         TrainLMForCausalLM overrides this.
         """
         raise NotImplementedError
+
+class TrainLMModel(TrainLMPreTrainedModel):
+    """
+    Bare TrainLM decoder.
+
+    This class contains the decoder backbone without a language modeling
+    head. It is analogous to `LlamaModel` in the Transformers library.
+
+    Returns hidden states only.
+    """
+
+    def __init__(self, config: TrainLMConfig):
+        super().__init__(config)
+
+        self.padding_idx = getattr(config, "pad_token_id", None)
+        self.vocab_size = config.vocab_size
+
+        #
+        # Token embeddings
+        #
+        self.embed_tokens = nn.Embedding(
+            num_embeddings=config.vocab_size,
+            embedding_dim=config.hidden_size,
+            padding_idx=self.padding_idx,
+        )
+
+        #
+        # Decoder layers.
+        #
+        # M3 will populate this with TrainLMDecoderLayer instances.
+        #
+        self.layers = nn.ModuleList()
+
+        #
+        # Final normalization.
+        #
+        # Placeholder until RMSNorm is implemented.
+        #
+        self.norm = nn.Identity()
+
+        #
+        # HF gradient checkpointing flag.
+        #
+        self.gradient_checkpointing = False
+
+        #
+        # Initialize weights.
+        #
+        self.post_init()
+
+    #
+    # Embedding API
+    #
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.embed_tokens
+
+    def set_input_embeddings(self, value: nn.Module) -> None:
+        self.embed_tokens = value
+
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_values=None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs,
+    ):
+        """
+        Forward pass.
+
+        Transformer layers will be implemented in M3.
+        """
+
+        del (
+            attention_mask,
+            position_ids,
+            past_key_values,
+            use_cache,
+            output_attentions,
+            output_hidden_states,
+            cache_position,
+            kwargs,
+        )
+
+        return_dict = (
+            return_dict
+            if return_dict is not None
+            else self.config.use_return_dict
+        )
+
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError(
+                "Only one of 'input_ids' or 'inputs_embeds' may be provided."
+            )
+
+        if input_ids is None and inputs_embeds is None:
+            raise ValueError(
+                "Either 'input_ids' or 'inputs_embeds' must be provided."
+            )
+
+        if inputs_embeds is None:
+            hidden_states = self.embed_tokens(input_ids)
+        else:
+            hidden_states = inputs_embeds
+
+        #
+        # Placeholder decoder.
+        #
+        for layer in self.layers:
+            hidden_states = layer(hidden_states)
+
+        hidden_states = self.norm(hidden_states)
+
+        if not return_dict:
+            return (hidden_states,)
+
+        return BaseModelOutputWithPast(
+            last_hidden_state=hidden_states,
+            past_key_values=None,
+            hidden_states=None,
+            attentions=None,
+        )
