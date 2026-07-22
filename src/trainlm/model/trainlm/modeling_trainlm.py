@@ -5,7 +5,10 @@ from typing import Optional
 import torch
 import torch.nn as nn
 from transformers import PreTrainedModel
-from transformers.modeling_outputs import BaseModelOutputWithPast
+from transformers.modeling_outputs import (
+    BaseModelOutputWithPast,
+    CausalLMOutputWithPast,
+)
 
 from trainlm.config import TrainLMConfig
 
@@ -230,4 +233,118 @@ class TrainLMModel(TrainLMPreTrainedModel):
             past_key_values=None,
             hidden_states=None,
             attentions=None,
+        )
+
+class TrainLMForCausalLM(TrainLMPreTrainedModel):
+    """
+    TrainLM Model with a causal language modeling head.
+
+    This class wraps TrainLMModel with an output projection suitable for
+    autoregressive language modeling.
+    """
+
+    _tied_weights_keys = {
+        "lm_head.weight": "model.embed_tokens.weight",
+    }
+    def __init__(self, config: TrainLMConfig):
+        super().__init__(config)
+
+        self.model = TrainLMModel(config)
+
+        self.vocab_size = config.vocab_size
+
+        self.lm_head = nn.Linear(
+            config.hidden_size,
+            config.vocab_size,
+            bias=False,
+        )
+
+        self.post_init()
+
+    #
+    # Backbone
+    #
+
+    def get_input_embeddings(self):
+        return self.model.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.model.set_input_embeddings(value)
+
+    #
+    # Output head
+    #
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
+
+    def get_decoder(self):
+        return self.model
+
+    def set_decoder(self, decoder):
+        self.model = decoder
+
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        position_ids=None,
+        past_key_values=None,
+        inputs_embeds=None,
+        labels=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        cache_position=None,
+        **kwargs,
+    ):
+        return_dict = (
+            return_dict
+            if return_dict is not None
+            else self.config.use_return_dict
+        )
+
+        outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            cache_position=cache_position,
+            **kwargs,
+        )
+
+        hidden_states = outputs.last_hidden_state
+
+        logits = self.lm_head(hidden_states)
+
+        logits = logits.float()
+
+        #
+        # Loss will be implemented in the next commit.
+        #
+        loss = None
+
+        if labels is not None:
+            raise NotImplementedError(
+                "Causal language modeling loss will be implemented in the next milestone."
+            )
+
+        if not return_dict:
+            return (logits,) + outputs[1:]
+
+        return CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )

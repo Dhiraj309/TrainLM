@@ -1,4 +1,5 @@
 from .trainlm import (
+    TrainLMForCausalLM,
     TrainLMModel,
     TrainLMPreTrainedModel,
 )
@@ -6,4 +7,5 @@ from .trainlm import (
 __all__ = [
     "TrainLMPreTrainedModel",
     "TrainLMModel",
+    "TrainLMForCausalLM",
 ]
