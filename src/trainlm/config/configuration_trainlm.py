@@ -13,6 +13,9 @@ class TrainLMConfig(PretrainedConfig):
 
     model_type = "trainlm"
 
+    head_dim: int
+    num_key_value_groups: int
+
     def __init__(
         self,
         # ------------------------------------------------------------------
@@ -31,6 +34,7 @@ class TrainLMConfig(PretrainedConfig):
         num_attention_heads: int = 12,
         num_key_value_heads: int = 4,
         attention_bias: bool = False,
+        attention_dropout: float = 0.0,
         # ------------------------------------------------------------------
         # Feed-Forward Network
         # ------------------------------------------------------------------
@@ -68,6 +72,7 @@ class TrainLMConfig(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
         self.attention_bias = attention_bias
+        self.attention_dropout = attention_dropout
 
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
@@ -81,6 +86,16 @@ class TrainLMConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
 
         self._validate()
+
+        self.head_dim = (
+            self.hidden_size //
+            self.num_attention_heads
+        )
+
+        self.num_key_value_groups = (
+            self.num_attention_heads //
+            self.num_key_value_heads
+        )
 
     def _validate(self) -> None:
         """Validate configuration values."""
@@ -114,6 +129,11 @@ class TrainLMConfig(PretrainedConfig):
         if self.initializer_range <= 0:
             raise ValueError(
                 "'initializer_range' must be greater than 0."
+            )
+
+        if not 0.0 <= self.attention_dropout <= 1.0:
+            raise ValueError(
+                "'attention_dropout' must be between 0.0 and 1.0."
             )
 
         if self.hidden_size % self.num_attention_heads != 0:
