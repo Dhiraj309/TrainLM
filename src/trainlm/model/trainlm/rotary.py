@@ -20,10 +20,9 @@ class TrainLMRotaryEmbedding(nn.Module):
     - Implements the original RoPE formulation.
     - Computes trigonometric functions in FP32 for numerical stability.
     - Returns outputs cast back to the input dtype.
-    - Stores only the inverse frequencies as a non-persistent buffer.
+    - Recomputes inverse frequencies from the configuration each forward
+      instead of storing them as a buffer.
     """
-
-    inv_freq: torch.Tensor
 
     def __init__(
         self,
@@ -31,26 +30,8 @@ class TrainLMRotaryEmbedding(nn.Module):
     ) -> None:
         super().__init__()
 
-        head_dim = config.head_dim
-
-        inv_freq = 1.0 / (
-            config.rope_theta
-            ** (
-                torch.arange(
-                    0,
-                    head_dim,
-                    2,
-                    dtype=torch.float32,
-                )
-                / head_dim
-            )
-        )
-
-        self.register_buffer(
-            "inv_freq",
-            inv_freq,
-            persistent=False,
-        )
+        self.head_dim = config.head_dim
+        self.rope_theta = config.rope_theta
 
     @torch.no_grad()
     def forward(
@@ -86,12 +67,28 @@ class TrainLMRotaryEmbedding(nn.Module):
                 (batch_size, 1, sequence_length, head_dim)
         """
 
-        inv_freq = self.inv_freq.float().unsqueeze(0).unsqueeze(-1)
+        inv_freq = 1.0 / (
+            self.rope_theta
+            ** (
+                torch.arange(
+                    0,
+                    self.head_dim,
+                    2,
+                    device=x.device,
+                    dtype=torch.float32,
+                )
+                / self.head_dim
+            )
+        )
 
-        position_ids = position_ids.float().unsqueeze(1)
+        inv_freq = inv_freq.unsqueeze(0).unsqueeze(-1)
+
+        position_ids = position_ids.to(
+            device=x.device,
+            dtype=torch.float32,
+        ).unsqueeze(1)
 
         freqs = torch.matmul(inv_freq, position_ids)
-
         freqs = freqs.transpose(1, 2)
 
         emb = torch.cat(
@@ -99,9 +96,7 @@ class TrainLMRotaryEmbedding(nn.Module):
             dim=-1,
         ).unsqueeze(1)
 
-        cos, sin = emb.cos(), emb.sin()
+        cos = emb.cos().to(dtype=x.dtype)
+        sin = emb.sin().to(dtype=x.dtype)
 
-        return (
-            cos.to(dtype=x.dtype),
-            sin.to(dtype=x.dtype),
-        )
+        return cos, sin

@@ -4,6 +4,7 @@ from typing import Optional
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from transformers import PreTrainedModel
 from transformers.modeling_outputs import (
     BaseModelOutputWithPast,
@@ -11,6 +12,19 @@ from transformers.modeling_outputs import (
 )
 
 from trainlm.config import TrainLMConfig
+
+from .decoder import TrainLMDecoderLayer
+
+
+def _assert_finite(
+    tensor: torch.Tensor,
+    name: str,
+) -> None:
+    """
+    Raise an error if a floating-point tensor contains non-finite values.
+    """
+    if torch.is_floating_point(tensor) and not torch.isfinite(tensor).all():
+        raise RuntimeError(f"Non-finite values detected in {name}.")
 
 
 class TrainLMPreTrainedModel(PreTrainedModel):
@@ -31,7 +45,7 @@ class TrainLMPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
 
     supports_gradient_checkpointing = True
-    _no_split_modules = []
+    _no_split_modules: list[str] = ["TrainLMDecoderLayer"]
     _supports_flash_attn_2 = False
 
     def _init_weights(self, module: nn.Module) -> None:
@@ -106,6 +120,7 @@ class TrainLMPreTrainedModel(PreTrainedModel):
         """
         raise NotImplementedError
 
+
 class TrainLMModel(TrainLMPreTrainedModel):
     """
     Bare TrainLM decoder.
@@ -116,43 +131,36 @@ class TrainLMModel(TrainLMPreTrainedModel):
     Returns hidden states only.
     """
 
+    embed_tokens: nn.Embedding
+    layers: nn.ModuleList
+    norm: nn.RMSNorm
+
     def __init__(self, config: TrainLMConfig):
         super().__init__(config)
 
         self.padding_idx = getattr(config, "pad_token_id", None)
         self.vocab_size = config.vocab_size
+        self.hidden_size = config.hidden_size
+        self.num_hidden_layers = config.num_hidden_layers
 
-        #
-        # Token embeddings
-        #
         self.embed_tokens = nn.Embedding(
-            num_embeddings=config.vocab_size,
-            embedding_dim=config.hidden_size,
+            num_embeddings=self.vocab_size,
+            embedding_dim=self.hidden_size,
             padding_idx=self.padding_idx,
         )
 
-        #
-        # Decoder layers.
-        #
-        # M3 will populate this with TrainLMDecoderLayer instances.
-        #
-        self.layers = nn.ModuleList()
+        self.layers = nn.ModuleList(
+            TrainLMDecoderLayer(config)
+            for _ in range(self.num_hidden_layers)
+        )
 
-        #
-        # Final normalization.
-        #
-        # Placeholder until RMSNorm is implemented.
-        #
-        self.norm = nn.Identity()
+        self.norm = nn.RMSNorm(
+            self.hidden_size,
+            eps=config.rms_norm_eps,
+        )
 
-        #
-        # HF gradient checkpointing flag.
-        #
         self.gradient_checkpointing = False
 
-        #
-        # Initialize weights.
-        #
         self.post_init()
 
     #
@@ -162,7 +170,10 @@ class TrainLMModel(TrainLMPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.embed_tokens
 
-    def set_input_embeddings(self, value: nn.Module) -> None:
+    def set_input_embeddings(
+        self,
+        value: nn.Module,
+    ) -> None:
         self.embed_tokens = value
 
     def forward(
@@ -186,8 +197,6 @@ class TrainLMModel(TrainLMPreTrainedModel):
         """
 
         del (
-            attention_mask,
-            position_ids,
             past_key_values,
             use_cache,
             output_attentions,
@@ -217,13 +226,31 @@ class TrainLMModel(TrainLMPreTrainedModel):
         else:
             hidden_states = inputs_embeds
 
-        #
-        # Placeholder decoder.
-        #
-        for layer in self.layers:
-            hidden_states = layer(hidden_states)
+        _assert_finite(hidden_states, "model.embed_tokens")
+
+        batch_size, sequence_length = hidden_states.shape[:2]
+
+        if position_ids is None:
+            position_ids = (
+                torch.arange(
+                    sequence_length,
+                    device=hidden_states.device,
+                    dtype=torch.long,
+                )
+                .unsqueeze(0)
+                .expand(batch_size, sequence_length)
+            )
+
+        for layer_idx, layer in enumerate(self.layers):
+            hidden_states = layer(
+                hidden_states,
+                position_ids,
+                attention_mask,
+            )
+            _assert_finite(hidden_states, f"model.layer_{layer_idx}")
 
         hidden_states = self.norm(hidden_states)
+        _assert_finite(hidden_states, "model.norm")
 
         if not return_dict:
             return (hidden_states,)
@@ -234,6 +261,7 @@ class TrainLMModel(TrainLMPreTrainedModel):
             hidden_states=None,
             attentions=None,
         )
+
 
 class TrainLMForCausalLM(TrainLMPreTrainedModel):
     """
@@ -246,6 +274,10 @@ class TrainLMForCausalLM(TrainLMPreTrainedModel):
     _tied_weights_keys = {
         "lm_head.weight": "model.embed_tokens.weight",
     }
+
+    model: TrainLMModel
+    lm_head: nn.Linear
+
     def __init__(self, config: TrainLMConfig):
         super().__init__(config)
 
@@ -323,23 +355,31 @@ class TrainLMForCausalLM(TrainLMPreTrainedModel):
         )
 
         hidden_states = outputs.last_hidden_state
+        _assert_finite(hidden_states, "causal_lm.hidden_states")
 
         logits = self.lm_head(hidden_states)
-
         logits = logits.float()
+        _assert_finite(logits, "causal_lm.logits")
 
-        #
-        # Loss will be implemented in the next commit.
-        #
         loss = None
 
         if labels is not None:
-            raise NotImplementedError(
-                "Causal language modeling loss will be implemented in the next milestone."
+            shift_logits = logits[..., :-1, :].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
+
+            loss = F.cross_entropy(
+                shift_logits.view(-1, self.vocab_size),
+                shift_labels.view(-1),
+                ignore_index=-100,
             )
 
         if not return_dict:
-            return (logits,) + outputs[1:]
+            output = (logits,) + outputs[1:]
+
+            if loss is not None:
+                return (loss,) + output
+
+            return output
 
         return CausalLMOutputWithPast(
             loss=loss,
