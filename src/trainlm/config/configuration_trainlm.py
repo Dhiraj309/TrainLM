@@ -22,6 +22,9 @@ class TrainLMConfig(PretrainedConfig):
         # Vocabulary & Embeddings
         # ------------------------------------------------------------------
         vocab_size: int = 32000,
+        pad_token_id: int | None = None,
+        bos_token_id: int = 1,
+        eos_token_id: int = 2,
         tie_word_embeddings: bool = True,
         # ------------------------------------------------------------------
         # Core Architecture
@@ -40,6 +43,7 @@ class TrainLMConfig(PretrainedConfig):
         # ------------------------------------------------------------------
         intermediate_size: int = 3072,
         hidden_act: str = "silu",
+        mlp_bias: bool = False,
         # ------------------------------------------------------------------
         # Normalization
         # ------------------------------------------------------------------
@@ -59,30 +63,58 @@ class TrainLMConfig(PretrainedConfig):
         **kwargs,
     ) -> None:
         super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
 
+        #
+        # Vocabulary
+        #
         self.vocab_size = vocab_size
         self.tie_word_embeddings = tie_word_embeddings
 
+        #
+        # Architecture
+        #
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
 
+        #
+        # Attention
+        #
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
 
+        #
+        # Feed-forward
+        #
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
+        self.mlp_bias = mlp_bias
 
+        #
+        # Normalization
+        #
         self.rms_norm_eps = rms_norm_eps
 
+        #
+        # RoPE
+        #
         self.rope_theta = rope_theta
 
+        #
+        # Initialization
+        #
         self.initializer_range = initializer_range
 
+        #
+        # Sequence length
+        #
         self.max_position_embeddings = max_position_embeddings
 
         self._validate()
@@ -160,6 +192,11 @@ class TrainLMConfig(PretrainedConfig):
         if self.attention_bias:
             raise ValueError(
                 "TrainLM v1 uses bias-free attention projections."
+            )
+
+        if self.mlp_bias:
+            raise ValueError(
+                "TrainLM v1 uses bias-free feed-forward projections."
             )
 
         if self.hidden_act != "silu":

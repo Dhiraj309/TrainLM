@@ -10,6 +10,30 @@ from trainlm.config import TrainLMConfig
 from .rotary import TrainLMRotaryEmbedding
 
 
+def _assert_finite(
+    tensor: torch.Tensor,
+    name: str,
+) -> None:
+    """
+    Raise an error if a floating-point tensor contains non-finite values.
+    """
+    if not torch.is_floating_point(tensor):
+        return
+
+    mask = ~torch.isfinite(tensor)
+
+    if mask.any():
+        idx = mask.nonzero(as_tuple=False)[0].tolist()
+
+        raise RuntimeError(
+            f"{name} contains a non-finite value.\n"
+            f"First bad index: {idx}\n"
+            f"Value: {tensor[tuple(idx)]}\n"
+            f"Shape: {tuple(tensor.shape)}\n"
+            f"Dtype: {tensor.dtype}"
+        )
+
+
 def _repeat_kv(
     hidden_states: torch.Tensor,
     num_repeats: int,
@@ -220,14 +244,17 @@ class TrainLMAttention(nn.Module):
         query_states = self.q_proj(
             hidden_states,
         )
+        _assert_finite(query_states, "attention.q_proj")
 
         key_states = self.k_proj(
             hidden_states,
         )
+        _assert_finite(key_states, "attention.k_proj")
 
         value_states = self.v_proj(
             hidden_states,
         )
+        _assert_finite(value_states, "attention.v_proj")
 
         query_states = query_states.view(
             batch_size,
@@ -254,6 +281,8 @@ class TrainLMAttention(nn.Module):
             query_states,
             position_ids,
         )
+        _assert_finite(cos, "attention.rotary.cos")
+        _assert_finite(sin, "attention.rotary.sin")
 
         query_states, key_states = _apply_rotary_pos_emb(
             query_states,
@@ -261,12 +290,13 @@ class TrainLMAttention(nn.Module):
             cos,
             sin,
         )
+        _assert_finite(query_states, "attention.rotary.query")
+        _assert_finite(key_states, "attention.rotary.key")
 
         key_states = _repeat_kv(
             key_states,
             self.num_key_value_groups,
         )
-
         value_states = _repeat_kv(
             value_states,
             self.num_key_value_groups,
@@ -284,6 +314,7 @@ class TrainLMAttention(nn.Module):
             ),
             is_causal=attention_mask is None,
         )
+        _assert_finite(attn_output, "attention.sdpa")
 
         attn_output = (
             attn_output.transpose(1, 2)
@@ -297,5 +328,6 @@ class TrainLMAttention(nn.Module):
         attn_output = self.o_proj(
             attn_output,
         )
+        _assert_finite(attn_output, "attention.o_proj")
 
         return attn_output

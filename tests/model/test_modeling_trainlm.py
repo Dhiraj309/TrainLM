@@ -70,9 +70,72 @@ def test_forward_consistency_after_reload():
         loaded = TrainLMForCausalLM.from_pretrained(tmpdir)
         loaded.eval()
 
+        #
+        # ------------------------------------------------------------------
+        # Configuration diagnostics
+        # ------------------------------------------------------------------
+        #
+        print("\n=== CONFIG ===")
+        print("Original head_dim:       ", model.config.head_dim)
+        print("Loaded head_dim:         ", loaded.config.head_dim)
+
+        print("Original kv groups:      ", model.config.num_key_value_groups)
+        print("Loaded kv groups:        ", loaded.config.num_key_value_groups)
+
+        print("Original rope_theta:     ", model.config.rope_theta)
+        print("Loaded rope_theta:       ", loaded.config.rope_theta)
+
+        print("Original hidden_size:    ", model.config.hidden_size)
+        print("Loaded hidden_size:      ", loaded.config.hidden_size)
+
+        print("Original num_heads:      ", model.config.num_attention_heads)
+        print("Loaded num_heads:        ", loaded.config.num_attention_heads)
+
+        print("Original num_kv_heads:   ", model.config.num_key_value_heads)
+        print("Loaded num_kv_heads:     ", loaded.config.num_key_value_heads)
+
+        #
+        # ------------------------------------------------------------------
+        # Parameter diagnostics
+        # ------------------------------------------------------------------
+        #
+        state1 = model.state_dict()
+        state2 = loaded.state_dict()
+
+        mismatch_found = False
+
+        for name in state1:
+            if not torch.allclose(state1[name], state2[name]):
+                mismatch_found = True
+
+                diff = (state1[name] - state2[name]).abs()
+
+                print("\n=== PARAMETER MISMATCH ===")
+                print(name)
+                print("Shape:", tuple(state1[name].shape))
+                print("Max abs diff:", diff.max().item())
+                print("Mean abs diff:", diff.mean().item())
+
+                break
+
+        if not mismatch_found:
+            print("\nAll parameters and persistent buffers are identical.")
+
+        #
+        # ------------------------------------------------------------------
+        # Forward
+        # ------------------------------------------------------------------
+        #
         with torch.no_grad():
             logits1 = model(input_ids=input_ids).logits
             logits2 = loaded(input_ids=input_ids).logits
+
+        if not torch.allclose(logits1, logits2):
+            diff = (logits1 - logits2).abs()
+
+            print("\n=== LOGITS ===")
+            print("Max abs diff:", diff.max().item())
+            print("Mean abs diff:", diff.mean().item())
 
         assert torch.allclose(
             logits1,
