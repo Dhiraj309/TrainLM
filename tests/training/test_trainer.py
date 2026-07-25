@@ -126,3 +126,27 @@ def test_custom_loss_function():
 
     assert trainer.state.step == 1
     assert trainer.state.loss is not None
+
+def test_current_learning_rate():
+    trainer = create_trainer()
+
+    assert trainer._current_learning_rate() == 0.1
+
+
+def test_update_state():
+    trainer = create_trainer()
+
+    batch = {
+        "input_ids": torch.randn(2, 4),
+    }
+
+    loss = torch.tensor(2.5)
+
+    trainer._update_state(
+        batch=batch,
+        loss=loss,
+    )
+
+    assert trainer.state.step == 1
+    assert trainer.state.loss == 2.5
+    assert trainer.state.learning_rate == 0.1

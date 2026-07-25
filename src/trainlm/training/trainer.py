@@ -135,6 +135,56 @@ class Trainer:
         self.state.loss = loss.detach().item()
         self.state.learning_rate = self.scheduler.get_last_lr()[0]
 
+    def _current_learning_rate(self) -> float:
+        """Return the current learning rate."""
+
+        return self.scheduler.get_last_lr()[0]
+
+    def _update_state(
+        self,
+        *,
+        batch: Any,
+        loss: torch.Tensor,
+    ) -> None:
+        """Update trainer state after a completed optimization step."""
+
+        del batch
+
+        self.state.step += 1
+        self.state.loss = loss.detach().item()
+        self.state.learning_rate = self._current_learning_rate()
+
+    def _train_step(self) -> None:
+        batch = self._next_batch()
+
+        self.runtime.zero_grad(self.optimizer)
+
+        loss = self.loss_fn(
+            self.model,
+            batch,
+            self.runtime,
+        )
+
+        self.runtime.backward(loss)
+
+        self.runtime.clip_gradients(
+            self.model.parameters(),
+            self.config.trainer.max_grad_norm,
+        )
+
+        self.runtime.optimizer_step(
+            self.optimizer,
+        )
+
+        self.scheduler.step()
+
+        self.runtime.synchronize()
+
+        self._update_state(
+            batch=batch,
+            loss=loss,
+        )
+    
     def evaluate(self):
         raise NotImplementedError
 
