@@ -1,71 +1,106 @@
+from __future__ import annotations
+
 import torch
 from torch import nn
 from torch.optim import SGD
 from torch.optim.lr_scheduler import LambdaLR
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader
 
 from trainlm.runtime import Runtime
 from trainlm.training import Trainer
 
 
+class DummyOutput:
+
+    def __init__(self, loss):
+        self.loss = loss
+
+
+class DummyModel(nn.Module):
+
+    def __init__(self):
+        super().__init__()
+        self.linear = nn.Linear(4, 1)
+
+    def forward(self, input_ids):
+        output = self.linear(input_ids)
+        return DummyOutput(output.mean())
+
+
+class DummyDataset(torch.utils.data.Dataset):
+
+    def __len__(self):
+        return 8
+
+    def __getitem__(self, index):
+        del index
+        return {
+            "input_ids": torch.randn(4),
+        }
+
+
+class DummyTrainerConfig:
+
+    max_steps = 1
+    max_grad_norm = 1.0
+
+
 class DummyConfig:
-    pass
+
+    trainer = DummyTrainerConfig()
 
 
-def create_trainer() -> Trainer:
-    model = nn.Linear(4, 2)
+def create_trainer():
+    model = DummyModel()
 
-    optimizer = SGD(model.parameters(), lr=0.1)
+    optimizer = SGD(
+        model.parameters(),
+        lr=0.1,
+    )
 
     scheduler = LambdaLR(
         optimizer,
-        lr_lambda=lambda _: 1.0,
+        lambda _: 1.0,
     )
-
-    dataset = TensorDataset(torch.randn(8, 4))
 
     dataloader = DataLoader(
-        dataset,
+        DummyDataset(),
         batch_size=2,
     )
-
-    runtime = Runtime()
 
     return Trainer(
         config=DummyConfig(),
         model=model,
-        runtime=runtime,
+        runtime=Runtime(),
         optimizer=optimizer,
         scheduler=scheduler,
         train_dataloader=dataloader,
     )
 
 
-def test_trainer_initializes():
+def test_train_runs_one_step():
     trainer = create_trainer()
 
-    assert trainer.model is not None
-    assert trainer.runtime is not None
-    assert trainer.optimizer is not None
-    assert trainer.scheduler is not None
-    assert trainer.train_dataloader is not None
-    assert trainer.eval_dataloader is None
+    state = trainer.train()
+
+    assert state.step == 1
+    assert state.loss is not None
+    assert state.learning_rate > 0.0
 
 
-def test_state_initialized():
+def test_parameters_are_updated():
     trainer = create_trainer()
 
-    assert trainer.state.step == 0
-    assert trainer.state.is_training is False
+    before = [
+        parameter.detach().clone()
+        for parameter in trainer.model.parameters()
+    ]
 
+    trainer.train()
 
-def test_control_initialized():
-    trainer = create_trainer()
+    after = list(trainer.model.parameters())
 
-    assert trainer.control.should_stop is False
-
-
-def test_callback_handler_initialized():
-    trainer = create_trainer()
-
-    assert trainer.callback_handler.callbacks == ()
+    assert any(
+        not torch.equal(a, b)
+        for a, b in zip(before, after)
+    )
