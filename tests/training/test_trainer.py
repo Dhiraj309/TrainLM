@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 from trainlm.runtime import Runtime
 from trainlm.training import Trainer
 from trainlm.training.loss import LanguageModelLoss
-
+import pytest
 
 class DummyOutput:
 
@@ -150,3 +150,72 @@ def test_update_state():
     assert trainer.state.step == 1
     assert trainer.state.loss == 2.5
     assert trainer.state.learning_rate == 0.1
+
+def create_trainer(loss_fn=None):
+    model = DummyModel()
+
+    optimizer = SGD(
+        model.parameters(),
+        lr=0.1,
+    )
+
+    scheduler = LambdaLR(
+        optimizer,
+        lr_lambda=lambda _: 1.0,
+    )
+
+    train_dataloader = DataLoader(
+        DummyDataset(),
+        batch_size=2,
+    )
+
+    eval_dataloader = DataLoader(
+        DummyDataset(),
+        batch_size=2,
+    )
+
+    return Trainer(
+        config=DummyConfig(),
+        model=model,
+        runtime=Runtime(),
+        optimizer=optimizer,
+        scheduler=scheduler,
+        loss_fn=loss_fn or LanguageModelLoss(),
+        train_dataloader=train_dataloader,
+        eval_dataloader=eval_dataloader,
+    )
+
+def test_evaluate_returns_metrics():
+    trainer = create_trainer()
+
+    metrics = trainer.evaluate()
+
+    assert "eval_loss" in metrics
+    assert isinstance(metrics["eval_loss"], float)
+
+
+def test_evaluate_restores_train_mode():
+    trainer = create_trainer()
+
+    trainer.model.train()
+
+    trainer.evaluate()
+
+    assert trainer.model.training
+
+
+def test_evaluate_without_dataloader():
+    trainer = create_trainer()
+
+    trainer.eval_dataloader = None
+
+    with pytest.raises(RuntimeError):
+        trainer.evaluate()
+
+
+def test_evaluate_average_loss():
+    trainer = create_trainer()
+
+    metrics = trainer.evaluate()
+
+    assert metrics["eval_loss"] >= 0.0
