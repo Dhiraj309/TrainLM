@@ -1,48 +1,28 @@
 """
 Configuration package for TrainLM.
-
-This package contains the model configuration used by Hugging Face
-(`TrainLMConfig`) together with the training configuration objects used
-by the TrainLM training framework.
-
-Structure
----------
-configuration_trainlm.py
-    Hugging Face model configuration.
-
-train.py
-    Root training configuration.
-
-dataset.py
-    Dataset configuration.
-
-runtime.py
-    Runtime and execution configuration.
-
-optimizer.py
-    Optimizer configuration.
-
-scheduler.py
-    Learning-rate scheduler configuration.
-
-trainer.py
-    Trainer configuration.
-
-checkpoint.py
-    Checkpoint configuration.
-
-logging.py
-    Logging configuration.
-
-evaluation.py
-    Evaluation configuration.
-
-parallel.py
-    Parallelism configuration.
 """
 
+from .checkpoint import CheckpointConfig
 from .configuration_trainlm import TrainLMConfig
+from .dataset import DatasetConfig, DatasetSource
+from .evaluation import EvaluationConfig
+from .logging import LoggingConfig
+from .optimizer import OptimizerConfig
+from .runtime import RuntimeConfig
+from .scheduler import SchedulerConfig
+from .train import TrainConfig
+from .trainer import TrainerConfig
 
 __all__ = [
     "TrainLMConfig",
+    "TrainConfig",
+    "DatasetSource",
+    "DatasetConfig",
+    "RuntimeConfig",
+    "OptimizerConfig",
+    "SchedulerConfig",
+    "TrainerConfig",
+    "CheckpointConfig",
+    "LoggingConfig",
+    "EvaluationConfig",
 ]
