@@ -97,7 +97,7 @@ def load_config(
     else:
         merged = base
 
-    return TrainConfig(
+    config = TrainConfig(
         model=TrainLMConfig(
             **merged.get("model", {})
         ),
@@ -126,3 +126,7 @@ def load_config(
             **merged.get("evaluation", {})
         ),
     )
+
+    config.validate()
+
+    return config

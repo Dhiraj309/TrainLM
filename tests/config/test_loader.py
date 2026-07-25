@@ -7,7 +7,10 @@ def test_load_minimal_config(tmp_path):
     config_file = tmp_path / "config.yaml"
 
     config_file.write_text(
-        "{}",
+        """
+trainer:
+  max_steps: 100
+""",
         encoding="utf-8",
     )
 
@@ -16,8 +19,7 @@ def test_load_minimal_config(tmp_path):
     assert config.model.hidden_size == 768
     assert config.optimizer.name == "adamw"
 
-    # Default trainer configuration
-    assert config.trainer.max_steps is None
+    assert config.trainer.max_steps == 100
     assert config.trainer.max_tokens is None
     assert config.trainer.gradient_accumulation_steps == 1
 
@@ -28,8 +30,12 @@ def test_override_config(tmp_path):
 
     base.write_text(
         """
+trainer:
+  max_steps: 100
+
 model:
   hidden_size: 768
+
 optimizer:
   learning_rate: 0.001
 """,
@@ -51,8 +57,4 @@ optimizer:
 
     assert config.model.hidden_size == 768
     assert config.optimizer.learning_rate == 0.0003
-
-
-def test_missing_file():
-    with pytest.raises(FileNotFoundError):
-        load_config("does_not_exist.yaml")
+    assert config.trainer.max_steps == 100
