@@ -12,6 +12,7 @@ from .runtime import RuntimeConfig
 from .scheduler import SchedulerConfig
 from .train import TrainConfig
 from .trainer import TrainerConfig
+from .loader import load_config
 
 __all__ = [
     "TrainLMConfig",
@@ -25,4 +26,5 @@ __all__ = [
     "CheckpointConfig",
     "LoggingConfig",
     "EvaluationConfig",
+    "load_config",
 ]
