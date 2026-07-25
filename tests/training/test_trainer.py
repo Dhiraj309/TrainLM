@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader
 
 from trainlm.runtime import Runtime
 from trainlm.training import Trainer
+from trainlm.training.loss import LanguageModelLoss
 
 
 class DummyOutput:
@@ -50,7 +51,16 @@ class DummyConfig:
     trainer = DummyTrainerConfig()
 
 
-def create_trainer():
+class ConstantLoss:
+
+    def __call__(self, model, batch, runtime):
+        del batch
+        del runtime
+
+        return model.linear.weight.sum()
+
+
+def create_trainer(loss_fn=None):
     model = DummyModel()
 
     optimizer = SGD(
@@ -60,7 +70,7 @@ def create_trainer():
 
     scheduler = LambdaLR(
         optimizer,
-        lambda _: 1.0,
+        lr_lambda=lambda _: 1.0,
     )
 
     dataloader = DataLoader(
@@ -74,6 +84,7 @@ def create_trainer():
         runtime=Runtime(),
         optimizer=optimizer,
         scheduler=scheduler,
+        loss_fn=loss_fn or LanguageModelLoss(),
         train_dataloader=dataloader,
     )
 
@@ -101,6 +112,17 @@ def test_parameters_are_updated():
     after = list(trainer.model.parameters())
 
     assert any(
-        not torch.equal(a, b)
-        for a, b in zip(before, after)
+        not torch.equal(before_param, after_param)
+        for before_param, after_param in zip(before, after)
     )
+
+
+def test_custom_loss_function():
+    trainer = create_trainer(
+        loss_fn=ConstantLoss(),
+    )
+
+    trainer.train()
+
+    assert trainer.state.step == 1
+    assert trainer.state.loss is not None
