@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
 
-import torch
 from torch import nn
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
@@ -14,6 +13,7 @@ from trainlm.runtime import Runtime
 from .callback import TrainerCallback
 from .callback_handler import CallbackHandler
 from .control import TrainerControl
+from .loss import Loss
 from .state import TrainerState
 
 
@@ -28,6 +28,7 @@ class Trainer:
         runtime: Runtime,
         optimizer: Optimizer,
         scheduler: LRScheduler,
+        loss_fn: Loss,
         train_dataloader: DataLoader,
         eval_dataloader: DataLoader | None = None,
         callbacks: Sequence[TrainerCallback] | None = None,
@@ -39,6 +40,7 @@ class Trainer:
 
         self.optimizer = optimizer
         self.scheduler = scheduler
+        self.loss_fn = loss_fn
 
         self.train_dataloader = train_dataloader
         self.eval_dataloader = eval_dataloader
@@ -103,25 +105,16 @@ class Trainer:
             self._train_iterator = iter(self.train_dataloader)
             return next(self._train_iterator)
 
-    def _compute_loss(self, batch) -> torch.Tensor:
-        batch = self.runtime.prepare_batch(batch)
-
-        with self.runtime.autocast():
-            outputs = self.model(**batch)
-
-        if not hasattr(outputs, "loss"):
-            raise ValueError(
-                "Model output must define a 'loss' attribute."
-            )
-
-        return outputs.loss
-
     def _train_step(self) -> None:
         batch = self._next_batch()
 
         self.runtime.zero_grad(self.optimizer)
 
-        loss = self._compute_loss(batch)
+        loss = self.loss_fn(
+            self.model,
+            batch,
+            self.runtime,
+        )
 
         self.runtime.backward(loss)
 
