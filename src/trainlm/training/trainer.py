@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
 
+import torch
 from torch import nn
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
@@ -184,10 +185,42 @@ class Trainer:
             batch=batch,
             loss=loss,
         )
-    
-    def evaluate(self):
-        raise NotImplementedError
 
+    def _evaluation_step(self, batch) -> torch.Tensor:
+        """Compute the evaluation loss for a batch."""
+
+        return self.loss_fn(
+            self.model,
+            batch,
+            self.runtime,
+        )
+
+    def evaluate(self) -> dict[str, float]:
+        """Run evaluation over the evaluation dataloader."""
+
+        if self.eval_dataloader is None:
+            raise RuntimeError(
+                "Evaluation requested but no evaluation dataloader is configured."
+            )
+
+        was_training = self.model.training
+        self.model.eval()
+
+        total_loss = 0.0
+        num_batches = 0
+
+        with torch.no_grad():
+            for batch in self.eval_dataloader:
+                loss = self._evaluation_step(batch)
+                total_loss += loss.detach().item()
+                num_batches += 1
+
+        if was_training:
+            self.model.train()
+
+        return {
+            "eval_loss": total_loss / num_batches,
+        }
     def save_model(self):
         raise NotImplementedError
 
