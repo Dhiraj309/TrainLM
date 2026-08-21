@@ -309,12 +309,16 @@ bug and must be prevented by API design.
 
 - This roadmap is delivered as one documentation commit on
   `codex/hf-tpu-parity-roadmap`.
-- Implementation begins on `codex/hf-tpu-parity`, based on the accepted
-  `m4/training-framework` state (or updated `main` if M4 is merged first).
-- Open one draft PR immediately so CI and review follow every feature.
+- Dense-AR V1 is delivered through six sequential PR branches. Do not put the
+  complete implementation on one long-lived branch.
+- PR1 begins from the accepted roadmap/M4 state. Every later PR is rebased onto
+  the latest merged target branch immediately before implementation begins.
+- Open one draft PR per active branch so CI and review follow every feature.
+- Only one implementation PR should be active unless the roadmap explicitly
+  identifies work that is safe to run in parallel.
 - Every numbered feature below is one future atomic commit.
-- Do not squash the implementation PR: commit boundaries are the rollback and
-  review boundaries.
+- Do not squash implementation PRs: feature commits are the review and rollback
+  boundaries.
 - Each feature commit includes its tests and narrowly required documentation.
 - Benchmark-only commits contain machine-readable results and analysis, never
   product-code changes.
@@ -322,6 +326,47 @@ bug and must be prevented by API design.
 - No feature may weaken a completed milestone gate without a recorded decision.
 
 Commit subjects use `type(scope): imperative summary`, as listed below.
+
+### Dense-AR V1 PR sequence
+
+| PR | Branch | Milestones | Feature commits | Merge gate |
+|---|---|---|---:|---|
+| PR1 | `codex/hf-tpu-pr01-foundation` | M0-M2 | 15 | Scope/contracts and generic HF CPU conformance pass |
+| PR2 | `codex/hf-tpu-pr02-data-trainer` | M3-M4 | 13 | Packed data and backend-neutral trainer pass |
+| PR3 | `codex/hf-tpu-pr03-xla-compatibility` | M5-M7 | 16 | 600K gate, universal TPU compatibility, and resume pass |
+| PR4 | `codex/hf-tpu-pr04-optimization-core` | M8-M9 | 11 | Reversible planner and chunked-loss correctness pass |
+| PR5 | `codex/hf-tpu-pr05-kernels-parity` | M10-M12 | 19 | 850K intermediate and 90% LaughLM parity gates pass |
+| PR6 | `codex/hf-tpu-pr06-family-release` | M13-M14 | 12 | Cross-family certification and V1 release gates pass |
+
+The six PRs contain all 86 dense-AR V1 feature commits. A PR is merged only
+after every included milestone exit gate passes. If a TPU gate is waiting on
+hardware evidence, keep that PR open rather than moving incomplete work into
+the next branch.
+
+### Future PR tracks
+
+| Track | Reserved branch | Milestone | Feature commits | Start condition |
+|---|---|---|---:|---|
+| TorchTPU | `codex/hf-tpu-pr07-torchtpu` | M15 | 5 | Public TorchTPU training APIs and dense-AR V1 baseline exist |
+| MoE | `codex/hf-tpu-pr08-moe` | M16 | 5 | Dense-AR V1 is released |
+| DLLM | `codex/hf-tpu-pr09-dllm` | M17 | 5 | Dense-AR V1 is released |
+
+These future names are reserved for planning. Their branches should not receive
+implementation commits until their start conditions are satisfied.
+
+### Branch lifecycle
+
+For each PR branch:
+
+1. update the local target branch after the preceding PR merges;
+2. rebase the next untouched PR branch onto that exact target;
+3. implement only the milestones assigned to that branch;
+4. keep one feature/story per commit in roadmap order;
+5. run the PR's CPU/TPU merge gates and attach evidence;
+6. merge the PR before activating its successor.
+
+This sequence prevents cross-PR dependency commits, duplicate fixes, and large
+end-of-project rebases while preserving the atomic feature history.
 
 ## Milestone overview
 
