@@ -1,0 +1,22 @@
+# Support-level meanings and performance-claim rules are normative in
+# docs/SCOPE.md.
+changelog:
+  exclude:
+    labels:
+      - skip-changelog
+  categories:
+    - title: Model support and scope
+      labels:
+        - scope
+        - support
+        - support:compatible
+        - support:optimized
+        - support:certified
+    - title: TPU runtime and performance
+      labels:
+        - backend:xla
+        - backend:torchtpu
+        - performance
+    - title: Other changes
+      labels:
+        - "*"
