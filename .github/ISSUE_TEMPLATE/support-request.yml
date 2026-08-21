@@ -1,0 +1,87 @@
+name: Model support request
+description: Request or clarify TrainLM support for a Hugging Face causal model.
+title: "[Support]: "
+labels:
+  - scope
+  - support
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Read `docs/SCOPE.md` before filing. TrainLM distinguishes Compatible,
+        Optimized, and Certified support; a model merely running is not a
+        performance certification.
+
+  - type: input
+    id: model
+    attributes:
+      label: Hugging Face model or config
+      description: Include the repository ID or local model type and exact revision.
+      placeholder: organization/model-name@revision
+    validations:
+      required: true
+
+  - type: dropdown
+    id: requested_level
+    attributes:
+      label: Requested support level
+      options:
+        - Compatible
+        - Optimized
+        - Certified
+    validations:
+      required: true
+
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Execution backend
+      options:
+        - PyTorch/XLA on TPU
+        - CPU compatibility
+        - CUDA compatibility
+        - Future TorchTPU
+        - Unknown
+    validations:
+      required: true
+
+  - type: input
+    id: hardware
+    attributes:
+      label: Hardware and topology
+      placeholder: TPU v5e-8, single VM
+
+  - type: checkboxes
+    id: model_contract
+    attributes:
+      label: Model contract
+      options:
+        - label: The model is decoder-only and autoregressive.
+          required: true
+        - label: I have disclosed whether `trust_remote_code=True` is required.
+          required: true
+        - label: I understand that MoE and DLLM support are future tracks.
+          required: true
+
+  - type: textarea
+    id: architecture
+    attributes:
+      label: Relevant architecture details
+      description: Describe attention, position, norm, MLP, residual, projection, and output-head layouts if known.
+    validations:
+      required: true
+
+  - type: textarea
+    id: explain
+    attributes:
+      label: TrainLM explain report or observed behavior
+      description: Paste `trainer.explain()` output when available. Remove credentials and private paths.
+      render: text
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected outcome
+      description: State whether you need correctness, structural optimization, or hardware certification.
+    validations:
+      required: true

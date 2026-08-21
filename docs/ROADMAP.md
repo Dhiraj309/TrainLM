@@ -6,7 +6,7 @@
 - **Current TPU backend:** PyTorch/XLA
 - **Future TPU backend:** TorchTPU, after its public training APIs are available
 - **Dataset path:** Hugging Face-hosted, pre-tokenized packed `.bin` shards
-- **Roadmap branch:** `codex/hf-tpu-parity-roadmap`
+- **Roadmap branch:** `roadmap/hf-tpu-parity`
 - **Implementation base:** `m4/training-framework` at `1a00b44a96e6`
 - **Performance reference:** LaughLM at `0705d255faab`
 
@@ -308,7 +308,7 @@ bug and must be prevented by API design.
 ## Branch, PR, and commit policy
 
 - This roadmap is delivered as one documentation commit on
-  `codex/hf-tpu-parity-roadmap`.
+  `roadmap/hf-tpu-parity`.
 - Dense-AR V1 is delivered through six sequential PR branches. Do not put the
   complete implementation on one long-lived branch.
 - PR1 begins from the accepted roadmap/M4 state. Every later PR is rebased onto
@@ -327,16 +327,34 @@ bug and must be prevented by API design.
 
 Commit subjects use `type(scope): imperative summary`, as listed below.
 
+### Branch naming convention
+
+Branch names describe repository work rather than the tool or contributor that
+created them:
+
+- `roadmap/<initiative>` for planning-only branches;
+- `milestone/<range>-<outcome>` for reviewable implementation PRs containing
+  one or more dependent milestones;
+- `feature/<milestone>-<feature>-<outcome>` only when a feature needs an
+  isolated experimental branch before being integrated into its milestone PR;
+- `benchmark/<milestone>-<feature>-<hardware>` only for independently reviewed
+  benchmark artifacts with no product-code changes.
+
+For example, M10-F3 may temporarily use
+`feature/m10-f3-xla-pallas-attention`, but its accepted implementation belongs
+in `milestone/m10-m12-kernels-parity`. Personal or agent-specific prefixes are
+not part of the repository naming contract.
+
 ### Dense-AR V1 PR sequence
 
 | PR | Branch | Milestones | Feature commits | Merge gate |
 |---|---|---|---:|---|
-| PR1 | `codex/hf-tpu-pr01-foundation` | M0-M2 | 15 | Scope/contracts and generic HF CPU conformance pass |
-| PR2 | `codex/hf-tpu-pr02-data-trainer` | M3-M4 | 13 | Packed data and backend-neutral trainer pass |
-| PR3 | `codex/hf-tpu-pr03-xla-compatibility` | M5-M7 | 16 | 600K gate, universal TPU compatibility, and resume pass |
-| PR4 | `codex/hf-tpu-pr04-optimization-core` | M8-M9 | 11 | Reversible planner and chunked-loss correctness pass |
-| PR5 | `codex/hf-tpu-pr05-kernels-parity` | M10-M12 | 19 | 850K intermediate and 90% LaughLM parity gates pass |
-| PR6 | `codex/hf-tpu-pr06-family-release` | M13-M14 | 12 | Cross-family certification and V1 release gates pass |
+| PR1 | `milestone/m0-m2-foundation` | M0-M2 | 15 | Scope/contracts and generic HF CPU conformance pass |
+| PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 13 | Packed data and backend-neutral trainer pass |
+| PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 16 | 600K gate, universal TPU compatibility, and resume pass |
+| PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11 | Reversible planner and chunked-loss correctness pass |
+| PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | 850K intermediate and 90% LaughLM parity gates pass |
+| PR6 | `milestone/m13-m14-family-release` | M13-M14 | 12 | Cross-family certification and V1 release gates pass |
 
 The six PRs contain all 86 dense-AR V1 feature commits. A PR is merged only
 after every included milestone exit gate passes. If a TPU gate is waiting on
@@ -347,9 +365,9 @@ the next branch.
 
 | Track | Reserved branch | Milestone | Feature commits | Start condition |
 |---|---|---|---:|---|
-| TorchTPU | `codex/hf-tpu-pr07-torchtpu` | M15 | 5 | Public TorchTPU training APIs and dense-AR V1 baseline exist |
-| MoE | `codex/hf-tpu-pr08-moe` | M16 | 5 | Dense-AR V1 is released |
-| DLLM | `codex/hf-tpu-pr09-dllm` | M17 | 5 | Dense-AR V1 is released |
+| TorchTPU | `milestone/m15-torchtpu` | M15 | 5 | Public TorchTPU training APIs and dense-AR V1 baseline exist |
+| MoE | `milestone/m16-moe` | M16 | 5 | Dense-AR V1 is released |
+| DLLM | `milestone/m17-dllm` | M17 | 5 | Dense-AR V1 is released |
 
 These future names are reserved for planning. Their branches should not receive
 implementation commits until their start conditions are satisfied.
@@ -372,7 +390,7 @@ end-of-project rebases while preserving the atomic feature history.
 
 | Status | Milestone | Outcome | Priority |
 |---|---|---|---|
-| [ ] | M0 | Reproducible scope, parity manifest, metrics, and dependencies | Blocking |
+| [~] | M0 | Reproducible scope, parity manifest, metrics, and dependencies | Blocking |
 | [ ] | M1 | Backend-neutral framework contracts | Blocking |
 | [ ] | M2 | Universal HF dense-causal intake on CPU | Blocking |
 | [ ] | M3 | Production packed-binary data pipeline | Blocking |
@@ -395,12 +413,12 @@ end-of-project rebases while preserving the atomic feature history.
 
 ## M0 — Reproducibility and release contract
 
-**Status:** [ ] Not started
+**Status:** [~] Implementation in progress; M0-F1 awaits validation
 
 **Goal:** eliminate ambiguous scope, geometry, metrics, and dependency versions
 before implementation work begins.
 
-### [ ] M0-F1 — Dense-AR product scope
+### [~] M0-F1 — Dense-AR product scope
 
 **Commit:** `docs(scope): define dense causal LM support contract`
 
