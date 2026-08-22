@@ -18,6 +18,7 @@ trainer:
 
     assert config.model.provider == "external"
     assert config.optimizer.name == "adamw"
+    assert config.loss.implementation == "auto"
 
     assert config.trainer.max_steps == 100
     assert config.trainer.max_tokens is None

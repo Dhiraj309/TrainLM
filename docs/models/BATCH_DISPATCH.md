@@ -33,7 +33,7 @@ dispatcher = ForwardBatchDispatcher.from_model(
 )
 ```
 
-`CausalLMTask` owns labels and loss masks, so those task-only values are removed
-before model dispatch. The trainer itself never interprets model input names.
-This story filters calls only; generic HF output and model-loss behavior are
-defined by M2-F3.
+`CausalLMTask` always removes its private loss mask. It forwards full-length,
+masked labels only when M2-F3 determines that the model's declared label input
+and loss semantics are compatible; the TrainLM cross-entropy path keeps labels
+task-local. The trainer itself never interprets model input names.

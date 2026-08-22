@@ -10,6 +10,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from trainlm.model.dispatch import ForwardBatchDispatcher
+from trainlm.model.outputs import normalize_causal_lm_output
 from trainlm.runtime import ExecutionBackend
 
 from .base import TaskResult, TokenCounts
@@ -28,14 +29,25 @@ class CausalLMTask:
             "supervised_tokens"
         ),
         z_loss: float = 0.0,
+        loss_implementation: Literal["auto", "causal_lm", "model"] = "auto",
     ) -> None:
         if normalization not in {"supervised_tokens", "batch"}:
             raise ValueError(f"Unsupported loss normalization: {normalization}")
         if z_loss < 0:
             raise ValueError("z_loss must be non-negative.")
+        if loss_implementation not in {"auto", "causal_lm", "model"}:
+            raise ValueError(
+                f"Unsupported loss implementation: {loss_implementation}"
+            )
         self.ignore_index = ignore_index
         self.normalization = normalization
         self.z_loss = z_loss
+        self.loss_implementation = loss_implementation
+        if loss_implementation == "model" and not self._model_loss_compatible:
+            raise ValueError(
+                "Model loss requires ignore_index=-100, supervised-token "
+                "normalization, and z_loss=0."
+            )
         self._dispatcher_model: nn.Module | None = None
         self._dispatcher: ForwardBatchDispatcher | None = None
 
@@ -87,7 +99,8 @@ class CausalLMTask:
         task_batch, counts = self._prepare_task_batch(batch)
         task_batch = backend.prepare_batch(task_batch)
 
-        labels = task_batch["labels"]
+        model_labels = task_batch["labels"]
+        labels = model_labels[..., 1:]
         loss_mask = task_batch["loss_mask"]
         model_inputs = {
             key: value
@@ -97,18 +110,60 @@ class CausalLMTask:
         if self._dispatcher is None or self._dispatcher_model is not model:
             self._dispatcher = ForwardBatchDispatcher.from_model(model)
             self._dispatcher_model = model
+        labels_supported = "labels" in self._dispatcher.signature.keyword_parameters
+        request_model_loss = (
+            self.loss_implementation in {"auto", "model"}
+            and self._model_loss_compatible
+        )
+        if request_model_loss and labels_supported:
+            model_inputs["labels"] = model_labels
+        elif self.loss_implementation == "model":
+            raise TypeError(
+                "Model-owned loss was requested but forward does not declare labels."
+            )
         dispatch = self._dispatcher.dispatch(model_inputs)
 
         with backend.autocast():
             outputs = model(**dispatch.inputs)
-            logits = _extract_logits(outputs)
-            loss, z_loss_value = self._loss(logits, labels, loss_mask)
+            normalized_output = normalize_causal_lm_output(outputs)
+            if request_model_loss and labels_supported:
+                if normalized_output.loss is None:
+                    if self.loss_implementation == "model":
+                        raise TypeError(
+                            "Model-owned loss was requested but output has no loss."
+                        )
+                    loss, z_loss_value = self._loss(
+                        normalized_output.logits, labels, loss_mask
+                    )
+                    loss_source = "trainlm_cross_entropy"
+                else:
+                    loss = normalized_output.loss
+                    z_loss_value = None
+                    loss_source = "model"
+            else:
+                loss, z_loss_value = self._loss(
+                    normalized_output.logits, labels, loss_mask
+                )
+                loss_source = "trainlm_cross_entropy"
 
         metrics: dict[str, torch.Tensor | float] = {}
         if z_loss_value is not None:
             metrics["z_loss"] = z_loss_value.detach()
 
-        return TaskResult(loss=loss, tokens=counts, metrics=metrics)
+        return TaskResult(
+            loss=loss,
+            tokens=counts,
+            metrics=metrics,
+            loss_source=loss_source,
+        )
+
+    @property
+    def _model_loss_compatible(self) -> bool:
+        return (
+            self.ignore_index == -100
+            and self.normalization == "supervised_tokens"
+            and self.z_loss == 0.0
+        )
 
     def _prepare_task_batch(
         self,
@@ -129,7 +184,8 @@ class CausalLMTask:
         if not isinstance(labels, torch.Tensor) or labels.shape != input_ids.shape:
             raise ValueError("'labels' must be a tensor matching 'input_ids'.")
 
-        effective_labels = labels[..., 1:].clone()
+        model_labels = labels.clone()
+        effective_labels = model_labels[..., 1:]
         target_mask = torch.ones_like(effective_labels, dtype=torch.bool)
 
         attention_mask = batch.get("attention_mask")
@@ -164,7 +220,7 @@ class CausalLMTask:
             raise ValueError("Causal LM batch contains no supervised tokens.")
 
         task_batch = dict(batch)
-        task_batch["labels"] = effective_labels
+        task_batch["labels"] = model_labels
         task_batch["loss_mask"] = target_mask
         return task_batch, counts
 
@@ -205,18 +261,3 @@ class CausalLMTask:
             loss = loss + self.z_loss * z_loss_value
 
         return loss, z_loss_value
-
-
-def _extract_logits(outputs: Any) -> torch.Tensor:
-    if hasattr(outputs, "logits"):
-        logits = outputs.logits
-    elif isinstance(outputs, Mapping) and "logits" in outputs:
-        logits = outputs["logits"]
-    elif isinstance(outputs, tuple) and outputs:
-        logits = outputs[0]
-    else:
-        raise TypeError("Model output must expose causal LM logits.")
-
-    if not isinstance(logits, torch.Tensor):
-        raise TypeError("Model logits must be a torch.Tensor.")
-    return logits

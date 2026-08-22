@@ -10,14 +10,14 @@ from typing import Literal
 class LossConfig:
     """Configure loss ownership and numerically relevant behavior."""
 
-    implementation: Literal["causal_lm", "model"] = "causal_lm"
+    implementation: Literal["auto", "causal_lm", "model"] = "auto"
     ignore_index: int = -100
     normalization: Literal["supervised_tokens", "batch"] = "supervised_tokens"
     z_loss: float = 0.0
     logits_chunk_size: int | None = None
 
     def __post_init__(self) -> None:
-        if self.implementation not in {"causal_lm", "model"}:
+        if self.implementation not in {"auto", "causal_lm", "model"}:
             raise ValueError(
                 f"Unsupported loss implementation: {self.implementation}"
             )
@@ -29,3 +29,12 @@ class LossConfig:
             raise ValueError("'loss.z_loss' must be non-negative.")
         if self.logits_chunk_size is not None and self.logits_chunk_size <= 0:
             raise ValueError("'loss.logits_chunk_size' must be positive.")
+        if self.implementation == "model" and (
+            self.ignore_index != -100
+            or self.normalization != "supervised_tokens"
+            or self.z_loss != 0.0
+        ):
+            raise ValueError(
+                "'loss.implementation: model' requires ignore_index=-100, "
+                "supervised-token normalization, and z_loss=0."
+            )
