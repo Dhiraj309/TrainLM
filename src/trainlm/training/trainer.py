@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
-from typing import Any
-
 import torch
 from torch import nn
 from torch.optim import Optimizer
@@ -11,6 +9,11 @@ from torch.utils.data import DataLoader
 
 from trainlm.config import TrainConfig
 from trainlm.runtime import ExecutionBackend
+from trainlm.tasks import (
+    LanguageModelTask,
+    LossTaskAdapter,
+    TaskResult,
+)
 
 from .callback import TrainerCallback
 from .callback_handler import CallbackHandler
@@ -30,8 +33,9 @@ class Trainer:
         runtime: ExecutionBackend,
         optimizer: Optimizer,
         scheduler: LRScheduler,
-        loss_fn: Loss,
         train_dataloader: DataLoader,
+        task: LanguageModelTask | None = None,
+        loss_fn: Loss | None = None,
         eval_dataloader: DataLoader | None = None,
         callbacks: Sequence[TrainerCallback] | None = None,
     ) -> None:
@@ -42,7 +46,13 @@ class Trainer:
 
         self.optimizer = runtime.prepare_optimizer(optimizer)
         self.scheduler = scheduler
-        self.loss_fn = loss_fn
+        if task is not None and loss_fn is not None:
+            raise ValueError("Set either 'task' or legacy 'loss_fn', not both.")
+        if task is None:
+            if loss_fn is None:
+                raise ValueError("Trainer requires a language-model 'task'.")
+            task = LossTaskAdapter(loss_fn)
+        self.task = task
 
         self.train_dataloader = runtime.prepare_dataloader(train_dataloader)
         self.eval_dataloader = (
@@ -107,7 +117,15 @@ class Trainer:
         if self.control.should_stop:
             return True
 
-        return self.state.step >= self.config.trainer.max_steps
+        trainer = self.config.trainer
+        if trainer.max_steps is not None and self.state.step >= trainer.max_steps:
+            return True
+        if (
+            trainer.max_tokens is not None
+            and self.state.tokens_seen >= trainer.max_tokens
+        ):
+            return True
+        return False
 
     def _next_batch(self):
         if self._train_iterator is None:
@@ -128,15 +146,14 @@ class Trainer:
     def _update_state(
         self,
         *,
-        batch: Any,
-        loss: torch.Tensor,
+        result: TaskResult,
     ) -> None:
         """Update trainer state after a completed optimization step."""
 
-        del batch
-
         self.state.step += 1
-        self.state.loss = loss.detach().item()
+        self.state.tokens_seen += result.tokens.supervised_tokens
+        self.state.samples_seen += result.tokens.sequences
+        self.state.loss = result.loss.detach().item()
         self.state.learning_rate = self._current_learning_rate()
 
     def _train_step(self) -> None:
@@ -146,13 +163,13 @@ class Trainer:
 
         self.runtime.zero_grad(self.optimizer)
 
-        loss = self.loss_fn(
+        result = self.task.training_step(
             self.model,
             batch,
             self.runtime,
         )
 
-        self.runtime.backward(loss)
+        self.runtime.backward(result.loss)
 
         self.runtime.clip_gradients(
             self.model.parameters(),
@@ -168,16 +185,15 @@ class Trainer:
         self.runtime.synchronize()
 
         self._update_state(
-            batch=batch,
-            loss=loss,
+            result=result,
         )
 
         self.runtime.on_step_end(self.state.step)
 
-    def _evaluation_step(self, batch) -> torch.Tensor:
-        """Compute the evaluation loss for a batch."""
+    def _evaluation_step(self, batch) -> TaskResult:
+        """Dispatch one evaluation batch through the selected task."""
 
-        return self.loss_fn(
+        return self.task.evaluation_step(
             self.model,
             batch,
             self.runtime,
@@ -194,21 +210,17 @@ class Trainer:
         was_training = self.model.training
         self.model.eval()
 
-        total_loss = 0.0
-        num_batches = 0
+        results: list[TaskResult] = []
 
         with torch.no_grad():
             for batch in self.eval_dataloader:
-                loss = self._evaluation_step(batch)
-                total_loss += loss.detach().item()
-                num_batches += 1
+                result = self._evaluation_step(batch)
+                results.append(result)
 
         if was_training:
             self.model.train()
 
-        return {
-            "eval_loss": total_loss / num_batches,
-        }
+        return self.task.aggregate_evaluation(results)
 
     def save_model(self):
         raise NotImplementedError

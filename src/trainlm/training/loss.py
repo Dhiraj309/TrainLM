@@ -21,7 +21,11 @@ class Loss(Protocol):
 
 
 class LanguageModelLoss:
-    """Default loss for Hugging Face-style language models."""
+    """Legacy adapter target for model-owned Hugging Face loss.
+
+    New training code should use ``trainlm.tasks.CausalLMTask`` so shifting,
+    masking, normalization, and token accounting remain explicit.
+    """
 
     def __call__(
         self,

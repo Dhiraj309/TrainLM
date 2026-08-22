@@ -8,6 +8,7 @@ from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader
 
 from trainlm.runtime import Runtime
+from trainlm.tasks import TaskResult, TokenCounts
 from trainlm.training import Trainer
 from trainlm.training.loss import LanguageModelLoss
 
@@ -44,6 +45,7 @@ class DummyDataset(torch.utils.data.Dataset):
 class DummyTrainerConfig:
 
     max_steps = 1
+    max_tokens = None
     max_grad_norm = 1.0
 
 
@@ -59,6 +61,34 @@ class ConstantLoss:
         del runtime
 
         return model.linear.weight.sum()
+
+
+class CountingTask:
+
+    name = "counting"
+
+    def training_step(self, model, batch, backend):
+        del batch
+        del backend
+        return TaskResult(
+            loss=model.linear.weight.sum(),
+            tokens=TokenCounts(
+                sequences=2,
+                input_tokens=8,
+                target_tokens=6,
+                supervised_tokens=5,
+                ignored_tokens=1,
+            ),
+        )
+
+    def evaluation_step(self, model, batch, backend):
+        return self.training_step(model, batch, backend)
+
+    def aggregate_evaluation(self, results):
+        return {
+            "eval_loss": sum(result.loss.item() for result in results)
+            / len(results)
+        }
 
 
 def test_train_runs_one_step():
@@ -100,6 +130,16 @@ def test_custom_loss_function():
     assert trainer.state.loss is not None
 
 
+def test_trainer_consumes_task_result_and_exact_token_counts():
+    trainer = create_trainer(task=CountingTask())
+
+    state = trainer.train()
+
+    assert state.step == 1
+    assert state.tokens_seen == 5
+    assert state.samples_seen == 2
+
+
 def test_current_learning_rate():
     trainer = create_trainer()
 
@@ -109,23 +149,27 @@ def test_current_learning_rate():
 def test_update_state():
     trainer = create_trainer()
 
-    batch = {
-        "input_ids": torch.randn(2, 4),
-    }
-
-    loss = torch.tensor(2.5)
-
     trainer._update_state(
-        batch=batch,
-        loss=loss,
+        result=TaskResult(
+            loss=torch.tensor(2.5),
+            tokens=TokenCounts(
+                sequences=2,
+                input_tokens=8,
+                target_tokens=6,
+                supervised_tokens=5,
+                ignored_tokens=1,
+            ),
+        ),
     )
 
     assert trainer.state.step == 1
     assert trainer.state.loss == 2.5
     assert trainer.state.learning_rate == 0.1
+    assert trainer.state.tokens_seen == 5
+    assert trainer.state.samples_seen == 2
 
 
-def create_trainer(loss_fn=None, runtime=None):
+def create_trainer(loss_fn=None, runtime=None, task=None):
     model = DummyModel()
 
     optimizer = SGD(
@@ -154,7 +198,8 @@ def create_trainer(loss_fn=None, runtime=None):
         runtime=runtime or Runtime(),
         optimizer=optimizer,
         scheduler=scheduler,
-        loss_fn=loss_fn or LanguageModelLoss(),
+        task=task,
+        loss_fn=None if task is not None else (loss_fn or LanguageModelLoss()),
         train_dataloader=train_dataloader,
         eval_dataloader=eval_dataloader,
     )

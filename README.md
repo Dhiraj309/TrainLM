@@ -17,6 +17,9 @@ Model architecture and training-policy boundaries are defined by the
 Device-specific execution is isolated behind the
 [execution backend protocol](docs/runtime/BACKEND_PROTOCOL.md).
 
+Next-token shifting, masking, normalization, and accounting are fixed by the
+[causal language-model task contract](docs/tasks/CAUSAL_LM.md).
+
 TrainLM distinguishes models that are **Compatible**, **Optimized**, and
 hardware **Certified**. Generic execution is never presented as TPU performance
 certification.
