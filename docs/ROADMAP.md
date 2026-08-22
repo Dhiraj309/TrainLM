@@ -231,16 +231,16 @@ runtime or kernel work.
 
 ## M1 — Framework contracts and backend boundary
 
-**Status:** [~] M1-F1 implemented and awaiting validation
+**Status:** [~] M1-F1 complete; M1-F2 implemented and awaiting validation
 
 **Goal:** Remove custom-model, XLA, and task assumptions from core TrainLM.
 
-- [~] **M1-F1 — Configuration ownership**
+- [x] **M1-F1 — Configuration ownership**
   `refactor(config): separate model training runtime and optimization config`
   HF `PretrainedConfig` owns architecture; TrainLM owns training/runtime policy.
   **Acceptance:** `TrainLMConfig` is built only when explicitly selected.
 
-- [ ] **M1-F2 — Execution backend protocol**
+- [~] **M1-F2 — Execution backend protocol**
   `feat(runtime): define replaceable execution backend protocol`
   Define device, precision, compile, mesh, shard, sync, data, checkpoint,
   diagnostics, and lifecycle hooks.

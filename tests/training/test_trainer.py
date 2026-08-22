@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 import torch
 from torch import nn
 from torch.optim import SGD
@@ -9,7 +10,7 @@ from torch.utils.data import DataLoader
 from trainlm.runtime import Runtime
 from trainlm.training import Trainer
 from trainlm.training.loss import LanguageModelLoss
-import pytest
+
 
 class DummyOutput:
 
@@ -60,35 +61,6 @@ class ConstantLoss:
         return model.linear.weight.sum()
 
 
-def create_trainer(loss_fn=None):
-    model = DummyModel()
-
-    optimizer = SGD(
-        model.parameters(),
-        lr=0.1,
-    )
-
-    scheduler = LambdaLR(
-        optimizer,
-        lr_lambda=lambda _: 1.0,
-    )
-
-    dataloader = DataLoader(
-        DummyDataset(),
-        batch_size=2,
-    )
-
-    return Trainer(
-        config=DummyConfig(),
-        model=model,
-        runtime=Runtime(),
-        optimizer=optimizer,
-        scheduler=scheduler,
-        loss_fn=loss_fn or LanguageModelLoss(),
-        train_dataloader=dataloader,
-    )
-
-
 def test_train_runs_one_step():
     trainer = create_trainer()
 
@@ -127,6 +99,7 @@ def test_custom_loss_function():
     assert trainer.state.step == 1
     assert trainer.state.loss is not None
 
+
 def test_current_learning_rate():
     trainer = create_trainer()
 
@@ -151,7 +124,8 @@ def test_update_state():
     assert trainer.state.loss == 2.5
     assert trainer.state.learning_rate == 0.1
 
-def create_trainer(loss_fn=None):
+
+def create_trainer(loss_fn=None, runtime=None):
     model = DummyModel()
 
     optimizer = SGD(
@@ -177,13 +151,14 @@ def create_trainer(loss_fn=None):
     return Trainer(
         config=DummyConfig(),
         model=model,
-        runtime=Runtime(),
+        runtime=runtime or Runtime(),
         optimizer=optimizer,
         scheduler=scheduler,
         loss_fn=loss_fn or LanguageModelLoss(),
         train_dataloader=train_dataloader,
         eval_dataloader=eval_dataloader,
     )
+
 
 def test_evaluate_returns_metrics():
     trainer = create_trainer()
@@ -219,3 +194,44 @@ def test_evaluate_average_loss():
     metrics = trainer.evaluate()
 
     assert metrics["eval_loss"] >= 0.0
+
+
+class RecordingRuntime(Runtime):
+
+    def __init__(self):
+        super().__init__()
+        self.events = []
+
+    def initialize(self):
+        self.events.append("initialize")
+
+    def on_train_begin(self):
+        self.events.append("train_begin")
+
+    def on_step_begin(self, step):
+        self.events.append(("step_begin", step))
+
+    def on_step_end(self, step):
+        self.events.append(("step_end", step))
+
+    def on_train_end(self):
+        self.events.append("train_end")
+
+    def finalize(self):
+        self.events.append("finalize")
+
+
+def test_trainer_uses_backend_lifecycle_hooks():
+    runtime = RecordingRuntime()
+    trainer = create_trainer(runtime=runtime)
+
+    trainer.train()
+
+    assert runtime.events == [
+        "initialize",
+        "train_begin",
+        ("step_begin", 0),
+        ("step_end", 1),
+        "train_end",
+        "finalize",
+    ]

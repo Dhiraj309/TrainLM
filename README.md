@@ -14,6 +14,9 @@ Environment support and exact CPU/TPU profiles are defined by the
 Model architecture and training-policy boundaries are defined by the
 [configuration ownership contract](docs/configuration/OWNERSHIP.md).
 
+Device-specific execution is isolated behind the
+[execution backend protocol](docs/runtime/BACKEND_PROTOCOL.md).
+
 TrainLM distinguishes models that are **Compatible**, **Optimized**, and
 hardware **Certified**. Generic execution is never presented as TPU performance
 certification.
