@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trainlm.dev/schemas/optimization/model_capabilities_v1.schema.json",
+  "title": "TrainLM Model Capabilities v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "model_type", "model_class", "config_class",
+    "source_provider", "architectures", "attention", "position",
+    "normalization", "mlp", "residual", "projections", "embedding",
+    "lm_head", "checkpointing", "warnings"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "model_type": {"type": "string", "minLength": 1},
+    "model_class": {"type": "string", "minLength": 1},
+    "config_class": {"type": "string", "minLength": 1},
+    "source_provider": {"type": "string", "minLength": 1},
+    "architectures": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
+    "attention": {"$ref": "#/$defs/component"},
+    "position": {"$ref": "#/$defs/component"},
+    "normalization": {"$ref": "#/$defs/component"},
+    "mlp": {"$ref": "#/$defs/component"},
+    "residual": {"$ref": "#/$defs/component"},
+    "projections": {"$ref": "#/$defs/component"},
+    "embedding": {"$ref": "#/$defs/component"},
+    "lm_head": {"$ref": "#/$defs/component"},
+    "checkpointing": {"$ref": "#/$defs/component"},
+    "warnings": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    }
+  },
+  "$defs": {
+    "fact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "value", "source"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "value": {"type": ["string", "integer", "number", "boolean", "null"]},
+        "source": {"type": ["string", "null"]}
+      }
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "kind", "facts", "evidence", "notes"],
+      "properties": {
+        "status": {
+          "enum": ["known", "inferred", "unknown", "unsupported"]
+        },
+        "kind": {"type": ["string", "null"]},
+        "facts": {"type": "array", "items": {"$ref": "#/$defs/fact"}},
+        "evidence": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        },
+        "notes": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"status": {"enum": ["known", "inferred"]}}},
+          "then": {"properties": {"kind": {"type": "string", "minLength": 1}}}
+        },
+        {
+          "if": {"properties": {"status": {"const": "unknown"}}},
+          "then": {"properties": {"kind": {"type": "null"}}}
+        }
+      ]
+    }
+  }
+}
