@@ -26,6 +26,9 @@ Optimization discovery and provider selection exchange immutable
 Exact resume state and plain Transformers output follow separate
 [checkpoint and Hugging Face export contracts](docs/checkpoint/CONTRACTS.md).
 
+Generic dense causal models are acquired through the
+[Hugging Face causal-model provider](docs/models/HUGGINGFACE_PROVIDER.md).
+
 TrainLM distinguishes models that are **Compatible**, **Optimized**, and
 hardware **Certified**. Generic execution is never presented as TPU performance
 certification.

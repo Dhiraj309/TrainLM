@@ -57,10 +57,14 @@ model:
   name_or_path: org/model
   revision: immutable-commit-sha
   initialization: pretrained
+  dtype: bfloat16
+  use_safetensors: true
 ```
 
 `trust_remote_code` defaults to `false` and must be consciously enabled. Its
 security and support implications are defined in [the scope contract](../SCOPE.md).
+Local `save_pretrained` directories use the same path; `local_files_only` and
+`cache_dir` control offline resolution without storing a Hub token in YAML.
 
 ## Selecting TrainLM's reference architecture
 
@@ -81,4 +85,3 @@ Legacy YAML that placed architecture keys directly under `model` is rejected
 with a migration message. Move those keys under `config_overrides` and choose
 the provider explicitly. Legacy `runtime.compile` is migrated to
 `optimizations.compile` only when the new field is absent.
-
