@@ -193,19 +193,19 @@ rebase that untouched branch onto the latest merged predecessor.
 
 ## M0 — Reproducibility and release contract
 
-**Status:** [~] M0-F1 implemented and awaiting validation
+**Status:** [~] M0-F1 complete; M0-F2 implemented and awaiting validation
 
 **Goal:** Freeze scope, geometry, metrics, and dependency expectations before
 runtime or kernel work.
 
-- [~] **M0-F1 — Dense-AR product scope**
+- [x] **M0-F1 — Dense-AR product scope**
   `docs(scope): define dense causal LM support contract`
   Define inclusions, exclusions, support levels, remote-code policy, issue
   labels, release terminology, and representative families.
   **Acceptance:** One normative scope document is referenced by tests, issue
   configuration, release notes, and README.
 
-- [ ] **M0-F2 — LaughLM parity manifest**
+- [~] **M0-F2 — LaughLM parity manifest**
   `test(benchmark): lock LaughLM 135M parity manifest`
   Lock model, initialization, loss, optimizer, schedule, batch, precision,
   data, runtime, hardware, reference commit, and evidence.

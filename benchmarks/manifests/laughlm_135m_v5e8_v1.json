@@ -1,0 +1,144 @@
+{
+  "schema_version": 1,
+  "manifest_id": "laughlm-135m-v5e8",
+  "manifest_version": 1,
+  "status": "locked_reference",
+  "purpose": "Matched TrainLM versus LaughLM TPU performance certification",
+  "reference": {
+    "project": "LaughLM",
+    "revision": "0705d255faab",
+    "configuration": "configs/v5e_pmap_true135m_production.yaml",
+    "hardware_result": "validated TPU v5e-8 production baseline"
+  },
+  "model": {
+    "vocab_size": 32064,
+    "hidden_size": 1024,
+    "num_hidden_layers": 8,
+    "num_attention_heads": 8,
+    "num_key_value_heads": 8,
+    "intermediate_size": 2816,
+    "max_sequence_length": 2048,
+    "expected_parameter_count": 135611392
+  },
+  "architecture": {
+    "model_type": "dense_decoder_only_causal_lm",
+    "position_encoding": "rope",
+    "normalization": "rms_norm",
+    "normalization_placement": "pre",
+    "attention_variant": "mha",
+    "attention_implementation": "splash",
+    "attention_fallback": "error",
+    "fused_qkv": true,
+    "mlp_type": "swiglu",
+    "residual_layout": "serial",
+    "embedding_layout": "standard",
+    "use_bias": false,
+    "tie_word_embeddings": true,
+    "parallel_block": false
+  },
+  "initialization": {
+    "method": "normal",
+    "parameter_std": 0.01,
+    "embedding_std": 0.01,
+    "attention_std": 0.01,
+    "mlp_std": 0.01,
+    "residual_scale": 1.0
+  },
+  "loss": {
+    "type": "causal_language_modeling",
+    "label_shift": "next_token",
+    "chunked_linear_cross_entropy": true,
+    "logits_chunk_size": 4096,
+    "rematerialize_chunks": true,
+    "z_loss": 0.0001,
+    "ignore_index": -100,
+    "reduction": "supervised_token_mean"
+  },
+  "optimizer": {
+    "type": "adamw",
+    "learning_rate": 0.0002,
+    "beta1": 0.9,
+    "beta2": 0.95,
+    "epsilon": 1e-08,
+    "weight_decay": 0.1,
+    "gradient_clip_norm": 1.0,
+    "first_moment_dtype": "bfloat16",
+    "second_moment_dtype": "float32"
+  },
+  "scheduler": {
+    "type": "wsd",
+    "horizon_tokens": 20000000000,
+    "warmup_fraction": 0.01,
+    "stable_fraction": 0.95,
+    "minimum_learning_rate_ratio": 0.05
+  },
+  "batch": {
+    "sequence_length": 2048,
+    "micro_batch_per_device": 2,
+    "gradient_accumulation_steps": 32,
+    "data_parallel_replicas": 8,
+    "expected_tokens_per_optimizer_update": 1048576
+  },
+  "precision": {
+    "parameter_dtype": "float32",
+    "compute_dtype": "bfloat16",
+    "output_dtype": "float32"
+  },
+  "parallelism": {
+    "backend": "pmap",
+    "data_parallel": 8,
+    "model_parallel": 1,
+    "fsdp_parallel": 1,
+    "tensor_parallel": 1,
+    "sequence_parallel": 1,
+    "pipeline_parallel": 1
+  },
+  "runtime": {
+    "accelerator": "tpu",
+    "accelerator_type": "v5e-8",
+    "host_count": 1,
+    "device_count": 8,
+    "scan_layers": false,
+    "rematerialization_policy": "dots_saveable",
+    "rematerialization_granularity": "block",
+    "data_backend": "native_memmap",
+    "prefetch_size": 16,
+    "persistent_compilation_cache": true,
+    "asynchronous_checkpointing": true
+  },
+  "data": {
+    "format": "packed_raw_uint16",
+    "source": "hugging_face_hub",
+    "repository": "LaughTaleAI/LaughLM-Tokenized-Fine",
+    "revision": null,
+    "dataset": "fineweb-edu",
+    "train_shard_start": 0,
+    "train_shard_count": 28,
+    "validation_shard_start": 28,
+    "validation_shard_count": 2,
+    "packing": true,
+    "eos_between_documents": true,
+    "pad_to_multiple": 128
+  },
+  "reference_metrics": {
+    "global_tokens_per_second": 1014000,
+    "device_tokens_per_second": 1023000,
+    "non_embedding_mfu": 0.531,
+    "logits_inclusive_mfu": 0.659,
+    "peak_hbm_gib": 5.73,
+    "total_step_seconds": 1.034,
+    "device_step_seconds": 1.025
+  },
+  "acceptance_thresholds": {
+    "hard_90_percent": {
+      "minimum_global_tokens_per_second": 912600,
+      "minimum_non_embedding_mfu": 0.478,
+      "maximum_total_step_seconds": 1.149
+    },
+    "preferred_95_percent": {
+      "minimum_global_tokens_per_second": 963300,
+      "minimum_non_embedding_mfu": 0.504,
+      "maximum_total_step_seconds": 1.089
+    }
+  }
+}
