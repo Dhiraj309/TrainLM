@@ -75,4 +75,5 @@ class LossTaskAdapter:
                 ignored_tokens=0,
                 exact=False,
             ),
+            loss_source="legacy_model",
         )

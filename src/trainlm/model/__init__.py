@@ -11,6 +11,7 @@ from .huggingface import (
     LoadedCausalLM,
     load_huggingface_causal_lm,
 )
+from .outputs import CausalLMOutput, normalize_causal_lm_output
 from .trainlm import (
     TrainLMForCausalLM,
     TrainLMModel,
@@ -19,6 +20,7 @@ from .trainlm import (
 
 __all__ = [
     "BatchDispatch",
+    "CausalLMOutput",
     "ForwardBatchDispatcher",
     "ForwardSignature",
     "ForwardSignatureError",
@@ -30,4 +32,5 @@ __all__ = [
     "TrainLMForCausalLM",
     "dispatch_model_batch",
     "load_huggingface_causal_lm",
+    "normalize_causal_lm_output",
 ]

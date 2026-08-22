@@ -49,10 +49,13 @@ class TaskResult:
     loss: torch.Tensor
     tokens: TokenCounts
     metrics: Mapping[str, torch.Tensor | float] = field(default_factory=dict)
+    loss_source: str = "task"
 
     def __post_init__(self) -> None:
         if not isinstance(self.loss, torch.Tensor) or self.loss.ndim != 0:
             raise ValueError("Task loss must be a scalar tensor.")
+        if not isinstance(self.loss_source, str) or not self.loss_source:
+            raise ValueError("Task loss_source must be a non-empty string.")
 
 
 @runtime_checkable

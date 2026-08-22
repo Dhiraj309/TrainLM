@@ -34,6 +34,8 @@ Status flags: `[ ]` not started, `[~]` in progress or awaiting validation,
 `[x]` complete, and `[d]` intentionally deferred.
 
 - Only one milestone should be active at a time.
+- Every progress change must update the milestone overview, PR overview, and
+  detailed milestone status in the same commit.
 - Every feature/story below is one atomic commit with its tests and narrowly
   required documentation.
 - Do not squash implementation PRs; feature commits are review and rollback
@@ -155,14 +157,14 @@ Branch names describe repository work, not the tool or contributor:
 
 ### Dense-AR V1 PR sequence
 
-| PR | Branch | Milestones | Commits | Merge gate |
-|---|---|---|---:|---|
-| PR1 | `milestone/m0-m2-foundation` | M0-M2 | 15 | Contracts and generic HF CPU conformance |
-| PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 13 | Packed data and backend-neutral trainer |
-| PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 16 | 600K, generic TPU, checkpoint/resume |
-| PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11 | Reversible planner and optimized loss |
-| PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | 850K and hard LaughLM parity |
-| PR6 | `milestone/m13-m14-family-release` | M13-M14 | 12 | Cross-family certification and V1 release |
+| Status | PR | Branch | Milestones | Commits | Merge gate |
+|---|---|---|---|---:|---|
+| [~] | PR1 | `milestone/m0-m2-foundation` | M0-M2 | 15 | Contracts and generic HF CPU conformance |
+| [ ] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 13 | Packed data and backend-neutral trainer |
+| [ ] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 16 | 600K, generic TPU, checkpoint/resume |
+| [ ] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11 | Reversible planner and optimized loss |
+| [ ] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | 850K and hard LaughLM parity |
+| [ ] | PR6 | `milestone/m13-m14-family-release` | M13-M14 | 12 | Cross-family certification and V1 release |
 
 Future tracks: `milestone/m15-torchtpu`, `milestone/m16-moe`, and
 `milestone/m17-dllm`, five commits each. Before activating a later PR branch,
@@ -172,9 +174,9 @@ rebase that untouched branch onto the latest merged predecessor.
 
 | Status | Milestone | Outcome |
 |---|---|---|
-| [~] | M0 | Scope, parity manifest, metrics, and dependencies |
-| [ ] | M1 | Backend-neutral framework contracts |
-| [ ] | M2 | Universal HF dense-causal CPU path |
+| [x] | M0 | Scope, parity manifest, metrics, and dependencies |
+| [x] | M1 | Backend-neutral framework contracts |
+| [~] | M2 | Universal HF dense-causal CPU path |
 | [ ] | M3 | Packed-binary data pipeline |
 | [ ] | M4 | Correct backend-neutral trainer |
 | [ ] | M5 | Stable PyTorch/XLA DP8 runtime |
@@ -271,7 +273,7 @@ runtime or kernel work.
 
 ## M2 — Universal Hugging Face dense-causal intake
 
-**Status:** [~] M2-F1 complete; M2-F2 implemented and awaiting validation
+**Status:** [~] M2-F1-M2-F2 complete; M2-F3 implemented and awaiting validation
 
 **Goal:** Every representative HF causal LM works through the unchanged generic
 path before optimization adapters exist.
@@ -282,13 +284,13 @@ path before optimization adapters exist.
   dtype, metadata, ties, and local loading.
   **Acceptance:** No TrainLM model class is required.
 
-- [~] **M2-F2 — Forward-aware batch dispatch**
+- [x] **M2-F2 — Forward-aware batch dispatch**
   `feat(models): add forward signature aware batch dispatch`
   Filter optional inputs while preserving masks, positions, cache position, and
   supported family fields.
   **Acceptance:** Tiny representative models receive only valid inputs.
 
-- [ ] **M2-F3 — Generic output/loss path**
+- [~] **M2-F3 — Generic output/loss path**
   `feat(models): add generic causal LM output and loss protocol`
   Use valid model loss or correctly shifted CE normalized by supervised tokens.
   **Acceptance:** CPU loss and gradients match direct HF execution.

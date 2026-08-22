@@ -4,6 +4,7 @@ import pytest
 import torch
 import torch.nn.functional as F
 from torch import nn
+from transformers import GPT2Config, GPT2LMHeadModel
 
 from trainlm.runtime import Runtime
 from trainlm.tasks import CausalLMTask, TaskResult, TokenCounts
@@ -69,6 +70,7 @@ def test_causal_task_owns_shift_masks_normalization_and_counts():
     )
     assert "labels" not in model.received
     assert "loss_mask" not in model.received
+    assert result.loss_source == "trainlm_cross_entropy"
 
 
 def test_causal_task_uses_input_ids_as_labels_when_labels_are_absent():
@@ -132,3 +134,64 @@ def test_causal_task_weights_evaluation_by_supervised_tokens():
     metrics = task.aggregate_evaluation(results)
 
     assert metrics["eval_loss"] == pytest.approx(3.5)
+
+
+@pytest.mark.parametrize(
+    ("implementation", "expected_source"),
+    (
+        ("auto", "model"),
+        ("causal_lm", "trainlm_cross_entropy"),
+    ),
+)
+def test_task_loss_and_gradients_match_direct_hf_execution(
+    implementation,
+    expected_source,
+):
+    config = GPT2Config(
+        vocab_size=32,
+        n_positions=8,
+        n_embd=8,
+        n_layer=1,
+        n_head=2,
+        resid_pdrop=0.0,
+        embd_pdrop=0.0,
+        attn_pdrop=0.0,
+    )
+    direct_model = GPT2LMHeadModel(config)
+    task_model = GPT2LMHeadModel(config)
+    task_model.load_state_dict(direct_model.state_dict())
+    input_ids = torch.tensor([[1, 2, 3, 4], [4, 3, 2, 1]])
+    attention_mask = torch.tensor([[1, 1, 1, 1], [1, 1, 1, 0]])
+    direct_labels = input_ids.clone()
+    direct_labels[:, 1:].masked_fill_(
+        ~attention_mask[:, 1:].to(dtype=torch.bool),
+        -100,
+    )
+
+    direct_loss = direct_model(
+        input_ids=input_ids,
+        attention_mask=attention_mask,
+        labels=direct_labels,
+    ).loss
+    direct_loss.backward()
+    result = CausalLMTask(loss_implementation=implementation).training_step(
+        task_model,
+        {"input_ids": input_ids, "attention_mask": attention_mask},
+        Runtime(),
+    )
+    result.loss.backward()
+
+    assert result.loss_source == expected_source
+    assert torch.allclose(result.loss, direct_loss)
+    direct_parameters = dict(direct_model.named_parameters())
+    for name, parameter in task_model.named_parameters():
+        direct_gradient = direct_parameters[name].grad
+        if direct_gradient is None:
+            assert parameter.grad is None
+        else:
+            assert torch.allclose(parameter.grad, direct_gradient)
+
+
+def test_explicit_model_loss_rejects_incompatible_semantics():
+    with pytest.raises(ValueError, match="Model loss requires"):
+        CausalLMTask(loss_implementation="model", z_loss=1e-4)

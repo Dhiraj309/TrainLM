@@ -13,9 +13,11 @@ For an input sequence `[t0, t1, ..., tn]`, logits at positions
 2. uses `input_ids` as labels when labels are absent;
 3. shifts targets exactly once;
 4. combines `attention_mask`, optional `loss_mask`, and `ignore_index`;
-5. removes task-only fields before model dispatch;
-6. extracts logits from HF attribute, mapping, or tuple outputs;
-7. computes summed cross-entropy and applies the configured normalization;
+5. keeps full masked labels for compatible HF-native causal loss and shifted
+   labels for TrainLM cross-entropy;
+6. extracts scalar loss and logits from HF attribute, mapping, or tuple outputs;
+7. uses compatible model loss or computes summed cross-entropy with the
+   configured normalization;
 8. optionally adds z-loss; and
 9. returns exact input, target, supervised, ignored, and sequence counts.
 
@@ -49,11 +51,21 @@ task = CausalLMTask(
     ignore_index=-100,
     normalization="supervised_tokens",
     z_loss=1e-4,
+    loss_implementation="auto",
 )
 ```
 
-The initial implementation uses portable PyTorch cross-entropy with FP32
-logits. It is the correctness reference, not the final throughput path.
+`auto` uses model-provided loss only when `forward` explicitly accepts labels,
+the output exposes a scalar loss, `ignore_index` is `-100`, normalization is by
+supervised tokens, and z-loss is disabled. Otherwise it uses portable PyTorch
+cross-entropy with FP32 logits. `model` makes native loss mandatory;
+`causal_lm` always selects the TrainLM correctness reference.
+
+Every `TaskResult` records `loss_source` as `model`,
+`trainlm_cross_entropy`, or `legacy_model`.
+
+The portable cross-entropy is the correctness reference, not the final
+throughput path.
 Chunked logits, fused linear-cross-entropy, Pallas, and backend-native kernels
 will implement the same task contract in later milestones.
 
@@ -64,6 +76,5 @@ The former callable `loss_fn(model, batch, runtime)` remains available through
 shift or mask semantics, the adapter marks token counts as inexact and reports
 zeros. It must not be used for parity benchmarks or token-based stopping.
 
-Selecting `loss.implementation: model` therefore requires an explicit legacy
-`loss_fn`. The default `loss.implementation: causal_lm` uses canonical,
-task-owned semantics.
+The default `loss.implementation: auto` belongs to `CausalLMTask`. The legacy
+adapter remains only for applications still passing the former `loss_fn`.
