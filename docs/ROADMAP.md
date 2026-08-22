@@ -271,18 +271,18 @@ runtime or kernel work.
 
 ## M2 — Universal Hugging Face dense-causal intake
 
-**Status:** [~] M2-F1 implemented and awaiting validation
+**Status:** [~] M2-F1 complete; M2-F2 implemented and awaiting validation
 
 **Goal:** Every representative HF causal LM works through the unchanged generic
 path before optimization adapters exist.
 
-- [~] **M2-F1 — Generic HF model provider**
+- [x] **M2-F1 — Generic HF model provider**
   `feat(models): add generic HF causal LM provider`
   Support `AutoConfig`, `from_config`, and `from_pretrained`; preserve revision,
   dtype, metadata, ties, and local loading.
   **Acceptance:** No TrainLM model class is required.
 
-- [ ] **M2-F2 — Forward-aware batch dispatch**
+- [~] **M2-F2 — Forward-aware batch dispatch**
   `feat(models): add forward signature aware batch dispatch`
   Filter optional inputs while preserving masks, positions, cache position, and
   supported family fields.

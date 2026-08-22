@@ -20,6 +20,21 @@ class FixedLogitsModel(nn.Module):
         return SimpleNamespace(logits=self.logits)
 
 
+class ExplicitInputsModel(nn.Module):
+    def __init__(self, logits):
+        super().__init__()
+        self.logits = nn.Parameter(logits)
+        self.received = None
+
+    def forward(self, input_ids, attention_mask=None, position_ids=None):
+        self.received = {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "position_ids": position_ids,
+        }
+        return SimpleNamespace(logits=self.logits)
+
+
 def test_causal_task_owns_shift_masks_normalization_and_counts():
     logits = torch.tensor(
         [[
@@ -68,6 +83,23 @@ def test_causal_task_uses_input_ids_as_labels_when_labels_are_absent():
     assert isinstance(result, TaskResult)
     assert result.tokens.supervised_tokens == 6
     assert result.tokens.ignored_tokens == 0
+
+
+def test_causal_task_filters_dataset_metadata_before_model_forward():
+    model = ExplicitInputsModel(torch.randn(1, 4, 8))
+
+    CausalLMTask().training_step(
+        model,
+        {
+            "input_ids": torch.tensor([[1, 2, 3, 4]]),
+            "attention_mask": torch.ones(1, 4),
+            "position_ids": torch.arange(4).unsqueeze(0),
+            "dataset_document_id": torch.tensor(12),
+        },
+        Runtime(),
+    )
+
+    assert set(model.received) == {"input_ids", "attention_mask", "position_ids"}
 
 
 def test_causal_task_rejects_batch_without_supervised_targets():

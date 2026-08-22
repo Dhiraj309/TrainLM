@@ -28,6 +28,8 @@ Exact resume state and plain Transformers output follow separate
 
 Generic dense causal models are acquired through the
 [Hugging Face causal-model provider](docs/models/HUGGINGFACE_PROVIDER.md).
+Model batches follow the model's own
+[forward-signature dispatch contract](docs/models/BATCH_DISPATCH.md).
 
 TrainLM distinguishes models that are **Compatible**, **Optimized**, and
 hardware **Certified**. Generic execution is never presented as TPU performance

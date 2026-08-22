@@ -9,6 +9,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from trainlm.model.dispatch import ForwardBatchDispatcher
 from trainlm.runtime import ExecutionBackend
 
 from .base import TaskResult, TokenCounts
@@ -35,6 +36,8 @@ class CausalLMTask:
         self.ignore_index = ignore_index
         self.normalization = normalization
         self.z_loss = z_loss
+        self._dispatcher_model: nn.Module | None = None
+        self._dispatcher: ForwardBatchDispatcher | None = None
 
     def training_step(
         self,
@@ -91,9 +94,13 @@ class CausalLMTask:
             for key, value in task_batch.items()
             if key not in {"labels", "loss_mask"}
         }
+        if self._dispatcher is None or self._dispatcher_model is not model:
+            self._dispatcher = ForwardBatchDispatcher.from_model(model)
+            self._dispatcher_model = model
+        dispatch = self._dispatcher.dispatch(model_inputs)
 
         with backend.autocast():
-            outputs = model(**model_inputs)
+            outputs = model(**dispatch.inputs)
             logits = _extract_logits(outputs)
             loss, z_loss_value = self._loss(logits, labels, loss_mask)
 
