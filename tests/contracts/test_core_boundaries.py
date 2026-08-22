@@ -21,7 +21,7 @@ FORBIDDEN_IMPORT_ROOTS = {
     "flax",
 }
 FORBIDDEN_MODEL_NAMESPACES = (
-    "trainlm.model",
+    "trainlm.model.trainlm",
     "transformers.models",
 )
 
