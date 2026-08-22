@@ -10,3 +10,5 @@ performance claims follow the normative
 
 - Defined the dense autoregressive V1 scope, representative Hugging Face model
   matrix, and distinct Compatible, Optimized, and Certified support levels.
+- Locked the versioned LaughLM 135M TPU v5e-8 parity workload and release
+  thresholds.

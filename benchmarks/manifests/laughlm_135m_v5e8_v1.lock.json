@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "manifest_id": "laughlm-135m-v5e8",
+  "manifest_version": 1,
+  "manifest_path": "benchmarks/manifests/laughlm_135m_v5e8_v1.json",
+  "sha256": "a7a78b4b3fd2da14b4314944d67e8a9576237769a557cc0805e98c71697bbfe1",
+  "decision_record": "docs/benchmarks/decisions/0001-laughlm-135m-reference.md",
+  "immutable": true
+}
