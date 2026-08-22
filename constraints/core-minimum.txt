@@ -1,0 +1,3 @@
+# Minimum supported core compatibility profile.
+torch==2.9.0
+transformers==5.0.0

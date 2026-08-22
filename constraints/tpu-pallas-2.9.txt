@@ -1,0 +1,7 @@
+# Stable PyTorch/XLA TPU profile with its official Pallas dependency pins.
+torch==2.9.0
+torch-xla==2.9.0
+transformers==5.15.0
+libtpu==0.0.21
+jax==0.7.1
+jaxlib==0.7.1

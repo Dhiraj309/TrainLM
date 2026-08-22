@@ -1,0 +1,5 @@
+# Stable PyTorch/XLA TPU profile. Must remain matched by release family.
+torch==2.9.0
+torch-xla==2.9.0
+transformers==5.15.0
+libtpu==0.0.21

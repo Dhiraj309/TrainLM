@@ -35,13 +35,29 @@ classifiers = [
 ]
 
 dependencies = [
-    "torch>=2.5",
-    "transformers>=4.56",
+    "torch>=2.9,<2.14",
+    "transformers>=5.0,<6",
 ]
 
 [project.optional-dependencies]
+tpu-xla = [
+    "torch==2.9.0",
+    "torch-xla[tpu]==2.9.0",
+    "transformers==5.15.0",
+]
+tpu-pallas = [
+    "torch==2.9.0",
+    "torch-xla[pallas,tpu]==2.9.0",
+    "transformers==5.15.0",
+]
+profiling = [
+    "tensorboard>=2.18,<3",
+]
 dev = [
-    "pytest>=8.0",
+    "jsonschema>=4.23,<5",
+    "pytest>=8,<10",
+    "pytest-cov>=6,<8",
+    "tomli>=2.2,<3; python_version < '3.11'",
 ]
 
 [tool.setuptools]
