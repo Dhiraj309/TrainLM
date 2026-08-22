@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trainlm.dev/schemas/optimization/execution_plan_v1.schema.json",
+  "title": "TrainLM Execution Plan v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "plan_id", "status", "policy",
+    "capability_fingerprint", "backend", "precision", "decisions",
+    "transformations", "warnings", "errors"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "plan_id": {"type": "string", "minLength": 1},
+    "status": {"enum": ["ready", "noop", "blocked"]},
+    "policy": {"enum": ["disabled", "auto", "required"]},
+    "capability_fingerprint": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "backend": {"type": "string", "minLength": 1},
+    "precision": {"type": "string", "minLength": 1},
+    "decisions": {"type": "array", "items": {"$ref": "#/$defs/decision"}},
+    "transformations": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/transformation"}
+    },
+    "warnings": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    },
+    "errors": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1}
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "blocked"}}},
+      "then": {"properties": {"errors": {"minItems": 1}}},
+      "else": {"properties": {"errors": {"maxItems": 0}}}
+    },
+    {
+      "if": {"properties": {"status": {"const": "noop"}}},
+      "then": {
+        "properties": {
+          "transformations": {"maxItems": 0},
+          "decisions": {
+            "items": {
+              "allOf": [
+                {"$ref": "#/$defs/decision"},
+                {"properties": {"status": {"const": "skipped"}}}
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "decisions": {
+            "contains": {
+              "properties": {"status": {"const": "blocked"}},
+              "required": ["status"]
+            }
+          }
+        }
+      },
+      "then": {"properties": {"status": {"const": "blocked"}}}
+    }
+  ],
+  "$defs": {
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "decision_id", "component", "operation", "status", "reason",
+        "selected_provider", "requested_provider", "requirements", "evidence"
+      ],
+      "properties": {
+        "decision_id": {"type": "string", "minLength": 1},
+        "component": {"type": "string", "minLength": 1},
+        "operation": {"type": "string", "minLength": 1},
+        "status": {"enum": ["selected", "fallback", "skipped", "blocked"]},
+        "reason": {"type": "string", "minLength": 1},
+        "selected_provider": {"type": ["string", "null"], "minLength": 1},
+        "requested_provider": {"type": ["string", "null"], "minLength": 1},
+        "requirements": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        },
+        "evidence": {
+          "type": "array",
+          "items": {"type": "string", "minLength": 1}
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"status": {"enum": ["selected", "fallback"]}}
+          },
+          "then": {
+            "properties": {"selected_provider": {"type": "string", "minLength": 1}}
+          }
+        },
+        {
+          "if": {
+            "properties": {"status": {"enum": ["skipped", "blocked"]}}
+          },
+          "then": {"properties": {"selected_provider": {"type": "null"}}}
+        },
+        {
+          "if": {"properties": {"status": {"const": "fallback"}}},
+          "then": {
+            "properties": {"requested_provider": {"type": "string", "minLength": 1}}
+          }
+        }
+      ]
+    },
+    "transformation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "transform_id", "component", "provider", "target_paths",
+        "inverse_transform_id", "reason", "parameter_layout_change"
+      ],
+      "properties": {
+        "transform_id": {"type": "string", "minLength": 1},
+        "component": {"type": "string", "minLength": 1},
+        "provider": {"type": "string", "minLength": 1},
+        "target_paths": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1}
+        },
+        "inverse_transform_id": {"type": "string", "minLength": 1},
+        "reason": {"type": "string", "minLength": 1},
+        "parameter_layout_change": {"type": "boolean"}
+      }
+    }
+  }
+}

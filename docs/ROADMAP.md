@@ -231,7 +231,7 @@ runtime or kernel work.
 
 ## M1 — Framework contracts and backend boundary
 
-**Status:** [~] M1-F1-M1-F2 complete; M1-F3 implemented and awaiting validation
+**Status:** [~] M1-F1-M1-F3 complete; M1-F4 implemented and awaiting validation
 
 **Goal:** Remove custom-model, XLA, and task assumptions from core TrainLM.
 
@@ -246,12 +246,12 @@ runtime or kernel work.
   diagnostics, and lifecycle hooks.
   **Acceptance:** Trainer-facing packages contain no `torch_xla` import.
 
-- [~] **M1-F3 — Language-model task protocol**
+- [x] **M1-F3 — Language-model task protocol**
   `feat(tasks): define causal language modeling task protocol`
   Own dispatch, label shift, ignored tokens, normalization, counting, and eval.
   **Acceptance:** Trainer code contains no causal-label logic.
 
-- [ ] **M1-F4 — Capability and plan schemas**
+- [~] **M1-F4 — Capability and plan schemas**
   `feat(optimization): define capability and execution plan schemas`
   Model attention, position, norm, MLP, residual, projections, head, embedding,
   checkpoint, and provider decisions.
