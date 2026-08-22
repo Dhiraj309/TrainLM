@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trainlm.dev/schemas/checkpoint/hf_export_manifest_v1.schema.json",
+  "title": "TrainLM Hugging Face Export Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "export_id", "created_at", "model_type", "architecture",
+    "config_class", "transformers_version", "dtype", "safe_serialization",
+    "layout", "tied_weights", "artifacts", "commit", "source_checkpoint_id",
+    "manifest_type"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "manifest_type": {"const": "huggingface_export"},
+    "export_id": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "format": "date-time"},
+    "model_type": {"type": "string", "minLength": 1},
+    "architecture": {"type": "string", "minLength": 1},
+    "config_class": {"type": "string", "minLength": 1},
+    "transformers_version": {"type": "string", "minLength": 1},
+    "dtype": {"type": "string", "minLength": 1},
+    "safe_serialization": {"const": true},
+    "source_checkpoint_id": {"type": ["string", "null"], "minLength": 1},
+    "layout": {"$ref": "#/$defs/layout"},
+    "tied_weights": {"type": "array", "items": {"$ref": "#/$defs/tie"}},
+    "artifacts": {"type": "array", "items": {"$ref": "#/$defs/artifact"}},
+    "commit": {"$ref": "#/$defs/commit"}
+  },
+  "$defs": {
+    "layout": {
+      "type": "object", "additionalProperties": false,
+      "required": ["source_parameter_layout", "target_parameter_layout", "reversed_transform_ids", "remaining_transform_ids"],
+      "properties": {
+        "source_parameter_layout": {"type": "string", "minLength": 1},
+        "target_parameter_layout": {"type": "string", "minLength": 1},
+        "reversed_transform_ids": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "remaining_transform_ids": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "tie": {
+      "type": "object", "additionalProperties": false,
+      "required": ["canonical_name", "alias_name"],
+      "properties": {
+        "canonical_name": {"type": "string", "minLength": 1},
+        "alias_name": {"type": "string", "minLength": 1}
+      }
+    },
+    "artifact": {
+      "type": "object", "additionalProperties": false,
+      "required": ["artifact_id", "role", "path", "format", "sha256", "size_bytes", "required", "shard_group", "shard_index", "shard_count", "rank"],
+      "properties": {
+        "artifact_id": {"type": "string", "minLength": 1},
+        "role": {"type": "string", "minLength": 1},
+        "path": {"type": "string", "minLength": 1},
+        "format": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "size_bytes": {"type": "integer", "minimum": 0},
+        "required": {"type": "boolean"},
+        "shard_group": {"type": ["string", "null"]},
+        "shard_index": {"type": ["integer", "null"], "minimum": 0},
+        "shard_count": {"type": ["integer", "null"], "minimum": 1},
+        "rank": {"type": ["integer", "null"], "minimum": 0}
+      }
+    },
+    "commit": {
+      "type": "object", "additionalProperties": false,
+      "required": ["status", "transaction_id", "strategy", "staging_suffix", "completion_marker", "incomplete_policy"],
+      "properties": {
+        "status": {"enum": ["staging", "complete", "failed"]},
+        "transaction_id": {"type": "string", "minLength": 1},
+        "strategy": {"enum": ["directory_rename", "commit_marker"]},
+        "staging_suffix": {"type": "string", "minLength": 1},
+        "completion_marker": {"type": "string", "minLength": 1},
+        "incomplete_policy": {"const": "ignore"}
+      }
+    }
+  }
+}
