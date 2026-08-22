@@ -121,7 +121,9 @@ def _normalize_legacy_fields(config: dict[str, Any]) -> dict[str, Any]:
     model = _section(normalized, "model")
     model_source_fields = {
         "provider", "initialization", "name_or_path", "model_type",
-        "revision", "trust_remote_code", "config_overrides",
+        "revision", "trust_remote_code", "dtype", "cache_dir",
+        "local_files_only", "subfolder", "use_safetensors",
+        "config_overrides",
     }
     legacy_architecture_fields = set(model) - model_source_fields
     if legacy_architecture_fields:

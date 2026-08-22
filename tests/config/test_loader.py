@@ -36,6 +36,8 @@ trainer:
 model:
   provider: huggingface
   model_type: llama
+  dtype: bfloat16
+  cache_dir: /tmp/hf-cache
   config_overrides:
     hidden_size: 768
 
@@ -60,6 +62,8 @@ optimizer:
 
     assert config.model.provider == "huggingface"
     assert config.model.model_type == "llama"
+    assert config.model.dtype == "bfloat16"
+    assert config.model.cache_dir == "/tmp/hf-cache"
     assert config.model.config_overrides["hidden_size"] == 768
     assert config.optimizer.learning_rate == 0.0003
     assert config.trainer.max_steps == 100
@@ -146,4 +150,23 @@ trainer:
     )
 
     with pytest.raises(ValueError, match="Unsupported model provider"):
+        load_config(config_file)
+
+
+def test_model_acquisition_fields_cannot_hide_in_config_overrides(tmp_path):
+    config_file = tmp_path / "misplaced-acquisition.yaml"
+    config_file.write_text(
+        """
+model:
+  provider: huggingface
+  model_type: gpt2
+  config_overrides:
+    revision: accidental-duplicate
+trainer:
+  max_steps: 1
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="acquisition fields"):
         load_config(config_file)

@@ -1,3 +1,9 @@
+from .huggingface import (
+    HuggingFaceCausalLMProvider,
+    HuggingFaceModelMetadata,
+    LoadedCausalLM,
+    load_huggingface_causal_lm,
+)
 from .trainlm import (
     TrainLMForCausalLM,
     TrainLMModel,
@@ -5,7 +11,11 @@ from .trainlm import (
 )
 
 __all__ = [
+    "HuggingFaceCausalLMProvider",
+    "HuggingFaceModelMetadata",
+    "LoadedCausalLM",
     "TrainLMPreTrainedModel",
     "TrainLMModel",
     "TrainLMForCausalLM",
+    "load_huggingface_causal_lm",
 ]
