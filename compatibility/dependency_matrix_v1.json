@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "matrix_id": "trainlm-dependencies",
+  "matrix_version": 1,
+  "reviewed_on": "2026-08-22",
+  "core_contract": {
+    "python": ">=3.10",
+    "torch": ">=2.9,<2.14",
+    "transformers": ">=5.0,<6",
+    "policy": "CPU compatibility CI covers the minimum and current profiles. TPU certification uses exact backend profiles."
+  },
+  "profiles": {
+    "core-minimum": {
+      "status": "ci_required",
+      "platform": "cpu",
+      "python": "3.10",
+      "packages": {
+        "torch": "2.9.0",
+        "transformers": "5.0.0"
+      },
+      "constraints": "constraints/core-minimum.txt"
+    },
+    "core-current": {
+      "status": "ci_required",
+      "platform": "cpu",
+      "python": "3.13",
+      "packages": {
+        "torch": "2.13.0",
+        "transformers": "5.15.0"
+      },
+      "constraints": "constraints/core-current.txt"
+    },
+    "cuda-portability": {
+      "status": "smoke_required_when_available",
+      "platform": "cuda",
+      "python": "3.13",
+      "packages": {
+        "torch": "2.13.0",
+        "transformers": "5.15.0"
+      },
+      "installation_note": "Install the official PyTorch wheel matching the selected CUDA runtime before installing TrainLM.",
+      "constraints": "constraints/core-current.txt"
+    },
+    "tpu-xla-stable": {
+      "status": "resolution_target_pending_m5_tpu_validation",
+      "platform": "linux_x86_64_tpu_vm",
+      "python": ">=3.10,<3.14",
+      "accelerator": "tpu-v5e-8",
+      "packages": {
+        "torch": "2.9.0",
+        "torch-xla": "2.9.0",
+        "transformers": "5.15.0",
+        "libtpu": "0.0.21"
+      },
+      "project_extra": "tpu-xla",
+      "constraints": "constraints/tpu-xla-2.9.txt"
+    },
+    "tpu-xla-pallas": {
+      "status": "resolution_target_pending_m5_and_kernel_validation",
+      "platform": "linux_x86_64_tpu_vm",
+      "python": ">=3.10,<3.14",
+      "accelerator": "tpu-v5e-8",
+      "packages": {
+        "torch": "2.9.0",
+        "torch-xla": "2.9.0",
+        "transformers": "5.15.0",
+        "libtpu": "0.0.21",
+        "jax": "0.7.1",
+        "jaxlib": "0.7.1"
+      },
+      "project_extra": "tpu-pallas",
+      "constraints": "constraints/tpu-pallas-2.9.txt"
+    }
+  },
+  "official_sources": [
+    {
+      "name": "Transformers v5 installation",
+      "url": "https://huggingface.co/docs/transformers/v5.0.0/installation"
+    },
+    {
+      "name": "Transformers releases",
+      "url": "https://github.com/huggingface/transformers/releases"
+    },
+    {
+      "name": "PyTorch/XLA 2.9 package metadata",
+      "url": "https://pypi.org/pypi/torch-xla/2.9.0/json"
+    },
+    {
+      "name": "PyTorch/XLA installation and wheels",
+      "url": "https://github.com/pytorch/xla"
+    },
+    {
+      "name": "PyTorch package metadata",
+      "url": "https://pypi.org/project/torch/"
+    },
+    {
+      "name": "JAX TPU installation",
+      "url": "https://docs.jax.dev/en/latest/installation.html"
+    }
+  ]
+}

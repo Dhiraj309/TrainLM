@@ -193,7 +193,7 @@ rebase that untouched branch onto the latest merged predecessor.
 
 ## M0 — Reproducibility and release contract
 
-**Status:** [~] M0-F1-M0-F2 complete; M0-F3 implemented and awaiting validation
+**Status:** [~] M0-F1-M0-F3 complete; M0-F4 implemented and awaiting validation
 
 **Goal:** Freeze scope, geometry, metrics, and dependency expectations before
 runtime or kernel work.
@@ -212,13 +212,13 @@ runtime or kernel work.
   **Acceptance:** Validate `135,611,392` parameters and `1,048,576`
   tokens/update; a same-version field change fails the lock test.
 
-- [~] **M0-F3 — Benchmark schema and MFU calculator**
+- [x] **M0-F3 — Benchmark schema and MFU calculator**
   `feat(benchmark): add throughput and MFU result schema`
   Standardize global/device throughput, step/compile time, HBM, FLOPs, MFU,
   input idle, and collectives with real token counts and device waits.
   **Acceptance:** Reproduce saved LaughLM metrics within rounding tolerance.
 
-- [ ] **M0-F4 — Dependency matrix**
+- [~] **M0-F4 — Dependency matrix**
   `build(deps): define reproducible framework compatibility matrix`
   Separate core, CUDA, XLA, Pallas, profiling, and dev extras; pin TPU stacks
   and tested Transformers v5 ranges.

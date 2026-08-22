@@ -14,3 +14,5 @@ performance claims follow the normative
   thresholds.
 - Added the versioned benchmark result schema and dense causal-LM MFU
   calculator.
+- Defined portable core dependencies and exact CPU, PyTorch/XLA, libtpu, and
+  Pallas compatibility profiles.
