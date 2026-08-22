@@ -193,7 +193,7 @@ rebase that untouched branch onto the latest merged predecessor.
 
 ## M0 — Reproducibility and release contract
 
-**Status:** [~] M0-F1 complete; M0-F2 implemented and awaiting validation
+**Status:** [~] M0-F1-M0-F2 complete; M0-F3 implemented and awaiting validation
 
 **Goal:** Freeze scope, geometry, metrics, and dependency expectations before
 runtime or kernel work.
@@ -205,14 +205,14 @@ runtime or kernel work.
   **Acceptance:** One normative scope document is referenced by tests, issue
   configuration, release notes, and README.
 
-- [~] **M0-F2 — LaughLM parity manifest**
+- [x] **M0-F2 — LaughLM parity manifest**
   `test(benchmark): lock LaughLM 135M parity manifest`
   Lock model, initialization, loss, optimizer, schedule, batch, precision,
   data, runtime, hardware, reference commit, and evidence.
   **Acceptance:** Validate `135,611,392` parameters and `1,048,576`
   tokens/update; a same-version field change fails the lock test.
 
-- [ ] **M0-F3 — Benchmark schema and MFU calculator**
+- [~] **M0-F3 — Benchmark schema and MFU calculator**
   `feat(benchmark): add throughput and MFU result schema`
   Standardize global/device throughput, step/compile time, HBM, FLOPs, MFU,
   input idle, and collectives with real token counts and device waits.
