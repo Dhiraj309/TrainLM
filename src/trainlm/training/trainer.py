@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
+from typing import Any
 
 import torch
 from torch import nn
@@ -9,7 +10,7 @@ from torch.optim.lr_scheduler import LRScheduler
 from torch.utils.data import DataLoader
 
 from trainlm.config import TrainConfig
-from trainlm.runtime import Runtime
+from trainlm.runtime import ExecutionBackend
 
 from .callback import TrainerCallback
 from .callback_handler import CallbackHandler
@@ -26,7 +27,7 @@ class Trainer:
         *,
         config: TrainConfig,
         model: nn.Module,
-        runtime: Runtime,
+        runtime: ExecutionBackend,
         optimizer: Optimizer,
         scheduler: LRScheduler,
         loss_fn: Loss,
@@ -36,15 +37,19 @@ class Trainer:
     ) -> None:
         self.config = config
 
-        self.model = runtime.prepare_model(model)
         self.runtime = runtime
+        self.model = runtime.prepare_model(model)
 
-        self.optimizer = optimizer
+        self.optimizer = runtime.prepare_optimizer(optimizer)
         self.scheduler = scheduler
         self.loss_fn = loss_fn
 
-        self.train_dataloader = train_dataloader
-        self.eval_dataloader = eval_dataloader
+        self.train_dataloader = runtime.prepare_dataloader(train_dataloader)
+        self.eval_dataloader = (
+            runtime.prepare_dataloader(eval_dataloader)
+            if eval_dataloader is not None
+            else None
+        )
 
         self.state = TrainerState()
         self.control = TrainerControl()
@@ -54,16 +59,19 @@ class Trainer:
         self._train_iterator: Iterator | None = None
 
     def train(self) -> TrainerState:
+        self.runtime.initialize()
         self.state.is_training = True
 
-        self.model.train()
-
-        self.callback_handler.on_train_begin(
-            self.state,
-            self.control,
-        )
-
         try:
+            self.model.train()
+
+            self.runtime.on_train_begin()
+
+            self.callback_handler.on_train_begin(
+                self.state,
+                self.control,
+            )
+
             while not self._should_stop():
                 self.control.reset()
 
@@ -82,10 +90,16 @@ class Trainer:
         finally:
             self.state.is_training = False
 
-            self.callback_handler.on_train_end(
-                self.state,
-                self.control,
-            )
+            try:
+                self.callback_handler.on_train_end(
+                    self.state,
+                    self.control,
+                )
+            finally:
+                try:
+                    self.runtime.on_train_end()
+                finally:
+                    self.runtime.finalize()
 
         return self.state
 
@@ -105,36 +119,6 @@ class Trainer:
         except StopIteration:
             self._train_iterator = iter(self.train_dataloader)
             return next(self._train_iterator)
-
-    def _train_step(self) -> None:
-        batch = self._next_batch()
-
-        self.runtime.zero_grad(self.optimizer)
-
-        loss = self.loss_fn(
-            self.model,
-            batch,
-            self.runtime,
-        )
-
-        self.runtime.backward(loss)
-
-        self.runtime.clip_gradients(
-            self.model.parameters(),
-            self.config.trainer.max_grad_norm,
-        )
-
-        self.runtime.optimizer_step(
-            self.optimizer,
-        )
-
-        self.scheduler.step()
-
-        self.runtime.synchronize()
-
-        self.state.step += 1
-        self.state.loss = loss.detach().item()
-        self.state.learning_rate = self.scheduler.get_last_lr()[0]
 
     def _current_learning_rate(self) -> float:
         """Return the current learning rate."""
@@ -157,6 +141,8 @@ class Trainer:
 
     def _train_step(self) -> None:
         batch = self._next_batch()
+
+        self.runtime.on_step_begin(self.state.step)
 
         self.runtime.zero_grad(self.optimizer)
 
@@ -185,6 +171,8 @@ class Trainer:
             batch=batch,
             loss=loss,
         )
+
+        self.runtime.on_step_end(self.state.step)
 
     def _evaluation_step(self, batch) -> torch.Tensor:
         """Compute the evaluation loss for a batch."""
@@ -221,6 +209,7 @@ class Trainer:
         return {
             "eval_loss": total_loss / num_batches,
         }
+
     def save_model(self):
         raise NotImplementedError
 

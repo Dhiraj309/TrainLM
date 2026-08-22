@@ -5,7 +5,7 @@ from typing import Any, Protocol
 import torch
 from torch import nn
 
-from trainlm.runtime import Runtime
+from trainlm.runtime import ExecutionBackend
 
 
 class Loss(Protocol):
@@ -15,7 +15,7 @@ class Loss(Protocol):
         self,
         model: nn.Module,
         batch: Any,
-        runtime: Runtime,
+        runtime: ExecutionBackend,
     ) -> torch.Tensor:
         ...
 
@@ -27,7 +27,7 @@ class LanguageModelLoss:
         self,
         model: nn.Module,
         batch: Any,
-        runtime: Runtime,
+        runtime: ExecutionBackend,
     ) -> torch.Tensor:
         batch = runtime.prepare_batch(batch)
 
