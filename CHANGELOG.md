@@ -12,3 +12,5 @@ performance claims follow the normative
   matrix, and distinct Compatible, Optimized, and Certified support levels.
 - Locked the versioned LaughLM 135M TPU v5e-8 parity workload and release
   thresholds.
+- Added the versioned benchmark result schema and dense causal-LM MFU
+  calculator.

@@ -25,3 +25,23 @@ Never edit a locked manifest in place. A changed workload requires:
 
 The `.gitattributes` rule forces manifest JSON to LF so the content digest is
 stable across Windows and Linux checkouts.
+
+## Result schema and MFU
+
+Benchmark results use
+[`benchmark_result_v1.schema.json`](../../benchmarks/schemas/benchmark_result_v1.schema.json)
+and the matching `trainlm.benchmark.BenchmarkResult` API.
+
+- Token throughput uses actual supervised-token counts from every
+  data-parallel replica.
+- Global throughput divides those tokens by the synchronized wall window.
+- Device throughput divides the same tokens by the device execution window.
+- MFU uses device throughput and the aggregate theoretical peak of all devices.
+- Non-embedding MFU excludes embedding/output projection parameter work and
+  includes quadratic attention work.
+- Logits-inclusive MFU adds the output projection computation even when its
+  weights are tied.
+
+Cold compilation, warm-cache execution, and steady-state measurement must be
+reported separately. The schema also records HBM, input idle, collectives,
+compile/fallback counts, and workload identity.
