@@ -41,3 +41,29 @@ class CheckpointConfig:
     save_optimizer: bool = True
 
     save_rng_state: bool = True
+
+    def __post_init__(self) -> None:
+        for name in (
+            "save_training_every_steps",
+            "save_training_every_tokens",
+            "save_inference_every_steps",
+            "save_inference_every_tokens",
+        ):
+            value = getattr(self, name)
+            if value is not None and (
+                isinstance(value, bool)
+                or not isinstance(value, int)
+                or value < 1
+            ):
+                raise ValueError(f"'{name}' must be positive when configured.")
+        if (
+            isinstance(self.keep_last, bool)
+            or not isinstance(self.keep_last, int)
+            or self.keep_last < 1
+        ):
+            raise ValueError("'keep_last' must be positive.")
+        if self.save_optimizer is not True or self.save_rng_state is not True:
+            raise ValueError(
+                "Exact training checkpoints require optimizer and RNG state; "
+                "use a Hugging Face export for model-only persistence."
+            )

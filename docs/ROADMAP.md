@@ -231,7 +231,7 @@ runtime or kernel work.
 
 ## M1 — Framework contracts and backend boundary
 
-**Status:** [~] M1-F1-M1-F3 complete; M1-F4 implemented and awaiting validation
+**Status:** [~] M1-F1-M1-F4 complete; M1-F5 implemented and awaiting validation
 
 **Goal:** Remove custom-model, XLA, and task assumptions from core TrainLM.
 
@@ -251,13 +251,13 @@ runtime or kernel work.
   Own dispatch, label shift, ignored tokens, normalization, counting, and eval.
   **Acceptance:** Trainer code contains no causal-label logic.
 
-- [~] **M1-F4 — Capability and plan schemas**
+- [x] **M1-F4 — Capability and plan schemas**
   `feat(optimization): define capability and execution plan schemas`
   Model attention, position, norm, MLP, residual, projections, head, embedding,
   checkpoint, and provider decisions.
   **Acceptance:** Plans serialize and explain without mutating a model.
 
-- [ ] **M1-F5 — Checkpoint/export contracts**
+- [~] **M1-F5 — Checkpoint/export contracts**
   `feat(checkpoint): define internal resume and HF export contracts`
   Version canonical/sharded state, transforms, optimizer, RNG, scheduler,
   tokens, data cursor, atomicity, and incomplete-save behavior.
@@ -265,8 +265,9 @@ runtime or kernel work.
 
 ### Exit gate
 
-- [ ] CPU contracts prove trainer, task, optimization, and runtime interfaces
-  have no family or XLA dependency.
+- [~] CPU boundary contracts are implemented and awaiting validation; they prove
+  trainer, task, optimization, checkpoint, and runtime interfaces have no family
+  or XLA dependency.
 
 ## M2 — Universal Hugging Face dense-causal intake
 

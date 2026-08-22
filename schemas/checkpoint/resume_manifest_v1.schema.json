@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trainlm.dev/schemas/checkpoint/resume_manifest_v1.schema.json",
+  "title": "TrainLM Exact Resume Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "checkpoint_id", "created_at", "framework_version",
+    "framework_revision", "progress", "topology", "layout", "states",
+    "data_cursors", "artifacts", "commit", "manifest_type"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "manifest_type": {"const": "trainlm_resume"},
+    "checkpoint_id": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "format": "date-time"},
+    "framework_version": {"type": "string", "minLength": 1},
+    "framework_revision": {"type": "string", "minLength": 1},
+    "progress": {"$ref": "#/$defs/progress"},
+    "topology": {"$ref": "#/$defs/topology"},
+    "layout": {"$ref": "#/$defs/layout"},
+    "states": {"type": "array", "items": {"$ref": "#/$defs/state"}},
+    "data_cursors": {"type": "array", "items": {"$ref": "#/$defs/cursor"}},
+    "artifacts": {"type": "array", "items": {"$ref": "#/$defs/artifact"}},
+    "commit": {"$ref": "#/$defs/commit"}
+  },
+  "$defs": {
+    "nonnegative": {"type": "integer", "minimum": 0},
+    "progress": {
+      "type": "object", "additionalProperties": false,
+      "required": ["optimizer_step", "micro_step", "epoch", "tokens_seen", "samples_seen"],
+      "properties": {
+        "optimizer_step": {"$ref": "#/$defs/nonnegative"},
+        "micro_step": {"$ref": "#/$defs/nonnegative"},
+        "epoch": {"$ref": "#/$defs/nonnegative"},
+        "tokens_seen": {"$ref": "#/$defs/nonnegative"},
+        "samples_seen": {"$ref": "#/$defs/nonnegative"}
+      }
+    },
+    "mesh_axis": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "size"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "size": {"type": "integer", "minimum": 1}
+      }
+    },
+    "topology": {
+      "type": "object", "additionalProperties": false,
+      "required": ["backend", "world_size", "precision", "state_layout", "mesh"],
+      "properties": {
+        "backend": {"type": "string", "minLength": 1},
+        "world_size": {"type": "integer", "minimum": 1},
+        "precision": {"type": "string", "minLength": 1},
+        "state_layout": {"enum": ["canonical", "sharded"]},
+        "mesh": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/mesh_axis"}}
+      }
+    },
+    "layout": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capability_fingerprint", "execution_plan_id", "parameter_layout", "applied_transform_ids"],
+      "properties": {
+        "capability_fingerprint": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "execution_plan_id": {"type": "string", "minLength": 1},
+        "parameter_layout": {"type": "string", "minLength": 1},
+        "applied_transform_ids": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "state": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "implementation", "format_version", "layout", "keying", "artifact_ids"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "implementation": {"type": "string", "minLength": 1},
+        "format_version": {"type": "integer", "minimum": 1},
+        "layout": {"enum": ["canonical", "sharded", "replicated", "per_rank", "per_worker"]},
+        "keying": {"type": "string", "minLength": 1},
+        "artifact_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "cursor": {
+      "type": "object", "additionalProperties": false,
+      "required": ["replica_rank", "worker_id", "dataset_fingerprint", "state_artifact_id", "source_index", "shard_index", "document_index", "token_offset", "epoch", "samples_consumed", "exact"],
+      "properties": {
+        "replica_rank": {"$ref": "#/$defs/nonnegative"},
+        "worker_id": {"$ref": "#/$defs/nonnegative"},
+        "dataset_fingerprint": {"type": "string", "minLength": 1},
+        "state_artifact_id": {"type": "string", "minLength": 1},
+        "source_index": {"$ref": "#/$defs/nonnegative"},
+        "shard_index": {"$ref": "#/$defs/nonnegative"},
+        "document_index": {"$ref": "#/$defs/nonnegative"},
+        "token_offset": {"$ref": "#/$defs/nonnegative"},
+        "epoch": {"$ref": "#/$defs/nonnegative"},
+        "samples_consumed": {"$ref": "#/$defs/nonnegative"},
+        "exact": {"type": "boolean"}
+      }
+    },
+    "artifact": {
+      "type": "object", "additionalProperties": false,
+      "required": ["artifact_id", "role", "path", "format", "sha256", "size_bytes", "required", "shard_group", "shard_index", "shard_count", "rank"],
+      "properties": {
+        "artifact_id": {"type": "string", "minLength": 1},
+        "role": {"type": "string", "minLength": 1},
+        "path": {"type": "string", "minLength": 1},
+        "format": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "size_bytes": {"$ref": "#/$defs/nonnegative"},
+        "required": {"type": "boolean"},
+        "shard_group": {"type": ["string", "null"]},
+        "shard_index": {"type": ["integer", "null"], "minimum": 0},
+        "shard_count": {"type": ["integer", "null"], "minimum": 1},
+        "rank": {"type": ["integer", "null"], "minimum": 0}
+      }
+    },
+    "commit": {
+      "type": "object", "additionalProperties": false,
+      "required": ["status", "transaction_id", "strategy", "staging_suffix", "completion_marker", "incomplete_policy"],
+      "properties": {
+        "status": {"enum": ["staging", "complete", "failed"]},
+        "transaction_id": {"type": "string", "minLength": 1},
+        "strategy": {"enum": ["directory_rename", "commit_marker"]},
+        "staging_suffix": {"type": "string", "minLength": 1},
+        "completion_marker": {"type": "string", "minLength": 1},
+        "incomplete_policy": {"const": "ignore"}
+      }
+    }
+  }
+}

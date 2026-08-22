@@ -23,6 +23,9 @@ Next-token shifting, masking, normalization, and accounting are fixed by the
 Optimization discovery and provider selection exchange immutable
 [capability and execution-plan schemas](docs/optimization/SCHEMAS.md).
 
+Exact resume state and plain Transformers output follow separate
+[checkpoint and Hugging Face export contracts](docs/checkpoint/CONTRACTS.md).
+
 TrainLM distinguishes models that are **Compatible**, **Optimized**, and
 hardware **Certified**. Generic execution is never presented as TPU performance
 certification.
