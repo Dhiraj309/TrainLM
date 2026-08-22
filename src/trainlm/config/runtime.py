@@ -37,4 +37,3 @@ class RuntimeConfig:
         "sharded",
     ] = "replicated"
 
-    compile: bool = False
