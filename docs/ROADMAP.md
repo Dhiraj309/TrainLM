@@ -193,7 +193,7 @@ rebase that untouched branch onto the latest merged predecessor.
 
 ## M0 — Reproducibility and release contract
 
-**Status:** [~] M0-F1-M0-F3 complete; M0-F4 implemented and awaiting validation
+**Status:** [x] Complete
 
 **Goal:** Freeze scope, geometry, metrics, and dependency expectations before
 runtime or kernel work.
@@ -218,7 +218,7 @@ runtime or kernel work.
   input idle, and collectives with real token counts and device waits.
   **Acceptance:** Reproduce saved LaughLM metrics within rounding tolerance.
 
-- [~] **M0-F4 — Dependency matrix**
+- [x] **M0-F4 — Dependency matrix**
   `build(deps): define reproducible framework compatibility matrix`
   Separate core, CUDA, XLA, Pallas, profiling, and dev extras; pin TPU stacks
   and tested Transformers v5 ranges.
@@ -226,16 +226,16 @@ runtime or kernel work.
 
 ### Exit gate
 
-- [ ] Scope, parity data, metric formulas, and dependency profiles are reviewed
+- [x] Scope, parity data, metric formulas, and dependency profiles are reviewed
   and versioned.
 
 ## M1 — Framework contracts and backend boundary
 
-**Status:** [ ] Not started
+**Status:** [~] M1-F1 implemented and awaiting validation
 
 **Goal:** Remove custom-model, XLA, and task assumptions from core TrainLM.
 
-- [ ] **M1-F1 — Configuration ownership**
+- [~] **M1-F1 — Configuration ownership**
   `refactor(config): separate model training runtime and optimization config`
   HF `PretrainedConfig` owns architecture; TrainLM owns training/runtime policy.
   **Acceptance:** `TrainLMConfig` is built only when explicitly selected.
