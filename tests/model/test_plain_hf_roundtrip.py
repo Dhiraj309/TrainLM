@@ -26,7 +26,7 @@ def test_plain_hf_roundtrip_preserves_updated_state_outputs_and_ties(
     tied: bool,
     tmp_path,
 ):
-    model = AutoModelForCausalLM.from_config(fixture.config_factory(tied))
+    model = AutoModelForCausalLM.from_config(fixture.config(tied))
     assert not type(model).__module__.startswith("trainlm.")
 
     input_ids = torch.tensor([[1, 2, 3, 4]], dtype=torch.long)
