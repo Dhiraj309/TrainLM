@@ -1,10 +1,11 @@
 {
   "schema_version": 1,
   "matrix_id": "trainlm-dependencies",
-  "matrix_version": 1,
-  "reviewed_on": "2026-08-22",
+  "matrix_version": 2,
+  "reviewed_on": "2026-08-23",
   "core_contract": {
     "python": ">=3.10",
+    "huggingface-hub": ">=1.0,<2",
     "torch": ">=2.9,<2.14",
     "transformers": ">=5.0,<6",
     "policy": "CPU compatibility CI covers the minimum and current profiles. TPU certification uses exact backend profiles."
@@ -15,6 +16,7 @@
       "platform": "cpu",
       "python": "3.10",
       "packages": {
+        "huggingface-hub": "1.3.5",
         "torch": "2.9.0",
         "transformers": "5.0.0"
       },
@@ -25,6 +27,7 @@
       "platform": "cpu",
       "python": "3.13",
       "packages": {
+        "huggingface-hub": "1.16.4",
         "torch": "2.13.0",
         "transformers": "5.15.0"
       },
@@ -35,6 +38,7 @@
       "platform": "cuda",
       "python": "3.13",
       "packages": {
+        "huggingface-hub": "1.16.4",
         "torch": "2.13.0",
         "transformers": "5.15.0"
       },
@@ -47,6 +51,7 @@
       "python": ">=3.10,<3.14",
       "accelerator": "tpu-v5e-8",
       "packages": {
+        "huggingface-hub": "1.16.4",
         "torch": "2.9.0",
         "torch-xla": "2.9.0",
         "transformers": "5.15.0",
@@ -61,6 +66,7 @@
       "python": ">=3.10,<3.14",
       "accelerator": "tpu-v5e-8",
       "packages": {
+        "huggingface-hub": "1.16.4",
         "torch": "2.9.0",
         "torch-xla": "2.9.0",
         "transformers": "5.15.0",
@@ -73,6 +79,14 @@
     }
   },
   "official_sources": [
+    {
+      "name": "Hugging Face Hub file download API",
+      "url": "https://huggingface.co/docs/huggingface_hub/main/package_reference/file_download"
+    },
+    {
+      "name": "Hugging Face Hub package metadata",
+      "url": "https://pypi.org/pypi/huggingface-hub/json"
+    },
     {
       "name": "Transformers v5 installation",
       "url": "https://huggingface.co/docs/transformers/v5.0.0/installation"

@@ -318,17 +318,17 @@ path before optimization adapters exist.
 
 ## M3 — Production packed-binary data
 
-**Status:** [~] M3-F1 implemented and awaiting validation
+**Status:** [~] M3-F1 complete; M3-F2 implemented and awaiting validation
 
 **Goal:** Provide safe, distributed, fixed-shape, exactly resumable `.bin` data.
 
-- [~] **M3-F1 — Binary manifest**
+- [x] **M3-F1 — Binary manifest**
   `feat(data): define packed binary shard manifest`
   Define header, dtype, endian, count, vocab bounds, checksum, documents, and
   existing 1,024-byte-header `uint16` compatibility.
   **Acceptance:** Corrupt metadata, size, checksum, and token range fail early.
 
-- [ ] **M3-F2 — HF shard source**
+- [~] **M3-F2 — HF shard source**
   `feat(data): add revision-pinned HF binary shard source`
   Resolve repo/revision/path/IDs/cache/offline reuse with standard `HF_TOKEN`.
   **Acceptance:** Mocked source resolution is deterministic.

@@ -39,6 +39,7 @@ def test_core_dependencies_are_portable_and_transformers_v5():
 
     assert project["requires-python"] == ">=3.10"
     assert set(project["dependencies"]) == {
+        "huggingface-hub>=1.0,<2",
         "torch>=2.9,<2.14",
         "transformers>=5.0,<6",
     }
@@ -67,6 +68,7 @@ def test_matrix_profiles_match_their_constraint_files():
     assert matrix["schema_version"] == 1
     assert matrix["core_contract"] == {
         "python": ">=3.10",
+        "huggingface-hub": ">=1.0,<2",
         "torch": ">=2.9,<2.14",
         "transformers": ">=5.0,<6",
         "policy": (
@@ -89,6 +91,7 @@ def test_xla_package_metadata_pins_are_preserved_by_tpu_profiles():
 
     assert xla["status"] == "resolution_target_pending_m5_tpu_validation"
     assert xla["packages"] == {
+        "huggingface-hub": "1.16.4",
         "torch": "2.9.0",
         "torch-xla": "2.9.0",
         "transformers": "5.15.0",

@@ -1,4 +1,5 @@
 # Stable PyTorch/XLA TPU profile with its official Pallas dependency pins.
+huggingface-hub==1.16.4
 torch==2.9.0
 torch-xla==2.9.0
 transformers==5.15.0

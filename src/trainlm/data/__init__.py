@@ -1,3 +1,9 @@
+from .huggingface import (
+    HuggingFacePackedShardSource,
+    HuggingFaceShardSourceConfig,
+    HuggingFaceShardSpec,
+    ResolvedHuggingFaceShard,
+)
 from .manifest import (
     ByteOrder,
     CompatibilityProfile,
@@ -14,7 +20,11 @@ __all__ = [
     "CompatibilityProfile",
     "DocumentIndex",
     "DocumentIndexStorage",
+    "HuggingFacePackedShardSource",
+    "HuggingFaceShardSourceConfig",
+    "HuggingFaceShardSpec",
     "PackedBinaryShardManifest",
+    "ResolvedHuggingFaceShard",
     "TokenDType",
     "ValidatedPackedBinaryShard",
     "validate_packed_binary_shard",

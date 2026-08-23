@@ -16,10 +16,11 @@ JAX, libtpu, or profiling packages installed.
 | TPU XLA stable | 3.10–3.13 | 2.9.0 | 5.15.0 | torch-xla 2.9.0, libtpu 0.0.21 | Pending M5 TPU validation |
 | TPU XLA + Pallas | 3.10–3.13 | 2.9.0 | 5.15.0 | XLA/libtpu above, JAX/jaxlib 0.7.1 | Pending M5/kernel validation |
 
-The broad core package contract is PyTorch `>=2.9,<2.14` and Transformers
-`>=5.0,<6`. Exact constraint profiles are the reproducible CI and TPU
-environments. A version inside the broad range is not hardware Certified merely
-because dependency resolution succeeds.
+The broad core package contract is PyTorch `>=2.9,<2.14`, Transformers
+`>=5.0,<6`, and Hugging Face Hub `>=1.0,<2`. Exact constraint profiles are the
+reproducible CI and TPU environments. The minimum profile locks Hub 1.3.5; the
+current and TPU profiles lock Hub 1.16.4. A version inside the broad range is
+not hardware Certified merely because dependency resolution succeeds.
 
 ## Installation profiles
 
@@ -103,6 +104,8 @@ public installable training contract and passes its future migration gates.
 
 - [Transformers v5 installation](https://huggingface.co/docs/transformers/v5.0.0/installation)
 - [Transformers releases](https://github.com/huggingface/transformers/releases)
+- [Hugging Face Hub downloads](https://huggingface.co/docs/huggingface_hub/main/package_reference/file_download)
+- [Hugging Face Hub package metadata](https://pypi.org/pypi/huggingface-hub/json)
 - [PyTorch/XLA installation](https://github.com/pytorch/xla)
 - [PyTorch/XLA 2.9 package metadata](https://pypi.org/pypi/torch-xla/2.9.0/json)
 - [PyTorch package metadata](https://pypi.org/project/torch/)
