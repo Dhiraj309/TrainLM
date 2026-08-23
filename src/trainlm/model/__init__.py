@@ -1,3 +1,8 @@
+from .compatibility import (
+    ModelCompatibilityExplanation,
+    SupportLevel,
+    explain_huggingface_compatibility,
+)
 from .dispatch import (
     BatchDispatch,
     ForwardBatchDispatcher,
@@ -27,10 +32,13 @@ __all__ = [
     "HuggingFaceCausalLMProvider",
     "HuggingFaceModelMetadata",
     "LoadedCausalLM",
+    "ModelCompatibilityExplanation",
+    "SupportLevel",
     "TrainLMPreTrainedModel",
     "TrainLMModel",
     "TrainLMForCausalLM",
     "dispatch_model_batch",
+    "explain_huggingface_compatibility",
     "load_huggingface_causal_lm",
     "normalize_causal_lm_output",
 ]

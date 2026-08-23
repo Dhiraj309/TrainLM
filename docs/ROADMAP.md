@@ -273,7 +273,7 @@ runtime or kernel work.
 
 ## M2 — Universal Hugging Face dense-causal intake
 
-**Status:** [~] M2-F1-M2-F4 complete; M2-F5 implemented and awaiting validation
+**Status:** [~] M2-F1-M2-F5 complete; M2-F6 implemented and awaiting validation
 
 **Goal:** Every representative HF causal LM works through the unchanged generic
 path before optimization adapters exist.
@@ -301,13 +301,13 @@ path before optimization adapters exist.
   untied state/output.
   **Acceptance:** Every representative family passes.
 
-- [~] **M2-F5 — Dense-AR CPU matrix**
+- [x] **M2-F5 — Dense-AR CPU matrix**
   `test(models): add dense AR architecture conformance matrix`
   Cover tiny GPT-2, OPT, GPT-NeoX, BLOOM, Falcon, Phi, Llama, Mistral, Qwen2,
   and Gemma through construct/forward/loss/backward/update/export/overfit.
   **Acceptance:** No optimization adapter is used.
 
-- [ ] **M2-F6 — Compatibility explanation**
+- [~] **M2-F6 — Compatibility explanation**
   `feat(models): report generic model capabilities and fallbacks`
   Report known/unknown capabilities, support level, and selected generic path.
   **Acceptance:** Every model has stable human and machine-readable output.

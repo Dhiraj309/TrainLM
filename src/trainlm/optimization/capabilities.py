@@ -116,7 +116,7 @@ class ModelCapabilities:
     checkpointing: ComponentCapability
     warnings: tuple[str, ...] = field(default_factory=tuple)
 
-    _COMPONENTS: ClassVar[tuple[str, ...]] = (
+    COMPONENT_NAMES: ClassVar[tuple[str, ...]] = (
         "attention",
         "position",
         "normalization",
@@ -152,7 +152,7 @@ class ModelCapabilities:
             for item in (*self.architectures, *self.warnings)
         ):
             raise ValueError("Architectures and warnings cannot contain empty text.")
-        for name in self._COMPONENTS:
+        for name in self.COMPONENT_NAMES:
             if not isinstance(getattr(self, name), ComponentCapability):
                 raise ValueError(f"{name} must be a ComponentCapability.")
 
@@ -166,9 +166,15 @@ class ModelCapabilities:
         return hashlib.sha256(canonical).hexdigest()
 
     def component(self, name: str) -> ComponentCapability:
-        if name not in self._COMPONENTS:
+        if name not in self.COMPONENT_NAMES:
             raise KeyError(f"Unknown capability component: {name}")
         return getattr(self, name)
+
+    @property
+    def component_names(self) -> tuple[str, ...]:
+        """Return component names in stable explanation order."""
+
+        return self.COMPONENT_NAMES
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -179,7 +185,7 @@ class ModelCapabilities:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ModelCapabilities":
         values = dict(data)
-        for name in cls._COMPONENTS:
+        for name in cls.COMPONENT_NAMES:
             values[name] = ComponentCapability.from_dict(values[name])
         values["architectures"] = tuple(values.get("architectures", ()))
         values["warnings"] = tuple(values.get("warnings", ()))
