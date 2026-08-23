@@ -40,6 +40,8 @@ with explicit capabilities, providers, and fallbacks.
 
 Packed `.bin` inputs are accepted only through the versioned
 [binary shard manifest and integrity contract](docs/data/PACKED_BINARY_MANIFEST.md).
+Remote shards use the
+[revision-pinned Hugging Face dataset source](docs/data/HUGGINGFACE_SHARD_SOURCE.md).
 
 TrainLM distinguishes models that are **Compatible**, **Optimized**, and
 hardware **Certified**. Generic execution is never presented as TPU performance

@@ -35,6 +35,7 @@ classifiers = [
 ]
 
 dependencies = [
+    "huggingface-hub>=1.0,<2",
     "torch>=2.9,<2.14",
     "transformers>=5.0,<6",
 ]
