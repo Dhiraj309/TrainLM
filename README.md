@@ -30,6 +30,8 @@ Generic dense causal models are acquired through the
 [Hugging Face causal-model provider](docs/models/HUGGINGFACE_PROVIDER.md).
 Model batches follow the model's own
 [forward-signature dispatch contract](docs/models/BATCH_DISPATCH.md).
+Updated models must pass the
+[plain Hugging Face round-trip contract](docs/models/PLAIN_HF_ROUNDTRIP.md).
 
 TrainLM distinguishes models that are **Compatible**, **Optimized**, and
 hardware **Certified**. Generic execution is never presented as TPU performance

@@ -273,7 +273,7 @@ runtime or kernel work.
 
 ## M2 — Universal Hugging Face dense-causal intake
 
-**Status:** [~] M2-F1-M2-F2 complete; M2-F3 implemented and awaiting validation
+**Status:** [~] M2-F1-M2-F3 complete; M2-F4 implemented and awaiting validation
 
 **Goal:** Every representative HF causal LM works through the unchanged generic
 path before optimization adapters exist.
@@ -290,12 +290,12 @@ path before optimization adapters exist.
   supported family fields.
   **Acceptance:** Tiny representative models receive only valid inputs.
 
-- [~] **M2-F3 — Generic output/loss path**
+- [x] **M2-F3 — Generic output/loss path**
   `feat(models): add generic causal LM output and loss protocol`
   Use valid model loss or correctly shifted CE normalized by supervised tokens.
   **Acceptance:** CPU loss and gradients match direct HF execution.
 
-- [ ] **M2-F4 — Plain-HF round trip**
+- [~] **M2-F4 — Plain-HF round trip**
   `test(models): certify generic HF save and reload round trip`
   Train one update, save, reload without TrainLM model code, compare tied and
   untied state/output.
