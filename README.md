@@ -34,6 +34,9 @@ Updated models must pass the
 [plain Hugging Face round-trip contract](docs/models/PLAIN_HF_ROUNDTRIP.md).
 Representative non-Llama families are exercised by the
 [dense-AR CPU conformance matrix](docs/models/DENSE_AR_CPU_MATRIX.md).
+Every loaded model has a stable
+[generic compatibility explanation](docs/models/COMPATIBILITY_EXPLANATION.md)
+with explicit capabilities, providers, and fallbacks.
 
 TrainLM distinguishes models that are **Compatible**, **Optimized**, and
 hardware **Certified**. Generic execution is never presented as TPU performance

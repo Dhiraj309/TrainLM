@@ -57,3 +57,8 @@ and config classes, and observes tied parameter aliases without modifying them.
 It normalizes both initialization paths to training mode. Forward dispatch,
 loss handling, optimization analysis, and model transformations belong to
 later roadmap stories.
+
+Call `explain_huggingface_compatibility(loaded)` to obtain the current generic
+path, conservative capability state, explicit optimization fallback, and
+support-level boundary. See
+[`COMPATIBILITY_EXPLANATION.md`](COMPATIBILITY_EXPLANATION.md).
