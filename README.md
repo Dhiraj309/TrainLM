@@ -38,6 +38,9 @@ Every loaded model has a stable
 [generic compatibility explanation](docs/models/COMPATIBILITY_EXPLANATION.md)
 with explicit capabilities, providers, and fallbacks.
 
+Packed `.bin` inputs are accepted only through the versioned
+[binary shard manifest and integrity contract](docs/data/PACKED_BINARY_MANIFEST.md).
+
 TrainLM distinguishes models that are **Compatible**, **Optimized**, and
 hardware **Certified**. Generic execution is never presented as TPU performance
 certification.

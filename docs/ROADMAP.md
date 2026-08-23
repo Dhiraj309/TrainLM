@@ -159,8 +159,8 @@ Branch names describe repository work, not the tool or contributor:
 
 | Status | PR | Branch | Milestones | Commits | Merge gate |
 |---|---|---|---|---:|---|
-| [~] | PR1 | `milestone/m0-m2-foundation` | M0-M2 | 15 | Contracts and generic HF CPU conformance |
-| [ ] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 13 | Packed data and backend-neutral trainer |
+| [x] | PR1 | `milestone/m0-m2-foundation` | M0-M2 | 15 | Contracts and generic HF CPU conformance |
+| [~] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 13 | Packed data and backend-neutral trainer |
 | [ ] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 16 | 600K, generic TPU, checkpoint/resume |
 | [ ] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11 | Reversible planner and optimized loss |
 | [ ] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | 850K and hard LaughLM parity |
@@ -176,8 +176,8 @@ rebase that untouched branch onto the latest merged predecessor.
 |---|---|---|
 | [x] | M0 | Scope, parity manifest, metrics, and dependencies |
 | [x] | M1 | Backend-neutral framework contracts |
-| [~] | M2 | Universal HF dense-causal CPU path |
-| [ ] | M3 | Packed-binary data pipeline |
+| [x] | M2 | Universal HF dense-causal CPU path |
+| [~] | M3 | Packed-binary data pipeline |
 | [ ] | M4 | Correct backend-neutral trainer |
 | [ ] | M5 | Stable PyTorch/XLA DP8 runtime |
 | [ ] | M6 | Universal dense-AR TPU compatibility |
@@ -273,7 +273,7 @@ runtime or kernel work.
 
 ## M2 — Universal Hugging Face dense-causal intake
 
-**Status:** [~] M2-F1-M2-F5 complete; M2-F6 implemented and awaiting validation
+**Status:** [x] Complete
 
 **Goal:** Every representative HF causal LM works through the unchanged generic
 path before optimization adapters exist.
@@ -307,22 +307,22 @@ path before optimization adapters exist.
   and Gemma through construct/forward/loss/backward/update/export/overfit.
   **Acceptance:** No optimization adapter is used.
 
-- [~] **M2-F6 — Compatibility explanation**
+- [x] **M2-F6 — Compatibility explanation**
   `feat(models): report generic model capabilities and fallbacks`
   Report known/unknown capabilities, support level, and selected generic path.
   **Acceptance:** Every model has stable human and machine-readable output.
 
 ### Exit gate
 
-- [ ] All representative clusters are Compatible on CPU without an adapter.
+- [x] All representative clusters are Compatible on CPU without an adapter.
 
 ## M3 — Production packed-binary data
 
-**Status:** [ ] Not started
+**Status:** [~] M3-F1 implemented and awaiting validation
 
 **Goal:** Provide safe, distributed, fixed-shape, exactly resumable `.bin` data.
 
-- [ ] **M3-F1 — Binary manifest**
+- [~] **M3-F1 — Binary manifest**
   `feat(data): define packed binary shard manifest`
   Define header, dtype, endian, count, vocab bounds, checksum, documents, and
   existing 1,024-byte-header `uint16` compatibility.
