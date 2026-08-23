@@ -318,7 +318,7 @@ path before optimization adapters exist.
 
 ## M3 — Production packed-binary data
 
-**Status:** [~] M3-F1 complete; M3-F2 implemented and awaiting validation
+**Status:** [~] M3-F1-M3-F2 complete; M3-F3 implemented and awaiting validation
 
 **Goal:** Provide safe, distributed, fixed-shape, exactly resumable `.bin` data.
 
@@ -328,12 +328,12 @@ path before optimization adapters exist.
   existing 1,024-byte-header `uint16` compatibility.
   **Acceptance:** Corrupt metadata, size, checksum, and token range fail early.
 
-- [~] **M3-F2 — HF shard source**
+- [x] **M3-F2 — HF shard source**
   `feat(data): add revision-pinned HF binary shard source`
   Resolve repo/revision/path/IDs/cache/offline reuse with standard `HF_TOKEN`.
   **Acceptance:** Mocked source resolution is deterministic.
 
-- [ ] **M3-F3 — Batched memmap reader**
+- [~] **M3-F3 — Batched memmap reader**
   `feat(data): add contiguous packed memmap batch reader`
   Read complete `[batch, sequence]` regions and fixed-shape inputs/labels/masks.
   **Acceptance:** Valid bytes match the reference reader.
