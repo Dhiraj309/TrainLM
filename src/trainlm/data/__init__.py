@@ -14,16 +14,26 @@ from .manifest import (
     ValidatedPackedBinaryShard,
     validate_packed_binary_shard,
 )
+from .reader import (
+    ContiguousPackedBatchReader,
+    PackedBatchLocation,
+    PackedReaderLayout,
+    PackedShardFile,
+)
 
 __all__ = [
     "ByteOrder",
     "CompatibilityProfile",
+    "ContiguousPackedBatchReader",
     "DocumentIndex",
     "DocumentIndexStorage",
     "HuggingFacePackedShardSource",
     "HuggingFaceShardSourceConfig",
     "HuggingFaceShardSpec",
     "PackedBinaryShardManifest",
+    "PackedBatchLocation",
+    "PackedReaderLayout",
+    "PackedShardFile",
     "ResolvedHuggingFaceShard",
     "TokenDType",
     "ValidatedPackedBinaryShard",
