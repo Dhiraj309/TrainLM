@@ -32,6 +32,8 @@ Model batches follow the model's own
 [forward-signature dispatch contract](docs/models/BATCH_DISPATCH.md).
 Updated models must pass the
 [plain Hugging Face round-trip contract](docs/models/PLAIN_HF_ROUNDTRIP.md).
+Representative non-Llama families are exercised by the
+[dense-AR CPU conformance matrix](docs/models/DENSE_AR_CPU_MATRIX.md).
 
 TrainLM distinguishes models that are **Compatible**, **Optimized**, and
 hardware **Certified**. Generic execution is never presented as TPU performance
