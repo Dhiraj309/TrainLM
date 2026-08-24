@@ -44,6 +44,8 @@ Remote shards use the
 [revision-pinned Hugging Face dataset source](docs/data/HUGGINGFACE_SHARD_SOURCE.md).
 Validated payloads are exposed through the
 [contiguous fixed-shape batch reader](docs/data/CONTIGUOUS_BATCH_READER.md).
+Shard order and rank ownership follow the
+[deterministic packed-data partition contract](docs/data/DETERMINISTIC_PARTITIONING.md).
 
 TrainLM distinguishes models that are **Compatible**, **Optimized**, and
 hardware **Certified**. Generic execution is never presented as TPU performance
