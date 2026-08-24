@@ -33,3 +33,8 @@ class TrainerControl:
         self.should_log = False
         self.should_evaluate = False
         self.should_save_checkpoint = False
+
+    def request_stop(self) -> None:
+        """Request a safe stop at the next trainer loop boundary."""
+
+        self.should_stop = True

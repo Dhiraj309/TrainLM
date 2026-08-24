@@ -46,6 +46,14 @@ class CallbackHandler:
         for callback in self._callbacks:
             callback.on_train_begin(state, control)
 
+    def on_resume(
+        self,
+        state: TrainerState,
+        control: TrainerControl,
+    ) -> None:
+        for callback in self._callbacks:
+            callback.on_resume(state, control)
+
     def on_train_end(
         self,
         state: TrainerState,

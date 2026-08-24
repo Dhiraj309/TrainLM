@@ -24,6 +24,13 @@ class TrainerCallback(ABC):
     ) -> None:
         """Called before training begins."""
 
+    def on_resume(
+        self,
+        state: TrainerState,
+        control: TrainerControl,
+    ) -> None:
+        """Called after a checkpoint has been restored."""
+
     def on_train_end(
         self,
         state: TrainerState,

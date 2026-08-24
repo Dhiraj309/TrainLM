@@ -169,7 +169,13 @@ def test_update_state():
     assert trainer.state.samples_seen == 2
 
 
-def create_trainer(loss_fn=None, runtime=None, task=None):
+def create_trainer(
+    loss_fn=None,
+    runtime=None,
+    task=None,
+    checkpoint_saver=None,
+    checkpoint_loader=None,
+):
     model = DummyModel()
 
     optimizer = SGD(
@@ -202,6 +208,8 @@ def create_trainer(loss_fn=None, runtime=None, task=None):
         loss_fn=None if task is not None else (loss_fn or LanguageModelLoss()),
         train_dataloader=train_dataloader,
         eval_dataloader=eval_dataloader,
+        checkpoint_saver=checkpoint_saver,
+        checkpoint_loader=checkpoint_loader,
     )
 
 

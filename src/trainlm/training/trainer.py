@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 import torch
 from torch import nn
 from torch.optim import Optimizer
@@ -19,7 +19,7 @@ from .callback import TrainerCallback
 from .callback_handler import CallbackHandler
 from .control import TrainerControl
 from .loss import Loss
-from .state import TrainerState
+from .state import TrainerPhase, TrainerState
 
 
 class Trainer:
@@ -38,6 +38,8 @@ class Trainer:
         loss_fn: Loss | None = None,
         eval_dataloader: DataLoader | None = None,
         callbacks: Sequence[TrainerCallback] | None = None,
+        checkpoint_saver: Callable[["Trainer", object | None], object] | None = None,
+        checkpoint_loader: Callable[["Trainer", object], object] | None = None,
     ) -> None:
         self.config = config
 
@@ -66,10 +68,34 @@ class Trainer:
 
         self.callback_handler = CallbackHandler(callbacks)
 
+        self._checkpoint_saver = checkpoint_saver
+        self._checkpoint_loader = checkpoint_loader
+
         self._train_iterator: Iterator | None = None
 
+    def prepare(self) -> TrainerState:
+        """Initialize backend resources and enter the prepared phase."""
+
+        if self.state.phase == TrainerPhase.PREPARED:
+            return self.state
+        if self.state.phase != TrainerPhase.CREATED:
+            raise RuntimeError(
+                f"Cannot prepare trainer in phase '{self.state.phase.value}'."
+            )
+        try:
+            self.runtime.initialize()
+            self.state.transition(TrainerPhase.PREPARED)
+        except BaseException as exc:
+            self.state.mark_failed(exc)
+            try:
+                self.runtime.finalize()
+            finally:
+                raise
+        return self.state
+
     def train(self) -> TrainerState:
-        self.runtime.initialize()
+        self.prepare()
+        self.state.transition(TrainerPhase.TRAINING)
         self.state.is_training = True
 
         try:
@@ -97,24 +123,49 @@ class Trainer:
                     self.control,
                 )
 
+        except BaseException as exc:
+            self.state.mark_failed(exc)
+            raise
         finally:
-            self.state.is_training = False
-
-            try:
-                self.callback_handler.on_train_end(
-                    self.state,
-                    self.control,
-                )
-            finally:
-                try:
-                    self.runtime.on_train_end()
-                finally:
-                    self.runtime.finalize()
+            self._finish_training()
 
         return self.state
 
+    def _finish_training(self) -> None:
+        """Run end hooks and finalize resources exactly once."""
+
+        self.state.is_training = False
+        self.state.should_stop = self.state.should_stop or self.control.should_stop
+        if self.state.phase != TrainerPhase.FAILED:
+            self.state.transition(TrainerPhase.STOPPING)
+        try:
+            self.callback_handler.on_train_end(
+                self.state,
+                self.control,
+            )
+        except BaseException as exc:
+            self.state.mark_failed(exc)
+            raise
+        finally:
+            try:
+                self.runtime.on_train_end()
+            except BaseException as exc:
+                self.state.mark_failed(exc)
+                raise
+            finally:
+                try:
+                    self.runtime.finalize()
+                except BaseException as exc:
+                    self.state.mark_failed(exc)
+                    raise
+                finally:
+                    if self.state.phase == TrainerPhase.FAILED:
+                        self.state.transition(TrainerPhase.STOPPING)
+                    if self.state.phase == TrainerPhase.STOPPING:
+                        self.state.transition(TrainerPhase.FINALIZED)
+
     def _should_stop(self) -> bool:
-        if self.control.should_stop:
+        if self.control.should_stop or self.state.should_stop:
             return True
 
         trainer = self.config.trainer
@@ -126,6 +177,12 @@ class Trainer:
         ):
             return True
         return False
+
+    def request_stop(self) -> None:
+        """Request a graceful stop at the next completed-step boundary."""
+
+        self.control.request_stop()
+        self.state.should_stop = True
 
     def _next_batch(self):
         if self._train_iterator is None:
@@ -207,26 +264,126 @@ class Trainer:
                 "Evaluation requested but no evaluation dataloader is configured."
             )
 
+        previous_phase = self.state.phase
+        if previous_phase not in {
+            TrainerPhase.CREATED,
+            TrainerPhase.PREPARED,
+            TrainerPhase.TRAINING,
+        }:
+            raise RuntimeError(
+                f"Cannot evaluate trainer in phase '{previous_phase.value}'."
+            )
+        self.state.transition(TrainerPhase.EVALUATING)
         was_training = self.model.training
         self.model.eval()
 
-        results: list[TaskResult] = []
-
-        with torch.no_grad():
-            for batch in self.eval_dataloader:
-                result = self._evaluation_step(batch)
-                results.append(result)
-
-        if was_training:
-            self.model.train()
-
-        return self.task.aggregate_evaluation(results)
+        try:
+            results: list[TaskResult] = []
+            with torch.no_grad():
+                for batch in self.eval_dataloader:
+                    result = self._evaluation_step(batch)
+                    results.append(result)
+            metrics = self.task.aggregate_evaluation(results)
+            self.callback_handler.on_evaluate(self.state, self.control)
+            return metrics
+        except BaseException as exc:
+            self.state.mark_failed(exc)
+            raise
+        finally:
+            if was_training:
+                self.model.train()
+            if self.state.phase == TrainerPhase.EVALUATING:
+                self.state.transition(previous_phase)
 
     def save_model(self):
         raise NotImplementedError
 
-    def save_checkpoint(self):
-        raise NotImplementedError
+    def save_checkpoint(self, destination: object | None = None) -> object:
+        """Run a checkpoint save hook within backend coordination barriers."""
 
-    def load_checkpoint(self):
-        raise NotImplementedError
+        if self._checkpoint_saver is None:
+            raise NotImplementedError(
+                "Provide checkpoint_saver; checkpoint file formats are owned by M7."
+            )
+        previous_phase = self.state.phase
+        if previous_phase not in {
+            TrainerPhase.CREATED,
+            TrainerPhase.PREPARED,
+            TrainerPhase.TRAINING,
+        }:
+            raise RuntimeError(
+                f"Cannot save checkpoint in phase '{previous_phase.value}'."
+            )
+        name = str(destination) if destination is not None else "manual"
+        self.state.transition(TrainerPhase.SAVING)
+        success = False
+        try:
+            self.runtime.before_checkpoint(name)
+            result = self._checkpoint_saver(self, destination)
+            self.callback_handler.on_save_checkpoint(self.state, self.control)
+            success = True
+            return result
+        except BaseException as exc:
+            self.state.mark_failed(exc)
+            raise
+        finally:
+            try:
+                self.runtime.after_checkpoint(name, success=success)
+            except BaseException as exc:
+                self.state.mark_failed(exc)
+                raise
+            finally:
+                if self.state.phase == TrainerPhase.SAVING:
+                    self.state.transition(previous_phase)
+
+    def load_checkpoint(self, source: object | None = None) -> object:
+        """Restore through a checkpoint hook and publish a resume event."""
+
+        if self._checkpoint_loader is None:
+            raise NotImplementedError(
+                "Provide checkpoint_loader; checkpoint file formats are owned by M7."
+            )
+        if self.state.phase == TrainerPhase.CREATED:
+            self.prepare()
+        if self.state.phase != TrainerPhase.PREPARED:
+            raise RuntimeError(
+                f"Cannot resume trainer in phase '{self.state.phase.value}'."
+            )
+        self.state.transition(TrainerPhase.RESUMING)
+        success = False
+        try:
+            self.runtime.before_checkpoint("resume")
+            result = self._checkpoint_loader(self, source)
+            self.callback_handler.on_resume(self.state, self.control)
+            success = True
+            return result
+        except BaseException as exc:
+            self.state.mark_failed(exc)
+            raise
+        finally:
+            try:
+                self.runtime.after_checkpoint("resume", success=success)
+            except BaseException as exc:
+                self.state.mark_failed(exc)
+                raise
+            finally:
+                if self.state.phase == TrainerPhase.RESUMING:
+                    self.state.transition(TrainerPhase.PREPARED)
+
+    def finalize(self) -> TrainerState:
+        """Finalize a prepared trainer that is not actively training."""
+
+        if self.state.phase == TrainerPhase.FINALIZED:
+            return self.state
+        if self.state.phase == TrainerPhase.TRAINING:
+            raise RuntimeError("Request stop and let train() finalize the trainer.")
+        if self.state.phase != TrainerPhase.FAILED:
+            self.state.transition(TrainerPhase.STOPPING)
+        try:
+            self.runtime.finalize()
+        finally:
+            if self.state.phase == TrainerPhase.FAILED:
+                self.state.transition(TrainerPhase.STOPPING)
+            if self.state.phase == TrainerPhase.STOPPING:
+                self.state.transition(TrainerPhase.FINALIZED)
+        return self.state
