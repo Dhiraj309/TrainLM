@@ -34,6 +34,8 @@ Trainer lifecycle, stop, evaluation, and checkpoint hook ordering follow the
 [backend-neutral lifecycle contract](docs/training/LIFECYCLE.md).
 Microbatch reduction and token accounting follow the
 [token-normalized accumulation contract](docs/training/ACCUMULATION.md).
+Optimizer construction and moment precision follow the
+[optimizer state policy](docs/optimization/OPTIMIZER_POLICY.md).
 Updated models must pass the
 [plain Hugging Face round-trip contract](docs/models/PLAIN_HF_ROUNDTRIP.md).
 Representative non-Llama families are exercised by the
