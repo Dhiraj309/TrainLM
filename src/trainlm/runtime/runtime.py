@@ -131,6 +131,17 @@ class TorchRuntime:
     ) -> None:
         torch.nn.utils.clip_grad_norm_(parameters, max_norm)
 
+    def scale_gradients(
+        self,
+        parameters: Iterable[nn.Parameter],
+        scale: float,
+    ) -> None:
+        if not isinstance(scale, (int, float)) or scale <= 0:
+            raise ValueError("Gradient scale must be positive.")
+        for parameter in parameters:
+            if parameter.grad is not None:
+                parameter.grad.mul_(scale)
+
     def optimizer_step(self, optimizer: Optimizer) -> None:
         optimizer.step()
 
@@ -187,4 +198,3 @@ def _move_to_device(value: Any, device: torch.device) -> Any:
 
 # Backward-compatible name for the portable default backend.
 Runtime = TorchRuntime
-

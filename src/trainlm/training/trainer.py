@@ -213,20 +213,94 @@ class Trainer:
         self.state.loss = result.loss.detach().item()
         self.state.learning_rate = self._current_learning_rate()
 
+    def _update_accumulated_state(
+        self,
+        *,
+        total_tokens: int,
+        total_sequences: int,
+        loss_numerator: torch.Tensor,
+        exact_tokens: bool,
+    ) -> None:
+        """Commit one optimizer update after all microbatches are reduced."""
+
+        self.state.step += 1
+        self.state.tokens_seen += total_tokens
+        self.state.samples_seen += total_sequences
+        self.state.global_batch_size = total_sequences
+        loss_value = loss_numerator.detach().item()
+        self.state.loss = (
+            loss_value / total_tokens if exact_tokens else loss_value
+        )
+        self.state.learning_rate = self._current_learning_rate()
+
     def _train_step(self) -> None:
-        batch = self._next_batch()
-
         self.runtime.on_step_begin(self.state.step)
-
         self.runtime.zero_grad(self.optimizer)
 
-        result = self.task.training_step(
-            self.model,
-            batch,
-            self.runtime,
+        accumulation_steps = getattr(
+            self.config.trainer,
+            "gradient_accumulation_steps",
+            1,
         )
+        if (
+            isinstance(accumulation_steps, bool)
+            or not isinstance(accumulation_steps, int)
+            or accumulation_steps < 1
+        ):
+            raise ValueError("gradient_accumulation_steps must be positive.")
 
-        self.runtime.backward(result.loss)
+        total_tokens = 0
+        total_sequences = 0
+        loss_numerator: torch.Tensor | None = None
+        exact_tokens = True
+
+        for _ in range(accumulation_steps):
+            result = self.task.training_step(
+                self.model,
+                self._next_batch(),
+                self.runtime,
+            )
+            self.state.micro_step += 1
+            token_count = result.tokens.supervised_tokens
+            if not result.tokens.exact or token_count <= 0:
+                if accumulation_steps != 1:
+                    raise ValueError(
+                        "Gradient accumulation requires exact positive "
+                        "supervised-token counts."
+                    )
+                exact_tokens = False
+                self.runtime.backward(result.loss)
+                loss_numerator = result.loss.detach()
+                total_sequences = result.tokens.sequences
+                break
+
+            weighted_loss = result.loss * token_count
+            self.runtime.backward(weighted_loss)
+            total_tokens += token_count
+            total_sequences += result.tokens.sequences
+            detached_weighted_loss = weighted_loss.detach()
+            loss_numerator = (
+                detached_weighted_loss
+                if loss_numerator is None
+                else loss_numerator + detached_weighted_loss
+            )
+
+            if (
+                self.config.trainer.max_tokens is not None
+                and self.state.tokens_seen + total_tokens
+                >= self.config.trainer.max_tokens
+            ):
+                break
+
+        if loss_numerator is None:
+            raise RuntimeError("Training update produced no loss.")
+        if exact_tokens:
+            if total_tokens <= 0:
+                raise ValueError("Training update produced no supervised tokens.")
+            self.runtime.scale_gradients(
+                self.model.parameters(),
+                1.0 / total_tokens,
+            )
 
         self.runtime.clip_gradients(
             self.model.parameters(),
@@ -241,8 +315,11 @@ class Trainer:
 
         self.runtime.synchronize()
 
-        self._update_state(
-            result=result,
+        self._update_accumulated_state(
+            total_tokens=total_tokens,
+            total_sequences=total_sequences,
+            loss_numerator=loss_numerator,
+            exact_tokens=exact_tokens,
         )
 
         self.runtime.on_step_end(self.state.step)

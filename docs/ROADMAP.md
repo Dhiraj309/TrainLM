@@ -160,7 +160,7 @@ Branch names describe repository work, not the tool or contributor:
 | Status | PR | Branch | Milestones | Commits | Merge gate |
 |---|---|---|---|---:|---|
 | [x] | PR1 | `milestone/m0-m2-foundation` | M0-M2 | 15 | Contracts and generic HF CPU conformance |
-| [~] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 13 | M3 pending validation; M4-F1 lifecycle implemented |
+| [~] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 13 | M3 pending validation; M4-F1 complete, F2 awaiting validation |
 | [ ] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 16 | 600K, generic TPU, checkpoint/resume |
 | [ ] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11 | Reversible planner and optimized loss |
 | [ ] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | 850K and hard LaughLM parity |
@@ -178,7 +178,7 @@ rebase that untouched branch onto the latest merged predecessor.
 | [x] | M1 | Backend-neutral framework contracts |
 | [x] | M2 | Universal HF dense-causal CPU path |
 | [~] | M3 | F1-F5 complete; resumable cursor awaiting validation |
-| [~] | M4 | F1 lifecycle implemented; remaining trainer features pending |
+| [~] | M4 | F1 complete; token-normalized accumulation awaiting validation |
 | [ ] | M5 | Stable PyTorch/XLA DP8 runtime |
 | [ ] | M6 | Universal dense-AR TPU compatibility |
 | [ ] | M7 | Checkpointing, telemetry, and integrity |
@@ -359,16 +359,16 @@ path before optimization adapters exist.
 
 ## M4 — Correct backend-neutral trainer
 
-**Status:** [~] M4-F1 implemented and awaiting validation
+**Status:** [~] M4-F1 complete; M4-F2 implemented and awaiting validation
 
 **Goal:** Complete correct training independently of TPU optimization.
 
-- [~] **M4-F1 — Lifecycle/state machine**
+- [x] **M4-F1 — Lifecycle/state machine**
   `feat(training): implement trainer lifecycle and control state`
   Prepare, train, evaluate, save, resume, stop, finalize, and callback order.
   **Acceptance:** Normal, failure, stop, and resume flows pass.
 
-- [ ] **M4-F2 — Token-correct accumulation**
+- [~] **M4-F2 — Token-correct accumulation**
   `feat(training): implement token-normalized gradient accumulation`
   Handle ignored-token variation and separate microstep/update/token counters.
   **Acceptance:** Accumulation matches an equivalent large CPU batch.

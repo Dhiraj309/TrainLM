@@ -65,6 +65,19 @@ def test_clip_gradients():
     )
 
 
+def test_scale_gradients():
+    runtime = Runtime()
+
+    model = nn.Linear(4, 2)
+    loss = model(torch.ones(1, 4)).sum()
+    runtime.backward(loss)
+    before = model.weight.grad.detach().clone()
+
+    runtime.scale_gradients(model.parameters(), 0.25)
+
+    assert torch.equal(model.weight.grad, before * 0.25)
+
+
 def test_optimizer_step():
     runtime = Runtime()
 
