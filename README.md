@@ -30,6 +30,8 @@ Generic dense causal models are acquired through the
 [Hugging Face causal-model provider](docs/models/HUGGINGFACE_PROVIDER.md).
 Model batches follow the model's own
 [forward-signature dispatch contract](docs/models/BATCH_DISPATCH.md).
+Trainer lifecycle, stop, evaluation, and checkpoint hook ordering follow the
+[backend-neutral lifecycle contract](docs/training/LIFECYCLE.md).
 Updated models must pass the
 [plain Hugging Face round-trip contract](docs/models/PLAIN_HF_ROUNDTRIP.md).
 Representative non-Llama families are exercised by the
