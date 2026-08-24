@@ -34,6 +34,8 @@ class TrainerState:
 
     step: int = 0
 
+    micro_step: int = 0
+
     epoch: int = 0
 
     tokens_seen: int = 0
@@ -53,6 +55,16 @@ class TrainerState:
     phase: TrainerPhase = TrainerPhase.CREATED
 
     failure: str | None = None
+
+    @property
+    def optimizer_step(self) -> int:
+        """Checkpoint-contract name for the completed optimizer updates."""
+
+        return self.step
+
+    @optimizer_step.setter
+    def optimizer_step(self, value: int) -> None:
+        self.step = value
 
     def transition(self, phase: TrainerPhase) -> None:
         """Move to a valid lifecycle phase."""

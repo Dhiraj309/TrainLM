@@ -15,7 +15,7 @@ changing the trainer or Hugging Face model implementation.
 | Precision | backend-native autocast context |
 | Compilation | compile a model or return it unchanged |
 | Distribution | create a logical mesh and shard model/optimizer state |
-| Execution | backward, gradient clipping, optimizer step, zeroing gradients |
+| Execution | gradient scaling, backward, clipping, optimizer step, zeroing gradients |
 | Coordination | device synchronization and named worker barriers |
 | Checkpointing | before/after coordination plus backend-owned runtime state |
 | Diagnostics | portable identity fields plus backend-specific scalar facts |
@@ -56,4 +56,3 @@ Imports such as `torch_xla` are allowed only in their concrete backend package.
 They are forbidden in `trainlm.training` and the backend protocol module. This
 is enforced by a source-level contract test, allowing the core package and its
 CPU tests to remain installable without TPU dependencies.
-
