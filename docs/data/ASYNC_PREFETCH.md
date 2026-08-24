@@ -14,8 +14,9 @@ or select an accelerator backend.
   completed queue entries.
 - Capacity defaults to 16. This is a starting point for the TPU benchmark
   matrix, not a claim that 16 is optimal for every model or storage path.
-- `start_index` and `stop_index` select an exact half-open source range. M3-F6
-  will construct these values from the resumable data cursor.
+- `start_index` and `stop_index` select an exact half-open source range. The
+  [resumable cursor](RESUMABLE_CURSOR.md) supplies the next range when a
+  consumer chooses to prefetch a resumed segment.
 - Reader or transfer failures are delivered after every earlier ready batch,
   then raised as `PrefetchWorkerError` with the original exception as its
   cause.

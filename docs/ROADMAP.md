@@ -160,7 +160,7 @@ Branch names describe repository work, not the tool or contributor:
 | Status | PR | Branch | Milestones | Commits | Merge gate |
 |---|---|---|---|---:|---|
 | [x] | PR1 | `milestone/m0-m2-foundation` | M0-M2 | 15 | Contracts and generic HF CPU conformance |
-| [~] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 13 | Packed data and backend-neutral trainer; M3-F5 awaiting validation |
+| [~] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 13 | M3 complete pending validation; backend-neutral trainer remains |
 | [ ] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 16 | 600K, generic TPU, checkpoint/resume |
 | [ ] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11 | Reversible planner and optimized loss |
 | [ ] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | 850K and hard LaughLM parity |
@@ -177,7 +177,7 @@ rebase that untouched branch onto the latest merged predecessor.
 | [x] | M0 | Scope, parity manifest, metrics, and dependencies |
 | [x] | M1 | Backend-neutral framework contracts |
 | [x] | M2 | Universal HF dense-causal CPU path |
-| [~] | M3 | F1-F4 complete; backend-aware prefetch awaiting validation |
+| [~] | M3 | F1-F5 complete; resumable cursor awaiting validation |
 | [ ] | M4 | Correct backend-neutral trainer |
 | [ ] | M5 | Stable PyTorch/XLA DP8 runtime |
 | [ ] | M6 | Universal dense-AR TPU compatibility |
@@ -318,7 +318,7 @@ path before optimization adapters exist.
 
 ## M3 — Production packed-binary data
 
-**Status:** [~] M3-F1-M3-F4 complete; M3-F5 implemented and awaiting validation
+**Status:** [~] M3-F1-M3-F5 complete; M3-F6 implemented and awaiting validation
 
 **Goal:** Provide safe, distributed, fixed-shape, exactly resumable `.bin` data.
 
@@ -343,12 +343,12 @@ path before optimization adapters exist.
   Define seeded order, rank ownership, cross-shard, and validation behavior.
   **Acceptance:** Simulated hosts cover intended samples exactly once.
 
-- [~] **M3-F5 — Backend-aware prefetch**
+- [x] **M3-F5 — Backend-aware prefetch**
   `feat(data): add backend-aware asynchronous prefetch queue`
   Keep reading backend-neutral; expose transfer wrappers, depth, and timing.
   **Acceptance:** Ordering/backpressure pass; TPU begins tuning at depth 16.
 
-- [ ] **M3-F6 — Resumable cursor**
+- [~] **M3-F6 — Resumable cursor**
   `feat(data): make packed data iteration exactly resumable`
   Save revision, permutation, shard, offset, epoch/tokens, and RNG.
   **Acceptance:** Interrupted and uninterrupted next batches match.
