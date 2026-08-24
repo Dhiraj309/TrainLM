@@ -12,17 +12,26 @@ from .plan import (
     PlanStatus,
     ProviderDecision,
 )
+from .optimizers import (
+    AdamWStateDtype,
+    OptimizerFactory,
+    OptimizerStatePolicy,
+    create_optimizer,
+)
 
 __all__ = [
     "CapabilityFact",
     "CapabilityStatus",
+    "AdamWStateDtype",
     "ComponentCapability",
     "DecisionStatus",
     "ExecutionPlan",
     "ModelCapabilities",
     "ModelTransformation",
     "OptimizationPolicy",
+    "OptimizerFactory",
+    "OptimizerStatePolicy",
     "PlanStatus",
     "ProviderDecision",
+    "create_optimizer",
 ]
-
