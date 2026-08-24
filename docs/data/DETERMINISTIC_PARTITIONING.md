@@ -81,5 +81,6 @@ for batch in rank_reader:
 
 The plan serializes deterministically and includes dataset and global schedule
 fingerprints. Its language-neutral contract is
-`schemas/data/batch_partition_v1.schema.json`. M3-F6 will bind its exact resume
-cursor to these identities.
+`schemas/data/batch_partition_v1.schema.json`. The exact resume boundary is
+defined by the [resumable cursor contract](RESUMABLE_CURSOR.md) and binds its
+state to these identities.

@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trainlm.dev/schemas/data/packed_data_cursor_v1.schema.json",
+  "title": "TrainLM Packed Data Cursor v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "split",
+    "seed",
+    "epoch",
+    "world_size",
+    "rank",
+    "dataset_fingerprint",
+    "schedule_fingerprint",
+    "source_revision",
+    "next_partition_index",
+    "next_global_batch_index",
+    "next_shard_id",
+    "next_local_batch_index",
+    "next_token_offset",
+    "batches_consumed",
+    "tokens_consumed",
+    "rng_state"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "split": {"enum": ["train", "validation"]},
+    "seed": {"type": "integer", "minimum": 0},
+    "epoch": {"type": "integer", "minimum": 0},
+    "world_size": {"type": "integer", "minimum": 1},
+    "rank": {"type": "integer", "minimum": 0},
+    "dataset_fingerprint": {"$ref": "#/$defs/sha256"},
+    "schedule_fingerprint": {"$ref": "#/$defs/sha256"},
+    "source_revision": {"type": ["string", "null"]},
+    "next_partition_index": {"type": "integer", "minimum": 0},
+    "next_global_batch_index": {"type": ["integer", "null"], "minimum": 0},
+    "next_shard_id": {"type": ["string", "null"]},
+    "next_local_batch_index": {"type": ["integer", "null"], "minimum": 0},
+    "next_token_offset": {"type": ["integer", "null"], "minimum": 0},
+    "batches_consumed": {"type": "integer", "minimum": 0},
+    "tokens_consumed": {"type": "integer", "minimum": 0},
+    "rng_state": {}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"split": {"const": "validation"}}},
+      "then": {
+        "properties": {
+          "seed": {"const": 0},
+          "epoch": {"const": 0}
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

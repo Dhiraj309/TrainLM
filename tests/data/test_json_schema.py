@@ -7,7 +7,11 @@ from pathlib import Path
 
 import jsonschema
 
-from trainlm.data import plan_packed_batch_partition
+from trainlm.data import (
+    PackedDataCursor,
+    PartitionedPackedBatchReader,
+    plan_packed_batch_partition,
+)
 
 from .test_partition import _reader
 from .test_packed_binary_manifest import legacy_shard
@@ -48,5 +52,23 @@ def test_batch_partition_matches_versioned_json_schema(tmp_path):
     jsonschema.validate(
         json.loads(plan.to_json()),
         _schema("batch_partition_v1.schema.json"),
+    )
+    reader.close()
+
+
+def test_packed_data_cursor_matches_versioned_json_schema(tmp_path):
+    reader = _reader(tmp_path, (16, 16))
+    plan = plan_packed_batch_partition(
+        reader,
+        split="train",
+        seed=11,
+        epoch=2,
+        world_size=2,
+        rank=0,
+    )
+    cursor = PackedDataCursor(PartitionedPackedBatchReader(reader, plan))
+    jsonschema.validate(
+        json.loads(cursor.state.to_json()),
+        _schema("packed_data_cursor_v1.schema.json"),
     )
     reader.close()

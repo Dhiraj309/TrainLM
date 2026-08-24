@@ -22,6 +22,7 @@ from .partition import (
     packed_dataset_fingerprint,
     plan_packed_batch_partition,
 )
+from .cursor import PackedDataCursor, PackedDataCursorState
 from .prefetch import (
     AsyncBatchPrefetcher,
     BackendBatchTransfer,
@@ -48,6 +49,8 @@ __all__ = [
     "BatchTransfer",
     "CompatibilityProfile",
     "ContiguousPackedBatchReader",
+    "PackedDataCursor",
+    "PackedDataCursorState",
     "DocumentIndex",
     "DocumentIndexStorage",
     "DataSplit",
