@@ -22,6 +22,16 @@ from .partition import (
     packed_dataset_fingerprint,
     plan_packed_batch_partition,
 )
+from .prefetch import (
+    AsyncBatchPrefetcher,
+    BackendBatchTransfer,
+    BatchSource,
+    BatchTransfer,
+    IdentityBatchTransfer,
+    PrefetchMetrics,
+    PrefetchState,
+    PrefetchWorkerError,
+)
 from .reader import (
     ContiguousPackedBatchReader,
     PackedBatchLocation,
@@ -30,8 +40,12 @@ from .reader import (
 )
 
 __all__ = [
+    "AsyncBatchPrefetcher",
     "ByteOrder",
     "BatchPartitionPlan",
+    "BackendBatchTransfer",
+    "BatchSource",
+    "BatchTransfer",
     "CompatibilityProfile",
     "ContiguousPackedBatchReader",
     "DocumentIndex",
@@ -40,11 +54,15 @@ __all__ = [
     "HuggingFacePackedShardSource",
     "HuggingFaceShardSourceConfig",
     "HuggingFaceShardSpec",
+    "IdentityBatchTransfer",
     "PackedBinaryShardManifest",
     "PackedBatchLocation",
     "PackedReaderLayout",
     "PackedShardFile",
     "PartitionedPackedBatchReader",
+    "PrefetchMetrics",
+    "PrefetchState",
+    "PrefetchWorkerError",
     "RemainderPolicy",
     "ResolvedHuggingFaceShard",
     "TokenDType",
