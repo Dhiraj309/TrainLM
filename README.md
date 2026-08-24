@@ -46,6 +46,8 @@ Validated payloads are exposed through the
 [contiguous fixed-shape batch reader](docs/data/CONTIGUOUS_BATCH_READER.md).
 Shard order and rank ownership follow the
 [deterministic packed-data partition contract](docs/data/DETERMINISTIC_PARTITIONING.md).
+Packed reads can overlap training through the bounded, backend-aware
+[asynchronous prefetch contract](docs/data/ASYNC_PREFETCH.md).
 
 TrainLM distinguishes models that are **Compatible**, **Optimized**, and
 hardware **Certified**. Generic execution is never presented as TPU performance
