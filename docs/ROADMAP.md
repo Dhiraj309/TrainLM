@@ -170,6 +170,12 @@ Future tracks: `milestone/m15-torchtpu`, `milestone/m16-moe`, and
 `milestone/m17-dllm`, five commits each. Before activating a later PR branch,
 rebase that untouched branch onto the latest merged predecessor.
 
+### Current branch handoff
+
+PR1 (`milestone/m0-m2-foundation`) is merged. Create the next implementation
+branch from the latest `main` as `milestone/m3-m4-data-trainer`; it owns the
+M3 production data path and M4 backend-neutral trainer work listed below.
+
 ## Milestone overview
 
 | Status | Milestone | Outcome |
