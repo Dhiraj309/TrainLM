@@ -160,7 +160,7 @@ Branch names describe repository work, not the tool or contributor:
 | Status | PR | Branch | Milestones | Commits | Merge gate |
 |---|---|---|---|---:|---|
 | [x] | PR1 | `milestone/m0-m2-foundation` | M0-M2 | 15 | Contracts and generic HF CPU conformance |
-| [~] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 13 | M3 pending validation; M4-F1-F2 complete, F3 awaiting validation |
+| [~] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 14 | M3 pending validation; M4-F1-F4 complete, F5 next; test package import fix added |
 | [ ] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 16 | 600K, generic TPU, checkpoint/resume |
 | [ ] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11 | Reversible planner and optimized loss |
 | [ ] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | 850K and hard LaughLM parity |
@@ -178,7 +178,7 @@ rebase that untouched branch onto the latest merged predecessor.
 | [x] | M1 | Backend-neutral framework contracts |
 | [x] | M2 | Universal HF dense-causal CPU path |
 | [~] | M3 | F1-F5 complete; resumable cursor awaiting validation |
-| [~] | M4 | F1-F2 complete; optimizer dtype policy awaiting validation |
+| [~] | M4 | F1-F4 complete; streaming evaluation next |
 | [ ] | M5 | Stable PyTorch/XLA DP8 runtime |
 | [ ] | M6 | Universal dense-AR TPU compatibility |
 | [ ] | M7 | Checkpointing, telemetry, and integrity |
@@ -359,7 +359,7 @@ path before optimization adapters exist.
 
 ## M4 — Correct backend-neutral trainer
 
-**Status:** [~] M4-F1-F2 complete; M4-F3 implemented and awaiting validation
+**Status:** [~] M4-F1-F4 implemented; F4 and test-collection fix awaiting validation
 
 **Goal:** Complete correct training independently of TPU optimization.
 
@@ -373,13 +373,13 @@ path before optimization adapters exist.
   Handle ignored-token variation and separate microstep/update/token counters.
   **Acceptance:** Accumulation matches an equivalent large CPU batch.
 
-- [~] **M4-F3 — Optimizer/state dtype factory**
+- [x] **M4-F3 — Optimizer/state dtype factory**
   `feat(optim): add backend-neutral AdamW state policy`
   AdamW, decay policy, clipping, independent parameter/moment dtype, and
   backend option validation.
   **Acceptance:** Match PyTorch AdamW under identical policy.
 
-- [ ] **M4-F4 — Token-based WSD**
+- [~] **M4-F4 — Token-based WSD**
   `feat(scheduler): add token-based WSD schedule`
   Warmup/stable/decay/min-LR/horizon with token-based resume.
   **Acceptance:** Boundaries and resume match the locked schedule.
