@@ -311,8 +311,6 @@ class Trainer:
             self.optimizer,
         )
 
-        self.scheduler.step()
-
         self.runtime.synchronize()
 
         self._update_accumulated_state(
@@ -321,8 +319,20 @@ class Trainer:
             loss_numerator=loss_numerator,
             exact_tokens=exact_tokens,
         )
+        self._advance_scheduler(total_tokens=total_tokens)
+        self.state.learning_rate = self._current_learning_rate()
 
         self.runtime.on_step_end(self.state.step)
+
+    def _advance_scheduler(self, *, total_tokens: int) -> None:
+        """Advance token-indexed schedules by cumulative consumed tokens."""
+
+        step_tokens = getattr(self.scheduler, "step_tokens", None)
+        if callable(step_tokens):
+            step_tokens(self.state.tokens_seen)
+        else:
+            del total_tokens
+            self.scheduler.step()
 
     def _evaluation_step(self, batch) -> TaskResult:
         """Dispatch one evaluation batch through the selected task."""
