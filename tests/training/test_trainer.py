@@ -27,7 +27,9 @@ class DummyModel(nn.Module):
 
     def forward(self, input_ids):
         output = self.linear(input_ids)
-        return DummyOutput(output.mean())
+        # Keep the fixture's model-owned loss mathematically valid while
+        # preserving a differentiable signal for optimizer/lifecycle tests.
+        return DummyOutput(output.square().mean())
 
 
 class DummyDataset(torch.utils.data.Dataset):
