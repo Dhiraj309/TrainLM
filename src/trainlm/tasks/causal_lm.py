@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+import math
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Any, Literal
 
 import torch
@@ -71,24 +72,41 @@ class CausalLMTask:
         self,
         results: Sequence[TaskResult],
     ) -> dict[str, float]:
-        if not results:
-            raise ValueError("Cannot aggregate an empty evaluation.")
+        return self.aggregate_evaluation_stream(results)
+
+    def aggregate_evaluation_stream(
+        self,
+        results: Iterable[TaskResult],
+    ) -> dict[str, float]:
 
         weight_name = (
             "supervised_tokens"
             if self.normalization == "supervised_tokens"
             else "sequences"
         )
-        weighted_loss = 0.0
+        weighted_loss: torch.Tensor | None = None
         total_weight = 0
         for result in results:
             weight = getattr(result.tokens, weight_name)
-            weighted_loss += result.loss.detach().item() * weight
+            contribution = result.loss.detach() * weight
+            weighted_loss = (
+                contribution
+                if weighted_loss is None
+                else weighted_loss + contribution
+            )
             total_weight += weight
 
-        if total_weight == 0:
+        if total_weight == 0 or weighted_loss is None:
             raise ValueError("Evaluation contains no normalization units.")
-        return {"eval_loss": weighted_loss / total_weight}
+        eval_loss = (weighted_loss / total_weight).item()
+        try:
+            perplexity = math.exp(eval_loss)
+        except OverflowError:
+            perplexity = float("inf")
+        return {
+            "eval_loss": eval_loss,
+            "eval_perplexity": perplexity,
+        }
 
     def _step(
         self,

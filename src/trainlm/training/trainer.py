@@ -343,6 +343,12 @@ class Trainer:
             self.runtime,
         )
 
+    def _evaluation_results(self):
+        """Yield evaluation results without retaining the evaluation set."""
+
+        for batch in self.eval_dataloader:
+            yield self._evaluation_step(batch)
+
     def evaluate(self) -> dict[str, float]:
         """Run evaluation over the evaluation dataloader."""
 
@@ -365,12 +371,19 @@ class Trainer:
         self.model.eval()
 
         try:
-            results: list[TaskResult] = []
             with torch.no_grad():
-                for batch in self.eval_dataloader:
-                    result = self._evaluation_step(batch)
-                    results.append(result)
-            metrics = self.task.aggregate_evaluation(results)
+                stream_aggregator = getattr(
+                    self.task,
+                    "aggregate_evaluation_stream",
+                    None,
+                )
+                if callable(stream_aggregator):
+                    metrics = stream_aggregator(self._evaluation_results())
+                else:
+                    results: list[TaskResult] = []
+                    for result in self._evaluation_results():
+                        results.append(result)
+                    metrics = self.task.aggregate_evaluation(results)
             self.callback_handler.on_evaluate(self.state, self.control)
             return metrics
         except BaseException as exc:

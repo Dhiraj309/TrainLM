@@ -93,6 +93,18 @@ class CountingTask:
         }
 
 
+class StreamingCountingTask(CountingTask):
+
+    def __init__(self):
+        self.received_iterator = False
+        self.result_count = 0
+
+    def aggregate_evaluation_stream(self, results):
+        self.received_iterator = iter(results) is results
+        self.result_count = sum(1 for _ in results)
+        return {"eval_loss": float(self.result_count)}
+
+
 def test_train_runs_one_step():
     trainer = create_trainer()
 
@@ -249,6 +261,17 @@ def test_evaluate_average_loss():
     metrics = trainer.evaluate()
 
     assert metrics["eval_loss"] >= 0.0
+
+
+def test_evaluate_uses_streaming_task_aggregator():
+    task = StreamingCountingTask()
+    trainer = create_trainer(task=task)
+
+    metrics = trainer.evaluate()
+
+    assert task.received_iterator
+    assert task.result_count == len(trainer.eval_dataloader)
+    assert metrics["eval_loss"] == float(task.result_count)
 
 
 class RecordingRuntime(Runtime):

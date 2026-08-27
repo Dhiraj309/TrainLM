@@ -160,7 +160,7 @@ Branch names describe repository work, not the tool or contributor:
 | Status | PR | Branch | Milestones | Commits | Merge gate |
 |---|---|---|---|---:|---|
 | [x] | PR1 | `milestone/m0-m2-foundation` | M0-M2 | 15 | Contracts and generic HF CPU conformance |
-| [~] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 15 | M3 pending validation; M4-F1-F4 complete, F5 next; test collection and loss-fixture fixes added |
+| [~] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 16 | M3 pending validation; M4-F1-F5 implemented, F5 awaiting validation; F6 next |
 | [ ] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 16 | 600K, generic TPU, checkpoint/resume |
 | [ ] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11 | Reversible planner and optimized loss |
 | [ ] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | 850K and hard LaughLM parity |
@@ -184,7 +184,7 @@ M3 production data path and M4 backend-neutral trainer work listed below.
 | [x] | M1 | Backend-neutral framework contracts |
 | [x] | M2 | Universal HF dense-causal CPU path |
 | [~] | M3 | F1-F5 complete; resumable cursor awaiting validation |
-| [~] | M4 | F1-F4 complete; test validation fixes applied; streaming evaluation next |
+| [~] | M4 | F1-F5 implemented; F5 awaiting validation; sync-safe callbacks next |
 | [ ] | M5 | Stable PyTorch/XLA DP8 runtime |
 | [ ] | M6 | Universal dense-AR TPU compatibility |
 | [ ] | M7 | Checkpointing, telemetry, and integrity |
@@ -365,7 +365,7 @@ path before optimization adapters exist.
 
 ## M4 — Correct backend-neutral trainer
 
-**Status:** [~] M4-F1-F4 implemented; test collection/loss-fixture fixes awaiting validation
+**Status:** [~] M4-F1-F5 implemented; F5 awaiting validation
 
 **Goal:** Complete correct training independently of TPU optimization.
 
@@ -390,7 +390,7 @@ path before optimization adapters exist.
   Warmup/stable/decay/min-LR/horizon with token-based resume.
   **Acceptance:** Boundaries and resume match the locked schedule.
 
-- [ ] **M4-F5 — Streaming evaluation**
+- [~] **M4-F5 — Streaming evaluation**
   `feat(evaluation): add token-weighted causal LM evaluation`
   Compute loss/perplexity without retaining predictions; isolate eval state.
   **Acceptance:** Match reference without mutating training.

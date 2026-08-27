@@ -136,6 +136,27 @@ def test_causal_task_weights_evaluation_by_supervised_tokens():
     assert metrics["eval_loss"] == pytest.approx(3.5)
 
 
+def test_causal_task_streaming_evaluation_matches_batch_aggregation():
+    task = CausalLMTask()
+    results = [
+        TaskResult(
+            loss=torch.tensor(2.0),
+            tokens=TokenCounts(1, 4, 3, 3, 0),
+        ),
+        TaskResult(
+            loss=torch.tensor(8.0),
+            tokens=TokenCounts(1, 4, 3, 1, 2),
+        ),
+    ]
+
+    metrics = task.aggregate_evaluation_stream(iter(results))
+
+    assert metrics["eval_loss"] == pytest.approx(3.5)
+    assert metrics["eval_perplexity"] == pytest.approx(
+        torch.exp(torch.tensor(3.5)).item()
+    )
+
+
 @pytest.mark.parametrize(
     ("implementation", "expected_source"),
     (
