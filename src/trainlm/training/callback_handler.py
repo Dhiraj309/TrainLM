@@ -4,10 +4,11 @@ Trainer callback dispatcher.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 
 from .callback import TrainerCallback
 from .control import TrainerControl
+from .metrics import MetricSnapshot
 from .state import TrainerState
 
 
@@ -77,6 +78,16 @@ class CallbackHandler:
     ) -> None:
         for callback in self._callbacks:
             callback.on_step_end(state, control)
+
+    def on_metrics(
+        self,
+        state: TrainerState,
+        control: TrainerControl,
+        metrics: Mapping[str, float],
+    ) -> None:
+        snapshot = MetricSnapshot.from_mapping(metrics)
+        for callback in self._callbacks:
+            callback.on_metrics(state, control, snapshot)
 
     def on_evaluate(
         self,

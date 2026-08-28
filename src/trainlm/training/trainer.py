@@ -122,6 +122,7 @@ class Trainer:
                     self.state,
                     self.control,
                 )
+                self._emit_step_metrics()
 
         except BaseException as exc:
             self.state.mark_failed(exc)
@@ -177,6 +178,31 @@ class Trainer:
         ):
             return True
         return False
+
+    def _emit_step_metrics(self) -> None:
+        """Emit a sparse host-only snapshot according to logging policy."""
+
+        logging_config = getattr(self.config, "logging", None)
+        interval = getattr(logging_config, "log_every_steps", None)
+        if interval is None:
+            return
+        if (
+            isinstance(interval, bool)
+            or not isinstance(interval, int)
+            or interval < 1
+        ):
+            raise ValueError("logging.log_every_steps must be positive.")
+        if self.state.step % interval != 0:
+            return
+        metrics: dict[str, float] = {
+            "step": float(self.state.step),
+            "tokens_seen": float(self.state.tokens_seen),
+            "samples_seen": float(self.state.samples_seen),
+            "learning_rate": self.state.learning_rate,
+        }
+        if self.state.loss is not None:
+            metrics["loss"] = self.state.loss
+        self.callback_handler.on_metrics(self.state, self.control, metrics)
 
     def request_stop(self) -> None:
         """Request a graceful stop at the next completed-step boundary."""
@@ -385,6 +411,11 @@ class Trainer:
                         results.append(result)
                     metrics = self.task.aggregate_evaluation(results)
             self.callback_handler.on_evaluate(self.state, self.control)
+            self.callback_handler.on_metrics(
+                self.state,
+                self.control,
+                metrics,
+            )
             return metrics
         except BaseException as exc:
             self.state.mark_failed(exc)

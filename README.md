@@ -40,6 +40,8 @@ Token-indexed warmup/stable/decay scheduling follows the
 [WSD scheduler contract](docs/training/TOKEN_SCHEDULER.md).
 Streaming, token-weighted evaluation follows the
 [streaming evaluation contract](docs/evaluation/STREAMING_EVALUATION.md).
+Host callbacks consume immutable, materialized metrics through the
+[sync-safe callback contract](docs/training/CALLBACKS.md).
 Updated models must pass the
 [plain Hugging Face round-trip contract](docs/models/PLAIN_HF_ROUNDTRIP.md).
 Representative non-Llama families are exercised by the

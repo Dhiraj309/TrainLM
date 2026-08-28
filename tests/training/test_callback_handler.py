@@ -1,3 +1,6 @@
+import pytest
+import torch
+
 from trainlm.training import (
     CallbackHandler,
     TrainerCallback,
@@ -52,3 +55,39 @@ def test_callbacks_property():
     handler = CallbackHandler([callback])
 
     assert handler.callbacks == (callback,)
+
+
+class MetricsCallback(TrainerCallback):
+    def __init__(self):
+        self.metrics = []
+
+    def on_metrics(self, state, control, metrics):
+        del state, control
+        self.metrics.append(metrics)
+
+
+def test_metrics_are_read_only_host_scalars():
+    callback = MetricsCallback()
+    handler = CallbackHandler([callback])
+
+    handler.on_metrics(
+        TrainerState(),
+        TrainerControl(),
+        {"loss": 1.5, "step": 2},
+    )
+
+    snapshot = callback.metrics[0]
+    assert snapshot["loss"] == 1.5
+    with pytest.raises(TypeError):
+        snapshot["loss"] = 3.0
+
+
+def test_metrics_reject_live_tensors():
+    handler = CallbackHandler()
+
+    with pytest.raises(TypeError, match="materialized"):
+        handler.on_metrics(
+            TrainerState(),
+            TrainerControl(),
+            {"loss": torch.tensor(1.5)},
+        )
