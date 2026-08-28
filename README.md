@@ -42,6 +42,8 @@ Streaming, token-weighted evaluation follows the
 [streaming evaluation contract](docs/evaluation/STREAMING_EVALUATION.md).
 Host callbacks consume immutable, materialized metrics through the
 [sync-safe callback contract](docs/training/CALLBACKS.md).
+Generic dense-AR trainability is checked across representative HF families by
+the [multi-family overfit matrix](docs/training/MULTI_FAMILY_OVERFIT.md).
 Updated models must pass the
 [plain Hugging Face round-trip contract](docs/models/PLAIN_HF_ROUNDTRIP.md).
 Representative non-Llama families are exercised by the
