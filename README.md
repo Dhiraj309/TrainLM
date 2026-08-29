@@ -16,6 +16,8 @@ Model architecture and training-policy boundaries are defined by the
 
 Device-specific execution is isolated behind the
 [execution backend protocol](docs/runtime/BACKEND_PROTOCOL.md).
+The optional PyTorch/XLA implementation follows the
+[XLA runtime contract](docs/runtime/PYTORCH_XLA.md).
 
 Next-token shifting, masking, normalization, and accounting are fixed by the
 [causal language-model task contract](docs/tasks/CAUSAL_LM.md).

@@ -160,8 +160,8 @@ Branch names describe repository work, not the tool or contributor:
 | Status | PR | Branch | Milestones | Commits | Merge gate |
 |---|---|---|---|---:|---|
 | [x] | PR1 | `milestone/m0-m2-foundation` | M0-M2 | 15 | Contracts and generic HF CPU conformance |
-| [~] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 18 | M3 pending validation; M4-F1-F7 implemented, M4 validation pending |
-| [ ] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 16 | 600K, generic TPU, checkpoint/resume |
+| [x] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 18 | Merged; post-merge TPU evidence remains tracked by validation gates |
+| [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 1 | M5-F1 implemented; target TPU validation pending |
 | [ ] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11 | Reversible planner and optimized loss |
 | [ ] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | 850K and hard LaughLM parity |
 | [ ] | PR6 | `milestone/m13-m14-family-release` | M13-M14 | 12 | Cross-family certification and V1 release |
@@ -172,9 +172,9 @@ rebase that untouched branch onto the latest merged predecessor.
 
 ### Current branch handoff
 
-PR1 (`milestone/m0-m2-foundation`) is merged. Create the next implementation
-branch from the latest `main` as `milestone/m3-m4-data-trainer`; it owns the
-M3 production data path and M4 backend-neutral trainer work listed below.
+PR2 (`milestone/m3-m4-data-trainer`) is merged. The active implementation
+branch is `milestone/m5-m7-xla-compatibility`, created from the latest `main`;
+it owns the M5 PyTorch/XLA runtime and subsequent TPU validation work.
 
 ## Milestone overview
 
@@ -185,7 +185,7 @@ M3 production data path and M4 backend-neutral trainer work listed below.
 | [x] | M2 | Universal HF dense-causal CPU path |
 | [~] | M3 | F1-F5 complete; resumable cursor awaiting validation |
 | [~] | M4 | F1-F7 implemented; validation pending |
-| [ ] | M5 | Stable PyTorch/XLA DP8 runtime |
+| [~] | M5 | Optional PyTorch/XLA backend implemented; DP8 runtime next |
 | [ ] | M6 | Universal dense-AR TPU compatibility |
 | [ ] | M7 | Checkpointing, telemetry, and integrity |
 | [ ] | M8 | Reversible capability optimization engine |
@@ -412,11 +412,11 @@ path before optimization adapters exist.
 
 ## M5 — PyTorch/XLA runtime and accumulation feasibility
 
-**Status:** [ ] Not started
+**Status:** [~] M5-F1 implemented; target TPU validation pending
 
 **Goal:** Establish stable DP8 execution before specialized TPU kernels.
 
-- [ ] **M5-F1 — Optional XLA backend**
+- [~] **M5-F1 — Optional XLA backend**
   `feat(runtime): add pinned PyTorch XLA backend`
   Contain initialization, BF16 policy, device/ordinal, versions, and guarded
   Pallas/JAX imports.
