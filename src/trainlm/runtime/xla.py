@@ -12,7 +12,7 @@ from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
-from typing import Any
+from typing import Any, Callable, TypeVar
 
 import torch
 from torch import nn
@@ -21,6 +21,9 @@ from torch.optim import Optimizer
 from .base import BackendDiagnostics, LogicalMesh, Precision
 from .runtime import _move_to_device
 from .shape_guard import StaticShapeGuard
+
+
+_Step = TypeVar("_Step", bound=Callable[..., Any])
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,6 +48,7 @@ class XlaRuntime:
         torch_xla_runtime_module: Any | None = None,
         cache_dir: str | Path | None = None,
         cache_readonly: bool = False,
+        compile_training: bool = False,
     ) -> None:
         if precision not in {"fp32", "fp16", "bf16"}:
             raise ValueError(f"Unsupported runtime precision: {precision}")
@@ -64,6 +68,8 @@ class XlaRuntime:
         self._cache_dir = Path(cache_dir) if cache_dir is not None else None
         self._cache_readonly = cache_readonly
         self._cache_initialized = False
+        self._compile_training = compile_training
+        self._compiled_step_ids: set[int] = set()
         if self._cache_dir is not None:
             self._initialize_cache()
         self._device = (
@@ -159,6 +165,30 @@ class XlaRuntime:
     def compile_model(self, model: nn.Module) -> nn.Module:
         return model
 
+    def compile_training_step(self, step_fn: _Step) -> _Step:
+        """Compile one complete device update when explicitly enabled.
+
+        PyTorch/XLA recommends compiling the complete training step (forward,
+        loss, backward, and optimizer update) rather than compiling only the
+        model. Host I/O, metrics, callbacks, and checkpointing stay outside
+        this boundary because callers provide only the device-step callable.
+        """
+
+        if not callable(step_fn):
+            raise TypeError("step_fn must be callable.")
+        if not self._compile_training:
+            return step_fn
+        compiler = getattr(self._torch_xla, "compile", None)
+        if not callable(compiler):
+            raise RuntimeError(
+                "This torch_xla version does not expose torch_xla.compile."
+            )
+        compiled = compiler(step_fn)
+        if not callable(compiled):
+            raise TypeError("torch_xla.compile returned a non-callable step.")
+        self._compiled_step_ids.add(id(compiled))
+        return compiled
+
     def create_mesh(self, mesh: LogicalMesh) -> XlaMesh:
         if mesh.size != self.world_size:
             raise ValueError(
@@ -237,6 +267,7 @@ class XlaRuntime:
             "precision": self.precision,
             "world_size": self.world_size,
             "rank": self.rank,
+            "compile_training": self._compile_training,
         }
         if self._mesh is not None:
             state["mesh_axes"] = dict(self._mesh.logical.axis_sizes)
@@ -275,6 +306,8 @@ class XlaRuntime:
                     else None
                 ),
                 "compilation_cache_initialized": self._cache_initialized,
+                "compile_training": self._compile_training,
+                "compiled_step_count": len(self._compiled_step_ids),
                 "compilation_fingerprint": self.compilation_fingerprint,
                 "shape_guard_fingerprint": self._shape_guard.fingerprint,
             },

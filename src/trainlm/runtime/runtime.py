@@ -111,6 +111,13 @@ class TorchRuntime:
             return model
         return torch.compile(model)
 
+    def compile_training_step(self, step_fn):
+        """Keep the optional training-step hook backend-compatible."""
+
+        if not callable(step_fn):
+            raise TypeError("step_fn must be callable.")
+        return step_fn
+
     def create_mesh(self, mesh: LogicalMesh) -> LogicalMesh:
         if mesh.size != self.world_size:
             raise ValueError(

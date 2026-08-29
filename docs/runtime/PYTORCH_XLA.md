@@ -31,7 +31,18 @@ trainer = Trainer(
 
 The backend delegates optimizer updates to `xm.optimizer_step`, flushes lazy
 graphs at explicit step/end boundaries, and uses XLA rendezvous for named
-barriers. M5-F1 deliberately does not claim SPMD sharding, graph caching,
-compiled operation fusion, or throughput certification; M5-F2 through M5-F7
-own those concerns. Runtime state records backend identity and topology for
-future checkpoint contracts.
+barriers. Model-only compilation remains disabled by design. For an explicit
+device-step callable, opt into the PyTorch/XLA training compiler:
+
+```python
+runtime = XlaRuntime(precision="bf16", compile_training=True)
+compiled_step = runtime.compile_training_step(device_step)
+```
+
+The callable should contain only forward, loss, backward, reduction, gradient
+clipping, and optimizer-update operations. Data loading, host token accounting,
+logging, callbacks, and checkpointing stay outside it. PyTorch/XLA currently
+documents `torch_xla.compile` as the recommended training-step boundary;
+TrainLM keeps this hook explicit until the M5 accumulation spike selects and
+validates one complete trainer integration. Runtime state records backend,
+compiler mode, and topology for future checkpoint contracts.

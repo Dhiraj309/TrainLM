@@ -161,7 +161,7 @@ Branch names describe repository work, not the tool or contributor:
 |---|---|---|---|---:|---|
 | [x] | PR1 | `milestone/m0-m2-foundation` | M0-M2 | 15 | Contracts and generic HF CPU conformance |
 | [x] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 18 | Merged; post-merge TPU evidence remains tracked by validation gates |
-| [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 3 | M5-F1-F3 implemented; target TPU validation pending |
+| [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 4 | M5-F1-F4 implemented; target TPU validation pending |
 | [ ] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11 | Reversible planner and optimized loss |
 | [ ] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | 850K and hard LaughLM parity |
 | [ ] | PR6 | `milestone/m13-m14-family-release` | M13-M14 | 12 | Cross-family certification and V1 release |
@@ -185,7 +185,7 @@ it owns the M5 PyTorch/XLA runtime and subsequent TPU validation work.
 | [x] | M2 | Universal HF dense-causal CPU path |
 | [~] | M3 | F1-F5 complete; resumable cursor awaiting validation |
 | [~] | M4 | F1-F7 implemented; validation pending |
-| [~] | M5 | F1-F3 XLA backend, DP mesh, cache, and shape guard implemented; validation pending |
+| [~] | M5 | F1-F4 XLA backend, DP mesh, cache, shape guard, and explicit compile boundary implemented; validation pending |
 | [ ] | M6 | Universal dense-AR TPU compatibility |
 | [ ] | M7 | Checkpointing, telemetry, and integrity |
 | [ ] | M8 | Reversible capability optimization engine |
@@ -436,11 +436,15 @@ path before optimization adapters exist.
   **Acceptance:** No compile beyond the allowed warmup graph set; cache and
   guard state are visible in runtime diagnostics.
 
-- [ ] **M5-F4 — Compiled training operations**
+- [~] **M5-F4 — Compiled training operations**
   `feat(runtime): compile XLA training operations`
-  Compile forward/backward/reduction/clip/update/schedule boundaries while
-  keeping I/O and logging outside.
-  **Acceptance:** A v5e-8 update matches reference semantics.
+  Add an explicit backend hook around a complete device-step callable, using
+  `torch_xla.compile` when enabled and leaving model-only compilation disabled.
+  Keep data I/O, host token accounting, logging, callbacks, and checkpointing
+  outside the compiled boundary; defer trainer integration until the
+  accumulation strategy spike selects the stable update shape.
+  **Acceptance:** A v5e-8 update matches reference semantics after the
+  accumulation strategy is selected; the hook is covered by backend tests.
 
 - [ ] **M5-F5 — Accumulation strategy spike**
   `perf(runtime): select v5e gradient accumulation strategy`

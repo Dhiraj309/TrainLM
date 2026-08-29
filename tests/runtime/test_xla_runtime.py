@@ -64,6 +64,9 @@ class FakeXlaRuntimeModule:
     def initialize_cache(self, path, readonly=False):
         self.cache_calls.append((path, readonly))
 
+    def compile(self, step_fn):
+        return lambda *args, **kwargs: step_fn(*args, **kwargs)
+
 
 def runtime(*, spmd=False):
     xm = FakeXlaModel()
@@ -76,6 +79,19 @@ def runtime(*, spmd=False):
         spmd_module=fake_spmd,
     )
     return backend, xm, fake_spmd
+
+
+def compiled_runtime():
+    xm = FakeXlaModel()
+    fake_xla = FakeXlaRuntimeModule()
+    backend = XlaRuntime(
+        device="cpu",
+        precision="fp32",
+        xm_module=xm,
+        torch_xla_module=fake_xla,
+        compile_training=True,
+    )
+    return backend, fake_xla
 
 
 def test_xla_runtime_is_lazy_and_satisfies_backend_protocol():
@@ -160,3 +176,15 @@ def test_xla_runtime_rejects_dynamic_batch_shapes_and_accumulation():
         backend.prepare_batch({"input_ids": torch.ones(1, 4)})
     with pytest.raises(RuntimeError, match="accumulation structure"):
         backend.configure_static_shapes(accumulation_steps=1)
+
+
+def test_xla_runtime_compiles_explicit_complete_training_step():
+    backend, _ = compiled_runtime()
+
+    def step(value):
+        return value + 1
+
+    compiled = backend.compile_training_step(step)
+
+    assert compiled(2) == 3
+    assert backend.diagnostics().values["compiled_step_count"] == 1
