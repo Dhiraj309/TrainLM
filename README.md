@@ -41,6 +41,8 @@ Distributed checkpoint state ownership follows the
 [distributed resume contract](docs/checkpoint/DISTRIBUTED_RESUME.md).
 Asynchronous publication follows the
 [checkpoint lifecycle contract](docs/checkpoint/ASYNC_LIFECYCLE.md).
+Canonical model publication follows the
+[Hugging Face export contract](docs/checkpoint/CANONICAL_HF_EXPORT.md).
 
 Generic dense causal models are acquired through the
 [Hugging Face causal-model provider](docs/models/HUGGINGFACE_PROVIDER.md).
