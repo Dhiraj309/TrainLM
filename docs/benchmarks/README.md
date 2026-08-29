@@ -13,6 +13,11 @@ The manifest is the matched workload for TrainLM's 135M TPU parity work. Its
 reference metrics are evidence from LaughLM; they are not claims about current
 TrainLM performance.
 
+The M5 generic execution gate and measurement procedure are documented in
+[`M5_BASELINE.md`](M5_BASELINE.md). Its evaluator requires an actual
+synchronized `BenchmarkResult`; it never substitutes the LaughLM reference
+numbers.
+
 ## Change rules
 
 Never edit a locked manifest in place. A changed workload requires:
