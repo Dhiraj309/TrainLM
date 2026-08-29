@@ -83,6 +83,15 @@ class Trainer:
                 f"Cannot prepare trainer in phase '{self.state.phase.value}'."
             )
         try:
+            configure_shapes = getattr(
+                self.runtime,
+                "configure_static_shapes",
+                None,
+            )
+            if callable(configure_shapes):
+                configure_shapes(
+                    accumulation_steps=self.config.trainer.gradient_accumulation_steps,
+                )
             self.runtime.initialize()
             self.state.transition(TrainerPhase.PREPARED)
         except BaseException as exc:
@@ -279,6 +288,7 @@ class Trainer:
         total_sequences = 0
         loss_numerator: torch.Tensor | None = None
         exact_tokens = True
+        micro_steps = 0
 
         for _ in range(accumulation_steps):
             result = self.task.training_step(
@@ -287,6 +297,7 @@ class Trainer:
                 self.runtime,
             )
             self.state.micro_step += 1
+            micro_steps += 1
             token_count = result.tokens.supervised_tokens
             if not result.tokens.exact or token_count <= 0:
                 if accumulation_steps != 1:
@@ -320,6 +331,13 @@ class Trainer:
 
         if loss_numerator is None:
             raise RuntimeError("Training update produced no loss.")
+        observe_accumulation = getattr(
+            self.runtime,
+            "observe_accumulation_steps",
+            None,
+        )
+        if callable(observe_accumulation):
+            observe_accumulation(micro_steps)
         if exact_tokens:
             if total_tokens <= 0:
                 raise ValueError("Training update produced no supervised tokens.")

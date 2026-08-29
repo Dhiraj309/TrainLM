@@ -161,7 +161,7 @@ Branch names describe repository work, not the tool or contributor:
 |---|---|---|---|---:|---|
 | [x] | PR1 | `milestone/m0-m2-foundation` | M0-M2 | 15 | Contracts and generic HF CPU conformance |
 | [x] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 18 | Merged; post-merge TPU evidence remains tracked by validation gates |
-| [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 2 | M5-F1-F2 implemented; target TPU validation pending |
+| [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 3 | M5-F1-F3 implemented; target TPU validation pending |
 | [ ] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11 | Reversible planner and optimized loss |
 | [ ] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | 850K and hard LaughLM parity |
 | [ ] | PR6 | `milestone/m13-m14-family-release` | M13-M14 | 12 | Cross-family certification and V1 release |
@@ -185,7 +185,7 @@ it owns the M5 PyTorch/XLA runtime and subsequent TPU validation work.
 | [x] | M2 | Universal HF dense-causal CPU path |
 | [~] | M3 | F1-F5 complete; resumable cursor awaiting validation |
 | [~] | M4 | F1-F7 implemented; validation pending |
-| [~] | M5 | Optional PyTorch/XLA backend and DP mesh implemented; validation pending |
+| [~] | M5 | F1-F3 XLA backend, DP mesh, cache, and shape guard implemented; validation pending |
 | [ ] | M6 | Universal dense-AR TPU compatibility |
 | [ ] | M7 | Checkpointing, telemetry, and integrity |
 | [ ] | M8 | Reversible capability optimization engine |
@@ -412,7 +412,7 @@ path before optimization adapters exist.
 
 ## M5 — PyTorch/XLA runtime and accumulation feasibility
 
-**Status:** [~] M5-F1-F2 implemented; target TPU validation pending
+**Status:** [~] M5-F1-F3 implemented; target TPU validation pending
 
 **Goal:** Establish stable DP8 execution before specialized TPU kernels.
 
@@ -427,11 +427,14 @@ path before optimization adapters exist.
   Implement DP8 replicated parameters/sharded batch and validate logical axes.
   **Acceptance:** v5e-8 shapes and gradient reduction are correct.
 
-- [ ] **M5-F3 — Cache and recompile guard**
+- [~] **M5-F3 — Cache and recompile guard**
   `feat(runtime): add XLA cache and recompile guard`
-  Initialize persistent cache, fingerprint graphs, and enforce static batch,
-  sequence, mask, and accumulation structures.
-  **Acceptance:** No compile beyond the allowed warmup graph set.
+  Initialize the official persistent cache, fingerprint the compilation
+  contract, and reject changes to batch, sequence, mask, or accumulation
+  structures after warmup. The trainer registers accumulation steps before
+  backend initialization; the guard remains backend-owned and model-agnostic.
+  **Acceptance:** No compile beyond the allowed warmup graph set; cache and
+  guard state are visible in runtime diagnostics.
 
 - [ ] **M5-F4 — Compiled training operations**
   `feat(runtime): compile XLA training operations`

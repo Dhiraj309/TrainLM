@@ -94,6 +94,12 @@ class TorchRuntime:
             return batch
         return _move_to_device(batch, self.device)
 
+    def configure_static_shapes(self, *, accumulation_steps: int) -> None:
+        del accumulation_steps
+
+    def observe_accumulation_steps(self, steps: int) -> None:
+        del steps
+
     def autocast(self):
         if self.precision == "fp32":
             return nullcontext()

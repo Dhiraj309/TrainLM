@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from contextlib import nullcontext
 from dataclasses import dataclass
+from pathlib import Path
 from types import ModuleType
 from typing import Any
 
@@ -19,6 +20,7 @@ from torch.optim import Optimizer
 
 from .base import BackendDiagnostics, LogicalMesh, Precision
 from .runtime import _move_to_device
+from .shape_guard import StaticShapeGuard
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,7 +32,7 @@ class XlaMesh:
 
 
 class XlaRuntime:
-    """PyTorch/XLA backend with lazy dependency loading and no SPMD policy."""
+    """PyTorch/XLA backend with lazy loading and explicit SPMD/cache policy."""
 
     def __init__(
         self,
@@ -40,6 +42,9 @@ class XlaRuntime:
         xm_module: Any | None = None,
         torch_xla_module: Any | None = None,
         spmd_module: Any | None = None,
+        torch_xla_runtime_module: Any | None = None,
+        cache_dir: str | Path | None = None,
+        cache_readonly: bool = False,
     ) -> None:
         if precision not in {"fp32", "fp16", "bf16"}:
             raise ValueError(f"Unsupported runtime precision: {precision}")
@@ -52,8 +57,15 @@ class XlaRuntime:
         self._xm = xm_module
         self._torch_xla = torch_xla_module
         self._spmd = spmd_module
+        self._xla_runtime = torch_xla_runtime_module
         self._precision = precision
         self._mesh: XlaMesh | None = None
+        self._shape_guard = StaticShapeGuard()
+        self._cache_dir = Path(cache_dir) if cache_dir is not None else None
+        self._cache_readonly = cache_readonly
+        self._cache_initialized = False
+        if self._cache_dir is not None:
+            self._initialize_cache()
         self._device = (
             torch.device(device)
             if device is not None
@@ -97,6 +109,7 @@ class XlaRuntime:
     def initialize(self) -> None:
         """Validate that the XLA device is available and addressable."""
 
+        self._initialize_cache()
         self._xm.xla_device()
 
     def finalize(self) -> None:
@@ -126,9 +139,16 @@ class XlaRuntime:
 
     def prepare_batch(self, batch: Any) -> Any:
         prepared = _move_to_device(batch, self.device)
+        self._shape_guard.observe_batch(prepared)
         if self._mesh is None:
             return prepared
         return self._mark_batch_sharding(prepared)
+
+    def configure_static_shapes(self, *, accumulation_steps: int) -> None:
+        self._shape_guard.configure_accumulation_steps(accumulation_steps)
+
+    def observe_accumulation_steps(self, steps: int) -> None:
+        self._shape_guard.observe_accumulation_steps(steps)
 
     def autocast(self):
         if self.precision == "fp32":
@@ -220,6 +240,10 @@ class XlaRuntime:
         }
         if self._mesh is not None:
             state["mesh_axes"] = dict(self._mesh.logical.axis_sizes)
+        state["shape_guard"] = self._shape_guard.state_dict()
+        state["compilation_fingerprint"] = self.compilation_fingerprint
+        if self._cache_dir is not None:
+            state["compilation_cache_dir"] = str(self._cache_dir)
         return state
 
     def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
@@ -245,8 +269,46 @@ class XlaRuntime:
                     if self._mesh is not None
                     else None
                 ),
+                "compilation_cache_dir": (
+                    str(self._cache_dir)
+                    if self._cache_dir is not None
+                    else None
+                ),
+                "compilation_cache_initialized": self._cache_initialized,
+                "compilation_fingerprint": self.compilation_fingerprint,
+                "shape_guard_fingerprint": self._shape_guard.fingerprint,
             },
         )
+
+    @property
+    def compilation_fingerprint(self) -> str:
+        """Return the graph/cache identity for the current static contract."""
+
+        import hashlib
+
+        version = getattr(self._torch_xla, "__version__", "unknown")
+        mesh_axes = (
+            tuple(self._mesh.logical.axis_sizes.items())
+            if self._mesh is not None
+            else ()
+        )
+        payload = repr(
+            (version, self.precision, mesh_axes, self._shape_guard.fingerprint)
+        ).encode("utf-8")
+        return hashlib.sha256(payload).hexdigest()
+
+    def _initialize_cache(self) -> None:
+        if self._cache_dir is None or self._cache_initialized:
+            return
+        if self._xla_runtime is None:
+            self._xla_runtime = _load_torch_xla_runtime()
+        initialize_cache = getattr(self._xla_runtime, "initialize_cache", None)
+        if not callable(initialize_cache):
+            raise RuntimeError(
+                "This torch_xla version does not expose runtime.initialize_cache."
+            )
+        initialize_cache(str(self._cache_dir), readonly=self._cache_readonly)
+        self._cache_initialized = True
 
     def _require_mesh(self, mesh: Any) -> XlaMesh:
         if not isinstance(mesh, XlaMesh) or mesh is not self._mesh:
@@ -303,3 +365,15 @@ def _load_torch_xla_spmd() -> ModuleType:
             "XLA SPMD support requires the optional 'tpu-xla' dependencies."
         ) from exc
     return spmd
+
+
+def _load_torch_xla_runtime() -> ModuleType:
+    """Import the optional runtime module for persistent compilation caches."""
+
+    try:
+        import torch_xla.runtime as runtime
+    except ImportError as exc:  # pragma: no cover - depends on TPU profile
+        raise ImportError(
+            "XLA persistent caching requires the optional 'tpu-xla' dependencies."
+        ) from exc
+    return runtime

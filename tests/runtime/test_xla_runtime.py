@@ -56,6 +56,15 @@ class FakeSpmd:
         return tensor
 
 
+class FakeXlaRuntimeModule:
+
+    def __init__(self):
+        self.cache_calls = []
+
+    def initialize_cache(self, path, readonly=False):
+        self.cache_calls.append((path, readonly))
+
+
 def runtime(*, spmd=False):
     xm = FakeXlaModel()
     fake_spmd = FakeSpmd() if spmd else None
@@ -122,3 +131,32 @@ def test_xla_runtime_marks_replicated_parameters_and_data_batches():
     batch_spec = spmd.shardings[-1][2]
     assert parameter_spec.axes == ()
     assert batch_spec.axes == ("data", None)
+
+
+def test_xla_runtime_initializes_persistent_cache_before_device_use(tmp_path):
+    xm = FakeXlaModel()
+    cache_runtime = FakeXlaRuntimeModule()
+    backend = XlaRuntime(
+        device="cpu",
+        xm_module=xm,
+        torch_xla_module=SimpleNamespace(__version__="2.9.0"),
+        torch_xla_runtime_module=cache_runtime,
+        cache_dir=tmp_path / "xla-cache",
+        cache_readonly=True,
+    )
+
+    backend.initialize()
+
+    assert cache_runtime.cache_calls == [(str(tmp_path / "xla-cache"), True)]
+    assert backend.diagnostics().values["compilation_cache_initialized"] is True
+
+
+def test_xla_runtime_rejects_dynamic_batch_shapes_and_accumulation():
+    backend, _, _ = runtime()
+    backend.configure_static_shapes(accumulation_steps=2)
+    backend.prepare_batch({"input_ids": torch.ones(2, 4)})
+
+    with pytest.raises(RuntimeError, match="recompilation guard"):
+        backend.prepare_batch({"input_ids": torch.ones(1, 4)})
+    with pytest.raises(RuntimeError, match="accumulation structure"):
+        backend.configure_static_shapes(accumulation_steps=1)
