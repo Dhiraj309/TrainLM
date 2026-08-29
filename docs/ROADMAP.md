@@ -161,7 +161,7 @@ Branch names describe repository work, not the tool or contributor:
 |---|---|---|---|---:|---|
 | [x] | PR1 | `milestone/m0-m2-foundation` | M0-M2 | 15 | Contracts and generic HF CPU conformance |
 | [~] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 18 | Merged; post-merge data/trainer validation remains tracked by validation gates |
-| [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 8 | M5-F1-F7 and M6-F1 implemented; target TPU validation pending |
+| [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 9 | M5-F1-F7 and M6-F1-F2 implemented; target TPU validation pending |
 | [ ] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11 | Reversible planner and optimized loss |
 | [ ] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | 850K and hard LaughLM parity |
 | [ ] | PR6 | `milestone/m13-m14-family-release` | M13-M14 | 12 | Cross-family certification and V1 release |
@@ -175,7 +175,7 @@ rebase that untouched branch onto the latest merged predecessor.
 PR2 (`milestone/m3-m4-data-trainer`) is merged. The active implementation
 branch is `milestone/m5-m7-xla-compatibility`, created from the latest `main`;
 it owns the M5 PyTorch/XLA runtime and subsequent TPU validation work. PR3 has
-8 implemented feature commits and 8 feature commits remaining before the
+9 implemented feature commits and 7 feature commits remaining before the
 M5-M7 implementation gate is complete. Latest CI for the active pull request
 is passing. The branch contains a prior `main` merge commit; refresh and
 compare against the current `origin/main` before merging because a clean
@@ -196,7 +196,7 @@ TPU runtime foundation`; branch `milestone/m5-m7-xla-compatibility`.
 | [~] | M3 | F1-F5 complete; resumable cursor awaiting validation |
 | [~] | M4 | F1-F7 implemented; validation pending |
 | [~] | M5 | F1-F7 XLA backend, DP mesh, cache, shape guard, compile boundary, accumulation selector, diagnostics, and baseline evaluator implemented; validation pending |
-| [~] | M6 | F1 positional-semantics coverage implemented; TPU matrix validation pending |
+| [~] | M6 | F1-F2 positional and attention-layout coverage implemented; TPU matrix validation pending |
 | [ ] | M7 | Checkpointing, telemetry, and integrity |
 | [ ] | M8 | Reversible capability optimization engine |
 | [ ] | M9 | Memory-efficient causal loss |
@@ -489,7 +489,7 @@ path before optimization adapters exist.
 
 ## M6 — Universal dense-AR TPU compatibility
 
-**Status:** [~] M6-F1 implemented; target TPU validation pending
+**Status:** [~] M6-F1-F2 implemented; target TPU validation pending
 
 **Goal:** Prove the framework is not Llama-specific before parity optimization.
 
@@ -500,8 +500,10 @@ path before optimization adapters exist.
   Run learned-position, RoPE, and ALiBi models for five finite updates.
   **Acceptance:** Stable post-warmup graph for all three.
 
-- [ ] **M6-F2 — Attention layouts**
+- [~] **M6-F2 — Attention layouts**
   `test(tpu): cover dense MHA GQA and MQA layouts`
+  Add family-neutral head-count and QKV projection-layout detection with
+  static coverage for MHA, GQA, MQA, packed, and separate projections.
   Cover MHA/GQA/MQA and separate/packed projections on the generic path.
   **Acceptance:** No adapter or unexpected CPU fallback.
 
