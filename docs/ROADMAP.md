@@ -160,8 +160,8 @@ Branch names describe repository work, not the tool or contributor:
 | Status | PR | Branch | Milestones | Commits | Merge gate |
 |---|---|---|---|---:|---|
 | [x] | PR1 | `milestone/m0-m2-foundation` | M0-M2 | 15 | Contracts and generic HF CPU conformance |
-| [~] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 15 | M3 pending validation; M4-F1-F4 complete, F5 next; test collection and loss-fixture fixes added |
-| [ ] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 16 | 600K, generic TPU, checkpoint/resume |
+| [~] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 18 | Merged; post-merge data/trainer validation remains tracked by validation gates |
+| [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 4 | M5-F1-F4 implemented; target TPU validation pending |
 | [ ] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11 | Reversible planner and optimized loss |
 | [ ] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | 850K and hard LaughLM parity |
 | [ ] | PR6 | `milestone/m13-m14-family-release` | M13-M14 | 12 | Cross-family certification and V1 release |
@@ -169,6 +169,19 @@ Branch names describe repository work, not the tool or contributor:
 Future tracks: `milestone/m15-torchtpu`, `milestone/m16-moe`, and
 `milestone/m17-dllm`, five commits each. Before activating a later PR branch,
 rebase that untouched branch onto the latest merged predecessor.
+
+### Current branch handoff
+
+PR2 (`milestone/m3-m4-data-trainer`) is merged. The active implementation
+branch is `milestone/m5-m7-xla-compatibility`, created from the latest `main`;
+it owns the M5 PyTorch/XLA runtime and subsequent TPU validation work. PR3 has
+4 implemented feature commits and 12 feature commits remaining before the
+M5-M7 implementation gate is complete. Latest CI for the active pull request
+is passing. The branch contains a prior `main` merge commit; refresh and
+compare against the current `origin/main` before merging because a clean
+working tree only describes the PR branch itself. Current comparison is
+`origin/main...HEAD = 0 38`; normal merge is up to date, while GitHub's rebase
+action remains unavailable because of the merge commit.
 
 ## Milestone overview
 
@@ -178,8 +191,8 @@ rebase that untouched branch onto the latest merged predecessor.
 | [x] | M1 | Backend-neutral framework contracts |
 | [x] | M2 | Universal HF dense-causal CPU path |
 | [~] | M3 | F1-F5 complete; resumable cursor awaiting validation |
-| [~] | M4 | F1-F4 complete; test validation fixes applied; streaming evaluation next |
-| [ ] | M5 | Stable PyTorch/XLA DP8 runtime |
+| [~] | M4 | F1-F7 implemented; validation pending |
+| [~] | M5 | F1-F4 XLA backend, DP mesh, cache, shape guard, and explicit compile boundary implemented; validation pending |
 | [ ] | M6 | Universal dense-AR TPU compatibility |
 | [ ] | M7 | Checkpointing, telemetry, and integrity |
 | [ ] | M8 | Reversible capability optimization engine |
@@ -359,7 +372,7 @@ path before optimization adapters exist.
 
 ## M4 — Correct backend-neutral trainer
 
-**Status:** [~] M4-F1-F4 implemented; test collection/loss-fixture fixes awaiting validation
+**Status:** [~] M4-F1-F7 implemented; validation pending
 
 **Goal:** Complete correct training independently of TPU optimization.
 
@@ -384,17 +397,17 @@ path before optimization adapters exist.
   Warmup/stable/decay/min-LR/horizon with token-based resume.
   **Acceptance:** Boundaries and resume match the locked schedule.
 
-- [ ] **M4-F5 — Streaming evaluation**
+- [~] **M4-F5 — Streaming evaluation**
   `feat(evaluation): add token-weighted causal LM evaluation`
   Compute loss/perplexity without retaining predictions; isolate eval state.
   **Acceptance:** Match reference without mutating training.
 
-- [ ] **M4-F6 — Sync-safe callbacks**
+- [~] **M4-F6 — Sync-safe callbacks**
   `feat(training): separate host callbacks from compiled metrics`
   Callbacks consume sparse materialized metrics, never live hot-path tensors.
   **Acceptance:** Backend mock detects no hidden scalar extraction.
 
-- [ ] **M4-F7 — Multi-family overfit**
+- [~] **M4-F7 — Multi-family overfit**
   `test(training): overfit dense AR conformance models`
   Check falling loss, finite gradients, resume, and export across tiny families.
   **Acceptance:** Trainer contains no family branch.
@@ -406,32 +419,39 @@ path before optimization adapters exist.
 
 ## M5 — PyTorch/XLA runtime and accumulation feasibility
 
-**Status:** [ ] Not started
+**Status:** [~] M5-F1-F4 implemented; target TPU validation pending
 
 **Goal:** Establish stable DP8 execution before specialized TPU kernels.
 
-- [ ] **M5-F1 — Optional XLA backend**
+- [~] **M5-F1 — Optional XLA backend**
   `feat(runtime): add pinned PyTorch XLA backend`
   Contain initialization, BF16 policy, device/ordinal, versions, and guarded
   Pallas/JAX imports.
   **Acceptance:** Core TrainLM imports without TPU extras.
 
-- [ ] **M5-F2 — SPMD data-parallel mesh**
+- [~] **M5-F2 — SPMD data-parallel mesh**
   `feat(runtime): add SPMD data parallel mesh`
   Implement DP8 replicated parameters/sharded batch and validate logical axes.
   **Acceptance:** v5e-8 shapes and gradient reduction are correct.
 
-- [ ] **M5-F3 — Cache and recompile guard**
+- [~] **M5-F3 — Cache and recompile guard**
   `feat(runtime): add XLA cache and recompile guard`
-  Initialize persistent cache, fingerprint graphs, and enforce static batch,
-  sequence, mask, and accumulation structures.
-  **Acceptance:** No compile beyond the allowed warmup graph set.
+  Initialize the official persistent cache, fingerprint the compilation
+  contract, and reject changes to batch, sequence, mask, or accumulation
+  structures after warmup. The trainer registers accumulation steps before
+  backend initialization; the guard remains backend-owned and model-agnostic.
+  **Acceptance:** No compile beyond the allowed warmup graph set; cache and
+  guard state are visible in runtime diagnostics.
 
-- [ ] **M5-F4 — Compiled training operations**
+- [~] **M5-F4 — Compiled training operations**
   `feat(runtime): compile XLA training operations`
-  Compile forward/backward/reduction/clip/update/schedule boundaries while
-  keeping I/O and logging outside.
-  **Acceptance:** A v5e-8 update matches reference semantics.
+  Add an explicit backend hook around a complete device-step callable, using
+  `torch_xla.compile` when enabled and leaving model-only compilation disabled.
+  Keep data I/O, host token accounting, logging, callbacks, and checkpointing
+  outside the compiled boundary; defer trainer integration until the
+  accumulation strategy spike selects the stable update shape.
+  **Acceptance:** A v5e-8 update matches reference semantics after the
+  accumulation strategy is selected; the hook is covered by backend tests.
 
 - [ ] **M5-F5 — Accumulation strategy spike**
   `perf(runtime): select v5e gradient accumulation strategy`

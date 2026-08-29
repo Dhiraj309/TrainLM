@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
@@ -82,4 +82,14 @@ class LanguageModelTask(Protocol):
     def aggregate_evaluation(
         self,
         results: Sequence[TaskResult],
+    ) -> dict[str, float]: ...
+
+
+@runtime_checkable
+class StreamingEvaluationTask(Protocol):
+    """Optional task capability for one-pass evaluation aggregation."""
+
+    def aggregate_evaluation_stream(
+        self,
+        results: Iterable[TaskResult],
     ) -> dict[str, float]: ...

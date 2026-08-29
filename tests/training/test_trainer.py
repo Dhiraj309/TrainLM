@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 
 from trainlm.runtime import Runtime
 from trainlm.tasks import TaskResult, TokenCounts
-from trainlm.training import Trainer
+from trainlm.training import Trainer, TrainerCallback
 from trainlm.training.loss import LanguageModelLoss
 
 
@@ -51,9 +51,15 @@ class DummyTrainerConfig:
     max_grad_norm = 1.0
 
 
+class DummyLoggingConfig:
+
+    log_every_steps = 1
+
+
 class DummyConfig:
 
     trainer = DummyTrainerConfig()
+    logging = DummyLoggingConfig()
 
 
 class ConstantLoss:
@@ -91,6 +97,18 @@ class CountingTask:
             "eval_loss": sum(result.loss.item() for result in results)
             / len(results)
         }
+
+
+class StreamingCountingTask(CountingTask):
+
+    def __init__(self):
+        self.received_iterator = False
+        self.result_count = 0
+
+    def aggregate_evaluation_stream(self, results):
+        self.received_iterator = iter(results) is results
+        self.result_count = sum(1 for _ in results)
+        return {"eval_loss": float(self.result_count)}
 
 
 def test_train_runs_one_step():
@@ -249,6 +267,39 @@ def test_evaluate_average_loss():
     metrics = trainer.evaluate()
 
     assert metrics["eval_loss"] >= 0.0
+
+
+def test_evaluate_uses_streaming_task_aggregator():
+    task = StreamingCountingTask()
+    trainer = create_trainer(task=task)
+
+    metrics = trainer.evaluate()
+
+    assert task.received_iterator
+    assert task.result_count == len(trainer.eval_dataloader)
+    assert metrics["eval_loss"] == float(task.result_count)
+
+
+class MetricsRecordingCallback(TrainerCallback):
+
+    def __init__(self):
+        self.metrics = []
+
+    def on_metrics(self, state, control, metrics):
+        del state, control
+        self.metrics.append(metrics)
+
+
+def test_training_emits_sparse_materialized_metrics():
+    callback = MetricsRecordingCallback()
+    trainer = create_trainer()
+    trainer.callback_handler.add_callback(callback)
+
+    trainer.train()
+
+    assert len(callback.metrics) == 1
+    assert callback.metrics[0]["step"] == 1.0
+    assert isinstance(callback.metrics[0]["loss"], float)
 
 
 class RecordingRuntime(Runtime):

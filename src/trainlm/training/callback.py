@@ -5,6 +5,7 @@ Trainer callback interface.
 from __future__ import annotations
 
 from abc import ABC
+from collections.abc import Mapping
 
 from .control import TrainerControl
 from .state import TrainerState
@@ -51,6 +52,14 @@ class TrainerCallback(ABC):
         control: TrainerControl,
     ) -> None:
         """Called after an optimisation step."""
+
+    def on_metrics(
+        self,
+        state: TrainerState,
+        control: TrainerControl,
+        metrics: Mapping[str, float],
+    ) -> None:
+        """Called for sparse, host-materialized metric snapshots."""
 
     def on_evaluate(
         self,

@@ -83,6 +83,20 @@ class Trainer:
                 f"Cannot prepare trainer in phase '{self.state.phase.value}'."
             )
         try:
+            configure_shapes = getattr(
+                self.runtime,
+                "configure_static_shapes",
+                None,
+            )
+            if callable(configure_shapes):
+                accumulation_steps = getattr(
+                    self.config.trainer,
+                    "gradient_accumulation_steps",
+                    1,
+                )
+                configure_shapes(
+                    accumulation_steps=accumulation_steps,
+                )
             self.runtime.initialize()
             self.state.transition(TrainerPhase.PREPARED)
         except BaseException as exc:
@@ -122,6 +136,7 @@ class Trainer:
                     self.state,
                     self.control,
                 )
+                self._emit_step_metrics()
 
         except BaseException as exc:
             self.state.mark_failed(exc)
@@ -177,6 +192,31 @@ class Trainer:
         ):
             return True
         return False
+
+    def _emit_step_metrics(self) -> None:
+        """Emit a sparse host-only snapshot according to logging policy."""
+
+        logging_config = getattr(self.config, "logging", None)
+        interval = getattr(logging_config, "log_every_steps", None)
+        if interval is None:
+            return
+        if (
+            isinstance(interval, bool)
+            or not isinstance(interval, int)
+            or interval < 1
+        ):
+            raise ValueError("logging.log_every_steps must be positive.")
+        if self.state.step % interval != 0:
+            return
+        metrics: dict[str, float] = {
+            "step": float(self.state.step),
+            "tokens_seen": float(self.state.tokens_seen),
+            "samples_seen": float(self.state.samples_seen),
+            "learning_rate": self.state.learning_rate,
+        }
+        if self.state.loss is not None:
+            metrics["loss"] = self.state.loss
+        self.callback_handler.on_metrics(self.state, self.control, metrics)
 
     def request_stop(self) -> None:
         """Request a graceful stop at the next completed-step boundary."""
@@ -253,6 +293,7 @@ class Trainer:
         total_sequences = 0
         loss_numerator: torch.Tensor | None = None
         exact_tokens = True
+        micro_steps = 0
 
         for _ in range(accumulation_steps):
             result = self.task.training_step(
@@ -261,6 +302,7 @@ class Trainer:
                 self.runtime,
             )
             self.state.micro_step += 1
+            micro_steps += 1
             token_count = result.tokens.supervised_tokens
             if not result.tokens.exact or token_count <= 0:
                 if accumulation_steps != 1:
@@ -294,6 +336,13 @@ class Trainer:
 
         if loss_numerator is None:
             raise RuntimeError("Training update produced no loss.")
+        observe_accumulation = getattr(
+            self.runtime,
+            "observe_accumulation_steps",
+            None,
+        )
+        if callable(observe_accumulation):
+            observe_accumulation(micro_steps)
         if exact_tokens:
             if total_tokens <= 0:
                 raise ValueError("Training update produced no supervised tokens.")
@@ -343,6 +392,12 @@ class Trainer:
             self.runtime,
         )
 
+    def _evaluation_results(self):
+        """Yield evaluation results without retaining the evaluation set."""
+
+        for batch in self.eval_dataloader:
+            yield self._evaluation_step(batch)
+
     def evaluate(self) -> dict[str, float]:
         """Run evaluation over the evaluation dataloader."""
 
@@ -365,13 +420,25 @@ class Trainer:
         self.model.eval()
 
         try:
-            results: list[TaskResult] = []
             with torch.no_grad():
-                for batch in self.eval_dataloader:
-                    result = self._evaluation_step(batch)
-                    results.append(result)
-            metrics = self.task.aggregate_evaluation(results)
+                stream_aggregator = getattr(
+                    self.task,
+                    "aggregate_evaluation_stream",
+                    None,
+                )
+                if callable(stream_aggregator):
+                    metrics = stream_aggregator(self._evaluation_results())
+                else:
+                    results: list[TaskResult] = []
+                    for result in self._evaluation_results():
+                        results.append(result)
+                    metrics = self.task.aggregate_evaluation(results)
             self.callback_handler.on_evaluate(self.state, self.control)
+            self.callback_handler.on_metrics(
+                self.state,
+                self.control,
+                metrics,
+            )
             return metrics
         except BaseException as exc:
             self.state.mark_failed(exc)

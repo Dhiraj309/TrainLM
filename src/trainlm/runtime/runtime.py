@@ -94,6 +94,12 @@ class TorchRuntime:
             return batch
         return _move_to_device(batch, self.device)
 
+    def configure_static_shapes(self, *, accumulation_steps: int) -> None:
+        del accumulation_steps
+
+    def observe_accumulation_steps(self, steps: int) -> None:
+        del steps
+
     def autocast(self):
         if self.precision == "fp32":
             return nullcontext()
@@ -104,6 +110,13 @@ class TorchRuntime:
         if not self._compile_enabled:
             return model
         return torch.compile(model)
+
+    def compile_training_step(self, step_fn):
+        """Keep the optional training-step hook backend-compatible."""
+
+        if not callable(step_fn):
+            raise TypeError("step_fn must be callable.")
+        return step_fn
 
     def create_mesh(self, mesh: LogicalMesh) -> LogicalMesh:
         if mesh.size != self.world_size:

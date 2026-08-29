@@ -16,6 +16,12 @@ Model architecture and training-policy boundaries are defined by the
 
 Device-specific execution is isolated behind the
 [execution backend protocol](docs/runtime/BACKEND_PROTOCOL.md).
+The optional PyTorch/XLA implementation follows the
+[XLA runtime contract](docs/runtime/PYTORCH_XLA.md).
+Its logical data-parallel mesh follows the
+[XLA SPMD mesh contract](docs/runtime/XLA_SPMD.md).
+Persistent compilation caching and fixed-shape enforcement follow the
+[XLA cache and shape-guard contract](docs/runtime/XLA_CACHE_GUARD.md).
 
 Next-token shifting, masking, normalization, and accounting are fixed by the
 [causal language-model task contract](docs/tasks/CAUSAL_LM.md).
@@ -38,6 +44,12 @@ Optimizer construction and moment precision follow the
 [optimizer state policy](docs/optimization/OPTIMIZER_POLICY.md).
 Token-indexed warmup/stable/decay scheduling follows the
 [WSD scheduler contract](docs/training/TOKEN_SCHEDULER.md).
+Streaming, token-weighted evaluation follows the
+[streaming evaluation contract](docs/evaluation/STREAMING_EVALUATION.md).
+Host callbacks consume immutable, materialized metrics through the
+[sync-safe callback contract](docs/training/CALLBACKS.md).
+Generic dense-AR trainability is checked across representative HF families by
+the [multi-family overfit matrix](docs/training/MULTI_FAMILY_OVERFIT.md).
 Updated models must pass the
 [plain Hugging Face round-trip contract](docs/models/PLAIN_HF_ROUNDTRIP.md).
 Representative non-Llama families are exercised by the
