@@ -63,6 +63,8 @@ Every loaded model has a stable
 with explicit capabilities, providers, and fallbacks.
 Positional encoding detection and the TPU conformance procedure are defined in
 the [positional-semantics contract](docs/models/POSITION_SEMANTICS.md).
+Attention head and QKV projection coverage follows the
+[attention-layout contract](docs/models/ATTENTION_LAYOUTS.md).
 
 Packed `.bin` inputs are accepted only through the versioned
 [binary shard manifest and integrity contract](docs/data/PACKED_BINARY_MANIFEST.md).

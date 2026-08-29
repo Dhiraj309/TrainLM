@@ -3,6 +3,12 @@ from .compatibility import (
     SupportLevel,
     explain_huggingface_compatibility,
 )
+from .attention import (
+    AttentionKind,
+    AttentionLayout,
+    ProjectionKind,
+    detect_attention_layout,
+)
 from .dispatch import (
     BatchDispatch,
     ForwardBatchDispatcher,
@@ -26,6 +32,8 @@ from .trainlm import (
 
 __all__ = [
     "BatchDispatch",
+    "AttentionKind",
+    "AttentionLayout",
     "CausalLMOutput",
     "ForwardBatchDispatcher",
     "ForwardSignature",
@@ -42,6 +50,8 @@ __all__ = [
     "explain_huggingface_compatibility",
     "load_huggingface_causal_lm",
     "normalize_causal_lm_output",
+    "ProjectionKind",
+    "detect_attention_layout",
     "PositionKind",
     "PositionSemantics",
     "detect_position_semantics",
