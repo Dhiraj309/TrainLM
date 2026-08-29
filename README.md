@@ -35,6 +35,8 @@ Optimization discovery and provider selection exchange immutable
 
 Exact resume state and plain Transformers output follow separate
 [checkpoint and Hugging Face export contracts](docs/checkpoint/CONTRACTS.md).
+Generic TPU save/resume/export comparisons follow the
+[round-trip contract](docs/checkpoint/TPU_ROUND_TRIP.md).
 
 Generic dense causal models are acquired through the
 [Hugging Face causal-model provider](docs/models/HUGGINGFACE_PROVIDER.md).

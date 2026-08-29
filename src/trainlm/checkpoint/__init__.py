@@ -9,6 +9,7 @@ from .resume import (
     StateDescriptor,
     TrainingProgress,
 )
+from .roundtrip import RoundTripReport, evaluate_round_trip
 
 __all__ = [
     "ArtifactRecord",
@@ -25,4 +26,6 @@ __all__ = [
     "StateDescriptor",
     "TiedWeight",
     "TrainingProgress",
+    "RoundTripReport",
+    "evaluate_round_trip",
 ]
