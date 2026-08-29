@@ -37,16 +37,6 @@ Exact resume state and plain Transformers output follow separate
 [checkpoint and Hugging Face export contracts](docs/checkpoint/CONTRACTS.md).
 Generic TPU save/resume/export comparisons follow the
 [round-trip contract](docs/checkpoint/TPU_ROUND_TRIP.md).
-Distributed checkpoint state ownership follows the
-[distributed resume contract](docs/checkpoint/DISTRIBUTED_RESUME.md).
-Asynchronous publication follows the
-[checkpoint lifecycle contract](docs/checkpoint/ASYNC_LIFECYCLE.md).
-Canonical model publication follows the
-[Hugging Face export contract](docs/checkpoint/CANONICAL_HF_EXPORT.md).
-Synchronized throughput, HBM, compile, and fallback metrics follow the
-[TPU telemetry contract](docs/monitoring/TELEMETRY.md).
-Sparse numerical and data-continuity checks follow the
-[training-integrity contract](docs/monitoring/INTEGRITY_GATES.md).
 
 Generic dense causal models are acquired through the
 [Hugging Face causal-model provider](docs/models/HUGGINGFACE_PROVIDER.md).
