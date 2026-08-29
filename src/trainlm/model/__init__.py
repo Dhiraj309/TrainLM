@@ -9,6 +9,13 @@ from .attention import (
     ProjectionKind,
     detect_attention_layout,
 )
+from .block import (
+    BlockLayout,
+    MlpKind,
+    NormKind,
+    ResidualKind,
+    detect_block_layout,
+)
 from .dispatch import (
     BatchDispatch,
     ForwardBatchDispatcher,
@@ -34,6 +41,7 @@ __all__ = [
     "BatchDispatch",
     "AttentionKind",
     "AttentionLayout",
+    "BlockLayout",
     "CausalLMOutput",
     "ForwardBatchDispatcher",
     "ForwardSignature",
@@ -51,6 +59,10 @@ __all__ = [
     "load_huggingface_causal_lm",
     "normalize_causal_lm_output",
     "ProjectionKind",
+    "MlpKind",
+    "NormKind",
+    "ResidualKind",
+    "detect_block_layout",
     "detect_attention_layout",
     "PositionKind",
     "PositionSemantics",
