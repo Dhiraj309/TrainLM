@@ -22,6 +22,7 @@ from torch.optim import Optimizer
 from .base import BackendDiagnostics, LogicalMesh, Precision
 from .runtime import _move_to_device
 from .shape_guard import StaticShapeGuard
+from .diagnostics import XlaDiagnostics
 
 
 _Step = TypeVar("_Step", bound=Callable[..., Any])
@@ -50,6 +51,8 @@ class XlaRuntime:
         cache_dir: str | Path | None = None,
         cache_readonly: bool = False,
         compile_training: bool = False,
+        diagnostics: XlaDiagnostics | None = None,
+        collect_diagnostics: bool = False,
     ) -> None:
         if precision not in {"fp32", "fp16", "bf16"}:
             raise ValueError(f"Unsupported runtime precision: {precision}")
@@ -71,6 +74,17 @@ class XlaRuntime:
         self._cache_initialized = False
         self._compile_training = compile_training
         self._compiled_step_ids: set[int] = set()
+        if diagnostics is not None and collect_diagnostics:
+            raise ValueError("Set diagnostics or collect_diagnostics, not both.")
+        self._diagnostics = (
+            diagnostics
+            if diagnostics is not None
+            else (
+                XlaDiagnostics(_load_torch_xla_metrics())
+                if collect_diagnostics
+                else None
+            )
+        )
         if self._cache_dir is not None:
             self._initialize_cache()
         self._device = (
@@ -276,6 +290,8 @@ class XlaRuntime:
         state["compilation_fingerprint"] = self.compilation_fingerprint
         if self._cache_dir is not None:
             state["compilation_cache_dir"] = str(self._cache_dir)
+        if self._diagnostics is not None:
+            state["xla_diagnostics"] = self._diagnostics.snapshot()
         return state
 
     def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
@@ -311,8 +327,28 @@ class XlaRuntime:
                 "compiled_step_count": len(self._compiled_step_ids),
                 "compilation_fingerprint": self.compilation_fingerprint,
                 "shape_guard_fingerprint": self._shape_guard.fingerprint,
+                "diagnostics_enabled": self._diagnostics is not None,
             },
         )
+
+    def collect_diagnostics(self) -> Mapping[str, Any]:
+        """Return an explicit host-side snapshot of XLA metrics and artifacts."""
+
+        if self._diagnostics is None:
+            return {}
+        return self._diagnostics.snapshot()
+
+    def clear_diagnostics(self) -> None:
+        if self._diagnostics is not None:
+            self._diagnostics.clear()
+
+    def record_hlo(self, hlo: str | None) -> None:
+        if self._diagnostics is not None:
+            self._diagnostics.record_hlo(hlo)
+
+    def record_profile_metadata(self, metadata: Mapping[str, Any] | None) -> None:
+        if self._diagnostics is not None:
+            self._diagnostics.record_profile_metadata(metadata)
 
     @property
     def compilation_fingerprint(self) -> str:
@@ -411,3 +447,14 @@ def _load_torch_xla_runtime() -> ModuleType:
             "XLA persistent caching requires the optional 'tpu-xla' dependencies."
         ) from exc
     return runtime
+
+
+def _load_torch_xla_metrics() -> ModuleType:
+    """Import optional XLA metrics only when diagnostics are enabled."""
+
+    try:
+        return importlib.import_module("torch_xla.debug.metrics")
+    except ImportError as exc:  # pragma: no cover - depends on TPU profile
+        raise ImportError(
+            "XLA diagnostics require the optional 'tpu-xla' dependencies."
+        ) from exc

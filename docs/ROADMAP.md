@@ -161,7 +161,7 @@ Branch names describe repository work, not the tool or contributor:
 |---|---|---|---|---:|---|
 | [x] | PR1 | `milestone/m0-m2-foundation` | M0-M2 | 15 | Contracts and generic HF CPU conformance |
 | [~] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 18 | Merged; post-merge data/trainer validation remains tracked by validation gates |
-| [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 5 | M5-F1-F5 implemented; target TPU validation pending |
+| [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 6 | M5-F1-F6 implemented; target TPU validation pending |
 | [ ] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11 | Reversible planner and optimized loss |
 | [ ] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | 850K and hard LaughLM parity |
 | [ ] | PR6 | `milestone/m13-m14-family-release` | M13-M14 | 12 | Cross-family certification and V1 release |
@@ -175,13 +175,16 @@ rebase that untouched branch onto the latest merged predecessor.
 PR2 (`milestone/m3-m4-data-trainer`) is merged. The active implementation
 branch is `milestone/m5-m7-xla-compatibility`, created from the latest `main`;
 it owns the M5 PyTorch/XLA runtime and subsequent TPU validation work. PR3 has
-5 implemented feature commits and 11 feature commits remaining before the
+6 implemented feature commits and 10 feature commits remaining before the
 M5-M7 implementation gate is complete. Latest CI for the active pull request
 is passing. The branch contains a prior `main` merge commit; refresh and
 compare against the current `origin/main` before merging because a clean
 working tree only describes the PR branch itself. Current comparison is
 `origin/main...HEAD = 0 38`; normal merge is up to date, while GitHub's rebase
 action remains unavailable because of the merge commit.
+
+PR3 handoff metadata: title `feat(m5-m7): add PyTorch/XLA compatibility and
+TPU runtime foundation`; branch `milestone/m5-m7-xla-compatibility`.
 
 ## Milestone overview
 
@@ -192,7 +195,7 @@ action remains unavailable because of the merge commit.
 | [x] | M2 | Universal HF dense-causal CPU path |
 | [~] | M3 | F1-F5 complete; resumable cursor awaiting validation |
 | [~] | M4 | F1-F7 implemented; validation pending |
-| [~] | M5 | F1-F5 XLA backend, DP mesh, cache, shape guard, compile boundary, and accumulation selector implemented; validation pending |
+| [~] | M5 | F1-F6 XLA backend, DP mesh, cache, shape guard, compile boundary, accumulation selector, and diagnostics implemented; validation pending |
 | [ ] | M6 | Universal dense-AR TPU compatibility |
 | [ ] | M7 | Checkpointing, telemetry, and integrity |
 | [ ] | M8 | Reversible capability optimization engine |
@@ -419,7 +422,7 @@ path before optimization adapters exist.
 
 ## M5 — PyTorch/XLA runtime and accumulation feasibility
 
-**Status:** [~] M5-F1-F4 implemented; target TPU validation pending
+**Status:** [~] M5-F1-F6 implemented; target TPU validation pending
 
 **Goal:** Establish stable DP8 execution before specialized TPU kernels.
 
@@ -462,11 +465,14 @@ path before optimization adapters exist.
   **Acceptance:** Strategy plans are deterministic and explain fallbacks; the
   v5e-8 benchmark comparison remains required before any optimized default.
 
-- [ ] **M5-F6 — XLA diagnostics**
+- [~] **M5-F6 — XLA diagnostics**
   `feat(runtime): expose XLA metrics HLO and profile diagnostics`
-  Capture compile/execute counts, `aten::` fallbacks, HLO, synchronized timing,
-  and XProf metadata with bounded artifacts.
-  **Acceptance:** Evidence proves graph count and fallback status.
+  Add opt-in, bounded collection of compile/execute metric samples, `aten::`
+  fallback counters, short/full reports, optional HLO, and optional XProf
+  metadata. Keep collection at explicit host boundaries and expose snapshots
+  through runtime state and diagnostics.
+  **Acceptance:** TPU evidence proves graph count and fallback status; fake
+  metrics coverage is included without making XLA a core dependency.
 
 - [ ] **M5-F7 — Generic 135M baseline**
   `perf(benchmark): record generic HF 135M XLA baseline`

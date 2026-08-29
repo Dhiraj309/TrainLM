@@ -5,7 +5,12 @@ import torch
 from torch import nn
 from torch.optim import SGD
 
-from trainlm.runtime import ExecutionBackend, LogicalMesh, XlaRuntime
+from trainlm.runtime import (
+    ExecutionBackend,
+    LogicalMesh,
+    XlaDiagnostics,
+    XlaRuntime,
+)
 
 
 class FakeXlaModel:
@@ -188,3 +193,31 @@ def test_xla_runtime_compiles_explicit_complete_training_step():
 
     assert compiled(2) == 3
     assert backend.diagnostics().values["compiled_step_count"] == 1
+
+
+def test_xla_runtime_exposes_opt_in_diagnostics_snapshot():
+    class Metrics:
+        def metric_data(self, name):
+            return (2 if name == "CompileTime" else 5, 0, [])
+
+        def counter_names(self):
+            return ("aten::fallback",)
+
+        def counter_value(self, name):
+            assert name == "aten::fallback"
+            return 1
+
+    xm = FakeXlaModel()
+    backend = XlaRuntime(
+        device="cpu",
+        xm_module=xm,
+        torch_xla_module=SimpleNamespace(__version__="2.9.0"),
+        diagnostics=XlaDiagnostics(Metrics()),
+    )
+
+    snapshot = backend.collect_diagnostics()
+
+    assert snapshot["compile_count"] == 2
+    assert snapshot["execute_count"] == 5
+    assert snapshot["aten_fallback_count"] == 1
+    assert backend.diagnostics().values["diagnostics_enabled"] is True

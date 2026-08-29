@@ -8,6 +8,7 @@ from .accumulation import (
     AccumulationStrategy,
     select_accumulation_plan,
 )
+from .diagnostics import XlaDiagnostics
 
 __all__ = [
     "BackendDiagnostics",
@@ -23,4 +24,5 @@ __all__ = [
     "AccumulationRequest",
     "AccumulationStrategy",
     "select_accumulation_plan",
+    "XlaDiagnostics",
 ]
