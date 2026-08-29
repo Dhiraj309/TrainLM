@@ -1,6 +1,13 @@
 from .base import BackendDiagnostics, ExecutionBackend, LogicalMesh, Precision
 from .runtime import Runtime, TorchRuntime
 from .xla import XlaMesh, XlaRuntime
+from .accumulation import (
+    AccumulationEvidence,
+    AccumulationPlan,
+    AccumulationRequest,
+    AccumulationStrategy,
+    select_accumulation_plan,
+)
 
 __all__ = [
     "BackendDiagnostics",
@@ -11,4 +18,9 @@ __all__ = [
     "TorchRuntime",
     "XlaRuntime",
     "XlaMesh",
+    "AccumulationEvidence",
+    "AccumulationPlan",
+    "AccumulationRequest",
+    "AccumulationStrategy",
+    "select_accumulation_plan",
 ]

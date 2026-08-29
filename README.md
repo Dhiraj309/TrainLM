@@ -22,6 +22,8 @@ Its logical data-parallel mesh follows the
 [XLA SPMD mesh contract](docs/runtime/XLA_SPMD.md).
 Persistent compilation caching and fixed-shape enforcement follow the
 [XLA cache and shape-guard contract](docs/runtime/XLA_CACHE_GUARD.md).
+Accumulation choices and evidence-gated fallbacks follow the
+[XLA accumulation strategy contract](docs/runtime/XLA_ACCUMULATION.md).
 
 Next-token shifting, masking, normalization, and accounting are fixed by the
 [causal language-model task contract](docs/tasks/CAUSAL_LM.md).
