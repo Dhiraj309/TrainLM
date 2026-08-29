@@ -17,6 +17,7 @@ from .huggingface import (
     load_huggingface_causal_lm,
 )
 from .outputs import CausalLMOutput, normalize_causal_lm_output
+from .position import PositionKind, PositionSemantics, detect_position_semantics
 from .trainlm import (
     TrainLMForCausalLM,
     TrainLMModel,
@@ -41,4 +42,7 @@ __all__ = [
     "explain_huggingface_compatibility",
     "load_huggingface_causal_lm",
     "normalize_causal_lm_output",
+    "PositionKind",
+    "PositionSemantics",
+    "detect_position_semantics",
 ]

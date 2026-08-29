@@ -61,6 +61,8 @@ Representative non-Llama families are exercised by the
 Every loaded model has a stable
 [generic compatibility explanation](docs/models/COMPATIBILITY_EXPLANATION.md)
 with explicit capabilities, providers, and fallbacks.
+Positional encoding detection and the TPU conformance procedure are defined in
+the [positional-semantics contract](docs/models/POSITION_SEMANTICS.md).
 
 Packed `.bin` inputs are accepted only through the versioned
 [binary shard manifest and integrity contract](docs/data/PACKED_BINARY_MANIFEST.md).
