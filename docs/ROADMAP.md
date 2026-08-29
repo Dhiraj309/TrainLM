@@ -161,7 +161,7 @@ Branch names describe repository work, not the tool or contributor:
 |---|---|---|---|---:|---|
 | [x] | PR1 | `milestone/m0-m2-foundation` | M0-M2 | 15 | Contracts and generic HF CPU conformance |
 | [~] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 18 | Merged; post-merge data/trainer validation remains tracked by validation gates |
-| [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 11 | M5-F1-F7 and M6-F1-F4 implemented; target TPU validation pending |
+| [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 12 | M5-F1-F7, M6-F1-F4, and M7-F1 implemented; target TPU validation pending |
 | [ ] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11 | Reversible planner and optimized loss |
 | [ ] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | 850K and hard LaughLM parity |
 | [ ] | PR6 | `milestone/m13-m14-family-release` | M13-M14 | 12 | Cross-family certification and V1 release |
@@ -175,7 +175,7 @@ rebase that untouched branch onto the latest merged predecessor.
 PR2 (`milestone/m3-m4-data-trainer`) is merged. The active implementation
 branch is `milestone/m5-m7-xla-compatibility`, created from the latest `main`;
 it owns the M5 PyTorch/XLA runtime and subsequent TPU validation work. PR3 has
-11 implemented feature commits and 5 feature commits remaining before the
+12 implemented feature commits and 4 feature commits remaining before the
 M5-M7 implementation gate is complete. Latest CI for the active pull request
 is passing. The branch contains a prior `main` merge commit; refresh and
 compare against the current `origin/main` before merging because a clean
@@ -197,7 +197,7 @@ TPU runtime foundation`; branch `milestone/m5-m7-xla-compatibility`.
 | [~] | M4 | F1-F7 implemented; validation pending |
 | [~] | M5 | F1-F7 XLA backend, DP mesh, cache, shape guard, compile boundary, accumulation selector, diagnostics, and baseline evaluator implemented; validation pending |
 | [~] | M6 | F1-F4 positional, attention, block-layout, and TPU round-trip coverage implemented; target TPU validation pending |
-| [ ] | M7 | Checkpointing, telemetry, and integrity |
+| [~] | M7 | F1 distributed resume-state planning implemented; checkpoint, telemetry, and integrity validation pending |
 | [ ] | M8 | Reversible capability optimization engine |
 | [ ] | M9 | Memory-efficient causal loss |
 | [ ] | M10 | TPU attention and 850K gate |
@@ -529,12 +529,15 @@ path before optimization adapters exist.
 
 ## M7 — Checkpointing, observability, and integrity
 
-**Status:** [ ] Not started
+**Status:** [~] M7-F1 implemented; target TPU validation pending
 
 **Goal:** Make long TPU training recoverable and measurable before mutation.
 
-- [ ] **M7-F1 — Distributed resume state**
+- [~] **M7-F1 — Distributed resume state**
   `feat(checkpoint): add sharded distributed resume checkpoints`
+  Add a backend-neutral DP resume plan that validates complete state ownership,
+  sharded model/optimizer artifacts, per-rank RNG, and exact data cursors before
+  distributed I/O.
   Save model, optimizer, scheduler, trainer, RNG, tokens, cursor, plan, and
   manifest versions with direct shard I/O where supported.
   **Acceptance:** Interrupted DP8 resumes to an equivalent next update.

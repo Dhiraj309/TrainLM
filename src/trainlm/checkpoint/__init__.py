@@ -10,6 +10,7 @@ from .resume import (
     TrainingProgress,
 )
 from .roundtrip import RoundTripReport, evaluate_round_trip
+from .distributed import DistributedResumePlan, plan_distributed_resume
 
 __all__ = [
     "ArtifactRecord",
@@ -28,4 +29,6 @@ __all__ = [
     "TrainingProgress",
     "RoundTripReport",
     "evaluate_round_trip",
+    "DistributedResumePlan",
+    "plan_distributed_resume",
 ]
