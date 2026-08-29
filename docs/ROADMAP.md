@@ -161,7 +161,7 @@ Branch names describe repository work, not the tool or contributor:
 |---|---|---|---|---:|---|
 | [x] | PR1 | `milestone/m0-m2-foundation` | M0-M2 | 15 | Contracts and generic HF CPU conformance |
 | [~] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 18 | Merged; post-merge data/trainer validation remains tracked by validation gates |
-| [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 16 | M5-F1-F7, M6-F1-F4, and M7-F1-F5 implemented; target TPU validation pending |
+| [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 5 | M5-F1-F5 implemented; target TPU validation pending |
 | [ ] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11 | Reversible planner and optimized loss |
 | [ ] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | 850K and hard LaughLM parity |
 | [ ] | PR6 | `milestone/m13-m14-family-release` | M13-M14 | 12 | Cross-family certification and V1 release |
@@ -175,11 +175,10 @@ rebase that untouched branch onto the latest merged predecessor.
 PR2 (`milestone/m3-m4-data-trainer`) is merged. The active implementation
 branch is `milestone/m5-m7-xla-compatibility`, created from the latest `main`;
 it owns the M5 PyTorch/XLA runtime and subsequent TPU validation work. PR3 has
-16 implementation feature commits complete for the M5-M7 gate; target TPU
-validation remains. Latest CI for the active pull request
-is passing after the framework-independent round-trip and precision-safe
-telemetry test corrections. The branch contains a prior `main` merge commit;
-refresh and compare against the current `origin/main` before merging because a clean
+5 implemented feature commits and 11 feature commits remaining before the
+M5-M7 implementation gate is complete. Latest CI for the active pull request
+is passing. The branch contains a prior `main` merge commit; refresh and
+compare against the current `origin/main` before merging because a clean
 working tree only describes the PR branch itself. Current comparison is
 `origin/main...HEAD = 0 38`; normal merge is up to date, while GitHub's rebase
 action remains unavailable because of the merge commit.
@@ -196,9 +195,9 @@ TPU runtime foundation`; branch `milestone/m5-m7-xla-compatibility`.
 | [x] | M2 | Universal HF dense-causal CPU path |
 | [~] | M3 | F1-F5 complete; resumable cursor awaiting validation |
 | [~] | M4 | F1-F7 implemented; validation pending |
-| [~] | M5 | F1-F7 XLA backend, DP mesh, cache, shape guard, compile boundary, accumulation selector, diagnostics, and baseline evaluator implemented; validation pending |
-| [~] | M6 | F1-F4 positional, attention, block-layout, and TPU round-trip coverage implemented; target TPU validation pending |
-| [~] | M7 | F1-F5 distributed resume, async lifecycle, canonical HF export, telemetry, and integrity gates implemented; target TPU validation pending |
+| [~] | M5 | F1-F5 XLA backend, DP mesh, cache, shape guard, compile boundary, and accumulation selector implemented; validation pending |
+| [ ] | M6 | Universal dense-AR TPU compatibility |
+| [ ] | M7 | Checkpointing, telemetry, and integrity |
 | [ ] | M8 | Reversible capability optimization engine |
 | [ ] | M9 | Memory-efficient causal loss |
 | [ ] | M10 | TPU attention and 850K gate |
