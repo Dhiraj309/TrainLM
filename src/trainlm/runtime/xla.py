@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from contextlib import nullcontext
 from dataclasses import dataclass
+import importlib
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Callable, TypeVar
@@ -378,8 +379,8 @@ def _load_torch_xla() -> tuple[ModuleType, ModuleType]:
     """Import PyTorch/XLA only at explicit backend construction time."""
 
     try:
-        import torch_xla
-        import torch_xla.core.xla_model as xm
+        torch_xla = importlib.import_module("torch_xla")
+        xm = importlib.import_module("torch_xla.core.xla_model")
     except ImportError as exc:  # pragma: no cover - depends on TPU profile
         raise ImportError(
             "XlaRuntime requires the optional 'tpu-xla' dependencies. "
@@ -392,7 +393,7 @@ def _load_torch_xla_spmd() -> ModuleType:
     """Import the optional XLA SPMD module at mesh-construction time."""
 
     try:
-        import torch_xla.distributed.spmd as spmd
+        spmd = importlib.import_module("torch_xla.distributed.spmd")
     except ImportError as exc:  # pragma: no cover - depends on TPU profile
         raise ImportError(
             "XLA SPMD support requires the optional 'tpu-xla' dependencies."
@@ -404,7 +405,7 @@ def _load_torch_xla_runtime() -> ModuleType:
     """Import the optional runtime module for persistent compilation caches."""
 
     try:
-        import torch_xla.runtime as runtime
+        runtime = importlib.import_module("torch_xla.runtime")
     except ImportError as exc:  # pragma: no cover - depends on TPU profile
         raise ImportError(
             "XLA persistent caching requires the optional 'tpu-xla' dependencies."

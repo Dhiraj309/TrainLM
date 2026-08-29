@@ -160,7 +160,7 @@ Branch names describe repository work, not the tool or contributor:
 | Status | PR | Branch | Milestones | Commits | Merge gate |
 |---|---|---|---|---:|---|
 | [x] | PR1 | `milestone/m0-m2-foundation` | M0-M2 | 15 | Contracts and generic HF CPU conformance |
-| [x] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 18 | Merged; post-merge TPU evidence remains tracked by validation gates |
+| [~] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 18 | Merged; post-merge data/trainer validation remains tracked by validation gates |
 | [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 4 | M5-F1-F4 implemented; target TPU validation pending |
 | [ ] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11 | Reversible planner and optimized loss |
 | [ ] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | 850K and hard LaughLM parity |
@@ -174,7 +174,9 @@ rebase that untouched branch onto the latest merged predecessor.
 
 PR2 (`milestone/m3-m4-data-trainer`) is merged. The active implementation
 branch is `milestone/m5-m7-xla-compatibility`, created from the latest `main`;
-it owns the M5 PyTorch/XLA runtime and subsequent TPU validation work.
+it owns the M5 PyTorch/XLA runtime and subsequent TPU validation work. PR3 has
+4 implemented feature commits and 12 feature commits remaining before the
+M5-M7 implementation gate is complete.
 
 ## Milestone overview
 
@@ -412,7 +414,7 @@ path before optimization adapters exist.
 
 ## M5 — PyTorch/XLA runtime and accumulation feasibility
 
-**Status:** [~] M5-F1-F3 implemented; target TPU validation pending
+**Status:** [~] M5-F1-F4 implemented; target TPU validation pending
 
 **Goal:** Establish stable DP8 execution before specialized TPU kernels.
 

@@ -89,8 +89,13 @@ class Trainer:
                 None,
             )
             if callable(configure_shapes):
+                accumulation_steps = getattr(
+                    self.config.trainer,
+                    "gradient_accumulation_steps",
+                    1,
+                )
                 configure_shapes(
-                    accumulation_steps=self.config.trainer.gradient_accumulation_steps,
+                    accumulation_steps=accumulation_steps,
                 )
             self.runtime.initialize()
             self.state.transition(TrainerPhase.PREPARED)
