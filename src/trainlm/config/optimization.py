@@ -17,6 +17,9 @@ class OptimizationConfig:
     requested: tuple[str, ...] = field(default_factory=tuple)
     compilation_cache_dir: str | Path | None = None
     compilation_cache_readonly: bool = False
+    accumulation_strategy: Literal[
+        "auto", "microstep", "unrolled", "xla_loop", "native"
+    ] = "auto"
 
     def __post_init__(self) -> None:
         if self.policy not in {"disabled", "auto", "required"}:
@@ -27,6 +30,16 @@ class OptimizationConfig:
             if not cache_dir:
                 raise ValueError("compilation_cache_dir cannot be empty.")
             object.__setattr__(self, "compilation_cache_dir", cache_dir)
+        if self.accumulation_strategy not in {
+            "auto",
+            "microstep",
+            "unrolled",
+            "xla_loop",
+            "native",
+        }:
+            raise ValueError(
+                f"Unsupported accumulation strategy: {self.accumulation_strategy}"
+            )
         if self.policy == "required" and self.allow_fallbacks:
             raise ValueError(
                 "Required optimization policy cannot allow fallbacks."

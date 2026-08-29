@@ -161,7 +161,7 @@ Branch names describe repository work, not the tool or contributor:
 |---|---|---|---|---:|---|
 | [x] | PR1 | `milestone/m0-m2-foundation` | M0-M2 | 15 | Contracts and generic HF CPU conformance |
 | [~] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 18 | Merged; post-merge data/trainer validation remains tracked by validation gates |
-| [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 4 | M5-F1-F4 implemented; target TPU validation pending |
+| [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 5 | M5-F1-F5 implemented; target TPU validation pending |
 | [ ] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11 | Reversible planner and optimized loss |
 | [ ] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | 850K and hard LaughLM parity |
 | [ ] | PR6 | `milestone/m13-m14-family-release` | M13-M14 | 12 | Cross-family certification and V1 release |
@@ -175,7 +175,7 @@ rebase that untouched branch onto the latest merged predecessor.
 PR2 (`milestone/m3-m4-data-trainer`) is merged. The active implementation
 branch is `milestone/m5-m7-xla-compatibility`, created from the latest `main`;
 it owns the M5 PyTorch/XLA runtime and subsequent TPU validation work. PR3 has
-4 implemented feature commits and 12 feature commits remaining before the
+5 implemented feature commits and 11 feature commits remaining before the
 M5-M7 implementation gate is complete. Latest CI for the active pull request
 is passing. The branch contains a prior `main` merge commit; refresh and
 compare against the current `origin/main` before merging because a clean
@@ -192,7 +192,7 @@ action remains unavailable because of the merge commit.
 | [x] | M2 | Universal HF dense-causal CPU path |
 | [~] | M3 | F1-F5 complete; resumable cursor awaiting validation |
 | [~] | M4 | F1-F7 implemented; validation pending |
-| [~] | M5 | F1-F4 XLA backend, DP mesh, cache, shape guard, and explicit compile boundary implemented; validation pending |
+| [~] | M5 | F1-F5 XLA backend, DP mesh, cache, shape guard, compile boundary, and accumulation selector implemented; validation pending |
 | [ ] | M6 | Universal dense-AR TPU compatibility |
 | [ ] | M7 | Checkpointing, telemetry, and integrity |
 | [ ] | M8 | Reversible capability optimization engine |
@@ -453,11 +453,14 @@ path before optimization adapters exist.
   **Acceptance:** A v5e-8 update matches reference semantics after the
   accumulation strategy is selected; the hook is covered by backend tests.
 
-- [ ] **M5-F5 — Accumulation strategy spike**
+- [~] **M5-F5 — Accumulation strategy spike**
   `perf(runtime): select v5e gradient accumulation strategy`
-  Compare compiled microstep/update, unroll, XLA loop/scan, and available native
-  paths at MB2/GA32/S2048.
-  **Acceptance:** Select one strategy and fallback from compile/dispatch/HBM data.
+  Add an evidence-gated selector for compiled unrolled, XLA loop/scan, native,
+  and safe microstep paths at MB2/GA32/S2048. Optimized paths require complete
+  compile, dispatch, and HBM evidence; unsupported explicit requests fall back
+  or fail according to policy.
+  **Acceptance:** Strategy plans are deterministic and explain fallbacks; the
+  v5e-8 benchmark comparison remains required before any optimized default.
 
 - [ ] **M5-F6 — XLA diagnostics**
   `feat(runtime): expose XLA metrics HLO and profile diagnostics`
