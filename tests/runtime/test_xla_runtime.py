@@ -36,19 +36,41 @@ class FakeXlaModel:
         self.barriers.append(name)
 
 
-def runtime():
+class FakeSpmd:
+
+    class Mesh:
+        def __init__(self, device_ids, mesh_shape, axis_names):
+            self.device_ids = device_ids
+            self.mesh_shape = mesh_shape
+            self.axis_names = axis_names
+
+    class PartitionSpec:
+        def __init__(self, *axes):
+            self.axes = axes
+
+    def __init__(self):
+        self.shardings = []
+
+    def mark_sharding(self, tensor, mesh, spec):
+        self.shardings.append((tensor, mesh, spec))
+        return tensor
+
+
+def runtime(*, spmd=False):
     xm = FakeXlaModel()
+    fake_spmd = FakeSpmd() if spmd else None
     backend = XlaRuntime(
         device="cpu",
         precision="fp32",
         xm_module=xm,
         torch_xla_module=SimpleNamespace(__version__="2.9.0"),
+        spmd_module=fake_spmd,
     )
-    return backend, xm
+    return backend, xm, fake_spmd
 
 
 def test_xla_runtime_is_lazy_and_satisfies_backend_protocol():
-    backend, _ = runtime()
+    backend, _, _ = runtime()
 
     assert isinstance(backend, ExecutionBackend)
     assert backend.name == "pytorch-xla"
@@ -58,7 +80,7 @@ def test_xla_runtime_is_lazy_and_satisfies_backend_protocol():
 
 
 def test_xla_runtime_uses_xla_step_and_barrier_hooks():
-    backend, xm = runtime()
+    backend, xm, _ = runtime()
     model = nn.Linear(2, 1)
     optimizer = SGD(model.parameters(), lr=0.1)
     loss = model(torch.ones(1, 2)).sum()
@@ -74,12 +96,29 @@ def test_xla_runtime_uses_xla_step_and_barrier_hooks():
 
 
 def test_xla_runtime_validates_mesh_ownership_and_state():
-    backend, _ = runtime()
+    backend, _, _ = runtime(spmd=True)
 
-    assert backend.create_mesh(LogicalMesh({"data": 1}))
+    mesh = backend.create_mesh(LogicalMesh({"data": 1}))
+    assert mesh.logical.axis_sizes == {"data": 1}
     with pytest.raises(ValueError, match="world size"):
         backend.create_mesh(LogicalMesh({"data": 2}))
 
     backend.load_state_dict({"backend": "pytorch-xla"})
     with pytest.raises(ValueError, match="runtime state"):
         backend.load_state_dict({"backend": "other"})
+
+
+def test_xla_runtime_marks_replicated_parameters_and_data_batches():
+    backend, _, spmd = runtime(spmd=True)
+    mesh = backend.create_mesh(LogicalMesh({"data": 1}))
+    model = nn.Linear(2, 1)
+    batch = {"input_ids": torch.ones(2, 2)}
+
+    backend.shard_model(model, mesh)
+    backend.prepare_batch(batch)
+
+    assert len(spmd.shardings) == 3
+    parameter_spec = spmd.shardings[0][2]
+    batch_spec = spmd.shardings[-1][2]
+    assert parameter_spec.axes == ()
+    assert batch_spec.axes == ("data", None)

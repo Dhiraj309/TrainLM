@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from contextlib import nullcontext
+from dataclasses import dataclass
 from types import ModuleType
 from typing import Any
 
@@ -18,6 +19,14 @@ from torch.optim import Optimizer
 
 from .base import BackendDiagnostics, LogicalMesh, Precision
 from .runtime import _move_to_device
+
+
+@dataclass(frozen=True, slots=True)
+class XlaMesh:
+    """Logical TrainLM mesh paired with its native XLA mesh object."""
+
+    logical: LogicalMesh
+    native: Any
 
 
 class XlaRuntime:
@@ -30,6 +39,7 @@ class XlaRuntime:
         precision: Precision = "bf16",
         xm_module: Any | None = None,
         torch_xla_module: Any | None = None,
+        spmd_module: Any | None = None,
     ) -> None:
         if precision not in {"fp32", "fp16", "bf16"}:
             raise ValueError(f"Unsupported runtime precision: {precision}")
@@ -41,7 +51,9 @@ class XlaRuntime:
 
         self._xm = xm_module
         self._torch_xla = torch_xla_module
+        self._spmd = spmd_module
         self._precision = precision
+        self._mesh: XlaMesh | None = None
         self._device = (
             torch.device(device)
             if device is not None
@@ -113,7 +125,10 @@ class XlaRuntime:
         return dataloader
 
     def prepare_batch(self, batch: Any) -> Any:
-        return _move_to_device(batch, self.device)
+        prepared = _move_to_device(batch, self.device)
+        if self._mesh is None:
+            return prepared
+        return self._mark_batch_sharding(prepared)
 
     def autocast(self):
         if self.precision == "fp32":
@@ -124,20 +139,31 @@ class XlaRuntime:
     def compile_model(self, model: nn.Module) -> nn.Module:
         return model
 
-    def create_mesh(self, mesh: LogicalMesh) -> LogicalMesh:
+    def create_mesh(self, mesh: LogicalMesh) -> XlaMesh:
         if mesh.size != self.world_size:
             raise ValueError(
                 f"Logical mesh size {mesh.size} does not match XLA world "
                 f"size {self.world_size}."
             )
-        return mesh
+        if self._spmd is None:
+            self._spmd = _load_torch_xla_spmd()
+        native = self._spmd.Mesh(
+            list(range(self.world_size)),
+            tuple(mesh.axis_sizes.values()),
+            tuple(mesh.axis_sizes),
+        )
+        self._mesh = XlaMesh(logical=mesh, native=native)
+        return self._mesh
 
     def shard_model(self, model: nn.Module, mesh: Any) -> nn.Module:
-        del mesh
+        xla_mesh = self._require_mesh(mesh)
+        replicate = self._spmd.PartitionSpec()
+        for parameter in model.parameters():
+            self._spmd.mark_sharding(parameter, xla_mesh.native, replicate)
         return model
 
     def shard_optimizer(self, optimizer: Optimizer, mesh: Any) -> Optimizer:
-        del mesh
+        self._require_mesh(mesh)
         return optimizer
 
     def backward(self, loss: torch.Tensor) -> None:
@@ -185,13 +211,16 @@ class XlaRuntime:
         self.barrier(f"after-checkpoint:{name}")
 
     def state_dict(self) -> Mapping[str, Any]:
-        return {
+        state: dict[str, Any] = {
             "backend": self.name,
             "device": str(self.device),
             "precision": self.precision,
             "world_size": self.world_size,
             "rank": self.rank,
         }
+        if self._mesh is not None:
+            state["mesh_axes"] = dict(self._mesh.logical.axis_sizes)
+        return state
 
     def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
         if state_dict and state_dict.get("backend") not in {None, self.name}:
@@ -211,8 +240,43 @@ class XlaRuntime:
             values={
                 "torch_xla_version": version,
                 "device": str(self.device),
+                "mesh_axes": (
+                    dict(self._mesh.logical.axis_sizes)
+                    if self._mesh is not None
+                    else None
+                ),
             },
         )
+
+    def _require_mesh(self, mesh: Any) -> XlaMesh:
+        if not isinstance(mesh, XlaMesh) or mesh is not self._mesh:
+            raise ValueError("Model and optimizer sharding require this XLA mesh.")
+        return mesh
+
+    def _mark_batch_sharding(self, value: Any) -> Any:
+        if isinstance(value, torch.Tensor):
+            if value.ndim == 0:
+                return value
+            spec = self._spmd.PartitionSpec(
+                "data",
+                *([None] * (value.ndim - 1)),
+            )
+            marked = self._spmd.mark_sharding(
+                value,
+                self._mesh.native,
+                spec,
+            )
+            return value if marked is None else marked
+        if isinstance(value, Mapping):
+            return type(value)(
+                (key, self._mark_batch_sharding(item))
+                for key, item in value.items()
+            )
+        if isinstance(value, tuple):
+            return tuple(self._mark_batch_sharding(item) for item in value)
+        if isinstance(value, list):
+            return [self._mark_batch_sharding(item) for item in value]
+        return value
 
 
 def _load_torch_xla() -> tuple[ModuleType, ModuleType]:
@@ -227,3 +291,15 @@ def _load_torch_xla() -> tuple[ModuleType, ModuleType]:
             "Install TrainLM with `pip install -e .[tpu-xla]`."
         ) from exc
     return torch_xla, xm
+
+
+def _load_torch_xla_spmd() -> ModuleType:
+    """Import the optional XLA SPMD module at mesh-construction time."""
+
+    try:
+        import torch_xla.distributed.spmd as spmd
+    except ImportError as exc:  # pragma: no cover - depends on TPU profile
+        raise ImportError(
+            "XLA SPMD support requires the optional 'tpu-xla' dependencies."
+        ) from exc
+    return spmd
