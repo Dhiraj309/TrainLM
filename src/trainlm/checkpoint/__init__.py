@@ -11,6 +11,11 @@ from .resume import (
 )
 from .roundtrip import RoundTripReport, evaluate_round_trip
 from .distributed import DistributedResumePlan, plan_distributed_resume
+from .lifecycle import (
+    AsyncCheckpointLifecycle,
+    CheckpointLifecycleSnapshot,
+    CheckpointPhase,
+)
 
 __all__ = [
     "ArtifactRecord",
@@ -31,4 +36,7 @@ __all__ = [
     "evaluate_round_trip",
     "DistributedResumePlan",
     "plan_distributed_resume",
+    "AsyncCheckpointLifecycle",
+    "CheckpointLifecycleSnapshot",
+    "CheckpointPhase",
 ]
