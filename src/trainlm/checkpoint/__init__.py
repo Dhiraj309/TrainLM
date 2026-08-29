@@ -16,6 +16,7 @@ from .lifecycle import (
     CheckpointLifecycleSnapshot,
     CheckpointPhase,
 )
+from .canonical import CanonicalHFExportPlan, plan_canonical_hf_export
 
 __all__ = [
     "ArtifactRecord",
@@ -39,4 +40,6 @@ __all__ = [
     "AsyncCheckpointLifecycle",
     "CheckpointLifecycleSnapshot",
     "CheckpointPhase",
+    "CanonicalHFExportPlan",
+    "plan_canonical_hf_export",
 ]
