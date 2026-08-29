@@ -43,6 +43,8 @@ Asynchronous publication follows the
 [checkpoint lifecycle contract](docs/checkpoint/ASYNC_LIFECYCLE.md).
 Canonical model publication follows the
 [Hugging Face export contract](docs/checkpoint/CANONICAL_HF_EXPORT.md).
+Synchronized throughput, HBM, compile, and fallback metrics follow the
+[TPU telemetry contract](docs/monitoring/TELEMETRY.md).
 
 Generic dense causal models are acquired through the
 [Hugging Face causal-model provider](docs/models/HUGGINGFACE_PROVIDER.md).
