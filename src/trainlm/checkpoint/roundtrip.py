@@ -7,8 +7,6 @@ import math
 from collections.abc import Mapping
 from typing import Any
 
-import torch
-
 
 @dataclass(frozen=True, slots=True)
 class RoundTripReport:
@@ -51,14 +49,61 @@ class RoundTripReport:
 
 
 def _max_abs_error(left: Any, right: Any) -> float:
-    left_tensor = torch.as_tensor(left).detach().to(device="cpu")
-    right_tensor = torch.as_tensor(right).detach().to(device="cpu")
-    if left_tensor.shape != right_tensor.shape:
+    left_values = _materialize(left)
+    right_values = _materialize(right)
+    left_shape = _shape(left_values)
+    right_shape = _shape(right_values)
+    if left_shape != right_shape:
         return math.inf
-    if not (left_tensor.is_floating_point() or left_tensor.is_complex()):
-        return 0.0 if torch.equal(left_tensor, right_tensor) else math.inf
-    delta = (left_tensor.to(torch.float64) - right_tensor.to(torch.float64)).abs()
-    return float(delta.max().item()) if delta.numel() else 0.0
+    errors = []
+    for left_item, right_item in zip(
+        _flatten(left_values), _flatten(right_values), strict=True
+    ):
+        try:
+            error = abs(left_item - right_item)
+            error = float(error)
+        except (TypeError, ValueError, OverflowError):
+            error = 0.0 if left_item == right_item else math.inf
+        if math.isnan(error):
+            return math.inf
+        errors.append(error)
+    return max(errors, default=0.0)
+
+
+def _materialize(value: Any) -> Any:
+    """Convert tensor-like values through optional duck-typed host methods."""
+
+    current = value
+    detach = getattr(current, "detach", None)
+    if callable(detach):
+        current = detach()
+    cpu = getattr(current, "cpu", None)
+    if callable(cpu):
+        current = cpu()
+    tolist = getattr(current, "tolist", None)
+    if callable(tolist):
+        return tolist()
+    if isinstance(current, (list, tuple)):
+        return type(current)(_materialize(item) for item in current)
+    return current
+
+
+def _shape(value: Any) -> tuple[int, ...]:
+    if not isinstance(value, (list, tuple)):
+        return ()
+    children = tuple(_shape(item) for item in value)
+    if children and any(child != children[0] for child in children[1:]):
+        return (-1,)
+    return (len(value),) + (children[0] if children else ())
+
+
+def _flatten(value: Any) -> tuple[Any, ...]:
+    if not isinstance(value, (list, tuple)):
+        return (value,)
+    flattened: list[Any] = []
+    for item in value:
+        flattened.extend(_flatten(item))
+    return tuple(flattened)
 
 
 def _compare_states(
