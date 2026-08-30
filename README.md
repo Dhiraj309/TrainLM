@@ -45,6 +45,8 @@ Canonical model publication follows the
 [Hugging Face export contract](docs/checkpoint/CANONICAL_HF_EXPORT.md).
 Synchronized throughput, HBM, compile, and fallback metrics follow the
 [TPU telemetry contract](docs/monitoring/TELEMETRY.md).
+Sparse numerical and data-continuity checks follow the
+[training-integrity contract](docs/monitoring/INTEGRITY_GATES.md).
 
 Generic dense causal models are acquired through the
 [Hugging Face causal-model provider](docs/models/HUGGINGFACE_PROVIDER.md).
