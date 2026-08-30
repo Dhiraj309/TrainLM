@@ -161,7 +161,7 @@ Branch names describe repository work, not the tool or contributor:
 |---|---|---|---|---:|---|
 | [x] | PR1 | `milestone/m0-m2-foundation` | M0-M2 | 15 | Contracts and generic HF CPU conformance |
 | [~] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 18 | Merged; post-merge data/trainer validation remains tracked by validation gates |
-| [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 15 | M5-F1-F7, M6-F1-F4, and M7-F1-F4 implemented; target TPU validation pending |
+| [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 16 | M5-F1-F7, M6-F1-F4, and M7-F1-F5 implemented; target TPU validation pending |
 | [ ] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11 | Reversible planner and optimized loss |
 | [ ] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | 850K and hard LaughLM parity |
 | [ ] | PR6 | `milestone/m13-m14-family-release` | M13-M14 | 12 | Cross-family certification and V1 release |
@@ -175,8 +175,8 @@ rebase that untouched branch onto the latest merged predecessor.
 PR2 (`milestone/m3-m4-data-trainer`) is merged. The active implementation
 branch is `milestone/m5-m7-xla-compatibility`, created from the latest `main`;
 it owns the M5 PyTorch/XLA runtime and subsequent TPU validation work. PR3 has
-15 implemented feature commits and 1 feature commit remaining before the
-M5-M7 implementation gate is complete. Latest CI for the active pull request
+16 implementation feature commits complete for the M5-M7 gate; target TPU
+validation remains. Latest CI for the active pull request
 is passing. The branch contains a prior `main` merge commit; refresh and
 compare against the current `origin/main` before merging because a clean
 working tree only describes the PR branch itself. Current comparison is
@@ -197,7 +197,7 @@ TPU runtime foundation`; branch `milestone/m5-m7-xla-compatibility`.
 | [~] | M4 | F1-F7 implemented; validation pending |
 | [~] | M5 | F1-F7 XLA backend, DP mesh, cache, shape guard, compile boundary, accumulation selector, diagnostics, and baseline evaluator implemented; validation pending |
 | [~] | M6 | F1-F4 positional, attention, block-layout, and TPU round-trip coverage implemented; target TPU validation pending |
-| [~] | M7 | F1-F4 distributed resume, async lifecycle, canonical HF export, and sync-safe telemetry implemented; integrity validation pending |
+| [~] | M7 | F1-F5 distributed resume, async lifecycle, canonical HF export, telemetry, and integrity gates implemented; target TPU validation pending |
 | [ ] | M8 | Reversible capability optimization engine |
 | [ ] | M9 | Memory-efficient causal loss |
 | [ ] | M10 | TPU attention and 850K gate |
@@ -529,7 +529,7 @@ path before optimization adapters exist.
 
 ## M7 — Checkpointing, observability, and integrity
 
-**Status:** [~] M7-F1-F4 implemented; target TPU validation pending
+**Status:** [~] M7-F1-F5 implemented; target TPU validation pending
 
 **Goal:** Make long TPU training recoverable and measurable before mutation.
 
@@ -563,8 +563,10 @@ path before optimization adapters exist.
   Measure synchronized throughput, compile, HBM, idle, and collectives sparsely.
   **Acceptance:** No `.item()` or tensor print in the hot path; overhead bounded.
 
-- [ ] **M7-F5 — Integrity gates**
+- [~] **M7-F5 — Integrity gates**
   `feat(monitoring): add configurable training integrity checks`
+  Add sparse finite loss/gradient/parameter, update norm, token, and optional
+  cursor-continuity checks with injected-corruption coverage.
   Check finite loss/grad/parameters, update size, tokens, and data continuity.
   **Acceptance:** Sparse checks detect injected corruption.
 
