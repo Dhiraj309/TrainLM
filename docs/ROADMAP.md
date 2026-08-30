@@ -177,8 +177,9 @@ branch is `milestone/m5-m7-xla-compatibility`, created from the latest `main`;
 it owns the M5 PyTorch/XLA runtime and subsequent TPU validation work. PR3 has
 16 implementation feature commits complete for the M5-M7 gate; target TPU
 validation remains. Latest CI for the active pull request
-is passing. The branch contains a prior `main` merge commit; refresh and
-compare against the current `origin/main` before merging because a clean
+is passing after the framework-independent round-trip and precision-safe
+telemetry test corrections. The branch contains a prior `main` merge commit;
+refresh and compare against the current `origin/main` before merging because a clean
 working tree only describes the PR branch itself. Current comparison is
 `origin/main...HEAD = 0 38`; normal merge is up to date, while GitHub's rebase
 action remains unavailable because of the merge commit.
