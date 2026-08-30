@@ -37,8 +37,8 @@ def test_telemetry_snapshot_aggregates_synchronized_samples():
     assert snapshot.compile_seconds == 0.5
     assert snapshot.compile_count == 1
     assert snapshot.peak_hbm_gib == 5.0
-    assert snapshot.input_idle_fraction == 0.2
-    assert snapshot.collective_seconds_median == 0.3
+    assert snapshot.input_idle_fraction == pytest.approx(0.2)
+    assert snapshot.collective_seconds_median == pytest.approx(0.3)
     assert snapshot.cpu_fallback_count == 2
     assert snapshot.synchronized is True
 
