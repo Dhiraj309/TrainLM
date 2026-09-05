@@ -45,6 +45,11 @@ python -m pip install -e ".[dev]" -c constraints/core-current.txt
 python -m pip install -e ".[tpu-xla]" -c constraints/tpu-xla-2.9.txt
 ```
 
+The editable install is required when running the TPU launcher from a checkout:
+it registers the `trainlm` distribution and places the `src/` package on the
+worker import path. The validation notebook runs this same command when
+`TRAINLM_INSTALL=1` or when the local distribution metadata is missing.
+
 ### Stable PyTorch/XLA TPU with Pallas
 
 ```text
