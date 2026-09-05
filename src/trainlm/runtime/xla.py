@@ -11,6 +11,7 @@ from collections.abc import Iterable, Mapping
 from contextlib import nullcontext
 from dataclasses import dataclass
 import importlib
+import os
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Callable, TypeVar
@@ -57,6 +58,7 @@ class XlaRuntime:
         if precision not in {"fp32", "fp16", "bf16"}:
             raise ValueError(f"Unsupported runtime precision: {precision}")
 
+        xm_was_injected = xm_module is not None
         if xm_module is None or torch_xla_module is None:
             loaded_torch_xla, loaded_xm = _load_torch_xla()
             torch_xla_module = torch_xla_module or loaded_torch_xla
@@ -66,6 +68,7 @@ class XlaRuntime:
         self._torch_xla = torch_xla_module
         self._spmd = spmd_module
         self._xla_runtime = torch_xla_runtime_module
+        self._xm_was_injected = xm_was_injected
         self._precision = precision
         self._mesh: XlaMesh | None = None
         self._shape_guard = StaticShapeGuard()
@@ -107,14 +110,26 @@ class XlaRuntime:
 
     @property
     def world_size(self) -> int:
-        return int(self._xm.xrt_world_size())
+        runtime_world_size = getattr(self._runtime_module(), "world_size", None)
+        if callable(runtime_world_size):
+            return int(runtime_world_size())
+        legacy_world_size = getattr(self._xm, "xrt_world_size", None)
+        if callable(legacy_world_size):
+            return int(legacy_world_size())
+        return 1
 
     @property
     def rank(self) -> int:
+        global_ordinal = getattr(self._runtime_module(), "global_ordinal", None)
+        if callable(global_ordinal):
+            return int(global_ordinal())
         return int(self._xm.get_ordinal())
 
     @property
     def local_rank(self) -> int:
+        local_ordinal = getattr(self._runtime_module(), "local_ordinal", None)
+        if callable(local_ordinal):
+            return int(local_ordinal())
         get_local_ordinal = getattr(self._xm, "get_local_ordinal", None)
         return int(get_local_ordinal()) if callable(get_local_ordinal) else self.rank
 
@@ -370,8 +385,7 @@ class XlaRuntime:
     def _initialize_cache(self) -> None:
         if self._cache_dir is None or self._cache_initialized:
             return
-        if self._xla_runtime is None:
-            self._xla_runtime = _load_torch_xla_runtime()
+        self._xla_runtime = self._runtime_module()
         initialize_cache = getattr(self._xla_runtime, "initialize_cache", None)
         if not callable(initialize_cache):
             raise RuntimeError(
@@ -379,6 +393,19 @@ class XlaRuntime:
             )
         initialize_cache(str(self._cache_dir), readonly=self._cache_readonly)
         self._cache_initialized = True
+
+    def _runtime_module(self) -> Any:
+        """Return the PJRT runtime API, loading it only when needed.
+
+        Torch/XLA 2.9 removed ``xm.xrt_world_size`` from the public
+        ``xla_model`` module.  The supported equivalents are
+        ``torch_xla.runtime.world_size`` and ``global_ordinal``.  Keep the
+        legacy fallback for older XRT releases and injected test doubles.
+        """
+
+        if self._xla_runtime is None and not self._xm_was_injected:
+            self._xla_runtime = _load_torch_xla_runtime()
+        return self._xla_runtime
 
     def _require_mesh(self, mesh: Any) -> XlaMesh:
         if not isinstance(mesh, XlaMesh) or mesh is not self._mesh:
@@ -414,6 +441,7 @@ class XlaRuntime:
 def _load_torch_xla() -> tuple[ModuleType, ModuleType]:
     """Import PyTorch/XLA only at explicit backend construction time."""
 
+    _sanitize_single_vm_tpu_process_addresses()
     try:
         torch_xla = importlib.import_module("torch_xla")
         xm = importlib.import_module("torch_xla.core.xla_model")
@@ -423,6 +451,14 @@ def _load_torch_xla() -> tuple[ModuleType, ModuleType]:
             "Install TrainLM with `pip install -e .[tpu-xla]`."
         ) from exc
     return torch_xla, xm
+
+
+def _sanitize_single_vm_tpu_process_addresses() -> None:
+    """Drop Kaggle's invalid literal ``local`` topology override."""
+
+    for env_name in ("TPU_PROCESS_ADDRESSES", "JAX_TPU_PROCESS_ADDRESSES"):
+        if os.environ.get(env_name, "").strip().lower() == "local":
+            os.environ.pop(env_name, None)
 
 
 def _load_torch_xla_spmd() -> ModuleType:
