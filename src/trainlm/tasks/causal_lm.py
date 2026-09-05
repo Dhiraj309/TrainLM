@@ -31,6 +31,7 @@ class CausalLMTask:
         ),
         z_loss: float = 0.0,
         loss_implementation: Literal["auto", "causal_lm", "model"] = "auto",
+        assume_all_supervised: bool = False,
     ) -> None:
         if normalization not in {"supervised_tokens", "batch"}:
             raise ValueError(f"Unsupported loss normalization: {normalization}")
@@ -44,6 +45,9 @@ class CausalLMTask:
         self.normalization = normalization
         self.z_loss = z_loss
         self.loss_implementation = loss_implementation
+        if not isinstance(assume_all_supervised, bool):
+            raise ValueError("assume_all_supervised must be boolean.")
+        self.assume_all_supervised = assume_all_supervised
         if loss_implementation == "model" and not self._model_loss_compatible:
             raise ValueError(
                 "Model loss requires ignore_index=-100, supervised-token "
@@ -246,7 +250,8 @@ class CausalLMTask:
                 raise ValueError("'loss_mask' must match 'input_ids'.")
             target_mask &= loss_mask[..., 1:].to(dtype=torch.bool)
 
-        target_mask &= effective_labels.ne(self.ignore_index)
+        if not self.assume_all_supervised:
+            target_mask &= effective_labels.ne(self.ignore_index)
         effective_labels.masked_fill_(~target_mask, self.ignore_index)
 
         supervised = int(target_mask.sum().item())

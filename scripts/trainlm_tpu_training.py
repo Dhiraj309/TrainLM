@@ -8,7 +8,6 @@ XLA device and deterministic data partition.
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict
 import json
 import math
 from pathlib import Path
@@ -45,33 +44,22 @@ from trainlm.data import (
 from trainlm.model import load_huggingface_causal_lm
 from trainlm.optimization import create_optimizer
 from trainlm.runtime import XlaRuntime
-from trainlm.tasks import CausalLMTask, TokenCounts
+from trainlm.tasks import CausalLMTask
 from trainlm.training import Trainer, TrainerCallback, create_scheduler
 
 
 class BatchIterable(IterableDataset):
-    def __init__(self, reader: PartitionedPackedBatchReader, task: CausalLMTask) -> None:
+    def __init__(self, reader: PartitionedPackedBatchReader) -> None:
         self.reader = reader
-        self.task = task
 
     def __iter__(self):
         for batch in self.reader:
-            # This reader emits contiguous unpadded streams. An all-ones
-            # attention mask is redundant and can impede causal SDPA dispatch.
-            payload, counts = self.task.prepare_batch_on_host({
-                "input_ids": batch["input_ids"], "labels": batch["labels"],
-            })
-            yield {"task_batch": payload, "counts": asdict(counts)}
+            # Packed streams contain no padding or document loss mask. Keep
+            # this payload flat so MpDeviceLoader can transfer it directly.
+            yield {"input_ids": batch["input_ids"], "labels": batch["labels"]}
 
     def __len__(self) -> int:
         return len(self.reader)
-
-
-class PrefetchedTask(CausalLMTask):
-    def training_step(self, model, batch, backend):
-        return self.training_step_prepared(
-            model, batch["task_batch"], TokenCounts(**batch["counts"]), backend,
-        )
 
 
 class PrintMetrics(TrainerCallback):
@@ -153,7 +141,10 @@ def train_fn(index: int, args: argparse.Namespace, shards) -> None:
     # The entry point already initialized a distinct persistent cache per rank.
     runtime = XlaRuntime(device=device, precision="bf16", compile_training=False,
                          collect_diagnostics=True)
-    task = PrefetchedTask(z_loss=1e-4, loss_implementation="causal_lm")
+    task = CausalLMTask(
+        z_loss=1e-4, loss_implementation="causal_lm",
+        assume_all_supervised=True,
+    )
     print({"stage": "build_reader", "rank": rank}, flush=True)
     reader = ContiguousPackedBatchReader(
         shards,
@@ -175,7 +166,7 @@ def train_fn(index: int, args: argparse.Namespace, shards) -> None:
         reader.close()
         raise ValueError("Not enough complete rank-local batches for this run; add shards or reduce steps.")
     loader = DataLoader(
-        BatchIterable(partitioned, task),
+        BatchIterable(partitioned),
         batch_size=None,
         num_workers=0,
         pin_memory=False,

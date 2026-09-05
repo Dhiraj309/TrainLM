@@ -1189,3 +1189,12 @@ V1 is complete only when:
 The finished product keeps Hugging Face compatibility at the surface, applies
 explainable reversible optimization in memory, and runs on a replaceable
 high-performance TPU backend.
+Observed Kaggle result (2026-09-05): the eight-rank probe passed, including the
+rank-sum all-reduce (36), and host memory was healthy (about 390 GB available).
+The two-update smoke then aborted while importing `torchvision/extension.py`
+through Transformers' optional vision path. Kaggle's installed Torch 2.9.0
+and the pre-existing vision/audio packages were not a matched text-training
+dependency set. The notebook now removes `torchvision` and `torchaudio`
+before any Transformers import and requires one kernel restart when removal
+occurs. This is a dependency failure, not evidence of a TPU HBM or model
+allocation failure. Re-run the probe after the restart, then the smoke.
