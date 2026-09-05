@@ -161,7 +161,7 @@ Branch names describe repository work, not the tool or contributor:
 |---|---|---|---|---:|---|
 | [x] | PR1 | `milestone/m0-m2-foundation` | M0-M2 | 15 | Contracts and generic HF CPU conformance |
 | [~] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 18 | Merged; post-merge data/trainer validation remains tracked by validation gates |
-| [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 16 | M5-F1-F7, M6-F1-F4, and M7-F1-F5 implemented; target TPU validation pending |
+| [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 16 | Implementation merged; target TPU validation pending |
 | [ ] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11 | Reversible planner and optimized loss |
 | [ ] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | 850K and hard LaughLM parity |
 | [ ] | PR6 | `milestone/m13-m14-family-release` | M13-M14 | 12 | Cross-family certification and V1 release |
@@ -172,17 +172,67 @@ rebase that untouched branch onto the latest merged predecessor.
 
 ### Current branch handoff
 
-PR2 (`milestone/m3-m4-data-trainer`) is merged. The active implementation
-branch is `milestone/m5-m7-xla-compatibility`, created from the latest `main`;
-it owns the M5 PyTorch/XLA runtime and subsequent TPU validation work. PR3 has
-16 implementation feature commits complete for the M5-M7 gate; target TPU
-validation remains. Latest CI for the active pull request
-is passing after the framework-independent round-trip and precision-safe
-telemetry test corrections. The branch contains a prior `main` merge commit;
-refresh and compare against the current `origin/main` before merging because a clean
-working tree only describes the PR branch itself. Current comparison is
-`origin/main...HEAD = 0 38`; normal merge is up to date, while GitHub's rebase
-action remains unavailable because of the merge commit.
+PR2 (`milestone/m3-m4-data-trainer`) and the PR3 implementation branch
+(`milestone/m5-m7-xla-compatibility`) are merged. PR3 delivered 16 feature
+commits; target TPU validation for M5-M7 remains pending. The framework-
+independent round-trip and precision-safe telemetry corrections passed CI
+before merge. Create the next branch from the latest `main`:
+`milestone/m8-m9-optimization-core`.
+
+Validation checkpoint (2026-09-05): run the staged v5e-8 smoke, M5 baseline,
+M6 compatibility matrix, and M7 reliability checks before starting PR4. Do not
+run the full 20B-token workload yet; use the evidence to decide whether the
+generic XLA path is ready for capability transformations.
+
+Validation artifact: `notebooks/TrainLM_TPU_Validation.ipynb` now provides the
+repeatable installation, environment check, HF model acquisition, packed `.bin`
+manifest validation, XLA trainer construction, smoke run, measured run, and
+optional plain-Transformers export. It must be run on TPU; no local execution
+is implied. The notebook deliberately leaves exact-resume checkpoint writing
+to the application-owned callback required by the M7 contract.
+
+The notebook includes a corrected Kaggle/Colab bootstrap and consolidated
+import order; the attached reference notebook's import cell was marked as
+Markdown and its clone branch was stale. The repository notebook now assumes a
+checkout at `TRAINLM_REPO_DIR` and does not silently clone or switch branches
+during a run.
+
+The notebook also exposes a revision-pinned Hub mode for the supplied
+`LaughTaleAI/LaughLM-Tokenized-Fine` layout. The raw `.bin` URL and dataset
+summary do not replace TrainLM's per-shard manifest contract; tokenizer
+identity (`microsoft/Phi-3.5-mini-instruct` in the supplied metadata) must also
+match the model vocabulary mapping before parity results are meaningful.
+
+Kaggle installation checkpoint (2026-09-05): the editable install completed
+with the pinned Torch 2.9.0, Torch/XLA 2.9.0, Transformers 5.15.0, and libtpu
+profile. Kaggle reported pre-existing `torchvision`/`torchaudio` 2.8 versus
+Torch 2.9 and `google-tunix` versus `safetensors` 0.8 conflicts; these do not
+block TrainLM's TPU path unless those unrelated packages are imported. Restart
+the kernel before the XLA environment check.
+
+Kaggle XLA API correction (2026-09-05): Torch/XLA 2.9 uses
+`torch_xla.runtime.world_size()` and `global_ordinal()`; the notebook and
+`XlaRuntime` now use those APIs with a legacy `xm` fallback for older releases
+and injected test doubles. The old `xm.xrt_world_size()` call must not be used
+in TPU setup code.
+
+Kaggle PJRT launch correction (2026-09-05): `TPU_PROCESS_ADDRESSES=local` is
+removed before Torch/XLA import, and the notebook now uses `torch_xla.device()`
+for device discovery. A direct notebook process is explicitly reported as a
+single-process smoke (`TRAINLM_ALLOW_SINGLE_PROCESS=1`); it cannot represent
+the v5e-8 DP8 performance target. The default remains fail-fast until an
+8-process `torchrun`/`xmp.spawn` launch is used.
+
+Reference-notebook findings (2026-09-05): the previous HF Trainer workflow
+achieved DP8 by placing the complete model/data/training construction inside a
+worker function and invoking `torch_xla.launch(train_fn, args=())`. Reusable
+patterns are setting `PJRT_DEVICE=TPU` before imports, disabling TF/Flax
+integration, clearing stale TPU topology variables, using
+`DistributedSampler.set_epoch`, wrapping loaders with `MpDeviceLoader`, doing
+XLA optimizer steps with an explicit barrier, logging/checkpointing on ordinal
+0, and rendezvousing before exit. Its raw memmap reader (1024-byte header,
+`uint16`) and ~338K tok/s result are useful diagnostics, but are not a
+manifest-validated TrainLM run or a comparable LaughLM 1M tok/s measurement.
 
 PR3 handoff metadata: title `feat(m5-m7): add PyTorch/XLA compatibility and
 TPU runtime foundation`; branch `milestone/m5-m7-xla-compatibility`.
@@ -531,6 +581,12 @@ path before optimization adapters exist.
 ## M7 — Checkpointing, observability, and integrity
 
 **Status:** [~] M7-F1-F5 implemented; target TPU validation pending
+
+The staged validation runner is available at
+[`notebooks/TrainLM_TPU_Validation.ipynb`](../notebooks/TrainLM_TPU_Validation.ipynb).
+It exercises the M5 runtime, M6 generic HF path, and M7 evidence boundaries on
+v5e-8 without claiming that exact-resume persistence is implemented by the
+trainer itself.
 
 **Goal:** Make long TPU training recoverable and measurable before mutation.
 
