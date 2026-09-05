@@ -254,8 +254,14 @@ class CausalLMTask:
             target_mask &= effective_labels.ne(self.ignore_index)
         effective_labels.masked_fill_(~target_mask, self.ignore_index)
 
-        supervised = int(target_mask.sum().item())
         targets = effective_labels.numel()
+        # Raw packed streams have a fixed, fully supervised geometry. Avoid a
+        # device-to-host reduction on every microbatch in that path; the
+        # caller's explicit flag is only valid when no masks are supplied.
+        if self.assume_all_supervised and attention_mask is None and loss_mask is None:
+            supervised = targets
+        else:
+            supervised = int(target_mask.sum().item())
         counts = TokenCounts(
             sequences=input_ids.numel() // input_ids.shape[-1],
             input_tokens=input_ids.numel(),

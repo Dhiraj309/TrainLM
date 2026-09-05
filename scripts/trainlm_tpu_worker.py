@@ -40,18 +40,30 @@ def run_worker(index, args, shards) -> None:
     torch.set_num_threads(1)
     rank, world = int(xr.global_ordinal()), int(xr.world_size())
     event("worker_entered", rank=rank, world_size=world)
-    if world != 8:
-        raise RuntimeError(f"Expected DP8, got world_size={world}; no fallback is enabled.")
+    expected_world = int(args.expected_world_size)
+    if world != expected_world:
+        raise RuntimeError(
+            f"Expected world_size={expected_world}, got {world}; "
+            "no implicit fallback is enabled."
+        )
     # Cache must be configured before the first tensor computation, including probe.
     xr.initialize_cache(str(Path(args.cache_dir) / f"rank-{rank}"))
     device = torch_xla.device()
     total = xm.all_reduce(xm.REDUCE_SUM, torch.tensor(float(rank + 1), device=device))
     torch_xla.sync(wait=True)
-    if total.item() != 36.0:
-        raise RuntimeError("DP8 collective probe failed (expected rank sum 36).")
+    expected_sum = expected_world * (expected_world + 1) / 2
+    if total.item() != expected_sum:
+        raise RuntimeError(
+            f"Collective probe failed (expected rank sum {expected_sum:g})."
+        )
     event("probe_passed", rank=rank, world_size=world, device=str(device))
     if args.probe_only:
         xm.rendezvous("trainlm-probe-finished")
+        return
+    if args.model_preflight:
+        from trainlm_tpu_training import model_preflight
+        model_preflight(args)
+        xm.rendezvous("trainlm-model-preflight-finished")
         return
     from trainlm_tpu_training import train_fn
     train_fn(index, args, shards)
@@ -60,6 +72,8 @@ def run_worker(index, args, shards) -> None:
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--probe-only", action="store_true")
+    parser.add_argument("--model-preflight", action="store_true")
+    parser.add_argument("--expected-world-size", type=int, default=8)
     parser.add_argument("--max-steps", type=int, default=2)
     parser.add_argument("--warmup-steps", type=int, default=5)
     parser.add_argument("--gradient-accumulation-steps", type=int, default=32)
@@ -93,9 +107,11 @@ def parse_args():
                  "sequence_length", "log_every_steps", "shard_count", "token_vocab_size"):
         if getattr(args, name) < 1:
             parser.error(f"--{name.replace('_', '-')} must be positive")
+    if args.expected_world_size < 1:
+        parser.error("--expected-world-size must be positive")
     if args.sequence_length < 2 or args.warmup_steps < 0:
         parser.error("sequence length must be >=2 and warmup steps >=0")
-    if args.data_mode == "raw" and not args.probe_only:
+    if args.data_mode == "raw" and not (args.probe_only or args.model_preflight):
         if not args.bin_path or args.header_bytes is None or args.header_bytes < 0:
             parser.error("raw mode requires --bin-path and explicit nonnegative --header-bytes")
     if args.expected_token_count is not None and args.expected_token_count < 1:
@@ -117,7 +133,7 @@ def main() -> None:
     import torch_xla
     event("xla_imported")
     shards = None
-    if not args.probe_only:
+    if not (args.probe_only or args.model_preflight):
         event("data_preflight")
         # Validate once on the host, then pass small immutable descriptors to
         # workers. Never scan every multi-GB shard eight times simultaneously.

@@ -42,6 +42,7 @@ from trainlm.data import (
     plan_packed_batch_partition,
 )
 from trainlm.model import load_huggingface_causal_lm
+from trainlm.model.outputs import normalize_causal_lm_output
 from trainlm.optimization import create_optimizer
 from trainlm.runtime import XlaRuntime
 from trainlm.tasks import CausalLMTask
@@ -124,15 +125,57 @@ def _source(args: argparse.Namespace) -> ModelSourceConfig:
     )
 
 
+def model_preflight(args: argparse.Namespace) -> None:
+    """Load and execute one HF forward on every PJRT rank.
+
+    This deliberately stops before data, optimizer, and Trainer setup. It
+    isolates dependency/model/forward/XLA failures from training failures.
+    """
+    rank = int(xr.global_ordinal())
+    device = torch_xla.device()
+    runtime = XlaRuntime(device=device, precision="bf16", compile_training=False)
+    source = _source(args)
+    print({"stage": "model_preflight_load", "rank": rank}, flush=True)
+    loaded = load_huggingface_causal_lm(source)
+    if hasattr(loaded.model.config, "use_cache"):
+        loaded.model.config.use_cache = False
+    model = runtime.prepare_model(loaded.model)
+    model.train()
+    if hasattr(model, "tie_weights"):
+        model.tie_weights()
+    input_ids = torch.zeros(
+        (args.micro_batch_per_device, args.sequence_length),
+        dtype=torch.long,
+        device=device,
+    )
+    with runtime.autocast():
+        outputs = model(input_ids=input_ids)
+        normalized = normalize_causal_lm_output(outputs)
+    if normalized.logits is None:
+        raise RuntimeError("HF model preflight returned no logits.")
+    expected = (args.micro_batch_per_device, args.sequence_length)
+    if tuple(normalized.logits.shape[:-1]) != expected:
+        raise RuntimeError(
+            f"HF model preflight logits shape {tuple(normalized.logits.shape)} "
+            f"does not match expected prefix {expected}."
+        )
+    torch_xla.sync(wait=True)
+    print({"stage": "model_preflight_passed", "rank": rank,
+           "model_class": type(model).__name__,
+           "logits_shape": tuple(normalized.logits.shape)}, flush=True)
+    runtime.finalize()
+
+
 
 
 def train_fn(index: int, args: argparse.Namespace, shards) -> None:
     del index
     rank = int(xr.global_ordinal())
     world_size = int(xr.world_size())
-    if world_size != 8:
+    if world_size != args.expected_world_size:
         raise RuntimeError(
-            f"Torch/XLA launched {world_size} process(es); expected 8 for TPU v5e-8."
+            f"Torch/XLA launched {world_size} process(es); "
+            f"expected {args.expected_world_size}."
         )
 
     torch.manual_seed(args.seed)
@@ -286,6 +329,7 @@ def train_fn(index: int, args: argparse.Namespace, shards) -> None:
         "global_supervised_tokens": state.tokens_seen * world_size,
         "last_loss_rank0": state.loss,
         "world_size": world_size,
+        "expected_world_size": args.expected_world_size,
         "scheduled_tokens_per_update": args.sequence_length * args.micro_batch_per_device
             * args.gradient_accumulation_steps * world_size,
         "measured_global_supervised_tokens": metrics.measured_tokens,
