@@ -1219,6 +1219,11 @@ The first preflight exposed an HF rotary/SDPA dtype mismatch on TPU
 registries, normalizing Q/K/V to one dtype before delegating to HF SDPA.
 Boolean masks remain boolean; only additive masks are cast to the selected
 attention dtype.
+The subsequent preflight reached all eight `model_preflight_passed` stages;
+the notebook failure was only a log-format mismatch (Python repr versus JSON),
+which is now corrected at the producer.
+The notebook gate accepts both JSON and legacy Python-repr stage records so a
+successful preflight from an older worker cannot be discarded.
 The notebook also counts successful probe and preflight events in the saved
 logs, so a partial-rank success cannot be mistaken for a valid DP8 gate.
 Its environment cell now repairs a missing editable `trainlm` distribution
