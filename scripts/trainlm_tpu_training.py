@@ -194,7 +194,7 @@ def model_preflight(args: argparse.Namespace) -> None:
     device = torch_xla.device()
     runtime = XlaRuntime(device=device, precision="bf16", compile_training=False)
     source = _source(args)
-    print({"stage": "model_preflight_load", "rank": rank}, flush=True)
+    print(json.dumps({"stage": "model_preflight_load", "rank": rank}), flush=True)
     loaded = load_huggingface_causal_lm(source)
     if hasattr(loaded.model.config, "use_cache"):
         loaded.model.config.use_cache = False
@@ -220,9 +220,12 @@ def model_preflight(args: argparse.Namespace) -> None:
             f"does not match expected prefix {expected}."
         )
     torch_xla.sync(wait=True)
-    print({"stage": "model_preflight_passed", "rank": rank,
-           "model_class": type(model).__name__,
-           "logits_shape": tuple(normalized.logits.shape)}, flush=True)
+    print(json.dumps({
+        "stage": "model_preflight_passed",
+        "rank": rank,
+        "model_class": type(model).__name__,
+        "logits_shape": tuple(normalized.logits.shape),
+    }), flush=True)
     runtime.finalize()
 
 
