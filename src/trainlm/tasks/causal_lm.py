@@ -115,6 +115,30 @@ class CausalLMTask:
         backend: ExecutionBackend,
     ) -> TaskResult:
         task_batch, counts = self._prepare_task_batch(batch)
+        return self.training_step_prepared(model, task_batch, counts, backend)
+
+    def prepare_batch_on_host(self, batch: Any) -> tuple[dict[str, Any], TokenCounts]:
+        """Apply masks and count tokens before asynchronous device transfer."""
+        if not isinstance(batch, Mapping):
+            raise TypeError("Causal LM batches must be mappings.")
+        for key in ("input_ids", "labels", "attention_mask", "loss_mask"):
+            value = batch.get(key)
+            if isinstance(value, torch.Tensor) and value.device.type != "cpu":
+                raise ValueError("Host preparation requires CPU tensors.")
+        return self._prepare_task_batch(batch)
+
+    def training_step_prepared(
+        self,
+        model: nn.Module,
+        task_batch: Mapping[str, Any],
+        counts: TokenCounts,
+        backend: ExecutionBackend,
+    ) -> TaskResult:
+        """Consume this task's prepared tensors and unchanged host counts."""
+        if not isinstance(counts, TokenCounts) or not counts.exact:
+            raise ValueError("Prepared batches require exact TokenCounts.")
+        if counts.supervised_tokens <= 0:
+            raise ValueError("Prepared batches require supervised tokens.")
         task_batch = backend.prepare_batch(task_batch)
 
         model_labels = task_batch["labels"]
@@ -273,7 +297,7 @@ class CausalLMTask:
         if self.z_loss:
             log_z = torch.logsumexp(shifted_logits, dim=-1)
             z_loss_value = (
-                log_z.square().masked_select(loss_mask).sum()
+                torch.where(loss_mask, log_z.square(), 0.0).sum()
                 / loss_mask.sum()
             )
             loss = loss + self.z_loss * z_loss_value

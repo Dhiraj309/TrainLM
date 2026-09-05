@@ -378,7 +378,10 @@ class Trainer:
 
         step_tokens = getattr(self.scheduler, "step_tokens", None)
         if callable(step_tokens):
-            step_tokens(self.state.tokens_seen)
+            # State accounting is rank-local; the schedule horizon describes
+            # the global training corpus. Replicated DP uses equal token counts.
+            world_size = getattr(self.runtime, "world_size", 1)
+            step_tokens(self.state.tokens_seen * world_size)
         else:
             del total_tokens
             self.scheduler.step()
