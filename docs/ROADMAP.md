@@ -1198,3 +1198,32 @@ dependency set. The notebook now removes `torchvision` and `torchaudio`
 before any Transformers import and requires one kernel restart when removal
 occurs. This is a dependency failure, not evidence of a TPU HBM or model
 allocation failure. Re-run the probe after the restart, then the smoke.
+
+Final pre-rerun cross-check (2026-09-05): the DP8 entrypoint still has no
+single-process fallback, validates raw shards once before spawning, pins the
+Hub revision, and performs the rank-sum collective before model loading. The
+training body keeps packed batches flat for `ParallelLoader` and avoids a
+per-microbatch device-to-host token-count reduction on the fully supervised
+raw-stream path. A successful probe is necessary but not sufficient: smoke
+must still verify HF model construction, XLA graph compilation, AdamW update,
+and finalization on all eight ranks.
+The current validation intentionally exercises the generic unrolled GA32
+update; it is a functional gate, not the final microstep/XLA-loop performance
+implementation.
+The validation notebook now inserts a model-preflight gate between the
+collective probe and smoke: every rank must construct the selected HF causal
+LM and complete one XLA forward before optimizer/data execution begins.
+The notebook also counts successful probe and preflight events in the saved
+logs, so a partial-rank success cannot be mistaken for a valid DP8 gate.
+Its environment cell now repairs a missing editable `trainlm` distribution
+record with a local `pip install --no-deps -e` and treats only the TPU runtime
+packages as required; optional `libtpu` metadata reporting is non-fatal.
+The setup path is now aligned with the full pinned editable install
+`pip install -e ".[tpu-xla]" -c constraints/tpu-xla-2.9.txt`, including when
+the checkout exists but its distribution metadata is absent.
+The launcher now accepts `--expected-world-size 1` for a v5e-1 functional
+smoke and keeps the default `8` for the v5e-8 parity gate. A v5e-1 pass proves
+HF/XLA/model/trainer compatibility only; it is not evidence of DP8 scaling or
+LaughLM throughput parity. The notebook names evidence by world size and
+asserts the actual expected rank count, preventing a v5e-1 run from being
+mistaken for the v5e-8 certification.
