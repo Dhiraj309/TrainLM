@@ -234,6 +234,12 @@ XLA optimizer steps with an explicit barrier, logging/checkpointing on ordinal
 `uint16`) and ~338K tok/s result are useful diagnostics, but are not a
 manifest-validated TrainLM run or a comparable LaughLM 1M tok/s measurement.
 
+DP8 validation entry point: `scripts/trainlm_tpu_worker.py` now owns the
+Torch/XLA launch boundary and constructs the TrainLM model, validated shard
+partition, `MpDeviceLoader`, Trainer, optimizer, and scheduler per worker. The
+notebook's recommended launch cell invokes this script; the in-process cells
+remain functional-smoke/debug paths only.
+
 PR3 handoff metadata: title `feat(m5-m7): add PyTorch/XLA compatibility and
 TPU runtime foundation`; branch `milestone/m5-m7-xla-compatibility`.
 
