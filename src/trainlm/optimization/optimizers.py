@@ -44,8 +44,31 @@ class AdamWStateDtype(torch.optim.AdamW):
                     dtype=self.state_policy.nu_dtype
                 )
 
+    def _prepare_step_dtypes(self) -> None:
+        """Make in-place AdamW kernels dtype-compatible with current grads.
+
+        PyTorch/XLA's single-tensor AdamW path requires lerp_ and addcmul_
+        operands to have matching dtypes. We keep the requested compact state
+        policy between steps, but temporarily use each parameter's gradient
+        dtype during the in-place optimizer update.
+        """
+        for group in self.param_groups:
+            for parameter in group["params"]:
+                gradient = parameter.grad
+                state = self.state.get(parameter)
+                if gradient is None or not state:
+                    continue
+                for key in ("exp_avg", "exp_avg_sq"):
+                    value = state.get(key)
+                    if (
+                        isinstance(value, torch.Tensor)
+                        and value.dtype != gradient.dtype
+                    ):
+                        state[key] = value.to(dtype=gradient.dtype)
+
     def step(self, closure=None):
         self._cast_moment_state()
+        self._prepare_step_dtypes()
         result = super().step(closure)
         self._cast_moment_state()
         return result

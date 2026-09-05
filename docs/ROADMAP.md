@@ -1222,6 +1222,10 @@ attention dtype.
 The subsequent preflight reached all eight `model_preflight_passed` stages;
 the notebook failure was only a log-format mismatch (Python repr versus JSON),
 which is now corrected at the producer.
+The first smoke update then reached AdamW and exposed an XLA-only in-place
+moment dtype requirement. The optimizer now temporarily aligns moments with
+the current gradient dtype for the update and restores the configured
+bf16/fp32 state policy afterward.
 The notebook gate accepts both JSON and legacy Python-repr stage records so a
 successful preflight from an older worker cannot be discarded.
 The notebook also counts successful probe and preflight events in the saved
