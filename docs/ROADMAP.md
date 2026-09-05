@@ -161,7 +161,7 @@ Branch names describe repository work, not the tool or contributor:
 |---|---|---|---|---:|---|
 | [x] | PR1 | `milestone/m0-m2-foundation` | M0-M2 | 15 | Contracts and generic HF CPU conformance |
 | [~] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 18 | Merged; post-merge data/trainer validation remains tracked by validation gates |
-| [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 16 | Implementation merged; target TPU validation pending |
+| [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 16 | Implementation merged; post-merge DP8 launcher/data fixes added; target TPU validation pending |
 | [ ] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11 | Reversible planner and optimized loss |
 | [ ] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | 850K and hard LaughLM parity |
 | [ ] | PR6 | `milestone/m13-m14-family-release` | M13-M14 | 12 | Cross-family certification and V1 release |
@@ -176,8 +176,8 @@ PR2 (`milestone/m3-m4-data-trainer`) and the PR3 implementation branch
 (`milestone/m5-m7-xla-compatibility`) are merged. PR3 delivered 16 feature
 commits; target TPU validation for M5-M7 remains pending. The framework-
 independent round-trip and precision-safe telemetry corrections passed CI
-before merge. Create the next branch from the latest `main`:
-`milestone/m8-m9-optimization-core`.
+before merge. Finish the post-merge launch regression work and target TPU
+smoke before starting `milestone/m8-m9-optimization-core`.
 
 Validation checkpoint (2026-09-05): run the staged v5e-8 smoke, M5 baseline,
 M6 compatibility matrix, and M7 reliability checks before starting PR4. Do not
@@ -197,11 +197,14 @@ Markdown and its clone branch was stale. The repository notebook now assumes a
 checkout at `TRAINLM_REPO_DIR` and does not silently clone or switch branches
 during a run.
 
-The notebook also exposes a revision-pinned Hub mode for the supplied
-`LaughTaleAI/LaughLM-Tokenized-Fine` layout. The raw `.bin` URL and dataset
-summary do not replace TrainLM's per-shard manifest contract; tokenizer
-identity (`microsoft/Phi-3.5-mini-instruct` in the supplied metadata) must also
-match the model vocabulary mapping before parity results are meaningful.
+The notebook downloads the supplied `LaughTaleAI/LaughLM-Tokenized-Fine`
+shards at a resolved immutable Hub revision, or accepts mounted raw files and
+existing local manifests. The raw path requires explicit dtype/header/vocab
+information, checks file geometry against the supplied token count, and scans
+the entire payload for bounds and SHA-256 before creating validated in-memory
+manifest descriptors. No sidecar upload is required. Tokenizer identity
+(`microsoft/Phi-3.5-mini-instruct` in the supplied metadata) must also match
+the model vocabulary mapping before parity results are meaningful.
 
 Kaggle installation checkpoint (2026-09-05): the editable install completed
 with the pinned Torch 2.9.0, Torch/XLA 2.9.0, Transformers 5.15.0, and libtpu
@@ -216,12 +219,13 @@ Kaggle XLA API correction (2026-09-05): Torch/XLA 2.9 uses
 and injected test doubles. The old `xm.xrt_world_size()` call must not be used
 in TPU setup code.
 
-Kaggle PJRT launch correction (2026-09-05): `TPU_PROCESS_ADDRESSES=local` is
-removed before Torch/XLA import, and the notebook now uses `torch_xla.device()`
-for device discovery. A direct notebook process is explicitly reported as a
-single-process smoke (`TRAINLM_ALLOW_SINGLE_PROCESS=1`); it cannot represent
-the v5e-8 DP8 performance target. The default remains fail-fast until an
-8-process `torchrun`/`xmp.spawn` launch is used.
+Kaggle PJRT launch correction (2026-09-05): the notebook kernel must stay free
+of Torch/XLA, JAX, TensorFlow, model objects, and device queries. Its environment
+report reads package metadata only. A fresh script parent clears stale
+single-VM topology overrides before importing XLA, then uses
+`torch_xla.launch(..., start_method="spawn")`. Spawned workers retain PJRT's
+assigned rank/chip settings. This runner is for one v5e-8 VM, not multi-host
+launch, and has no automatic single-device fallback.
 
 Reference-notebook findings (2026-09-05): the previous HF Trainer workflow
 achieved DP8 by placing the complete model/data/training construction inside a
@@ -229,16 +233,36 @@ worker function and invoking `torch_xla.launch(train_fn, args=())`. Reusable
 patterns are setting `PJRT_DEVICE=TPU` before imports, disabling TF/Flax
 integration, clearing stale TPU topology variables, using
 `DistributedSampler.set_epoch`, wrapping loaders with `MpDeviceLoader`, doing
-XLA optimizer steps with an explicit barrier, logging/checkpointing on ordinal
+XLA optimizer steps with `barrier=False`, logging/checkpointing on ordinal
 0, and rendezvousing before exit. Its raw memmap reader (1024-byte header,
 `uint16`) and ~338K tok/s result are useful diagnostics, but are not a
 manifest-validated TrainLM run or a comparable LaughLM 1M tok/s measurement.
 
-DP8 validation entry point: `scripts/trainlm_tpu_worker.py` now owns the
-Torch/XLA launch boundary and constructs the TrainLM model, validated shard
-partition, `MpDeviceLoader`, Trainer, optimizer, and scheduler per worker. The
-notebook's recommended launch cell invokes this script; the in-process cells
-remain functional-smoke/debug paths only.
+DP8 validation entry point: `scripts/trainlm_tpu_worker.py` owns launch and a
+real all-reduce probe (ranks 0-7 sum to 36). `trainlm_tpu_data.py` validates
+shards once on the host; `trainlm_tpu_training.py` builds models only inside
+workers. The notebook's in-process training cells have been removed.
+
+Native allocation abort follow-up (2026-09-05):
+
+- [x] Remove parent device ownership and duplicate in-process model allocation.
+- [x] Configure per-rank caches before the first tensor computation.
+- [x] Move HF models to XLA and restore ties before optimizer construction.
+- [x] Prepare labels/masks and exact counts on CPU before asynchronous XLA
+  transfer; keep bounded prefetch and one microbatch per graph execution.
+- [x] Replace dynamic z-loss selection with a fixed-shape masked reduction.
+- [x] Advance WSD by global tokens for equal-count replicated DP batches.
+- [x] Save synchronized slowest-replica timing, both scheduled and supervised
+  token throughput, stage logs, and XLA metrics; expose full-logits loss honestly.
+- [x] Add regression tests and statically validate source/notebook syntax.
+- [ ] Run regression tests in CI (not executed on the local workstation).
+- [ ] On a fresh Kaggle kernel, complete the DP8 probe, two-update smoke, and
+  measured baseline. The supplied `std::bad_alloc` log alone does not identify
+  whether allocation failed during import, runtime startup, or training.
+
+These changes address observed code-path defects; the native abort is not
+marked resolved until the target run passes. Full logits, per-update host
+synchronization, and uncertified attention/kernel performance remain open.
 
 PR3 handoff metadata: title `feat(m5-m7): add PyTorch/XLA compatibility and
 TPU runtime foundation`; branch `milestone/m5-m7-xla-compatibility`.
@@ -252,7 +276,7 @@ TPU runtime foundation`; branch `milestone/m5-m7-xla-compatibility`.
 | [x] | M2 | Universal HF dense-causal CPU path |
 | [~] | M3 | F1-F5 complete; resumable cursor awaiting validation |
 | [~] | M4 | F1-F7 implemented; validation pending |
-| [~] | M5 | F1-F7 XLA backend, DP mesh, cache, shape guard, compile boundary, accumulation selector, diagnostics, and baseline evaluator implemented; validation pending |
+| [~] | M5 | F1-F7 implemented; post-merge DP8 launch, host data preparation, and timing corrections added; Kaggle probe/smoke/baseline pending |
 | [~] | M6 | F1-F4 positional, attention, block-layout, and TPU round-trip coverage implemented; target TPU validation pending |
 | [~] | M7 | F1-F5 distributed resume, async lifecycle, canonical HF export, telemetry, and integrity gates implemented; target TPU validation pending |
 | [ ] | M8 | Reversible capability optimization engine |
@@ -482,6 +506,13 @@ path before optimization adapters exist.
 **Status:** [~] M5-F1-F7 implemented; target TPU validation pending
 
 **Goal:** Establish stable DP8 execution before specialized TPU kernels.
+
+Current validation repair: one coordinator-only notebook and native PJRT
+launcher, host-validated raw shards, host-prepared causal batches, correct
+model/optimizer placement order, and saved synchronized baseline evidence.
+Use `notebooks/TrainLM_TPU_Validation.ipynb` from a fresh Kaggle kernel; retain
+`probe.log`, `smoke.log`, `baseline.log`, `request.json`, and the baseline
+`summary.json`/`xla_metrics.txt`. CI and target hardware gates remain open.
 
 - [~] **M5-F1 — Optional XLA backend**
   `feat(runtime): add pinned PyTorch XLA backend`

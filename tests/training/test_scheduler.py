@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 import torch
 from torch.optim import SGD
 
 from trainlm.config import SchedulerConfig
 from trainlm.training import SchedulerFactory, TokenWSD, create_scheduler
+from trainlm.training import Trainer
 
 
 def _scheduler(**kwargs):
@@ -52,6 +55,19 @@ def test_wsd_requires_monotonic_token_progress_and_restores_state():
     assert restored_optimizer.param_groups[0]["lr"] == pytest.approx(
         optimizer.param_groups[0]["lr"]
     )
+
+
+def test_trainer_advances_wsd_by_global_dp_tokens():
+    optimizer, scheduler = _scheduler(
+        horizon_tokens=1000, warmup_fraction=0.8, stable_fraction=0.2,
+    )
+    trainer = SimpleNamespace(
+        scheduler=scheduler, state=SimpleNamespace(tokens_seen=50),
+        runtime=SimpleNamespace(world_size=8),
+    )
+    Trainer._advance_scheduler(trainer, total_tokens=50)
+    assert scheduler.last_tokens == 400
+    assert optimizer.param_groups[0]["lr"] == pytest.approx(0.05)
 
 
 def test_scheduler_factory_builds_wsd_and_rejects_missing_horizon():

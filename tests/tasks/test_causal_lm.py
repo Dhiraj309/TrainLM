@@ -216,3 +216,51 @@ def test_task_loss_and_gradients_match_direct_hf_execution(
 def test_explicit_model_loss_rejects_incompatible_semantics():
     with pytest.raises(ValueError, match="Model loss requires"):
         CausalLMTask(loss_implementation="model", z_loss=1e-4)
+
+
+def test_host_prepared_batch_preserves_masked_loss_counts_and_gradients(monkeypatch):
+    task = CausalLMTask(z_loss=1e-4, loss_implementation="causal_lm")
+    batch = {
+        "input_ids": torch.tensor([[1, 2, 3, 4]]),
+        "labels": torch.tensor([[1, 2, -100, 4]]),
+        "attention_mask": torch.tensor([[1, 1, 1, 1]]),
+    }
+    initial = torch.randn(1, 4, 8)
+    reference_model = FixedLogitsModel(initial.clone())
+    prepared_model = FixedLogitsModel(initial.clone())
+    reference = task.training_step(reference_model, batch, Runtime())
+    prepared, counts = task.prepare_batch_on_host(batch)
+
+    def unexpected_recount(*args, **kwargs):
+        raise AssertionError("Prepared transfer path must not recount device tokens")
+
+    monkeypatch.setattr(task, "_prepare_task_batch", unexpected_recount)
+    result = task.training_step_prepared(prepared_model, prepared, counts, Runtime())
+    reference.loss.backward()
+    result.loss.backward()
+    assert result.tokens == reference.tokens
+    torch.testing.assert_close(result.loss, reference.loss)
+    torch.testing.assert_close(prepared_model.logits.grad, reference_model.logits.grad)
+
+
+def test_static_z_loss_matches_selected_reference_and_gradient():
+    logits = torch.randn(1, 4, 8, requires_grad=True)
+    reference_logits = logits.detach().clone().requires_grad_(True)
+    labels = torch.tensor([[2, -100, 4]])
+    mask = labels.ne(-100)
+    task = CausalLMTask(z_loss=0.1)
+    loss, _ = task._loss(logits, labels, mask)
+    shifted = reference_logits[:, :-1, :]
+    reference = F.cross_entropy(shifted.reshape(-1, 8), labels.reshape(-1), ignore_index=-100)
+    reference = reference + 0.1 * shifted.logsumexp(-1).square().masked_select(mask).mean()
+    loss.backward()
+    reference.backward()
+    torch.testing.assert_close(loss, reference)
+    torch.testing.assert_close(logits.grad, reference_logits.grad)
+
+
+def test_host_preparation_rejects_non_cpu_tensor_without_materializing():
+    with pytest.raises(ValueError, match="CPU tensors"):
+        CausalLMTask().prepare_batch_on_host({
+            "input_ids": torch.empty(1, 4, dtype=torch.long, device="meta"),
+        })
