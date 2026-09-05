@@ -1213,6 +1213,12 @@ implementation.
 The validation notebook now inserts a model-preflight gate between the
 collective probe and smoke: every rank must construct the selected HF causal
 LM and complete one XLA forward before optimizer/data execution begins.
+The first preflight exposed an HF rotary/SDPA dtype mismatch on TPU
+(Q/K=float32, V=bf16). TrainLM now registers a reversible
+`trainlm_xla_sdpa` adapter through Transformers' public attention and mask
+registries, normalizing Q/K/V to one dtype before delegating to HF SDPA.
+Boolean masks remain boolean; only additive masks are cast to the selected
+attention dtype.
 The notebook also counts successful probe and preflight events in the saved
 logs, so a partial-rank success cannot be mistaken for a valid DP8 gate.
 Its environment cell now repairs a missing editable `trainlm` distribution

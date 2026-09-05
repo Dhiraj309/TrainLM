@@ -125,6 +125,65 @@ def _source(args: argparse.Namespace) -> ModelSourceConfig:
     )
 
 
+def _install_xla_attention(model: torch.nn.Module) -> str | None:
+    """Register a TPU-safe HF SDPA adapter without changing model modules.
+
+    Some HF rotary implementations leave Q/K in fp32 while autocast produces
+    V in bf16. PyTorch SDPA requires a common Q/K/V dtype, so normalize the
+    three tensors immediately before delegating to HF's SDPA implementation.
+    """
+    config = getattr(model, "config", None)
+    if config is None or not hasattr(config, "_attn_implementation"):
+        return None
+    try:
+        from transformers import AttentionInterface, AttentionMaskInterface
+        from transformers.integrations.sdpa_attention import sdpa_attention_forward
+        from transformers.masking_utils import sdpa_mask
+    except ImportError as exc:
+        raise RuntimeError(
+            "This HF model exposes attention dispatch but the Transformers "
+            "attention registry is unavailable."
+        ) from exc
+
+    name = "trainlm_xla_sdpa"
+
+    def trainlm_sdpa(
+        module,
+        query,
+        key,
+        value,
+        attention_mask,
+        **kwargs,
+    ):
+        target_dtype = value.dtype
+        query = query.to(dtype=target_dtype)
+        key = key.to(dtype=target_dtype)
+        if (
+            attention_mask is not None
+            and attention_mask.dtype != torch.bool
+            and attention_mask.dtype != target_dtype
+        ):
+            attention_mask = attention_mask.to(dtype=target_dtype)
+        return sdpa_attention_forward(
+            module,
+            query,
+            key,
+            value,
+            attention_mask,
+            **kwargs,
+        )
+
+    AttentionInterface.register(name, trainlm_sdpa)
+    # HF requires a matching mask formatter for every custom attention name.
+    AttentionMaskInterface.register(name, sdpa_mask)
+    setter = getattr(model, "set_attn_implementation", None)
+    if callable(setter):
+        setter(name)
+    else:
+        config._attn_implementation = name
+    return name
+
+
 def model_preflight(args: argparse.Namespace) -> None:
     """Load and execute one HF forward on every PJRT rank.
 
@@ -143,6 +202,7 @@ def model_preflight(args: argparse.Namespace) -> None:
     model.train()
     if hasattr(model, "tie_weights"):
         model.tie_weights()
+    _install_xla_attention(model)
     input_ids = torch.zeros(
         (args.micro_batch_per_device, args.sequence_length),
         dtype=torch.long,
@@ -225,6 +285,7 @@ def train_fn(index: int, args: argparse.Namespace, shards) -> None:
     model = runtime.prepare_model(loaded.model)
     # Device conversion can replace Parameter objects and tied aliases.
     model.tie_weights()
+    attention_backend = _install_xla_attention(model)
     if getattr(model.config, "tie_word_embeddings", False):
         if model.get_input_embeddings().weight is not model.get_output_embeddings().weight:
             raise RuntimeError("HF tied embedding aliases were lost during device placement.")
@@ -308,7 +369,7 @@ def train_fn(index: int, args: argparse.Namespace, shards) -> None:
     )
     print({"stage": "train_start", "rank": rank,
            "parameters": sum(p.numel() for p in model.parameters()),
-           "attention": getattr(model.config, "_attn_implementation", None),
+           "attention": attention_backend or getattr(model.config, "_attn_implementation", None),
            "loss": "full_logits_causal_ce_z_loss", "max_steps": args.max_steps}, flush=True)
     try:
         state = trainer.train()
