@@ -11,6 +11,10 @@ relying on a model-support or performance claim, read the
 Environment support and exact CPU/TPU profiles are defined by the
 [dependency compatibility policy](docs/DEPENDENCIES.md).
 
+The active implementation handoff, measured TPU baseline, public-API
+boundary, and next commit sequence are tracked in
+[docs/IMPLEMENTATION_CONTEXT.md](docs/IMPLEMENTATION_CONTEXT.md).
+
 Model architecture and training-policy boundaries are defined by the
 [configuration ownership contract](docs/configuration/OWNERSHIP.md).
 
@@ -96,3 +100,35 @@ Exact next-batch restart state follows the
 TrainLM distinguishes models that are **Compatible**, **Optimized**, and
 hardware **Certified**. Generic execution is never presented as TPU performance
 certification.
+
+## Public trainer (M8-F0 in progress)
+
+The intended user workflow is a small Hugging Face-like surface. TrainLM owns
+the backend, validation, optimization planning, logging, and checkpoint
+lifecycle; users do not launch the TPU worker or parse its logs.
+
+```python
+from trainlm import TrainLMTrainer, TrainLMTrainingArguments
+
+trainer = TrainLMTrainer(
+    model="org/model-or-local-path",
+    train_dataset=train_dataset,
+    eval_dataset=eval_dataset,
+    tokenizer=tokenizer,
+    args=TrainLMTrainingArguments(
+        output_dir="runs/example",
+        max_steps=1000,
+        sequence_length=2048,
+        per_device_train_batch_size=2,
+        gradient_accumulation_steps=32,
+        accelerator="auto",
+    ),
+)
+trainer.train()
+```
+
+The first facade slice currently delegates to the portable CPU/CUDA engine.
+TPU coordinator launch, validated packed-binary dataset construction, and
+automatic capability-based kernel planning are being added behind this same
+API. Until those stories are complete, the worker notebook remains a
+validation surface rather than the public UX.
