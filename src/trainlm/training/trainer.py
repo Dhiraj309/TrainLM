@@ -250,8 +250,28 @@ class Trainer:
         self.state.step += 1
         self.state.tokens_seen += result.tokens.supervised_tokens
         self.state.samples_seen += result.tokens.sequences
-        self.state.loss = result.loss.detach().item()
+        self.state.loss = (
+            result.loss.detach().item()
+            if self._should_materialize_loss()
+            else None
+        )
         self.state.learning_rate = self._current_learning_rate()
+
+    def _should_materialize_loss(self) -> bool:
+        """Whether this completed update should synchronize its loss.
+
+        XLA executes asynchronously. Materializing a scalar with ``item()``
+        is a synchronization point, so high-throughput runs should request
+        loss snapshots at the same cadence as host logging rather than every
+        optimizer update.
+        """
+
+        interval = getattr(
+            self.config.trainer,
+            "materialize_loss_every_steps",
+            1,
+        )
+        return self.state.step % interval == 0
 
     def _update_accumulated_state(
         self,
@@ -267,10 +287,13 @@ class Trainer:
         self.state.tokens_seen += total_tokens
         self.state.samples_seen += total_sequences
         self.state.global_batch_size = total_sequences
-        loss_value = loss_numerator.detach().item()
-        self.state.loss = (
-            loss_value / total_tokens if exact_tokens else loss_value
-        )
+        if self._should_materialize_loss():
+            loss_value = loss_numerator.detach().item()
+            self.state.loss = (
+                loss_value / total_tokens if exact_tokens else loss_value
+            )
+        else:
+            self.state.loss = None
         self.state.learning_rate = self._current_learning_rate()
 
     def _train_step(self) -> None:

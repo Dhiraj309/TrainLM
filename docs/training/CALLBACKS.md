@@ -22,7 +22,11 @@ the callback path. Training metrics are emitted at
 `config.logging.log_every_steps`; evaluation metrics are emitted once after
 streaming evaluation completes. Both boundaries are intentionally sparse.
 
-The trainer materializes metrics before dispatching callbacks. Callback code
+The trainer materializes metrics before dispatching callbacks at the configured
+logging cadence. `TrainerConfig.materialize_loss_every_steps` controls the
+loss snapshot cadence independently (and defaults to every step for backward
+compatibility); TPU jobs should align it with `config.logging.log_every_steps`
+to avoid an XLA device-to-host synchronization on every update. Callback code
 must not access model parameters, optimizer tensors, device batches, or force
 backend synchronization. Backend-specific runtimes remain responsible for
 their own compiled reductions and synchronization policy.

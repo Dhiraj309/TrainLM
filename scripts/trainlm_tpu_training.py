@@ -78,7 +78,7 @@ class PrintMetrics(TrainerCallback):
             self.start_time = time.perf_counter()
 
     def on_step_end(self, state, control):
-        if state.loss is None or not math.isfinite(state.loss):
+        if state.loss is not None and not math.isfinite(state.loss):
             raise RuntimeError(f"Non-finite loss on rank {self.runtime.rank}, step {state.step}")
         if state.step == self.args.warmup_steps:
             torch_xla.sync(wait=True)
@@ -335,6 +335,7 @@ def train_fn(index: int, args: argparse.Namespace, shards) -> None:
         trainer=TrainerConfig(
             max_steps=args.max_steps,
             gradient_accumulation_steps=args.gradient_accumulation_steps,
+            materialize_loss_every_steps=args.log_every_steps,
             max_grad_norm=1.0,
             seed=args.seed,
         ),
@@ -373,7 +374,9 @@ def train_fn(index: int, args: argparse.Namespace, shards) -> None:
     print({"stage": "train_start", "rank": rank,
            "parameters": sum(p.numel() for p in model.parameters()),
            "attention": attention_backend or getattr(model.config, "_attn_implementation", None),
-           "loss": "full_logits_causal_ce_z_loss", "max_steps": args.max_steps}, flush=True)
+           "loss": "full_logits_causal_ce_z_loss",
+           "materialize_loss_every_steps": args.log_every_steps,
+           "max_steps": args.max_steps}, flush=True)
     try:
         state = trainer.train()
         torch_xla.sync(wait=True)
@@ -411,7 +414,8 @@ def train_fn(index: int, args: argparse.Namespace, shards) -> None:
         "shards": [s.manifest.to_dict() for s in shards],
         "geometry": {"sequence_length": args.sequence_length,
                      "micro_batch_per_device": args.micro_batch_per_device,
-                     "gradient_accumulation_steps": args.gradient_accumulation_steps},
+                     "gradient_accumulation_steps": args.gradient_accumulation_steps,
+                     "materialize_loss_every_steps": args.log_every_steps},
         "runtime": dict(runtime.diagnostics().values),
         "launcher_cache": str(Path(args.cache_dir) / f"rank-{rank}"),
         "versions": {"torch": torch.__version__, "torch_xla": torch_xla.__version__},
