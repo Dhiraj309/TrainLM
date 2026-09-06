@@ -161,7 +161,7 @@ Branch names describe repository work, not the tool or contributor:
 |---|---|---|---|---:|---|
 | [x] | PR1 | `milestone/m0-m2-foundation` | M0-M2 | 15 | Contracts and generic HF CPU conformance |
 | [~] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 18 | Merged; post-merge data/trainer validation remains tracked by validation gates |
-| [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 16 | Implementation merged; post-merge DP8 launcher/data fixes added; target TPU validation pending |
+| [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 16 | Implementation merged; DP8 launcher/data/attention/optimizer fixes landed; v5e-8 functional rerun ready, performance validation pending |
 | [ ] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11 | Reversible planner and optimized loss |
 | [ ] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | 850K and hard LaughLM parity |
 | [ ] | PR6 | `milestone/m13-m14-family-release` | M13-M14 | 12 | Cross-family certification and V1 release |
@@ -174,10 +174,11 @@ rebase that untouched branch onto the latest merged predecessor.
 
 PR2 (`milestone/m3-m4-data-trainer`) and the PR3 implementation branch
 (`milestone/m5-m7-xla-compatibility`) are merged. PR3 delivered 16 feature
-commits; target TPU validation for M5-M7 remains pending. The framework-
-independent round-trip and precision-safe telemetry corrections passed CI
-before merge. Finish the post-merge launch regression work and target TPU
-smoke before starting `milestone/m8-m9-optimization-core`.
+commits; its DP8 probe, HF model preflight, and data path are validated in
+Kaggle logs, while the optimizer dtype bridge now requires a fresh v5e-8 smoke.
+The framework-independent round-trip and precision-safe telemetry corrections
+passed CI before merge. Complete the two-update v5e-8 smoke and measured
+baseline before starting `milestone/m8-m9-optimization-core`.
 
 Validation checkpoint (2026-09-05): run the staged v5e-8 smoke, M5 baseline,
 M6 compatibility matrix, and M7 reliability checks before starting PR4. Do not
@@ -256,12 +257,15 @@ Native allocation abort follow-up (2026-09-05):
   token throughput, stage logs, and XLA metrics; expose full-logits loss honestly.
 - [x] Add regression tests and statically validate source/notebook syntax.
 - [ ] Run regression tests in CI (not executed on the local workstation).
-- [ ] On a fresh Kaggle kernel, complete the DP8 probe, two-update smoke, and
-  measured baseline. The supplied `std::bad_alloc` log alone does not identify
-  whether allocation failed during import, runtime startup, or training.
+- [x] On a fresh Kaggle kernel, complete the DP8 collective probe and all-rank
+  HF model preflight; rank-sum 36 and logits shape checks passed.
+- [ ] On a fresh Kaggle kernel, complete the two-update smoke and measured
+  baseline with the AdamW XLA dtype bridge. The earlier `std::bad_alloc` log
+  alone did not identify whether allocation failed during import, runtime
+  startup, or training.
 
-These changes address observed code-path defects; the native abort is not
-marked resolved until the target run passes. Full logits, per-update host
+These changes address the observed code-path defects; the optimizer smoke is
+not marked resolved until the target run passes. Full logits, per-update host
 synchronization, and uncertified attention/kernel performance remain open.
 
 PR3 handoff metadata: title `feat(m5-m7): add PyTorch/XLA compatibility and
@@ -276,9 +280,9 @@ TPU runtime foundation`; branch `milestone/m5-m7-xla-compatibility`.
 | [x] | M2 | Universal HF dense-causal CPU path |
 | [~] | M3 | F1-F5 complete; resumable cursor awaiting validation |
 | [~] | M4 | F1-F7 implemented; validation pending |
-| [~] | M5 | F1-F7 implemented; post-merge DP8 launch, host data preparation, and timing corrections added; Kaggle probe/smoke/baseline pending |
-| [~] | M6 | F1-F4 positional, attention, block-layout, and TPU round-trip coverage implemented; target TPU validation pending |
-| [~] | M7 | F1-F5 distributed resume, async lifecycle, canonical HF export, telemetry, and integrity gates implemented; target TPU validation pending |
+| [~] | M5 | F1-F7 implemented; DP8 launch, host data preparation, timing, and expected-world-size gates added; Kaggle probe passed, optimizer smoke pending |
+| [~] | M6 | F1-F4 positional, attention, block-layout, and TPU round-trip coverage implemented; all-rank HF model preflight passed, training validation pending |
+| [~] | M7 | F1-F5 distributed resume, async lifecycle, canonical HF export, telemetry, and integrity gates implemented; v5e-8 smoke and measured baseline pending |
 | [ ] | M8 | Reversible capability optimization engine |
 | [ ] | M9 | Memory-efficient causal loss |
 | [ ] | M10 | TPU attention and 850K gate |
@@ -1242,3 +1246,21 @@ HF/XLA/model/trainer compatibility only; it is not evidence of DP8 scaling or
 LaughLM throughput parity. The notebook names evidence by world size and
 asserts the actual expected rank count, preventing a v5e-1 run from being
 mistaken for the v5e-8 certification.
+
+## v5e-8 rerun readiness (2026-09-06)
+
+The next v5e-8 run is ready for a functional rerun with the current worker,
+HF attention adapter, pinned editable TPU install, and AdamW XLA dtype bridge.
+The previous smoke proved all eight ranks, model preflight, data validation,
+and the first forward/backward path; it stopped at the first optimizer update
+before the dtype bridge was available. The rerun gate is therefore:
+
+1. `probe_passed` on exactly eight ranks and rank-sum 36;
+2. `model_preflight_passed` on exactly eight ranks;
+3. two finalized optimizer updates with finite loss and a written summary;
+4. only after those pass, a measured run for throughput/MFU evidence.
+
+This baseline still uses full-vocabulary logits and host-unrolled GA32, so a
+successful smoke demonstrates correctness and graph formation, not LaughLM
+throughput parity. Chunked logits, device-side accumulation, and fused TPU
+attention remain the performance phase after the smoke is green.
