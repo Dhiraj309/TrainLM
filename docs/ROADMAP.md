@@ -161,8 +161,8 @@ Branch names describe repository work, not the tool or contributor:
 |---|---|---|---|---:|---|
 | [x] | PR1 | `milestone/m0-m2-foundation` | M0-M2 | 15 | Contracts and generic HF CPU conformance |
 | [~] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 18 | Merged; post-merge data/trainer validation remains tracked by validation gates |
-| [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 16 | Implementation merged; DP8 launcher/data/attention/optimizer fixes landed; v5e-8 smoke passed, measured baseline is 319,945 tok/s before sparse-loss fix |
-| [ ] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11 | Reversible planner and optimized loss |
+| [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 16 | Implementation merged; DP8 launcher/data/attention/optimizer fixes landed; v5e-8 baseline is 319,302 tok/s after sparse-loss fix, performance work pending |
+| [~] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11+ | HF-like public trainer facade, reversible planner, and optimized loss |
 | [ ] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | 850K and hard LaughLM parity |
 | [ ] | PR6 | `milestone/m13-m14-family-release` | M13-M14 | 12 | Cross-family certification and V1 release |
 
@@ -174,16 +174,17 @@ rebase that untouched branch onto the latest merged predecessor.
 
 PR2 (`milestone/m3-m4-data-trainer`) and the PR3 implementation branch
 (`milestone/m5-m7-xla-compatibility`) are merged. PR3 delivered 16 feature
-commits; its DP8 probe, HF model preflight, data path, and two-update optimizer
-smoke are validated in Kaggle logs. The measured baseline remains pending.
+commits; its DP8 probe, HF model preflight, data path, two-update optimizer
+smoke, and 100-update measured baseline are validated in Kaggle logs.
 The framework-independent round-trip and precision-safe telemetry corrections
-passed CI before merge. Complete the measured v5e-8 baseline before starting
-`milestone/m8-m9-optimization-core`.
+passed CI before merge. The measured v5e-8 baseline is complete; PR4
+(`milestone/m8-m9-optimization-core`) begins with the public trainer facade
+before wiring optimization passes into the user path.
 
-Validation checkpoint (2026-09-06): run the staged v5e-8 smoke, M5 baseline,
-M6 compatibility matrix, and M7 reliability checks before starting PR4. Do not
-run the full 20B-token workload yet; use the evidence to decide whether the
-generic XLA path is ready for capability transformations.
+Validation checkpoint (2026-09-06): the staged v5e-8 smoke and 100-update
+baseline are complete; M6 cross-family and M7 reliability gates remain
+tracked validation work. Do not run the full 20B-token workload yet; use the
+evidence to decide whether each optimization is ready for TPU measurement.
 
 Validation artifact: `notebooks/TrainLM_TPU_Validation.ipynb` now provides the
 repeatable installation, environment check, HF model acquisition, packed `.bin`
@@ -262,8 +263,10 @@ Native allocation abort follow-up (2026-09-05):
 - [x] On a fresh Kaggle kernel, complete the two-update smoke with the AdamW
   XLA dtype bridge: all eight ranks reached finite step 1/2 and finalized
   `summary.json`.
-- [ ] Complete the measured baseline after the smoke; record steady-state
-  throughput, MFU, HBM, and XLA metrics.
+- [x] Complete the measured baseline after the smoke; record steady-state
+  throughput, token rates, and XLA metrics. MFU/HBM certification remains
+  pending because the current summary does not provide a trustworthy FLOP
+  denominator for every HF family.
 
 Measured baseline evidence (2026-09-06, before sparse-loss materialization):
 The completed 100-step summary reports `99,566,080` measured global supervised
@@ -276,15 +279,29 @@ about `40K`, but it must not be presented as cluster throughput. This is about
 found in this path was
 `loss.item()` after every optimizer update even when logging every 10 steps.
 TrainLM now exposes `trainer.materialize_loss_every_steps` (default `1` for
-compatibility) and the TPU worker aligns it with `--log-every-steps`; rerun the
-measured baseline before attributing the remaining gap to kernels or model
-structure.
+compatibility) and the TPU worker aligns it with `--log-every-steps`.
+
+Post-fix rerun (2026-09-06): with `materialize_loss_every_steps: 10` active on
+all ranks, the measured summary reported `99,566,080` global supervised tokens
+over `311.824` seconds: `319,302` global supervised tok/s and `319,458`
+scheduled tok/s. This is within `0.20%` of the pre-fix `319,945` result, so
+sparse loss materialization is correct but not a material throughput lever.
+The remaining gap is dominated by device-side work and graph structure, not
+the per-update host loss readback.
+
+Decision after baseline (2026-09-06): the functional and measured v5e-8 run
+completed with `all_workers_finished` and a finalized summary. Stop/release
+the TPU environment after preserving `request.json`, probe/model-preflight/
+smoke/baseline logs, `baseline/summary.json`, and `baseline/xla_metrics.txt`.
+Do not spend TPU quota on another unchanged baseline; proceed with PR4's
+public HF-like facade, then run each M9 optimization as an HLO-backed A/B
+benchmark against this recorded 319K baseline.
 
 The observed code-path defects are resolved for the validated 135M Llama
 geometry. Full logits, cross-family coverage, and uncertified
-attention/kernel performance remain open. Sparse loss materialization now
-addresses the avoidable per-update host synchronization; its TPU impact still
-requires a fresh measured run.
+attention/kernel performance remain open. Sparse loss materialization is
+implemented and measured; it changed throughput by less than 0.20%, so the
+next gains must come from graph, memory, and kernel work.
 
 PR3 handoff metadata: title `feat(m5-m7): add PyTorch/XLA compatibility and
 TPU runtime foundation`; branch `milestone/m5-m7-xla-compatibility`.
@@ -300,8 +317,8 @@ TPU runtime foundation`; branch `milestone/m5-m7-xla-compatibility`.
 | [~] | M4 | F1-F7 implemented; validation pending |
 | [x] | M5 | F1-F7 implemented; DP8 launch, host data preparation, timing, expected-world-size gates, and two-update v5e-8 smoke passed |
 | [~] | M6 | F1-F4 positional, attention, block-layout, and TPU round-trip coverage implemented; Llama preflight passed, cross-family validation pending |
-| [~] | M7 | F1-F5 distributed resume, async lifecycle, canonical HF export, telemetry, and integrity gates implemented; v5e-8 smoke passed, measured baseline pending |
-| [ ] | M8 | Reversible capability optimization engine |
+| [~] | M7 | F1-F5 distributed resume, async lifecycle, canonical HF export, telemetry, and integrity gates implemented; v5e-8 smoke and measured baseline passed, reliability certification pending |
+| [~] | M8 | HF-like public trainer facade plus reversible capability optimization engine |
 | [ ] | M9 | Memory-efficient causal loss |
 | [ ] | M10 | TPU attention and 850K gate |
 | [ ] | M11 | Projection, optimizer, remat, and HLO tuning |
@@ -692,9 +709,21 @@ trainer itself.
 
 ## M8 — Capability planner and reversible optimization
 
-**Status:** [ ] Not started
+**Status:** [~] In progress — the public facade first slice is implemented; TPU coordinator and optimization planner remain.
 
-**Goal:** Transform loaded HF models safely without family logic in core.
+**Goal:** Provide a minimal Hugging Face-like trainer surface while transforming
+loaded HF models safely without family logic in core.
+
+- [~] **M8-F0 — Public TrainLM trainer facade**
+  `feat(api): add HF-like TrainLMTrainer and training arguments`
+  Expose `model`, `args`, `train_dataset`, `eval_dataset`,
+  `processing_class`/tokenizer, callbacks, `train`, `evaluate`, save methods,
+  and `explain`. Hide worker launch, PJRT setup, probes, cache, manifests,
+  preflight, and optimization internals; keep a CLI/config entry point aligned
+  with the same API.
+  **Acceptance:** A concise HF-style example trains on CPU and reaches the TPU
+  coordinator without users constructing subprocess commands or parsing stage
+  logs; raw validation remains an internal implementation detail.
 
 - [ ] **M8-F1 — Structural inspector**
   `feat(optimization): inspect dense causal LM capabilities`
@@ -1281,3 +1310,139 @@ This baseline still uses full-vocabulary logits and host-unrolled GA32, so a
 successful smoke demonstrates correctness and graph formation, not LaughLM
 throughput parity. Chunked logits, device-side accumulation, and fused TPU
 attention remain the performance phase before any parity claim.
+
+## Next validation after sparse-loss fix (2026-09-06)
+
+Run the identical 135M Llama geometry on a fresh v5e-8 session with the
+current source and pinned editable install. First repeat the two-update smoke
+(`--log-every-steps 1`) to guard the optimizer/lifecycle path, then repeat the
+100-update measured run (`--log-every-steps 10`). Confirm every `train_start`
+record reports `materialize_loss_every_steps: 10` for the measured run and use
+`summary.json`'s slowest-replica throughput as the comparison value. The first
+comparison target is whether sparse materialization improves on the prior
+`319,945` global supervised tok/s; it is not yet a parity claim. Preserve the
+baseline log, summary, and `xla_metrics.txt` for the subsequent chunked-loss
+and fused-kernel work.
+
+## Optimization stack for the 319K baseline
+
+The next implementation work is optimization of the existing dense-AR path,
+not additional model-family features. Every pass is selected from inspected
+HF capabilities, backend/dtype/shape/mask evidence, and reversible state-dict
+maps; unsupported models retain the generic path or fail in strict mode.
+
+1. **Memory-efficient loss (highest priority):** project hidden states to the
+   vocabulary in fixed chunks, accumulate FP32 cross-entropy and z-loss, and
+   rematerialize chunks during backward. This removes the full `[B,S,V]`
+   logits tensor while preserving shift, ignore-index, tied/untied heads, and
+   HF export semantics.
+2. **Compiled accumulation:** replace host-unrolled GA32 with a supported
+   device/XLA-loop or complete compiled update, keeping static shapes and
+   token-normalized gradients. Select only after compile/HBM evidence.
+3. **TPU attention providers:** retain the HF AttentionInterface contract but
+   add a TPU-native provider (Pallas/custom call where supported), with causal
+   masks, MHA/GQA/MQA, sliding-window/ALiBi semantics, and no silent KV repeat.
+4. **Projection/block fusion:** reversible QKV packing, gated-MLP packing,
+   and native/fused RMSNorm, RoPE, residual, and SwiGLU paths where HLO proves
+   a gain. Preserve aliases and canonical HF state-dict conversion.
+5. **Optimizer and rematerialization tuning:** replace the correctness-only
+   AdamW dtype bridge with an XLA-efficient state/update path; benchmark BF16
+   first moment, FP32 second moment, clipping, decay, and block/attention/MLP
+   rematerialization.
+6. **Input and cache tuning:** benchmark mmap-to-device copies, worker and
+   prefetch geometry, persistent compilation cache, and static batch layouts;
+   keep this behind the compute optimizations because the current gap is
+   primarily device-side.
+
+The order is intentional: prove chunked loss and compiled accumulation first,
+then add attention and block fusion. Each pass requires semantic parity, HLO
+evidence, HBM, and a matched v5e-8 throughput comparison before becoming the
+default.
+
+## Performance forecast (non-binding)
+
+The measured starting point is `319K` global supervised tok/s. Chunked loss
+alone should primarily reduce HBM and enable better geometry; it does not
+remove vocabulary projection FLOPs, so a fixed-geometry speedup is expected to
+be modest (roughly 0-25%). TPU-native attention, compiled accumulation, and
+projection/block fusion are the potential large gains, but their effects are
+not additive and depend on HLO fusion, layouts, and provider support.
+
+| Optimization state | Planning range | Meaning |
+|---|---:|---|
+| Current generic HF/XLA path | `~319K` | Observed baseline |
+| Chunked loss + stable graph | `320-420K` | HBM/graph improvement; speed uncertain |
+| Add compiled accumulation and TPU attention | `450-700K` | Provider-dependent intermediate target |
+| Add projection/block fusion and tuning | `650-900K` | Strong optimized outcome |
+| LaughLM-class parity | `>=912.6K` | Must be measured and repeated; not guaranteed |
+
+The `650-900K` range is engineering planning, not a promise. Reaching the
+hard `>=912.6K` or preferred `>=963.3K` thresholds requires critical providers
+to be active without fallback and three matched TPU runs to confirm the result.
+
+## Public UX gate before optimization release
+
+The notebook and `scripts/trainlm_tpu_worker.py` are internal validation
+surfaces only. They must not be the documented user workflow. Before calling
+the optimized path usable, expose one HF-Trainer-like `TrainLMTrainer` API and
+one optional `trainlm train` CLI. Users provide only the model source (or HF
+model), tokenizer/data source, output directory, and essential training
+geometry; TrainLM owns worker launch, PJRT environment, rank probe, model
+preflight, capability planning, transforms, cache, data validation, logging,
+checkpointing, and export.
+
+The public API must support both a concise path and an advanced escape hatch:
+
+```python
+trainer = TrainLMTrainer(
+    model="org/model-or-local-path",
+    train_dataset=PackedBinDataset.from_hub(
+        repo_id="org/dataset", pattern="train/*.bin", tokenizer=tokenizer
+    ),
+    tokenizer=tokenizer,
+    args=TrainLMTrainingArguments(
+        output_dir="runs/example",
+        max_steps=1000,
+        sequence_length=2048,
+        per_device_train_batch_size=2,
+        gradient_accumulation_steps=32,
+        accelerator="auto",
+    ),
+)
+trainer.train()
+```
+
+An equivalent CLI/config path is required for non-notebook jobs. Advanced
+users may supply explicit manifests, provider policies, cache paths, or
+optimization requests, but validation internals and raw worker arguments stay
+private. A TPU model source must be reconstructible inside each worker; live
+model objects remain supported for local backends and are serialized or
+recreated through an explicit model factory for TPU.
+
+### HF-like surface contract
+
+`TrainLMTrainer` is TrainLM's own trainer, not a wrapper around
+`transformers.Trainer`, but its common surface should be recognizable:
+
+- constructor fields: `model`, `args`, `train_dataset`, `eval_dataset`,
+  `processing_class`/tokenizer, `data_collator`, and callbacks;
+- lifecycle: `train(resume_from_checkpoint=...)`, `evaluate()`,
+  `save_model()`, `save_state()`, and `log_metrics()`;
+- familiar arguments: `output_dir`, `max_steps`, `per_device_*_batch_size`,
+  `gradient_accumulation_steps`, `learning_rate`, `weight_decay`, `bf16`,
+  `logging_steps`, `save_steps`, `eval_steps`, and `report_to`;
+- standard HF model outputs, tokenizer conventions, Hub revisions, and
+  `save_pretrained` export;
+- automatic accelerator/world-size/dtype/cache selection with an explicit
+  `trainer.explain()` report for every optimization or fallback decision.
+
+TrainLM-specific arguments are additive: packed-binary source specifications,
+token-normalized loss, optimizer-state precision, strict optimization policy,
+and TPU diagnostics. A compatibility adapter may accept
+`transformers.TrainingArguments`, but TrainLM owns execution and does not
+promise every HF Trainer feature or callback side effect on TPU.
+
+For cross-session implementation continuity, see
+[`docs/IMPLEMENTATION_CONTEXT.md`](IMPLEMENTATION_CONTEXT.md). It records the
+current measured baseline, public-API boundary, explicit non-goals, and the
+ordered next stories for this PR branch.
