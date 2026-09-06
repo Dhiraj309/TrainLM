@@ -26,6 +26,11 @@ class TrainerConfig:
 
     gradient_accumulation_steps: int = 1
 
+    # Host materialization is intentionally configurable because ``.item()``
+    # on an XLA loss forces a device synchronization. Keep the compatibility
+    # default at every step; TPU jobs can align this with logging cadence.
+    materialize_loss_every_steps: int = 1
+
     max_grad_norm: float = 1.0
 
     seed: int = 42
@@ -37,6 +42,12 @@ class TrainerConfig:
             or self.gradient_accumulation_steps < 1
         ):
             raise ValueError("gradient_accumulation_steps must be positive.")
+        if (
+            isinstance(self.materialize_loss_every_steps, bool)
+            or not isinstance(self.materialize_loss_every_steps, int)
+            or self.materialize_loss_every_steps < 1
+        ):
+            raise ValueError("materialize_loss_every_steps must be positive.")
         if (
             isinstance(self.max_grad_norm, bool)
             or not isinstance(self.max_grad_norm, (int, float))
