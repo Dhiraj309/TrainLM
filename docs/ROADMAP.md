@@ -711,8 +711,9 @@ trainer itself.
 
 **Status:** [~] In progress — the coordinator, packed-data adapter, local
 lifecycle facade, TPU metric/state bridge, structural inspector, and guarded
-adapter registry, pure provider planner, and transactional transform registry
-are implemented; TPU checkpoint parity and state-dict conversion remain.
+adapter registry, pure provider planner, transactional transform registry, and
+reversible state-dict conversion are implemented; TPU checkpoint parity and
+the complete explain report remain.
 
 **Goal:** Provide a minimal Hugging Face-like trainer surface while transforming
 loaded HF models safely without family logic in core.
@@ -773,11 +774,15 @@ loaded HF models safely without family logic in core.
   all earlier transforms in reverse order. Undeclared alias changes, missing
   handlers, blocked plans, and downstream context failures cannot commit.
 
-- [ ] **M8-F5 — State-dict conversion**
+- [x] **M8-F5 — State-dict conversion**
   `feat(optimization): add reversible parameter layout mappings`
   Pack/split maps, aliases, dtype/shape validation, transformed resume, and
   canonical import/export.
   **Acceptance:** Train/save/reload matches canonical HF state.
+  Versioned layout manifests now validate and reversibly concatenate/split
+  parameter groups with exact key, shape, dtype, device, collision, and alias
+  checks. The converter preserves unrelated state and restores declared tied
+  keys as shared tensor objects for canonical export.
 
 - [ ] **M8-F6 — Explain report**
   `feat(optimization): expose model optimization explanation`

@@ -33,6 +33,7 @@ from .transforms import (
     TransformHandler,
     TransformTransaction,
 )
+from .state_dict import ParameterLayoutMapping, StateDictLayoutConverter
 
 __all__ = [
     "CapabilityFact",
@@ -57,6 +58,8 @@ __all__ = [
     "ProviderDecision",
     "ProviderSpec",
     "PackageVersionGuard",
+    "ParameterLayoutMapping",
+    "StateDictLayoutConverter",
     "TransformApplicationError",
     "TransformHandler",
     "TransformTransaction",

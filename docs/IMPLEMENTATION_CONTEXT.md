@@ -122,6 +122,9 @@ matched runs; planning ranges are not guarantees.
   mutation, validates inverse mappings and parameter aliases, and reverses the
   failing transform plus all prior transforms when application or downstream
   optimizer construction fails.
+- a versioned state-dict layout converter for transformed resume and canonical
+  Hugging Face export, with reversible concatenation/splitting plus strict key,
+  shape, dtype, device, collision, and tied-alias validation.
 
 This slice is intentionally not complete. `accelerator="tpu"` now reaches the
 private single-VM coordinator for reconstructible pretrained HF model sources
@@ -138,8 +141,9 @@ this file in every turn:
 
 1. **M8-F0 TPU checkpoint parity:** carry safe resume and save/evaluation
    cadence through worker coordination.
-2. **M8-F5 state-dict conversion:** add validated reversible parameter layout
-   mappings for transformed resume and canonical Hugging Face export.
+2. **M8-F6 explain report:** combine capabilities, adapter/provider decisions,
+   transforms, fallbacks, backend evidence, and certification state in human
+   and JSON output.
 3. **M9 loss path:** add chunked/rematerialized causal loss and benchmark it
    against the measured 319K baseline before enabling it by default.
 4. **M10+ kernels:** integrate TPU attention/projection/norm/optimizer/remat
