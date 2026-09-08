@@ -27,6 +27,12 @@ from .adapters import (
     PackageVersionGuard,
 )
 from .planner import OperationRequest, OptimizationPlanner, ProviderSpec
+from .transforms import (
+    ModelTransformRegistry,
+    TransformApplicationError,
+    TransformHandler,
+    TransformTransaction,
+)
 
 __all__ = [
     "CapabilityFact",
@@ -41,6 +47,7 @@ __all__ = [
     "ModelCapabilities",
     "ModelAdapterRegistry",
     "ModelTransformation",
+    "ModelTransformRegistry",
     "OptimizationPolicy",
     "OptimizationPlanner",
     "OperationRequest",
@@ -50,6 +57,9 @@ __all__ = [
     "ProviderDecision",
     "ProviderSpec",
     "PackageVersionGuard",
+    "TransformApplicationError",
+    "TransformHandler",
+    "TransformTransaction",
     "create_optimizer",
     "inspect_dense_causal_lm",
 ]

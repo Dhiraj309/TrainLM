@@ -114,6 +114,10 @@ matched runs; planning ranges are not guarantees.
   precision, inspected component kind, runtime requirements, and explicit
   request; it records portable fallbacks and blocks required unsupported paths
   before any model mutation.
+- a transactional transform registry that captures rollback state before each
+  mutation, validates inverse mappings and parameter aliases, and reverses the
+  failing transform plus all prior transforms when application or downstream
+  optimizer construction fails.
 
 This slice is intentionally not complete. `accelerator="tpu"` now reaches the
 private single-VM coordinator for reconstructible pretrained HF model sources
@@ -130,8 +134,8 @@ this file in every turn:
 
 1. **M8-F0 TPU checkpoint parity:** carry safe resume and save/evaluation
    cadence through worker coordination.
-2. **M8-F4 transactional transforms:** apply a completed plan before optimizer
-   construction, preserve aliases, and roll back every partial mutation.
+2. **M8-F5 state-dict conversion:** add validated reversible parameter layout
+   mappings for transformed resume and canonical Hugging Face export.
 3. **M9 loss path:** add chunked/rematerialized causal loss and benchmark it
    against the measured 319K baseline before enabling it by default.
 4. **M10+ kernels:** integrate TPU attention/projection/norm/optimizer/remat

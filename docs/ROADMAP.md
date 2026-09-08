@@ -711,8 +711,8 @@ trainer itself.
 
 **Status:** [~] In progress — the coordinator, packed-data adapter, local
 lifecycle facade, TPU metric/state bridge, structural inspector, and guarded
-adapter registry and pure provider planner are implemented; TPU checkpoint
-parity and transactional application remain.
+adapter registry, pure provider planner, and transactional transform registry
+are implemented; TPU checkpoint parity and state-dict conversion remain.
 
 **Goal:** Provide a minimal Hugging Face-like trainer surface while transforming
 loaded HF models safely without family logic in core.
@@ -763,11 +763,15 @@ loaded HF models safely without family logic in core.
   planner deterministically handles disabled, auto, required, and explicit
   provider requests, producing a blocked plan before mutation when necessary.
 
-- [ ] **M8-F4 — Transactional transforms**
+- [x] **M8-F4 — Transactional transforms**
   `feat(optimization): apply validated reversible model transforms`
   Plan before mutation, transform before optimizer, preserve aliases, and roll
   back failure without global patches or hot-path hooks.
   **Acceptance:** Injected failure leaves the original model usable.
+  Transform handlers capture rollback state before mutation, validate declared
+  inverse IDs, apply plans in order, and roll back the failing transform plus
+  all earlier transforms in reverse order. Undeclared alias changes, missing
+  handlers, blocked plans, and downstream context failures cannot commit.
 
 - [ ] **M8-F5 — State-dict conversion**
   `feat(optimization): add reversible parameter layout mappings`
