@@ -97,10 +97,6 @@ matched runs; planning ranges are not guarantees.
   supported public training arguments in the worker request, and returns a
   structured coordinator summary.
 
-The package root also exports `greet()`, a lightweight installation-smoke
-helper that returns a normalized, friendly greeting without initializing a
-model or runtime.
-
 This slice is intentionally not complete. `accelerator="tpu"` now reaches the
 private single-VM coordinator for reconstructible pretrained HF model sources
 and a local validated-manifest directory. Packed-binary dataset constructors,
