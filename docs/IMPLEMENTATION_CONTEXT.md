@@ -55,8 +55,8 @@ layout, and log parsing are internal implementation details. An equivalent
 ## Current repository state
 
 - PR1 and PR2 are merged.
-- PR3 (`milestone/m5-m7-xla-compatibility`) is merged after its rebase and CI
-  fixes.
+- PR3 (`milestone/m5-m7-xla-compatibility`) is merge-ready after mainline
+  integration and CI fixes; one approving write-access review is still required.
 - PR4 is the active implementation branch: `milestone/m8-m9-optimization-core`.
 - PR3's branch is integrated with the current `main` history so its pull
   request can merge without discarding either line of development; remote
