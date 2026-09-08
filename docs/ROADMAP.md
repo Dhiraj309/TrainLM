@@ -172,10 +172,11 @@ rebase that untouched branch onto the latest merged predecessor.
 
 ### Current branch handoff
 
-PR2 (`milestone/m3-m4-data-trainer`) and the PR3 implementation branch
-(`milestone/m5-m7-xla-compatibility`) are merged. PR3 delivered 16 feature
-commits; its DP8 probe, HF model preflight, data path, two-update optimizer
-smoke, and 100-update measured baseline are validated in Kaggle logs.
+PR2 (`milestone/m3-m4-data-trainer`) is merged. The PR3 implementation branch
+(`milestone/m5-m7-xla-compatibility`) is complete and ready to merge. PR3
+delivered 16 feature commits; its DP8 probe, HF model preflight, data path,
+two-update optimizer smoke, and 100-update measured baseline are validated in
+Kaggle logs.
 The framework-independent round-trip and precision-safe telemetry corrections
 passed CI before merge. The measured v5e-8 baseline is complete; PR4
 (`milestone/m8-m9-optimization-core`) begins with the public trainer facade
