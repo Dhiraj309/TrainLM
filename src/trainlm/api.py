@@ -16,11 +16,12 @@ import torch
 from torch import nn
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
-from torch.utils.data import DataLoader, Dataset, IterableDataset
+from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler
 
 from trainlm.config import (
     CheckpointConfig,
     DatasetConfig,
+    EvaluationConfig,
     LoggingConfig,
     LossConfig,
     ModelSourceConfig,
@@ -37,7 +38,13 @@ from trainlm.optimization import create_optimizer
 from trainlm.runtime import Runtime
 from trainlm.tasks import CausalLMTask
 from trainlm.training import Trainer as EngineTrainer
-from trainlm.training import TrainerCallback, create_scheduler
+from trainlm.training import (
+    TrainerCallback,
+    TrainerControl,
+    TrainerPhase,
+    TrainerState,
+    create_scheduler,
+)
 
 if TYPE_CHECKING:
     from trainlm.model import LoadedCausalLM
@@ -164,9 +171,13 @@ class TrainLMTrainer:
         self.eval_dataset = eval_dataset
         self.data_collator = data_collator or _default_collator
         self.callbacks = tuple(callbacks or ())
+        if self.args.eval_steps is not None and eval_dataset is None:
+            raise ValueError("eval_steps requires eval_dataset.")
         self._model_source: ModelSourceConfig | None = None
         self.loaded: LoadedCausalLM | None = None
         self._last_metrics: dict[str, Any] = {}
+        self._train_loader_generator: torch.Generator | None = None
+        self._train_loader_generator_initial_state: torch.Tensor | None = None
         self._tpu_coordinator = None
         if self.args.accelerator == "tpu":
             if any(value is not None for value in (optimizer, scheduler, runtime)):
@@ -210,13 +221,21 @@ class TrainLMTrainer:
             optimizer=self.optimizer,
             scheduler=self.scheduler,
             task=CausalLMTask(loss_implementation="causal_lm"),
-            train_dataloader=self._make_loader(train_dataset, self.args.per_device_train_batch_size),
+            train_dataloader=self._make_loader(
+                train_dataset, self.args.per_device_train_batch_size, is_train=True
+            ),
             eval_dataloader=(
-                self._make_loader(eval_dataset, self.args.per_device_eval_batch_size)
+                self._make_loader(
+                    eval_dataset,
+                    self.args.per_device_eval_batch_size,
+                    is_train=False,
+                )
                 if eval_dataset is not None
                 else None
             ),
             callbacks=self.callbacks,
+            checkpoint_saver=self._save_training_checkpoint,
+            checkpoint_loader=self._load_training_checkpoint,
         )
 
     def _resolve_model(self, model: nn.Module | str | Path | ModelSourceConfig) -> nn.Module:
@@ -264,7 +283,13 @@ class TrainLMTrainer:
         precision = "bf16" if self.args.bf16 else "fp16" if self.args.fp16 else "fp32"
         return Runtime(device=accelerator, precision=precision)
 
-    def _make_loader(self, source: Dataset | DataLoader | Any, batch_size: int) -> DataLoader:
+    def _make_loader(
+        self,
+        source: Dataset | DataLoader | Any,
+        batch_size: int,
+        *,
+        is_train: bool,
+    ) -> DataLoader:
         if isinstance(source, DataLoader):
             return source
         if not isinstance(source, (Dataset, IterableDataset)) and not (
@@ -277,6 +302,12 @@ class TrainLMTrainer:
         is_iterable = isinstance(source, IterableDataset) or (
             hasattr(source, "__iter__") and not hasattr(source, "__getitem__")
         )
+        generator = None
+        if is_train and not is_iterable:
+            generator = torch.Generator()
+            generator.manual_seed(self.args.seed)
+            self._train_loader_generator = generator
+            self._train_loader_generator_initial_state = generator.get_state().clone()
         return DataLoader(
             source,
             batch_size=batch_size,
@@ -284,6 +315,7 @@ class TrainLMTrainer:
             num_workers=self.args.dataloader_num_workers,
             pin_memory=self.args.dataloader_pin_memory,
             collate_fn=self.data_collator,
+            generator=generator,
         )
 
     def _make_optimizer(self) -> Optimizer:
@@ -347,26 +379,121 @@ class TrainLMTrainer:
                 max_grad_norm=1.0,
                 seed=self.args.seed,
             ),
-            checkpoint=CheckpointConfig(output_dir=Path(self.args.output_dir)),
+            checkpoint=CheckpointConfig(
+                output_dir=Path(self.args.output_dir),
+                save_training_every_steps=self.args.save_steps,
+            ),
             logging=LoggingConfig(
                 log_every_steps=self.args.logging_steps,
                 output_dir=Path(self.args.output_dir),
             ),
             monitoring=MonitoringConfig(enabled=False),
+            evaluation=EvaluationConfig(
+                enabled=self.eval_dataset is not None,
+                eval_every_steps=self.args.eval_steps,
+            ),
         )
 
     def train(self, *, resume_from_checkpoint: str | Path | None = None):
         """Run training and return the TrainLM trainer state."""
 
-        if resume_from_checkpoint is not None:
-            raise NotImplementedError(
-                "Exact resume wiring is provided by the checkpoint service."
-            )
         if self._tpu_coordinator is not None:
-            return self._tpu_coordinator.run(self._make_tpu_request())
+            if resume_from_checkpoint is not None:
+                raise NotImplementedError(
+                    "TPU checkpoint resume will be added after worker checkpoint wiring."
+                )
+            return self._consume_tpu_result(
+                self._tpu_coordinator.run(self._make_tpu_request())
+            )
         if self.engine is None:
             raise RuntimeError("Trainer engine was not initialized.")
+        if resume_from_checkpoint is not None:
+            self.engine.load_checkpoint(Path(resume_from_checkpoint))
         return self.engine.train()
+
+    def _consume_tpu_result(self, result: dict[str, Any]) -> dict[str, Any]:
+        """Deliver worker artifacts through public state and callback contracts."""
+
+        worker = result.get("worker_summary") or {}
+        state = TrainerState(
+            step=int(worker.get("steps", 0)),
+            micro_step=int(worker.get("micro_steps", 0)),
+            tokens_seen=int(worker.get("tokens_seen_rank0", 0)),
+            samples_seen=int(worker.get("samples_seen_rank0", 0)),
+            learning_rate=float(worker.get("learning_rate", 0.0)),
+            loss=worker.get("last_loss_rank0"),
+            phase=TrainerPhase.FINALIZED,
+        )
+        control = TrainerControl()
+        for metrics in result.get("metrics", ()):
+            self._last_metrics = dict(metrics)
+            for callback in self.callbacks:
+                callback.on_metrics(state, control, metrics)
+        return {**result, "trainer_state": asdict(state)}
+
+    def _save_training_checkpoint(self, engine: EngineTrainer, destination: object | None):
+        root = Path(self.args.output_dir)
+        path = root / str(destination or f"checkpoint-{engine.state.step}")
+        path.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "schema_version": 1,
+            "model": engine.model.state_dict(),
+            "optimizer": engine.optimizer.state_dict(),
+            "scheduler": engine.scheduler.state_dict(),
+            "runtime": dict(engine.runtime.state_dict()),
+            "trainer": {
+                key: value
+                for key, value in asdict(engine.state).items()
+                if key not in {"phase", "is_training", "should_stop", "failure"}
+            },
+            "cpu_rng_state": torch.get_rng_state(),
+            "cuda_rng_state": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
+            "loader_generator_initial_state": self._train_loader_generator_initial_state,
+        }
+        temporary = path / "trainer_state.pt.tmp"
+        torch.save(payload, temporary)
+        temporary.replace(path / "trainer_state.pt")
+        return path
+
+    def _load_training_checkpoint(self, engine: EngineTrainer, source: object):
+        path = Path(source)
+        if path.is_dir():
+            path = path / "trainer_state.pt"
+        if not path.is_file():
+            raise FileNotFoundError(f"Training checkpoint does not exist: {path}")
+        payload = torch.load(path, map_location="cpu", weights_only=False)
+        if payload.get("schema_version") != 1:
+            raise ValueError("Unsupported TrainLM training checkpoint schema.")
+        engine.model.load_state_dict(payload["model"])
+        engine.optimizer.load_state_dict(payload["optimizer"])
+        engine.scheduler.load_state_dict(payload["scheduler"])
+        engine.runtime.load_state_dict(payload["runtime"])
+        for key, value in payload["trainer"].items():
+            setattr(engine.state, key, value)
+        initial_state = payload.get("loader_generator_initial_state")
+        sampler = getattr(engine.train_dataloader, "sampler", None)
+        if isinstance(sampler, RandomSampler) and initial_state is None:
+            raise ValueError(
+                "Exact resume requires a TrainLM-owned deterministic train loader."
+            )
+        if self._train_loader_generator is not None and initial_state is not None:
+            self._train_loader_generator.set_state(initial_state)
+        iterator = iter(engine.train_dataloader)
+        remaining = engine.state.micro_step
+        while remaining:
+            try:
+                next(iterator)
+                remaining -= 1
+            except StopIteration:
+                iterator = iter(engine.train_dataloader)
+        engine._train_iterator = iterator
+        # Iterator reconstruction may execute dataset code. Restore training
+        # RNG only after positioning so the next model operation sees the
+        # exact checkpoint state.
+        torch.set_rng_state(payload["cpu_rng_state"])
+        if torch.cuda.is_available() and payload["cuda_rng_state"] is not None:
+            torch.cuda.set_rng_state_all(payload["cuda_rng_state"])
+        return path
 
     def _make_tpu_request(self):
         from trainlm._tpu_coordinator import _TPURunRequest
@@ -469,20 +596,27 @@ class TrainLMTrainer:
                 ),
             }
         if self.loaded is None:
+            from trainlm.optimization import inspect_dense_causal_lm
+
             return {
                 "support_level": "compatible",
                 "selected_path": "external_model",
                 "model_class": type(self.model).__name__,
                 "backend": self.runtime.name,
+                "capabilities": inspect_dense_causal_lm(self.model).to_dict(),
             }
         explanation = self.loaded
         from trainlm.model import explain_huggingface_compatibility
+        from trainlm.optimization import inspect_dense_causal_lm
 
         return {
             "model": explanation.metadata.to_dict(),
             "compatibility": explain_huggingface_compatibility(explanation).to_dict(),
             "backend": self.runtime.name,
             "precision": self.runtime.precision,
+            "capabilities": inspect_dense_causal_lm(
+                self.model, source_provider="huggingface"
+            ).to_dict(),
         }
 
 

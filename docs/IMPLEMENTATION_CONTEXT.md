@@ -98,32 +98,36 @@ matched runs; planning ranges are not guarantees.
   structured coordinator summary;
 - public `PackedBinDataset.from_directory()` and `.from_hub()` constructors
   that validate manifests and payload integrity eagerly, yield fixed-length
-  causal-LM examples, and apply deterministic rank partitioning.
+  causal-LM examples, and apply deterministic rank partitioning;
+- local CPU/CUDA save and evaluation cadence, callback metric delivery, and
+  versioned model/optimizer/scheduler/runtime/RNG/trainer-state restoration;
+- structured TPU metric artifacts that the coordinator validates and delivers
+  to public callbacks together with a normalized trainer-state snapshot;
+- a family-neutral structural inspector used by `trainer.explain()` that
+  reports only config/module/alias/signature-backed facts and leaves residual
+  or custom semantics explicitly unknown.
 
 This slice is intentionally not complete. `accelerator="tpu"` now reaches the
 private single-VM coordinator for reconstructible pretrained HF model sources
-and a validated `PackedBinDataset`. Checkpoint resume, callback metric
-forwarding, and capability-based
-optimization planning are next stories. Do not mark M8-F0 complete until the
-public packed-data and lifecycle paths are complete and TPU behavior is
-validated on target hardware.
+and a validated `PackedBinDataset`. Local lifecycle cadence and resume now use
+the backend-neutral engine hooks. TPU callback metrics and return state no
+longer require stage-log parsing. TPU worker checkpoint/evaluation parity and
+capability-based optimization planning are next stories. Do not mark M8-F0
+complete until TPU lifecycle behavior is validated on target hardware.
 
 ## Required next sequence
 
 Implement one small commit/story at a time and update `docs/ROADMAP.md` and
 this file in every turn:
 
-1. **M8-F0 lifecycle parity:** implement safe `resume_from_checkpoint`, save
-   and eval cadence, callback metric delivery, and `train()` return state.
-2. **M8-F1 inspector:** inspect model signatures/config/forward outputs and
-   produce an explicit capability report; unknown semantics must be marked
-   unknown rather than guessed from class names.
-3. **M8-F2/F3 planner:** add version-guarded adapter registry and a pure,
+1. **M8-F0 TPU checkpoint parity:** carry safe resume and save/evaluation
+   cadence through worker coordination.
+2. **M8-F2/F3 planner:** add version-guarded adapter registry and a pure,
    reversible optimization plan. Every transform needs an eligibility reason,
    fallback reason, and rollback path.
-4. **M9 loss path:** add chunked/rematerialized causal loss and benchmark it
+3. **M9 loss path:** add chunked/rematerialized causal loss and benchmark it
    against the measured 319K baseline before enabling it by default.
-5. **M10+ kernels:** integrate TPU attention/projection/norm/optimizer/remat
+4. **M10+ kernels:** integrate TPU attention/projection/norm/optimizer/remat
    providers only after shape, dtype, mask, and backward correctness tests.
 
 ## Definition of done for the public surface
