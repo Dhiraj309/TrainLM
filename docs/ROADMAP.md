@@ -709,7 +709,11 @@ trainer itself.
 
 ## M8 — Capability planner and reversible optimization
 
-**Status:** [~] In progress — the public facade first slice is implemented; TPU coordinator and optimization planner remain.
+**Status:** [~] In progress — the private TPU coordinator bridge is implemented;
+public packed-data/lifecycle integration and the optimization planner remain.
+
+The package root also includes the lightweight `greet()` installation-smoke
+helper; it is independent of the trainer and milestone gates below.
 
 **Goal:** Provide a minimal Hugging Face-like trainer surface while transforming
 loaded HF models safely without family logic in core.
@@ -724,6 +728,10 @@ loaded HF models safely without family logic in core.
   **Acceptance:** A concise HF-style example trains on CPU and reaches the TPU
   coordinator without users constructing subprocess commands or parsing stage
   logs; raw validation remains an internal implementation detail.
+  The TPU branch now reaches a private coordinator that owns probe, model
+  preflight, worker launch, logs, and structured summaries for pretrained HF
+  sources plus local manifest directories. Public packed-data construction,
+  lifecycle parity, and target-hardware validation remain.
 
 - [ ] **M8-F1 — Structural inspector**
   `feat(optimization): inspect dense causal LM capabilities`
