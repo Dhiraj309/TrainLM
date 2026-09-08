@@ -161,7 +161,7 @@ Branch names describe repository work, not the tool or contributor:
 |---|---|---|---|---:|---|
 | [x] | PR1 | `milestone/m0-m2-foundation` | M0-M2 | 15 | Contracts and generic HF CPU conformance |
 | [~] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 18 | Merged; post-merge data/trainer validation remains tracked by validation gates |
-| [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 16 | Implementation merged; DP8 launcher/data/attention/optimizer fixes landed; v5e-8 baseline is 319,302 tok/s after sparse-loss fix, performance work pending |
+| [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 16 | Implementation merge-ready; DP8 launcher/data/attention/optimizer fixes landed; v5e-8 baseline is 319,302 tok/s after sparse-loss fix, performance work pending |
 | [~] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11+ | HF-like public trainer facade, reversible planner, and optimized loss |
 | [ ] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | 850K and hard LaughLM parity |
 | [ ] | PR6 | `milestone/m13-m14-family-release` | M13-M14 | 12 | Cross-family certification and V1 release |
