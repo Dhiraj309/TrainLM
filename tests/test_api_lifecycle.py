@@ -11,12 +11,13 @@ from trainlm.training import TrainerCallback
 class TinyModel(torch.nn.Module):
     def __init__(self):
         super().__init__()
+        self.embedding = torch.nn.Embedding(8, 4)
         self.projection = torch.nn.Linear(4, 8)
 
     def forward(self, input_ids, labels=None, **kwargs):
         del labels, kwargs
-        loss = self.projection(input_ids.float()).square().mean()
-        return SimpleNamespace(loss=loss)
+        logits = self.projection(self.embedding(input_ids))
+        return SimpleNamespace(logits=logits)
 
 
 class MetricsRecorder(TrainerCallback):

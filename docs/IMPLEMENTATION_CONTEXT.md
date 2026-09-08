@@ -58,6 +58,10 @@ layout, and log parsing are internal implementation details. An equivalent
 - PR3 (`milestone/m5-m7-xla-compatibility`) is merged after its rebase and CI
   fixes.
 - PR4 is the active implementation branch: `milestone/m8-m9-optimization-core`.
+- PR3 has been integrated with the current mainline and passes CI; repository
+  policy still requires one approving write-access review before PR13 can be
+  squash-merged. Remote backup branches preserve the pre-integration PR3 and
+  PR4 tips.
 - Do not run git commands in Codex sessions; the repository owner performs
   fetch, rebase, commit, push, and merge manually.
 - Do not claim TPU validation from a local run. TPU validation is performed by
