@@ -18,6 +18,7 @@ from .optimizers import (
     OptimizerStatePolicy,
     create_optimizer,
 )
+from .inspection import inspect_dense_causal_lm
 
 __all__ = [
     "CapabilityFact",
@@ -34,4 +35,5 @@ __all__ = [
     "PlanStatus",
     "ProviderDecision",
     "create_optimizer",
+    "inspect_dense_causal_lm",
 ]

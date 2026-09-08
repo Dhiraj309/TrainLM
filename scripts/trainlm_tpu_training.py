@@ -71,8 +71,12 @@ class PrintMetrics(TrainerCallback):
         self.start_tokens = 0
         self.elapsed = None
         self.measured_tokens = 0
+        self.metrics_path = Path(args.output_dir) / "metrics.jsonl"
 
     def on_train_begin(self, state, control):
+        if self.runtime.is_primary_process:
+            self.metrics_path.parent.mkdir(parents=True, exist_ok=True)
+            self.metrics_path.unlink(missing_ok=True)
         if self.args.warmup_steps == 0:
             torch_xla.sync(wait=True)
             self.start_time = time.perf_counter()
@@ -91,7 +95,10 @@ class PrintMetrics(TrainerCallback):
 
     def on_metrics(self, state, control, metrics) -> None:
         if self.runtime.is_primary_process:
-            print(dict(metrics), flush=True)
+            snapshot = dict(metrics)
+            with self.metrics_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(snapshot, sort_keys=True) + "\n")
+            print(snapshot, flush=True)
 
 
 def _source(args: argparse.Namespace) -> ModelSourceConfig:
@@ -405,6 +412,10 @@ def train_fn(index: int, args: argparse.Namespace, shards) -> None:
     summary = {
         "phase": state.phase.value,
         "steps": state.step,
+        "micro_steps": state.micro_step,
+        "tokens_seen_rank0": state.tokens_seen,
+        "samples_seen_rank0": state.samples_seen,
+        "learning_rate": state.learning_rate,
         "global_supervised_tokens": state.tokens_seen * world_size,
         "last_loss_rank0": state.loss,
         "world_size": world_size,

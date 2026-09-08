@@ -127,6 +127,11 @@ trainer = TrainLMTrainer(
 trainer.train()
 ```
 
+On CPU and CUDA, `save_steps` and `eval_steps` are handled by the same
+backend-neutral lifecycle used for training. A local run can continue from a
+TrainLM training checkpoint with
+`trainer.train(resume_from_checkpoint="runs/example/checkpoint-100")`.
+
 Packed token shards can be supplied through the validated public adapter. Local
 manifests and revision-pinned Hugging Face sources are checked before iteration,
 and rank ownership is deterministic:
@@ -144,5 +149,6 @@ The facade delegates local runs to the portable CPU/CUDA engine and routes
 `accelerator="tpu"` through a private single-VM coordinator. The initial TPU
 bridge accepts a reconstructible pretrained Hugging Face model source and a
 local directory of validated shard manifests; public packed-binary dataset
-construction, lifecycle parity, and automatic capability-based kernel planning
-remain in progress. The worker scripts and stage logs are internal details.
+construction, TPU checkpoint parity, and automatic capability-based kernel
+planning remain in progress. Structured worker metrics are delivered through
+public callbacks; worker scripts and stage logs are internal details.

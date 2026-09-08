@@ -12,6 +12,7 @@ from trainlm._tpu_coordinator import (
     _TPURunRequest,
 )
 from trainlm.config import ModelSourceConfig
+from trainlm.training import TrainerCallback
 
 
 class RecordingCoordinator:
@@ -20,11 +21,25 @@ class RecordingCoordinator:
 
     def run(self, request):
         self.requests.append(request)
-        return {"status": "completed"}
+        return {
+            "status": "completed",
+            "worker_summary": {"steps": 3, "global_supervised_tokens": 96},
+            "metrics": [{"step": 3.0, "loss": 1.5}],
+        }
+
+
+class MetricsRecorder(TrainerCallback):
+    def __init__(self):
+        self.metrics = []
+
+    def on_metrics(self, state, control, metrics):
+        del state, control
+        self.metrics.append(dict(metrics))
 
 
 def test_tpu_facade_defers_model_and_runtime_construction(tmp_path):
     coordinator = RecordingCoordinator()
+    recorder = MetricsRecorder()
     trainer = TrainLMTrainer(
         model="org/model",
         train_dataset=tmp_path / "manifests",
@@ -37,12 +52,15 @@ def test_tpu_facade_defers_model_and_runtime_construction(tmp_path):
             per_device_train_batch_size=2,
             sequence_length=128,
         ),
+        callbacks=[recorder],
     )
     trainer._tpu_coordinator = coordinator
 
     result = trainer.train()
 
-    assert result == {"status": "completed"}
+    assert result["status"] == "completed"
+    assert result["trainer_state"]["step"] == 3
+    assert recorder.metrics == [{"step": 3.0, "loss": 1.5}]
     assert trainer.model is None
     assert trainer.engine is None
     request = coordinator.requests[0]
@@ -138,6 +156,9 @@ def test_coordinator_owns_stages_logs_and_structured_summary(tmp_path, monkeypat
                 json.dumps({"phase": "finalized", "steps": 2}),
                 encoding="utf-8",
             )
+            (request.output_dir / "metrics.jsonl").write_text(
+                '{"loss": 2.5, "step": 2}\n', encoding="utf-8"
+            )
         return subprocess.CompletedProcess(command, 0, stdout="stage passed\n")
 
     monkeypatch.setattr(subprocess, "run", run)
@@ -147,6 +168,7 @@ def test_coordinator_owns_stages_logs_and_structured_summary(tmp_path, monkeypat
     assert summary["status"] == "completed"
     assert summary["completed_stages"] == ["probe", "model_preflight", "train"]
     assert summary["worker_summary"]["steps"] == 2
+    assert summary["metrics"] == [{"loss": 2.5, "step": 2.0}]
     assert len(calls) == 3
     assert "--probe-only" in calls[0][0]
     assert "--model-preflight" in calls[1][0]
@@ -177,3 +199,11 @@ def test_coordinator_reports_actionable_stage_failure(tmp_path, monkeypatch):
     assert summary["status"] == "failed"
     assert summary["completed_stages"] == []
     assert "PJRT launch failed" in summary["error"]
+
+
+def test_coordinator_rejects_malformed_metrics_artifact(tmp_path):
+    path = tmp_path / "metrics.jsonl"
+    path.write_text('{"loss": true}\n', encoding="utf-8")
+
+    with pytest.raises(TPUCoordinatorError, match="Invalid TPU metric snapshot"):
+        _TPUCoordinator._read_metrics(path)

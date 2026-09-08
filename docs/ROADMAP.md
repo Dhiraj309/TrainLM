@@ -709,8 +709,9 @@ trainer itself.
 
 ## M8 — Capability planner and reversible optimization
 
-**Status:** [~] In progress — the private TPU coordinator bridge and public
-packed-data adapter are implemented; lifecycle integration and planning remain.
+**Status:** [~] In progress — the coordinator, packed-data adapter, local
+lifecycle facade, and TPU metric/state bridge are implemented; TPU checkpoint
+parity and planning remain.
 
 **Goal:** Provide a minimal Hugging Face-like trainer surface while transforming
 loaded HF models safely without family logic in core.
@@ -729,12 +730,17 @@ loaded HF models safely without family logic in core.
   preflight, worker launch, logs, and structured summaries for pretrained HF
   sources plus validated `PackedBinDataset` inputs. Local and revision-pinned
   Hub constructors validate shard integrity and deterministically partition
-  examples by rank. Lifecycle parity and target-hardware validation remain.
+  examples by rank. CPU/CUDA runs honor save/evaluation cadence, forward
+  callback metrics, and restore versioned training state. TPU worker summaries
+  expose normalized public state and callback metrics without log parsing. TPU
+  checkpoint/evaluation parity and target-hardware validation remain.
 
-- [ ] **M8-F1 — Structural inspector**
+- [~] **M8-F1 — Structural inspector**
   `feat(optimization): inspect dense causal LM capabilities`
   Prefer public HF contracts and expose unknown semantics explicitly.
   **Acceptance:** Reports match family fixtures; no name-only semantic guesses.
+  Implemented through config, module, parameter-alias, and forward-signature
+  evidence; unproven residual/custom-normalization semantics remain unknown.
 
 - [ ] **M8-F2 — Adapter registry**
   `feat(optimization): add optional model adapter registry`
