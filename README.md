@@ -101,17 +101,6 @@ TrainLM distinguishes models that are **Compatible**, **Optimized**, and
 hardware **Certified**. Generic execution is never presented as TPU performance
 certification.
 
-## Greeting helper
-
-TrainLM exposes a small greeting helper for quick installation checks:
-
-```python
-from trainlm import greet
-
-print(greet())          # Hello, TrainLM!
-print(greet("Dhiraj"))  # Hello, Dhiraj!
-```
-
 ## Public trainer (M8-F0 in progress)
 
 The intended user workflow is a small Hugging Face-like surface. TrainLM owns

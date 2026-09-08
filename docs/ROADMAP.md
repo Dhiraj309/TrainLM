@@ -712,9 +712,6 @@ trainer itself.
 **Status:** [~] In progress — the private TPU coordinator bridge is implemented;
 public packed-data/lifecycle integration and the optimization planner remain.
 
-The package root also includes the lightweight `greet()` installation-smoke
-helper; it is independent of the trainer and milestone gates below.
-
 **Goal:** Provide a minimal Hugging Face-like trainer surface while transforming
 loaded HF models safely without family logic in core.
 
