@@ -316,7 +316,7 @@ TPU runtime foundation`; branch `milestone/m5-m7-xla-compatibility`.
 | [x] | M2 | Universal HF dense-causal CPU path |
 | [~] | M3 | F1-F5 complete; resumable cursor awaiting validation |
 | [~] | M4 | F1-F7 implemented; validation pending |
-| [x] | M5 | F1-F7 implemented; DP8 launch, host data preparation, timing, expected-world-size gates, and two-update v5e-8 smoke passed |
+| [~] | M5 | F1-F7 implemented; DP8 launch, host data preparation, timing, expected-world-size gates, and two-update v5e-8 smoke passed; certification remains pending |
 | [~] | M6 | F1-F4 positional, attention, block-layout, and TPU round-trip coverage implemented; Llama preflight passed, cross-family validation pending |
 | [~] | M7 | F1-F5 distributed resume, async lifecycle, canonical HF export, telemetry, and integrity gates implemented; v5e-8 smoke and measured baseline passed, reliability certification pending |
 | [~] | M8 | HF-like public trainer facade plus reversible capability optimization engine |
