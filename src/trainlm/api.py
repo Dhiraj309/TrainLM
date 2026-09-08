@@ -160,14 +160,46 @@ class TrainLMTrainer:
         if tokenizer is not None and processing_class is not None:
             raise ValueError("Set either tokenizer or processing_class, not both.")
         self.processing_class = processing_class if processing_class is not None else tokenizer
-        self._model_source: ModelSourceConfig | None = None
-        self.loaded: LoadedCausalLM | None = None
-        self._last_metrics: dict[str, Any] = {}
-        self.model = self._resolve_model(model)
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
         self.data_collator = data_collator or _default_collator
         self.callbacks = tuple(callbacks or ())
+        self._model_source: ModelSourceConfig | None = None
+        self.loaded: LoadedCausalLM | None = None
+        self._last_metrics: dict[str, Any] = {}
+        self._tpu_coordinator = None
+        if self.args.accelerator == "tpu":
+            if any(value is not None for value in (optimizer, scheduler, runtime)):
+                raise ValueError(
+                    "TPU execution constructs runtime, optimizer, and scheduler inside "
+                    "each worker; do not pass local instances."
+                )
+            self._model_source = self._coerce_model_source(model)
+            if self.args.max_steps is None:
+                raise NotImplementedError(
+                    "The TPU coordinator currently requires max_steps; max_tokens-only "
+                    "execution will be added with lifecycle parity."
+                )
+            if self.args.max_tokens is not None:
+                raise NotImplementedError(
+                    "TPU max_tokens stopping will be added with lifecycle parity."
+                )
+            if self.args.fp16:
+                raise ValueError("TPU execution supports fp32 or bf16, not fp16.")
+            if self.args.save_steps is not None or self.args.eval_steps is not None:
+                raise NotImplementedError(
+                    "TPU save_steps and eval_steps will be added with lifecycle parity."
+                )
+            from trainlm._tpu_coordinator import _TPUCoordinator
+
+            self._tpu_coordinator = _TPUCoordinator()
+            self.model = None
+            self.runtime = None
+            self.optimizer = None
+            self.scheduler = None
+            self.engine = None
+            return
+        self.model = self._resolve_model(model)
         self.runtime = runtime or self._make_runtime()
         self.optimizer = optimizer or self._make_optimizer()
         self.scheduler = scheduler or self._make_scheduler()
@@ -190,8 +222,24 @@ class TrainLMTrainer:
     def _resolve_model(self, model: nn.Module | str | Path | ModelSourceConfig) -> nn.Module:
         if isinstance(model, nn.Module):
             return model
+        model = self._coerce_model_source(model)
+        from trainlm.model import load_huggingface_causal_lm
+
+        self._model_source = model
+        self.loaded = load_huggingface_causal_lm(model)
+        return self.loaded.model
+
+    @staticmethod
+    def _coerce_model_source(
+        model: nn.Module | str | Path | ModelSourceConfig,
+    ) -> ModelSourceConfig:
+        if isinstance(model, nn.Module):
+            raise TypeError(
+                "TPU execution requires a model ID/path or ModelSourceConfig so each "
+                "worker can construct its own model."
+            )
         if isinstance(model, (str, Path)):
-            model = ModelSourceConfig(
+            return ModelSourceConfig(
                 provider="huggingface",
                 initialization="pretrained",
                 name_or_path=str(model),
@@ -200,11 +248,7 @@ class TrainLMTrainer:
             raise TypeError("model must be a torch module, model ID/path, or ModelSourceConfig.")
         if model.provider != "huggingface":
             raise ValueError("The public facade currently resolves Hugging Face models only.")
-        from trainlm.model import load_huggingface_causal_lm
-
-        self._model_source = model
-        self.loaded = load_huggingface_causal_lm(model)
-        return self.loaded.model
+        return model
 
     def _make_runtime(self):
         accelerator = self.args.accelerator
@@ -315,10 +359,52 @@ class TrainLMTrainer:
         """Run training and return the TrainLM trainer state."""
 
         if resume_from_checkpoint is not None:
-            raise NotImplementedError("Exact resume wiring is provided by the checkpoint service.")
+            raise NotImplementedError(
+                "Exact resume wiring is provided by the checkpoint service."
+            )
+        if self._tpu_coordinator is not None:
+            return self._tpu_coordinator.run(self._make_tpu_request())
+        if self.engine is None:
+            raise RuntimeError("Trainer engine was not initialized.")
         return self.engine.train()
 
+    def _make_tpu_request(self):
+        from trainlm._tpu_coordinator import _TPURunRequest
+
+        if not isinstance(self.train_dataset, (str, Path)):
+            raise TypeError(
+                "TPU training currently requires train_dataset to be a local manifest "
+                "directory; PackedBinDataset support is the next public data story."
+            )
+        if self._model_source is None or self.args.max_steps is None:
+            raise RuntimeError("TPU request prerequisites were not initialized.")
+        precision = (
+            "bf16" if self.args.bf16 else "fp16" if self.args.fp16 else "fp32"
+        )
+        return _TPURunRequest(
+            model=self._model_source,
+            manifest_dir=Path(self.train_dataset),
+            output_dir=Path(self.args.output_dir),
+            max_steps=self.args.max_steps,
+            gradient_accumulation_steps=self.args.gradient_accumulation_steps,
+            micro_batch_per_device=self.args.per_device_train_batch_size,
+            sequence_length=self.args.sequence_length,
+            seed=self.args.seed,
+            log_every_steps=self.args.logging_steps,
+            learning_rate=self.args.learning_rate,
+            betas=self.args.betas,
+            eps=self.args.eps,
+            weight_decay=self.args.weight_decay,
+            scheduler=self.args.lr_scheduler_type,
+            warmup_steps=self.args.warmup_steps,
+            precision=precision,
+        )
+
     def evaluate(self) -> dict[str, float]:
+        if self.engine is None:
+            raise NotImplementedError(
+                "TPU evaluation will be added with lifecycle parity."
+            )
         return self.engine.evaluate()
 
     def log_metrics(self, split: str, metrics: Mapping[str, Any]) -> None:
@@ -333,6 +419,10 @@ class TrainLMTrainer:
         }
 
     def save_model(self, output_dir: str | Path | None = None) -> Path:
+        if self.model is None:
+            raise NotImplementedError(
+                "TPU model export will be added with lifecycle parity."
+            )
         destination = Path(output_dir or self.args.output_dir)
         destination.mkdir(parents=True, exist_ok=True)
         if hasattr(self.model, "save_pretrained"):
@@ -342,6 +432,10 @@ class TrainLMTrainer:
         return destination
 
     def save_state(self, output_dir: str | Path | None = None) -> Path:
+        if self.engine is None or self.optimizer is None or self.scheduler is None:
+            raise NotImplementedError(
+                "TPU state saving will be added with lifecycle parity."
+            )
         destination = Path(output_dir or self.args.output_dir)
         destination.mkdir(parents=True, exist_ok=True)
         state = {
@@ -354,6 +448,20 @@ class TrainLMTrainer:
         return path
 
     def explain(self) -> dict[str, Any]:
+        if self._tpu_coordinator is not None:
+            return {
+                "support_level": "compatible",
+                "selected_path": "tpu_coordinator",
+                "model": asdict(self._model_source),
+                "backend": "xla",
+                "precision": (
+                    "bf16"
+                    if self.args.bf16
+                    else "fp16"
+                    if self.args.fp16
+                    else "fp32"
+                ),
+            }
         if self.loaded is None:
             return {
                 "support_level": "compatible",
