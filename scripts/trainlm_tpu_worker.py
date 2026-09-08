@@ -81,6 +81,18 @@ def parse_args():
     parser.add_argument("--sequence-length", type=int, default=2048)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--log-every-steps", type=int, default=10)
+    parser.add_argument("--learning-rate", type=float, default=2e-4)
+    parser.add_argument("--beta1", type=float, default=0.9)
+    parser.add_argument("--beta2", type=float, default=0.95)
+    parser.add_argument("--eps", type=float, default=1e-8)
+    parser.add_argument("--weight-decay", type=float, default=0.1)
+    parser.add_argument("--z-loss", type=float, default=1e-4)
+    parser.add_argument(
+        "--scheduler",
+        choices=("constant", "linear", "cosine", "wsd"),
+        default="wsd",
+    )
+    parser.add_argument("--precision", choices=("fp32", "bf16"), default="bf16")
     parser.add_argument("--cache-dir", default="/tmp/trainlm_xla_cache")
     parser.add_argument("--output-dir", default="runs/trainlm_v5e8")
     parser.add_argument("--manifest-dir", default="data/packed/train")
@@ -111,6 +123,18 @@ def parse_args():
         parser.error("--expected-world-size must be positive")
     if args.sequence_length < 2 or args.warmup_steps < 0:
         parser.error("sequence length must be >=2 and warmup steps >=0")
+    if (
+        args.learning_rate <= 0
+        or args.eps <= 0
+        or args.weight_decay < 0
+        or args.z_loss < 0
+    ):
+        parser.error(
+            "optimizer learning rate/eps must be positive; weight decay and z-loss "
+            "must be nonnegative"
+        )
+    if not 0 <= args.beta1 < 1 or not 0 <= args.beta2 < 1:
+        parser.error("optimizer betas must be in [0, 1)")
     if args.data_mode == "raw" and not (args.probe_only or args.model_preflight):
         if not args.bin_path or args.header_bytes is None or args.header_bytes < 0:
             parser.error("raw mode requires --bin-path and explicit nonnegative --header-bytes")

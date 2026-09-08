@@ -101,6 +101,17 @@ TrainLM distinguishes models that are **Compatible**, **Optimized**, and
 hardware **Certified**. Generic execution is never presented as TPU performance
 certification.
 
+## Greeting helper
+
+TrainLM exposes a small greeting helper for quick installation checks:
+
+```python
+from trainlm import greet
+
+print(greet())          # Hello, TrainLM!
+print(greet("Dhiraj"))  # Hello, Dhiraj!
+```
+
 ## Public trainer (M8-F0 in progress)
 
 The intended user workflow is a small Hugging Face-like surface. TrainLM owns
@@ -127,8 +138,9 @@ trainer = TrainLMTrainer(
 trainer.train()
 ```
 
-The first facade slice currently delegates to the portable CPU/CUDA engine.
-TPU coordinator launch, validated packed-binary dataset construction, and
-automatic capability-based kernel planning are being added behind this same
-API. Until those stories are complete, the worker notebook remains a
-validation surface rather than the public UX.
+The facade delegates local runs to the portable CPU/CUDA engine and routes
+`accelerator="tpu"` through a private single-VM coordinator. The initial TPU
+bridge accepts a reconstructible pretrained Hugging Face model source and a
+local directory of validated shard manifests; public packed-binary dataset
+construction, lifecycle parity, and automatic capability-based kernel planning
+remain in progress. The worker scripts and stage logs are internal details.
