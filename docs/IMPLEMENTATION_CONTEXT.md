@@ -91,38 +91,50 @@ matched runs; planning ranges are not guarantees.
 - lazy HF model resolution so importing `trainlm` does not import
   Transformers/XLA before a model ID is actually used;
 - delegation to the existing backend-neutral `training.Trainer` rather than
-  a second training loop.
+  a second training loop;
+- private TPU coordination that defers model/runtime/optimizer construction to
+  spawned workers, runs collective and model preflight stages, preserves the
+  supported public training arguments in the worker request, and returns a
+  structured coordinator summary;
+- public `PackedBinDataset.from_directory()` and `.from_hub()` constructors
+  that validate manifests and payload integrity eagerly, yield fixed-length
+  causal-LM examples, and apply deterministic rank partitioning;
+- local CPU/CUDA save and evaluation cadence, callback metric delivery, and
+  versioned model/optimizer/scheduler/runtime/RNG/trainer-state restoration;
+- structured TPU metric artifacts that the coordinator validates and delivers
+  to public callbacks together with a normalized trainer-state snapshot;
+- a family-neutral structural inspector used by `trainer.explain()` that
+  reports only config/module/alias/signature-backed facts and leaves residual
+  or custom semantics explicitly unknown.
+- a deterministic optional model-adapter registry whose entries require exact
+  model/config classes, inspected semantic capabilities, source providers, and
+  explicit tested package versions; resolution is pure and records every
+  rejection reason without importing or mutating a model.
+- a pure optimization planner that selects declarative providers by backend,
+  precision, inspected component kind, runtime requirements, and explicit
+  request; it records portable fallbacks and blocks required unsupported paths
+  before any model mutation.
 
-This slice is intentionally not complete. `accelerator="tpu"` still raises a
-clear coordinator-integration error. Packed-binary dataset constructors,
-automatic TPU worker launch, checkpoint resume, callback metric forwarding,
-and capability-based optimization planning are next stories. Do not mark
-M8-F0 complete until a concise public example reaches the TPU coordinator
-without subprocess calls or stage-log parsing.
+This slice is intentionally not complete. `accelerator="tpu"` now reaches the
+private single-VM coordinator for reconstructible pretrained HF model sources
+and a validated `PackedBinDataset`. Local lifecycle cadence and resume now use
+the backend-neutral engine hooks. TPU callback metrics and return state no
+longer require stage-log parsing. TPU worker checkpoint/evaluation parity and
+transactional optimization application are next stories. Do not mark M8-F0
+complete until TPU lifecycle behavior is validated on target hardware.
 
 ## Required next sequence
 
 Implement one small commit/story at a time and update `docs/ROADMAP.md` and
 this file in every turn:
 
-1. **M8-F0 continuation — coordinator facade:** add a private coordinator
-   object used by `TrainLMTrainer.train()` for TPU. It should construct the
-   existing worker request internally, preserve the public API, write a
-   structured run summary, and expose failures as actionable exceptions.
-2. **M8-F0 data adapter:** add `PackedBinDataset`/hub source construction for
-   versioned `.bin` shards, with dtype/header/count validation and deterministic
-   rank partitioning. Keep raw manifest details private.
-3. **M8-F0 lifecycle parity:** implement safe `resume_from_checkpoint`, save
-   and eval cadence, callback metric delivery, and `train()` return state.
-4. **M8-F1 inspector:** inspect model signatures/config/forward outputs and
-   produce an explicit capability report; unknown semantics must be marked
-   unknown rather than guessed from class names.
-5. **M8-F2/F3 planner:** add version-guarded adapter registry and a pure,
-   reversible optimization plan. Every transform needs an eligibility reason,
-   fallback reason, and rollback path.
-6. **M9 loss path:** add chunked/rematerialized causal loss and benchmark it
+1. **M8-F0 TPU checkpoint parity:** carry safe resume and save/evaluation
+   cadence through worker coordination.
+2. **M8-F4 transactional transforms:** apply a completed plan before optimizer
+   construction, preserve aliases, and roll back every partial mutation.
+3. **M9 loss path:** add chunked/rematerialized causal loss and benchmark it
    against the measured 319K baseline before enabling it by default.
-7. **M10+ kernels:** integrate TPU attention/projection/norm/optimizer/remat
+4. **M10+ kernels:** integrate TPU attention/projection/norm/optimizer/remat
    providers only after shape, dtype, mask, and backward correctness tests.
 
 ## Definition of done for the public surface
@@ -150,4 +162,3 @@ Use one feature/story per commit. Suggested next messages:
 - `feat(training): complete HF-like lifecycle and resume facade`
 - `feat(optimization): add model capability inspector and plan report`
 - `feat(optimization): add reversible kernel transform registry`
-

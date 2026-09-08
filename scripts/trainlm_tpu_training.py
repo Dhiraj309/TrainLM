@@ -71,8 +71,12 @@ class PrintMetrics(TrainerCallback):
         self.start_tokens = 0
         self.elapsed = None
         self.measured_tokens = 0
+        self.metrics_path = Path(args.output_dir) / "metrics.jsonl"
 
     def on_train_begin(self, state, control):
+        if self.runtime.is_primary_process:
+            self.metrics_path.parent.mkdir(parents=True, exist_ok=True)
+            self.metrics_path.unlink(missing_ok=True)
         if self.args.warmup_steps == 0:
             torch_xla.sync(wait=True)
             self.start_time = time.perf_counter()
@@ -91,7 +95,10 @@ class PrintMetrics(TrainerCallback):
 
     def on_metrics(self, state, control, metrics) -> None:
         if self.runtime.is_primary_process:
-            print(dict(metrics), flush=True)
+            snapshot = dict(metrics)
+            with self.metrics_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(snapshot, sort_keys=True) + "\n")
+            print(snapshot, flush=True)
 
 
 def _source(args: argparse.Namespace) -> ModelSourceConfig:
@@ -192,7 +199,11 @@ def model_preflight(args: argparse.Namespace) -> None:
     """
     rank = int(xr.global_ordinal())
     device = torch_xla.device()
-    runtime = XlaRuntime(device=device, precision="bf16", compile_training=False)
+    runtime = XlaRuntime(
+        device=device,
+        precision=args.precision,
+        compile_training=False,
+    )
     source = _source(args)
     print(json.dumps({"stage": "model_preflight_load", "rank": rank}), flush=True)
     loaded = load_huggingface_causal_lm(source)
@@ -245,10 +256,14 @@ def train_fn(index: int, args: argparse.Namespace, shards) -> None:
     device = torch_xla.device()
     torch_xla.manual_seed(args.seed, device=device)
     # The entry point already initialized a distinct persistent cache per rank.
-    runtime = XlaRuntime(device=device, precision="bf16", compile_training=False,
-                         collect_diagnostics=True)
+    runtime = XlaRuntime(
+        device=device,
+        precision=args.precision,
+        compile_training=False,
+        collect_diagnostics=True,
+    )
     task = CausalLMTask(
-        z_loss=1e-4, loss_implementation="causal_lm",
+        z_loss=args.z_loss, loss_implementation="causal_lm",
         assume_all_supervised=True,
     )
     print({"stage": "build_reader", "rank": rank}, flush=True)
@@ -304,10 +319,10 @@ def train_fn(index: int, args: argparse.Namespace, shards) -> None:
         loss=LossConfig(
             implementation="causal_lm",
             normalization="supervised_tokens",
-            z_loss=1e-4,
+            z_loss=args.z_loss,
             logits_chunk_size=None,
         ),
-        runtime=RuntimeConfig(device="xla", precision="bf16"),
+        runtime=RuntimeConfig(device="xla", precision=args.precision),
         parallelism=ParallelismConfig(data=world_size),
         optimizations=OptimizationConfig(
             policy="auto",
@@ -317,20 +332,24 @@ def train_fn(index: int, args: argparse.Namespace, shards) -> None:
             accumulation_strategy="microstep",
         ),
         optimizer=OptimizerConfig(
-            learning_rate=2e-4,
-            betas=(0.9, 0.95),
-            eps=1e-8,
-            weight_decay=0.1,
+            learning_rate=args.learning_rate,
+            betas=(args.beta1, args.beta2),
+            eps=args.eps,
+            weight_decay=args.weight_decay,
             fused=False,
-            mu_dtype="bfloat16",
+            mu_dtype="bfloat16" if args.precision == "bf16" else "float32",
             nu_dtype="float32",
         ),
         scheduler=SchedulerConfig(
-            name="wsd",
-            horizon_tokens=20_000_000_000,
-            warmup_fraction=0.01,
-            stable_fraction=0.95,
-            min_lr_ratio=0.05,
+            name=args.scheduler,
+            horizon_steps=(
+                args.max_steps if args.scheduler in {"linear", "cosine"} else None
+            ),
+            horizon_tokens=20_000_000_000 if args.scheduler == "wsd" else None,
+            warmup_steps=args.warmup_steps,
+            warmup_fraction=0.01 if args.scheduler == "wsd" else 0.0,
+            stable_fraction=0.95 if args.scheduler == "wsd" else 1.0,
+            min_lr_ratio=0.05 if args.scheduler == "wsd" else 0.0,
         ),
         trainer=TrainerConfig(
             max_steps=args.max_steps,
@@ -393,6 +412,10 @@ def train_fn(index: int, args: argparse.Namespace, shards) -> None:
     summary = {
         "phase": state.phase.value,
         "steps": state.step,
+        "micro_steps": state.micro_step,
+        "tokens_seen_rank0": state.tokens_seen,
+        "samples_seen_rank0": state.samples_seen,
+        "learning_rate": state.learning_rate,
         "global_supervised_tokens": state.tokens_seen * world_size,
         "last_loss_rank0": state.loss,
         "world_size": world_size,

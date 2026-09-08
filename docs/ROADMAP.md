@@ -709,7 +709,10 @@ trainer itself.
 
 ## M8 — Capability planner and reversible optimization
 
-**Status:** [~] In progress — the public facade first slice is implemented; TPU coordinator and optimization planner remain.
+**Status:** [~] In progress — the coordinator, packed-data adapter, local
+lifecycle facade, TPU metric/state bridge, structural inspector, and guarded
+adapter registry and pure provider planner are implemented; TPU checkpoint
+parity and transactional application remain.
 
 **Goal:** Provide a minimal Hugging Face-like trainer surface while transforming
 loaded HF models safely without family logic in core.
@@ -724,22 +727,41 @@ loaded HF models safely without family logic in core.
   **Acceptance:** A concise HF-style example trains on CPU and reaches the TPU
   coordinator without users constructing subprocess commands or parsing stage
   logs; raw validation remains an internal implementation detail.
+  The TPU branch now reaches a private coordinator that owns probe, model
+  preflight, worker launch, logs, and structured summaries for pretrained HF
+  sources plus validated `PackedBinDataset` inputs. Local and revision-pinned
+  Hub constructors validate shard integrity and deterministically partition
+  examples by rank. CPU/CUDA runs honor save/evaluation cadence, forward
+  callback metrics, and restore versioned training state. TPU worker summaries
+  expose normalized public state and callback metrics without log parsing. TPU
+  checkpoint/evaluation parity and target-hardware validation remain.
 
-- [ ] **M8-F1 — Structural inspector**
+- [~] **M8-F1 — Structural inspector**
   `feat(optimization): inspect dense causal LM capabilities`
   Prefer public HF contracts and expose unknown semantics explicitly.
   **Acceptance:** Reports match family fixtures; no name-only semantic guesses.
+  Implemented through config, module, parameter-alias, and forward-signature
+  evidence; unproven residual/custom-normalization semantics remain unknown.
 
-- [ ] **M8-F2 — Adapter registry**
+- [x] **M8-F2 — Adapter registry**
   `feat(optimization): add optional model adapter registry`
   Resolve explicit model/class adapters with semantic and version guards.
   **Acceptance:** Removing adapters preserves M6 compatibility.
+  The registry is declarative and optional: exact model/config class matches
+  are additionally gated by inspected component kinds, source provider, and
+  allow-listed tested package versions. Resolution has stable priority/ID
+  ordering, records every rejection reason, and never imports or mutates a
+  model, so an empty registry preserves the generic compatibility path.
 
-- [ ] **M8-F3 — Pure planner**
+- [x] **M8-F3 — Pure planner**
   `feat(optimization): select kernels transforms and fallbacks`
   Match capability to provider by backend, shape, dtype, mask, and backward
   support under auto/required/disabled/explicit policies.
   **Acceptance:** Deterministic snapshots explain every decision.
+  Provider specifications declare backend, precision, capability kind, runtime
+  requirements, fallback status, and reversible transformations. The pure
+  planner deterministically handles disabled, auto, required, and explicit
+  provider requests, producing a blocked plan before mutation when necessary.
 
 - [ ] **M8-F4 — Transactional transforms**
   `feat(optimization): apply validated reversible model transforms`
