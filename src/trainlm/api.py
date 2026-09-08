@@ -370,11 +370,17 @@ class TrainLMTrainer:
 
     def _make_tpu_request(self):
         from trainlm._tpu_coordinator import _TPURunRequest
+        from trainlm.data import PackedBinDataset
 
-        if not isinstance(self.train_dataset, (str, Path)):
+        if isinstance(self.train_dataset, PackedBinDataset):
+            manifest_dir = self.train_dataset.coordinator_manifest_dir(
+                self.args.output_dir
+            )
+        elif isinstance(self.train_dataset, (str, Path)):
+            manifest_dir = Path(self.train_dataset)
+        else:
             raise TypeError(
-                "TPU training currently requires train_dataset to be a local manifest "
-                "directory; PackedBinDataset support is the next public data story."
+                "TPU training requires a PackedBinDataset or local manifest directory."
             )
         if self._model_source is None or self.args.max_steps is None:
             raise RuntimeError("TPU request prerequisites were not initialized.")
@@ -383,7 +389,7 @@ class TrainLMTrainer:
         )
         return _TPURunRequest(
             model=self._model_source,
-            manifest_dir=Path(self.train_dataset),
+            manifest_dir=manifest_dir,
             output_dir=Path(self.args.output_dir),
             max_steps=self.args.max_steps,
             gradient_accumulation_steps=self.args.gradient_accumulation_steps,

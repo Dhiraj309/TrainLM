@@ -1,0 +1,87 @@
+"""Public packed-binary dataset construction and partitioning."""
+
+from __future__ import annotations
+
+import pytest
+import torch
+
+from trainlm import PackedBinDataset
+from trainlm.data import HuggingFaceShardSourceConfig, HuggingFaceShardSpec
+from trainlm.data.huggingface import HuggingFacePackedShardSource
+
+from .test_contiguous_reader import _local_shard
+
+
+def _write_manifest(root, shard):
+    data_path = root / shard.manifest.data_path
+    data_path.parent.mkdir(parents=True, exist_ok=True)
+    shard.data_file.replace(data_path)
+    path = root / f"{shard.shard_id}.manifest.json"
+    path.write_text(shard.manifest.to_json() + "\n", encoding="utf-8")
+
+
+def test_directory_dataset_validates_and_yields_fixed_examples(tmp_path):
+    shard = _local_shard(tmp_path, shard_id="train", tokens=tuple(range(16)))
+    _write_manifest(tmp_path, shard)
+
+    dataset = PackedBinDataset.from_directory(tmp_path, sequence_length=4)
+
+    examples = list(dataset)
+    assert len(dataset) == 4
+    assert len(examples) == 4
+    assert torch.equal(examples[0]["input_ids"], torch.tensor([0, 1, 2, 3]))
+    assert examples[0]["labels"].shape == (4,)
+    assert examples[0]["attention_mask"].all()
+    dataset.close()
+
+
+def test_directory_dataset_partitions_without_overlap(tmp_path):
+    shard = _local_shard(tmp_path, shard_id="train", tokens=tuple(range(16)))
+    _write_manifest(tmp_path, shard)
+    ranks = [
+        PackedBinDataset.from_directory(
+            tmp_path,
+            sequence_length=4,
+            seed=7,
+            world_size=2,
+            rank=rank,
+        )
+        for rank in range(2)
+    ]
+
+    owned = [{tuple(item["input_ids"].tolist()) for item in dataset} for dataset in ranks]
+    assert owned[0].isdisjoint(owned[1])
+    assert owned[0] | owned[1] == {
+        (0, 1, 2, 3),
+        (4, 5, 6, 7),
+        (8, 9, 10, 11),
+        (12, 13, 14, 15),
+    }
+    for dataset in ranks:
+        dataset.close()
+
+
+def test_hub_dataset_uses_revision_pinned_validated_source(tmp_path, monkeypatch):
+    shard = _local_shard(tmp_path, shard_id="train", tokens=tuple(range(8)))
+    source = HuggingFaceShardSourceConfig(
+        repo_id="org/data",
+        revision="a" * 40,
+        shards=(HuggingFaceShardSpec("train", "train.manifest.json"),),
+    )
+    monkeypatch.setattr(HuggingFacePackedShardSource, "resolve", lambda self: (shard,))
+
+    dataset = PackedBinDataset.from_hub(source, sequence_length=4)
+
+    assert len(list(dataset)) == 2
+    staged = dataset.coordinator_manifest_dir(tmp_path / "run")
+    assert tuple(staged.glob("*.manifest.json"))
+    assert (staged / shard.manifest.data_path).is_file()
+    dataset.close()
+
+
+def test_directory_dataset_rejects_missing_or_invalid_manifests(tmp_path):
+    with pytest.raises(FileNotFoundError, match="No packed shard manifests"):
+        PackedBinDataset.from_directory(tmp_path, sequence_length=4)
+    (tmp_path / "bad.manifest.json").write_text("{}", encoding="utf-8")
+    with pytest.raises(ValueError, match="Invalid packed shard manifest"):
+        PackedBinDataset.from_directory(tmp_path, sequence_length=4)
