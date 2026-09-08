@@ -83,6 +83,7 @@ class _TPUCoordinator:
             worker_summary = json.loads(
                 worker_summary_path.read_text(encoding="utf-8")
             )
+            metrics = self._read_metrics(request.output_dir / "metrics.jsonl")
         except Exception as exc:
             self._write_summary(
                 request,
@@ -99,7 +100,32 @@ class _TPUCoordinator:
             status="completed",
             completed_stages=completed_stages,
             worker_summary=worker_summary,
+            metrics=metrics,
         )
+
+    @staticmethod
+    def _read_metrics(path: Path) -> list[dict[str, float]]:
+        if not path.is_file():
+            return []
+        snapshots = []
+        for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            try:
+                value = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise TPUCoordinatorError(
+                    f"Invalid TPU metrics artifact at {path}:{line_number}."
+                ) from exc
+            if not isinstance(value, dict) or any(
+                not isinstance(key, str)
+                or isinstance(item, bool)
+                or not isinstance(item, (int, float))
+                for key, item in value.items()
+            ):
+                raise TPUCoordinatorError(
+                    f"Invalid TPU metric snapshot at {path}:{line_number}."
+                )
+            snapshots.append({key: float(item) for key, item in value.items()})
+        return snapshots
 
     def _run_stage(
         self,
@@ -187,6 +213,7 @@ class _TPUCoordinator:
         status: str,
         completed_stages: list[str],
         worker_summary: dict[str, Any] | None = None,
+        metrics: list[dict[str, float]] | None = None,
         error: str | None = None,
     ) -> dict[str, Any]:
         summary = {
@@ -194,6 +221,7 @@ class _TPUCoordinator:
             "completed_stages": completed_stages,
             "request": request.to_dict(),
             "worker_summary": worker_summary,
+            "metrics": metrics or [],
             "error": error,
         }
         path = request.output_dir / "coordinator_summary.json"
