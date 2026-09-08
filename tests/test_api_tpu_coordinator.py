@@ -5,7 +5,7 @@ import subprocess
 import pytest
 import torch
 
-from trainlm import TrainLMTrainer, TrainLMTrainingArguments
+from trainlm import PackedBinDataset, TrainLMTrainer, TrainLMTrainingArguments
 from trainlm._tpu_coordinator import (
     TPUCoordinatorError,
     _TPUCoordinator,
@@ -73,6 +73,29 @@ def test_tpu_facade_rejects_parent_owned_objects_and_unsupported_data(tmp_path):
     trainer._tpu_coordinator = RecordingCoordinator()
     with pytest.raises(TypeError, match="local manifest directory"):
         trainer.train()
+
+
+def test_tpu_facade_accepts_public_packed_dataset(tmp_path, monkeypatch):
+    dataset = object.__new__(PackedBinDataset)
+    manifest_dir = tmp_path / "validated"
+    monkeypatch.setattr(
+        PackedBinDataset,
+        "coordinator_manifest_dir",
+        lambda self, output_dir: manifest_dir,
+    )
+    coordinator = RecordingCoordinator()
+    trainer = TrainLMTrainer(
+        model="org/model",
+        train_dataset=dataset,
+        args=TrainLMTrainingArguments(
+            accelerator="tpu", output_dir=tmp_path / "run", max_steps=1
+        ),
+    )
+    trainer._tpu_coordinator = coordinator
+
+    trainer.train()
+
+    assert coordinator.requests[0].manifest_dir == manifest_dir
 
 
 def _request(tmp_path):

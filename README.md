@@ -127,6 +127,19 @@ trainer = TrainLMTrainer(
 trainer.train()
 ```
 
+Packed token shards can be supplied through the validated public adapter. Local
+manifests and revision-pinned Hugging Face sources are checked before iteration,
+and rank ownership is deterministic:
+
+```python
+from trainlm import PackedBinDataset
+
+train_dataset = PackedBinDataset.from_directory(
+    "data/packed/train",
+    sequence_length=2048,
+)
+```
+
 The facade delegates local runs to the portable CPU/CUDA engine and routes
 `accelerator="tpu"` through a private single-VM coordinator. The initial TPU
 bridge accepts a reconstructible pretrained Hugging Face model source and a
