@@ -58,11 +58,49 @@ def test_chunking_never_projects_more_than_requested(monkeypatch):
     assert sizes == [3, 3, 3, 1]
 
 
+def test_per_chunk_rematerialization_matches_loss_and_gradients():
+    torch.manual_seed(11)
+    source = (
+        torch.randn(2, 5, 4),
+        torch.randn(7, 4),
+        torch.randn(7),
+    )
+    labels = torch.randint(0, 7, (2, 5))
+
+    def run(policy):
+        hidden, weight, bias = (
+            value.detach().clone().requires_grad_(True) for value in source
+        )
+        loss, z_value = chunked_linear_causal_cross_entropy(
+            hidden,
+            weight,
+            labels,
+            bias=bias,
+            chunk_size=3,
+            z_loss=0.02,
+            rematerialization=policy,
+        )
+        loss.backward()
+        return loss.detach(), z_value.detach(), tuple(
+            value.grad for value in (hidden, weight, bias)
+        )
+
+    expected = run("disabled")
+    actual = run("per_chunk")
+    for actual_value, expected_value in zip(actual, expected):
+        if isinstance(actual_value, tuple):
+            for actual_gradient, expected_gradient in zip(actual_value, expected_value):
+                torch.testing.assert_close(actual_gradient, expected_gradient)
+        else:
+            torch.testing.assert_close(actual_value, expected_value)
+
+
 @pytest.mark.parametrize(
     ("kwargs", "message"),
     [
         ({"chunk_size": 0}, "chunk_size"),
         ({"z_loss": -1.0}, "z_loss"),
+        ({"rematerialization": "layer"}, "rematerialization"),
         ({"loss_mask": torch.zeros(2, 5, dtype=torch.bool)}, "no supervised"),
     ],
 )

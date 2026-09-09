@@ -3,9 +3,35 @@
 from __future__ import annotations
 
 import math
+from typing import Literal
 
 import torch
 import torch.nn.functional as F
+import torch.utils.checkpoint as checkpoint_utils
+
+RematerializationPolicy = Literal["disabled", "per_chunk"]
+
+
+def _chunk_terms(
+    hidden: torch.Tensor,
+    weight: torch.Tensor,
+    labels: torch.Tensor,
+    bias: torch.Tensor | None,
+    *,
+    ignore_index: int,
+    include_z_loss: bool,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    logits = F.linear(hidden.float(), weight, bias)
+    loss_sum = F.cross_entropy(
+        logits, labels, ignore_index=ignore_index, reduction="sum"
+    )
+    z_sum = logits.new_zeros(())
+    if include_z_loss:
+        active = labels.ne(ignore_index)
+        z_sum = torch.where(
+            active, torch.logsumexp(logits, dim=-1).square(), 0.0
+        ).sum()
+    return loss_sum, z_sum
 
 
 def chunked_linear_causal_cross_entropy(
@@ -18,6 +44,7 @@ def chunked_linear_causal_cross_entropy(
     chunk_size: int = 2048,
     ignore_index: int = -100,
     z_loss: float = 0.0,
+    rematerialization: RematerializationPolicy = "disabled",
 ) -> tuple[torch.Tensor, torch.Tensor | None]:
     """Compute shifted causal CE without materializing full-sequence logits.
 
@@ -40,6 +67,10 @@ def chunked_linear_causal_cross_entropy(
         raise ValueError("chunk_size must be a positive integer.")
     if not isinstance(z_loss, (int, float)) or not math.isfinite(z_loss) or z_loss < 0:
         raise ValueError("z_loss must be finite and non-negative.")
+    if rematerialization not in {"disabled", "per_chunk"}:
+        raise ValueError(
+            "rematerialization must be 'disabled' or 'per_chunk'."
+        )
 
     shifted_hidden = hidden_states[..., :-1, :].reshape(-1, hidden_states.shape[-1])
     shifted_labels = labels[..., 1:].reshape(-1)
@@ -65,15 +96,37 @@ def chunked_linear_causal_cross_entropy(
     for start in range(0, shifted_hidden.shape[0], chunk_size):
         stop = min(start + chunk_size, shifted_hidden.shape[0])
         chunk_labels = shifted_labels[start:stop]
-        logits = F.linear(shifted_hidden[start:stop].float(), weight_fp32, bias_fp32)
-        loss_sum = loss_sum + F.cross_entropy(
-            logits, chunk_labels, ignore_index=ignore_index, reduction="sum"
-        )
-        if z_loss:
-            active = chunk_labels.ne(ignore_index)
-            z_sum = z_sum + torch.where(
-                active, torch.logsumexp(logits, dim=-1).square(), 0.0
-            ).sum()
+        chunk_hidden = shifted_hidden[start:stop]
+        if rematerialization == "per_chunk":
+            if bias_fp32 is None:
+                chunk_loss, chunk_z = checkpoint_utils.checkpoint(
+                    lambda hidden, weight, targets: _chunk_terms(
+                        hidden, weight, targets, None,
+                        ignore_index=ignore_index, include_z_loss=bool(z_loss),
+                    ),
+                    chunk_hidden, weight_fp32, chunk_labels,
+                    use_reentrant=False,
+                )
+            else:
+                chunk_loss, chunk_z = checkpoint_utils.checkpoint(
+                    lambda hidden, weight, current_bias, targets: _chunk_terms(
+                        hidden, weight, targets, current_bias,
+                        ignore_index=ignore_index, include_z_loss=bool(z_loss),
+                    ),
+                    chunk_hidden, weight_fp32, bias_fp32, chunk_labels,
+                    use_reentrant=False,
+                )
+        else:
+            chunk_loss, chunk_z = _chunk_terms(
+                chunk_hidden,
+                weight_fp32,
+                chunk_labels,
+                bias_fp32,
+                ignore_index=ignore_index,
+                include_z_loss=bool(z_loss),
+            )
+        loss_sum = loss_sum + chunk_loss
+        z_sum = z_sum + chunk_z
 
     loss = loss_sum / denominator
     z_loss_value = z_sum / denominator if z_loss else None
@@ -82,4 +135,4 @@ def chunked_linear_causal_cross_entropy(
     return loss, z_loss_value
 
 
-__all__ = ["chunked_linear_causal_cross_entropy"]
+__all__ = ["RematerializationPolicy", "chunked_linear_causal_cross_entropy"]

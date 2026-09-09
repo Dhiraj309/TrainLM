@@ -155,10 +155,10 @@ this file in every turn:
    Target-TPU lifecycle validation remains.
    Coordinator contract coverage constructs mismatched evaluation requests by
    replacing serialized optional fields, matching real request round trips.
-2. **M9-F3 rematerialized chunks:** the reference chunked loss and explicit,
-   capability-guarded training view now bypass full model logits without model
-   mutation. Add rematerialization policy, compare configured chunk sizes, and
-   collect target-XLA HLO/HBM evidence before automatic selection.
+2. **M9-F3 rematerialized chunks:** an explicit non-reentrant per-chunk
+   checkpointing policy now preserves reference gradients. Compare chunk sizes
+   2,048/4,096/8,192 and collect target-XLA HLO/HBM/throughput evidence before
+   selecting a default or marking the story complete.
 3. **M10+ kernels:** integrate TPU attention/projection/norm/optimizer/remat
    providers only after shape, dtype, mask, and backward correctness tests.
 

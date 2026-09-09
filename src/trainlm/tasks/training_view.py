@@ -11,7 +11,10 @@ from torch import nn
 
 from trainlm.optimization.capabilities import ModelCapabilities
 
-from .chunked_loss import chunked_linear_causal_cross_entropy
+from .chunked_loss import (
+    RematerializationPolicy,
+    chunked_linear_causal_cross_entropy,
+)
 
 HiddenStateProvider = Callable[[nn.Module, Mapping[str, Any]], torch.Tensor]
 
@@ -85,6 +88,7 @@ class LinearCausalLMTrainingView:
         chunk_size: int = 2048,
         ignore_index: int = -100,
         z_loss: float = 0.0,
+        rematerialization: RematerializationPolicy = "disabled",
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         hidden = self.hidden_states(model_inputs)
         weight, bias = self.output_projection()
@@ -97,6 +101,7 @@ class LinearCausalLMTrainingView:
             chunk_size=chunk_size,
             ignore_index=ignore_index,
             z_loss=z_loss,
+            rematerialization=rematerialization,
         )
 
 

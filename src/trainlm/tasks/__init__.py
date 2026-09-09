@@ -6,7 +6,7 @@ from .base import (
     TokenCounts,
 )
 from .causal_lm import CausalLMTask
-from .chunked_loss import chunked_linear_causal_cross_entropy
+from .chunked_loss import RematerializationPolicy, chunked_linear_causal_cross_entropy
 from .training_view import HiddenStateProvider, LinearCausalLMTrainingView
 
 __all__ = [
@@ -19,4 +19,5 @@ __all__ = [
     "chunked_linear_causal_cross_entropy",
     "HiddenStateProvider",
     "LinearCausalLMTrainingView",
+    "RematerializationPolicy",
 ]

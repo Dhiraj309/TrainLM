@@ -839,10 +839,14 @@ TPU providers, and multi-family integration remain.
   loss without calling the model's full-logits forward. Target-XLA HLO evidence
   remains required before enabling this path automatically.
 
-- [ ] **M9-F3 — Rematerialized chunks**
+- [~] **M9-F3 — Rematerialized chunks**
   `feat(loss): add rematerialized chunked loss backward`
   Compare chunks 2,048/4,096/8,192 and bound HBM.
   **Acceptance:** Select size from matched throughput/HBM evidence.
+  An explicit `per_chunk` policy now uses non-reentrant activation checkpointing
+  around each linear-CE chunk and preserves reference loss/z-loss/gradient
+  semantics. Chunk-size selection and HBM/throughput evidence remain pending on
+  target TPU hardware, so this story is not complete.
 
 - [ ] **M9-F4 — TPU loss providers**
   `perf(loss): evaluate native XLA Pallas and Tokamax loss providers`
