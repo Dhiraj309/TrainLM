@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Any, Callable
 
 from .attention import CanonicalAttentionSpec
@@ -19,6 +20,8 @@ class PallasAttentionRuntime:
     backward_verified: bool
     hlo_custom_call_verified: bool = False
     grouped_query_verified: bool = False
+    alibi_verified: bool = False
+    sliding_window_verified: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.torch_xla_version, str) or not self.torch_xla_version:
@@ -40,6 +43,10 @@ class PallasAttentionRuntime:
             raise TypeError("hlo_custom_call_verified must be boolean.")
         if not isinstance(self.grouped_query_verified, bool):
             raise TypeError("grouped_query_verified must be boolean.")
+        if not isinstance(self.alibi_verified, bool):
+            raise TypeError("alibi_verified must be boolean.")
+        if not isinstance(self.sliding_window_verified, bool):
+            raise TypeError("sliding_window_verified must be boolean.")
 
     def require_supported(self) -> None:
         if self.torch_xla_version not in self.tested_torch_xla_versions:
@@ -140,6 +147,7 @@ def pallas_grouped_attention_provider(
     spec: CanonicalAttentionSpec,
     *,
     provider_id: str = "trainlm.pallas_grouped_attention",
+    alibi_slopes: tuple[float, ...] | None = None,
 ) -> HFAttentionProvider:
     """Build an MHA/GQA/MQA provider that preserves compact K/V head storage."""
 
@@ -148,8 +156,30 @@ def pallas_grouped_attention_provider(
         raise RuntimeError(
             "Grouped-query Pallas attention requires explicit GQA/MQA evidence."
         )
-    if spec.mask.layout != "causal" or spec.mask.segment_ids:
-        raise ValueError("Grouped Pallas attention currently supports full causal masks.")
+    if spec.mask.segment_ids:
+        raise ValueError("Grouped Pallas attention does not support segment masks.")
+    if (
+        spec.mask.layout == "causal_sliding_window"
+        and not runtime.sliding_window_verified
+    ):
+        raise RuntimeError(
+            "Sliding-window Pallas attention requires explicit runtime evidence."
+        )
+    if spec.position_encoding == "alibi":
+        if not runtime.alibi_verified:
+            raise RuntimeError("Pallas ALiBi attention requires explicit runtime evidence.")
+        if (
+            not isinstance(alibi_slopes, tuple)
+            or len(alibi_slopes) != spec.query_heads
+            or any(
+                isinstance(slope, bool) or not isinstance(slope, (int, float))
+                or not math.isfinite(slope)
+                for slope in alibi_slopes
+            )
+        ):
+            raise ValueError("ALiBi requires one explicit numeric slope per query head.")
+    elif alibi_slopes is not None:
+        raise ValueError("ALiBi slopes cannot be supplied for another position encoding.")
     mapping = KVHeadMapping(spec.query_heads, spec.key_value_heads)
 
     def attention_forward(
@@ -175,6 +205,8 @@ def pallas_grouped_attention_provider(
             scale=spec.effective_scale if scaling is None else scaling,
             query_heads=mapping.query_heads,
             key_value_heads=mapping.key_value_heads,
+            sliding_window=spec.mask.sliding_window,
+            alibi_slopes=alibi_slopes,
         )
         return output, None
 
@@ -187,7 +219,7 @@ def pallas_grouped_attention_provider(
         attention_forward=attention_forward,
         mask_factory=causal_mask_factory,
         layouts=(spec.layout,),
-        mask_layouts=("causal",),
+        mask_layouts=(spec.mask.layout,),
         position_encodings=(spec.position_encoding,),
     )
 

@@ -918,10 +918,14 @@ optimizations, autotuning, and benchmark evidence remain.
   an explicit kernel adapter and rejects GQA/MQA unless runtime evidence exists.
   Target-TPU numerical, gradient, and HBM evidence remains pending.
 
-- [ ] **M10-F5 — ALiBi/sliding window**
+- [~] **M10-F5 — ALiBi/sliding window**
   `feat(attention): add ALiBi and sliding window capabilities`
   Provide optimized support or efficient explicit XLA fallback.
   **Acceptance:** Boundary-token, mask, and gradient fixtures pass.
+  The guarded provider now forwards a scalar sliding-window boundary without a
+  dense mask and forwards explicit model-supplied ALiBi slopes unchanged. Both
+  paths require independent runtime evidence and otherwise fail explicitly.
+  Target-TPU boundary-token, numerical, gradient, and HBM evidence remains.
 
 - [ ] **M10-F6 — Attention autotuning**
   `perf(attention): tune v5e attention provider configurations`

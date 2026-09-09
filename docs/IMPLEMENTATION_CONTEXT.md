@@ -174,6 +174,10 @@ this file in every turn:
    guarded provider now preserve compact K/V inputs for 8/8, 8/4, and 8/1 and
    pass head geometry directly to the kernel adapter. Keep the story open until
    target-TPU correctness, gradient, and HBM evidence proves no hidden repeat.
+6. **M10-F5 ALiBi/sliding window:** the guarded provider now passes an integer
+   window to the compact kernel without materializing a dense mask and requires
+   explicit model-supplied ALiBi slopes rather than deriving family semantics.
+   Both paths remain gated until target-TPU boundary, gradient, and HBM evidence.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
