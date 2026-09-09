@@ -220,6 +220,10 @@ this file in every turn:
     schedule, and dtype fields and requires deterministic early-update errors
     within tolerance. Populate it from the exact reference and justify or remove
     every difference before certification.
+17. **M12-F2 three-run benchmark:** a repeated-run evaluator now requires three
+    matched warm-cache v5e-8 results with identical HLO, stable compilation,
+    zero fallback, and per-run hard gates, then reports medians, spread, and max
+    HBM. Populate it with three synchronized target runs.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

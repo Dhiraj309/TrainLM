@@ -27,6 +27,10 @@ from trainlm.benchmark.numerical_alignment import (
     REQUIRED_NUMERICAL_PATHS,
     compare_numerical_alignment,
 )
+from trainlm.benchmark.repeated_parity import (
+    RepeatedParityEvaluation,
+    evaluate_repeated_parity,
+)
 
 __all__ = [
     "BenchmarkResult",
@@ -41,9 +45,11 @@ __all__ = [
     "NumericalAlignmentReport",
     "NumericalDifference",
     "REQUIRED_NUMERICAL_PATHS",
+    "RepeatedParityEvaluation",
     "evaluate_baseline",
     "evaluate_attention_stage",
     "evaluate_parity_closure",
     "compare_numerical_alignment",
+    "evaluate_repeated_parity",
     "load_baseline_workload",
 ]

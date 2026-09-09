@@ -1045,10 +1045,15 @@ early-update evidence gate are implemented; target-run alignment remains.
   must be explicitly justified, and at least one deterministic early-update
   error must remain within tolerance. Target parity evidence remains pending.
 
-- [ ] **M12-F2 — Three-run benchmark**
+- [~] **M12-F2 — Three-run benchmark**
   `perf(parity): certify repeated v5e 135M throughput`
   Report matched runs, dispersion, cache, HBM, HLO, compiles, idle, and MFU.
   **Acceptance:** Every run clears hard thresholds; preferred median clears 95%.
+  A repeated-run evaluator now requires exactly three matched warm-cache v5e-8
+  results, identical HLO fingerprints, stable graphs, zero fallback, and every
+  run above the hard throughput/MFU thresholds. It reports median throughput/
+  MFU, spread, and max HBM, with separate preferred-median status. Real runs
+  remain pending.
 
 - [ ] **M12-F3 — Real-shard stability**
   `test(parity): validate 200 update real data stability`
