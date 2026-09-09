@@ -155,8 +155,10 @@ this file in every turn:
    Target-TPU lifecycle validation remains.
    Coordinator contract coverage constructs mismatched evaluation requests by
    replacing serialized optional fields, matching real request round trips.
-2. **M9 loss path:** add chunked/rematerialized causal loss and benchmark it
-   against the measured 319K baseline before enabling it by default.
+2. **M9-F2 optimized training view:** the reference chunked linear causal loss
+   now matches full-logits loss and gradients while bounding logits by chunk
+   size. Safely expose final hidden states and output weights without changing
+   canonical Hugging Face forward/export behavior, then benchmark before use.
 3. **M10+ kernels:** integrate TPU attention/projection/norm/optimizer/remat
    providers only after shape, dtype, mask, and backward correctness tests.
 

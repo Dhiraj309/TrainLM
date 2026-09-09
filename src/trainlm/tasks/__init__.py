@@ -6,6 +6,7 @@ from .base import (
     TokenCounts,
 )
 from .causal_lm import CausalLMTask
+from .chunked_loss import chunked_linear_causal_cross_entropy
 
 __all__ = [
     "CausalLMTask",
@@ -14,4 +15,5 @@ __all__ = [
     "StreamingEvaluationTask",
     "TaskResult",
     "TokenCounts",
+    "chunked_linear_causal_cross_entropy",
 ]

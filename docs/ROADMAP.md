@@ -817,11 +817,15 @@ loaded HF models safely without family logic in core.
 
 **Goal:** Remove the full FP32 logits bottleneck without changing semantics.
 
-- [ ] **M9-F1 — Reference chunked linear CE**
+- [x] **M9-F1 — Reference chunked linear CE**
   `feat(loss): add reference chunked linear causal cross entropy`
   Consume hidden state, output weight, labels, optional bias; support shift,
   ignore index, tied/untied, FP32 reduction, chunks, and z-loss.
   **Acceptance:** Loss and hidden/head gradients match full-logits reference.
+  The FP32 reference projects flattened shifted tokens in bounded chunks,
+  supports optional bias, masks/ignore index, tied or untied output weights,
+  supervised-token normalization, and z-loss. Tests compare loss and hidden,
+  head, and bias gradients against full-logits cross entropy.
 
 - [ ] **M9-F2 — Optimized training view**
   `feat(loss): bypass full HF logits during optimized training`
