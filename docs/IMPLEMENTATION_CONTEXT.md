@@ -199,6 +199,10 @@ this file in every turn:
     observations into native, custom, or blocked decisions for norm, RoPE,
     residual, and MLP. Populate it from target-XLA captures and benchmark every
     custom candidate before implementing another kernel.
+12. **M11-F4 decoder rematerialization:** explicit none/block/attention/MLP/
+    loss-chunk policies now require pre-FSDP application, and selection uses
+    measured gradient parity, graph stability, step slowdown, and peak HBM with
+    deterministic ties. Populate target-XLA measurements before defaulting.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

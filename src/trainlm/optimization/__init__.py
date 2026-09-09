@@ -76,6 +76,13 @@ from .hlo_audit import (
     HLOFusionObservation,
     audit_hlo_fusions,
 )
+from .rematerialization import (
+    RematerializationMeasurement,
+    RematerializationPolicy,
+    RematerializationScope,
+    RematerializationSelection,
+    select_rematerialization_policy,
+)
 
 __all__ = [
     "CapabilityFact",
@@ -122,6 +129,10 @@ __all__ = [
     "ProviderDecision",
     "ProviderSpec",
     "QKVProjectionSpec",
+    "RematerializationMeasurement",
+    "RematerializationPolicy",
+    "RematerializationScope",
+    "RematerializationSelection",
     "PositionEncoding",
     "PackageVersionGuard",
     "PallasAttentionRuntime",
@@ -137,6 +148,7 @@ __all__ = [
     "install_hf_attention_provider",
     "pallas_mha_provider",
     "pallas_grouped_attention_provider",
+    "select_rematerialization_policy",
     "causal_loss_provider_specs",
     "causal_loss_request",
 ]

@@ -987,10 +987,14 @@ numerical/gradient/update evidence remain.
   identifies custom-kernel candidates, and blocks unknown/fallback cases.
   Target-XLA HLO captures and matched benchmarks remain pending.
 
-- [ ] **M11-F4 — Decoder rematerialization**
+- [~] **M11-F4 — Decoder rematerialization**
   `feat(optimization): add structural decoder rematerialization policies`
   None/block/attention/MLP/loss-chunk with correct FSDP ordering.
   **Acceptance:** Selected policy is justified by step/HBM evidence.
+  Explicit none/block/attention/MLP/loss-chunk policies now enforce pre-FSDP
+  ordering. A deterministic selector rejects gradient mismatches, unstable
+  graphs, and policies outside a configured slowdown budget, then chooses the
+  lowest measured HBM with stable ties. Target-XLA measurements remain pending.
 
 - [ ] **M11-F5 — XLA optimizer-state path**
   `feat(optim): optimize XLA AdamW state and update graph`
