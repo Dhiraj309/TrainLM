@@ -813,7 +813,9 @@ loaded HF models safely without family logic in core.
 
 ## M9 — Memory-efficient causal-LM loss
 
-**Status:** [ ] Not started
+**Status:** [~] In progress — the portable reference chunked linear causal
+cross-entropy is implemented; optimized hidden-state access, rematerialization,
+TPU providers, and multi-family integration remain.
 
 **Goal:** Remove the full FP32 logits bottleneck without changing semantics.
 
