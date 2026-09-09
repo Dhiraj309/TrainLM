@@ -736,9 +736,10 @@ loaded HF models safely without family logic in core.
   callback metrics, and restore versioned training state. TPU worker summaries
   expose normalized public state and callback metrics without log parsing. TPU
   checkpoint/evaluation parity and target-hardware validation remain.
-  The private request/CLI boundary now validates and transports save cadence
-  and resume checkpoint paths; worker-side persistence and restoration are not
-  yet enabled through the public facade.
+  The private request/CLI boundary transports save cadence and resume paths;
+  rank-local atomic shards preserve model, optimizer, scheduler, runtime,
+  trainer, host/device RNG, and deterministic packed-data progress. Evaluation cadence and
+  target-hardware resume validation remain.
 
 - [~] **M8-F1 — Structural inspector**
   `feat(optimization): inspect dense causal LM capabilities`

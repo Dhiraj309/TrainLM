@@ -143,9 +143,10 @@ this file in every turn:
 
 1. **M8-F0 TPU checkpoint parity:** carry safe resume and save/evaluation
    cadence through worker coordination.
-   The coordinator request and worker CLI now have validated save-cadence and
-   resume-path contracts. Worker-side state persistence and restoration remain
-   disabled at the public facade until the next story completes the behavior.
+   The coordinator and worker now carry save cadence and resume paths. Each TPU
+   rank atomically persists model, optimizer, scheduler, runtime, host/device RNG,
+   and deterministic packed-data progress, and validates the committed topology
+   before restoring. Evaluation cadence and target-TPU validation remain.
 2. **M9 loss path:** add chunked/rematerialized causal loss and benchmark it
    against the measured 319K baseline before enabling it by default.
 3. **M10+ kernels:** integrate TPU attention/projection/norm/optimizer/remat

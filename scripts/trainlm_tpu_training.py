@@ -36,6 +36,7 @@ from trainlm.config import (
     TrainerConfig,
     ModelSourceConfig,
 )
+from trainlm.checkpoint import load_tpu_worker_checkpoint, save_tpu_worker_checkpoint
 from trainlm.data import (
     ContiguousPackedBatchReader,
     PartitionedPackedBatchReader,
@@ -358,7 +359,10 @@ def train_fn(index: int, args: argparse.Namespace, shards) -> None:
             max_grad_norm=1.0,
             seed=args.seed,
         ),
-        checkpoint=CheckpointConfig(output_dir=Path(args.output_dir)),
+        checkpoint=CheckpointConfig(
+            output_dir=Path(args.output_dir),
+            save_training_every_steps=args.save_every_steps,
+        ),
         logging=LoggingConfig(log_every_steps=args.log_every_steps),
         monitoring=MonitoringConfig(
             enabled=True,
@@ -389,7 +393,25 @@ def train_fn(index: int, args: argparse.Namespace, shards) -> None:
         task=task,
         train_dataloader=device_loader,
         callbacks=[metrics],
+        checkpoint_saver=lambda engine, destination: save_tpu_worker_checkpoint(
+            engine, Path(args.output_dir) / str(destination)
+        ),
+        checkpoint_loader=lambda engine, source: load_tpu_worker_checkpoint(
+            engine, source
+        ),
     )
+    if args.resume_from_checkpoint is not None:
+        trainer.load_checkpoint(Path(args.resume_from_checkpoint))
+        # The packed schedule is deterministic. Rebuild its exact position
+        # before entering the training loop so the next batch is not repeated.
+        trainer._train_iterator = iter(trainer.train_dataloader)
+        for _ in range(trainer.state.micro_step):
+            try:
+                next(trainer._train_iterator)
+            except StopIteration as exc:
+                raise ValueError(
+                    "TPU checkpoint data position exceeds the available rank schedule."
+                ) from exc
     print({"stage": "train_start", "rank": rank,
            "parameters": sum(p.numel() for p in model.parameters()),
            "attention": attention_backend or getattr(model.config, "_attn_implementation", None),
@@ -443,6 +465,12 @@ def train_fn(index: int, args: argparse.Namespace, shards) -> None:
         "launcher_cache": str(Path(args.cache_dir) / f"rank-{rank}"),
         "versions": {"torch": torch.__version__, "torch_xla": torch_xla.__version__},
         "performance_certified": False,
+        "resumed_from_checkpoint": args.resume_from_checkpoint,
+        "committed_checkpoints": sorted(
+            str(path)
+            for path in Path(args.output_dir).glob("checkpoint-*")
+            if (path / "manifest.json").is_file()
+        ),
     }
     if runtime.is_primary_process:
         output = Path(args.output_dir)

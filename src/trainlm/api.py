@@ -197,9 +197,9 @@ class TrainLMTrainer:
                 )
             if self.args.fp16:
                 raise ValueError("TPU execution supports fp32 or bf16, not fp16.")
-            if self.args.save_steps is not None or self.args.eval_steps is not None:
+            if self.args.eval_steps is not None:
                 raise NotImplementedError(
-                    "TPU save_steps and eval_steps will be added with lifecycle parity."
+                    "TPU eval_steps will be added with evaluation lifecycle parity."
                 )
             from trainlm._tpu_coordinator import _TPUCoordinator
 
@@ -398,10 +398,6 @@ class TrainLMTrainer:
         """Run training and return the TrainLM trainer state."""
 
         if self._tpu_coordinator is not None:
-            if resume_from_checkpoint is not None:
-                raise NotImplementedError(
-                    "TPU checkpoint resume will be added after worker checkpoint wiring."
-                )
             return self._consume_tpu_result(
                 self._tpu_coordinator.run(
                     self._make_tpu_request(resume_from_checkpoint=resume_from_checkpoint)
