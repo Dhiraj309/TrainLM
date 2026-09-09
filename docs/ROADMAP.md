@@ -976,11 +976,16 @@ numerical/gradient/update evidence remain.
   explicit no-transform path. Live module transforms and numerical/update parity
   remain pending.
 
-- [ ] **M11-F3 — Native fusion audit**
+- [~] **M11-F3 — Native fusion audit**
   `perf(hlo): audit norm RoPE residual and MLP fusion`
   Inspect copies, transposes, materialization, custom calls, and layout before
   writing kernels.
   **Acceptance:** Every candidate has evidence-backed native/custom decision.
+  A versioned pure audit now consumes HLO fingerprints plus copy, transpose,
+  materialization, custom-call, and fallback observations for normalization,
+  RoPE, residual, and MLP components. It retains proven clean native fusion,
+  identifies custom-kernel candidates, and blocks unknown/fallback cases.
+  Target-XLA HLO captures and matched benchmarks remain pending.
 
 - [ ] **M11-F4 — Decoder rematerialization**
   `feat(optimization): add structural decoder rematerialization policies`

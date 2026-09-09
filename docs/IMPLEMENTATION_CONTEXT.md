@@ -194,6 +194,11 @@ this file in every turn:
     now create reversible gate/up weight and optional-bias mappings, while GELU
     remains an explicit no-transform path. Add transactional live transforms
     and validate output/gradient/update parity before completing the story.
+11. **M11-F3 native fusion audit:** a deterministic audit now turns explicit
+    HLO fingerprints and copy/transpose/materialization/custom-call/fallback
+    observations into native, custom, or blocked decisions for norm, RoPE,
+    residual, and MLP. Populate it from target-XLA captures and benchmark every
+    custom candidate before implementing another kernel.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

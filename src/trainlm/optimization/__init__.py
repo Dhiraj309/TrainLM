@@ -68,6 +68,14 @@ from .attention_tuning import (
 )
 from .qkv import QKVProjectionSpec
 from .mlp import GatedMLPProjectionSpec, MLPActivation
+from .hlo_audit import (
+    FusionComponent,
+    FusionDecision,
+    HLOFusionAudit,
+    HLOFusionDecision,
+    HLOFusionObservation,
+    audit_hlo_fusions,
+)
 
 __all__ = [
     "CapabilityFact",
@@ -87,8 +95,13 @@ __all__ = [
     "ComponentCapability",
     "DecisionStatus",
     "ExecutionPlan",
+    "FusionComponent",
+    "FusionDecision",
     "HFAttentionInstallation",
     "HFAttentionProvider",
+    "HLOFusionAudit",
+    "HLOFusionDecision",
+    "HLOFusionObservation",
     "GatedMLPProjectionSpec",
     "LINEAR_CAUSAL_LOSS_REQUIREMENTS",
     "KVHeadMapping",
@@ -118,6 +131,7 @@ __all__ = [
     "TransformHandler",
     "TransformTransaction",
     "create_optimizer",
+    "audit_hlo_fusions",
     "expected_causal_visibility",
     "inspect_dense_causal_lm",
     "install_hf_attention_provider",
