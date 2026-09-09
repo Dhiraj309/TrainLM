@@ -1055,10 +1055,14 @@ early-update evidence gate are implemented; target-run alignment remains.
   MFU, spread, and max HBM, with separate preferred-median status. Real runs
   remain pending.
 
-- [ ] **M12-F3 — Real-shard stability**
+- [~] **M12-F3 — Real-shard stability**
   `test(parity): validate 200 update real data stability`
   Run pinned diverse shards with eval, integrity, checkpoint, resume, and graph.
   **Acceptance:** Finite/stable, continuous data, no recompile/fallback, export.
+  A structured gate now requires at least 200 updates across diverse
+  revision-pinned shards, scheduled evaluation, checkpoint resume, integrity
+  checks, cursor continuity, finite loss/gradient ranges, stable compilation,
+  zero fallback, and canonical export. The real target run remains pending.
 
 - [ ] **M12-F4 — Plain-HF export certification**
   `test(parity): certify optimized HF checkpoint interoperability`

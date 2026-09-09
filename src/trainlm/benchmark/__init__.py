@@ -31,6 +31,11 @@ from trainlm.benchmark.repeated_parity import (
     RepeatedParityEvaluation,
     evaluate_repeated_parity,
 )
+from trainlm.benchmark.stability import (
+    RealShardStabilityEvaluation,
+    RealShardStabilityEvidence,
+    evaluate_real_shard_stability,
+)
 
 __all__ = [
     "BenchmarkResult",
@@ -46,10 +51,13 @@ __all__ = [
     "NumericalDifference",
     "REQUIRED_NUMERICAL_PATHS",
     "RepeatedParityEvaluation",
+    "RealShardStabilityEvaluation",
+    "RealShardStabilityEvidence",
     "evaluate_baseline",
     "evaluate_attention_stage",
     "evaluate_parity_closure",
     "compare_numerical_alignment",
     "evaluate_repeated_parity",
+    "evaluate_real_shard_stability",
     "load_baseline_workload",
 ]

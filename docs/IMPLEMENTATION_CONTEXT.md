@@ -224,6 +224,10 @@ this file in every turn:
     matched warm-cache v5e-8 results with identical HLO, stable compilation,
     zero fallback, and per-run hard gates, then reports medians, spread, and max
     HBM. Populate it with three synchronized target runs.
+18. **M12-F3 real-shard stability:** a structured gate now requires 200 updates
+    on revision-pinned diverse shards with evaluation, resume, integrity,
+    cursor continuity, finite loss/gradient ranges, stable compilation, zero
+    fallback, and canonical export. Populate it from the target stability run.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
