@@ -848,10 +848,14 @@ TPU providers, and multi-family integration remain.
   semantics. Chunk-size selection and HBM/throughput evidence remain pending on
   target TPU hardware, so this story is not complete.
 
-- [ ] **M9-F4 — TPU loss providers**
+- [~] **M9-F4 — TPU loss providers**
   `perf(loss): evaluate native XLA Pallas and Tokamax loss providers`
   Compare pure XLA, Pallas bridge, and Tokamax where versions/backward permit.
   **Acceptance:** Record correctness, HBM, speed, compatibility, and fallback.
+  The pure provider catalog keeps Pallas and Tokamax gated on explicit runtime
+  and backward evidence and otherwise selects portable chunked loss as an
+  explained fallback. Provider implementation and matched TPU correctness,
+  HBM, and throughput measurements remain pending.
 
 - [ ] **M9-F5 — Multi-family loss adapters**
   `test(loss): certify chunked loss across dense output-head layouts`

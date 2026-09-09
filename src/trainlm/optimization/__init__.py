@@ -35,6 +35,11 @@ from .transforms import (
 )
 from .state_dict import ParameterLayoutMapping, StateDictLayoutConverter
 from .explanation import CertificationStatus, OptimizationExplanation
+from .loss_providers import (
+    LINEAR_CAUSAL_LOSS_REQUIREMENTS,
+    causal_loss_provider_specs,
+    causal_loss_request,
+)
 
 __all__ = [
     "CapabilityFact",
@@ -47,6 +52,7 @@ __all__ = [
     "ComponentCapability",
     "DecisionStatus",
     "ExecutionPlan",
+    "LINEAR_CAUSAL_LOSS_REQUIREMENTS",
     "ModelCapabilities",
     "ModelAdapterRegistry",
     "ModelTransformation",
@@ -68,4 +74,6 @@ __all__ = [
     "TransformTransaction",
     "create_optimizer",
     "inspect_dense_causal_lm",
+    "causal_loss_provider_specs",
+    "causal_loss_request",
 ]

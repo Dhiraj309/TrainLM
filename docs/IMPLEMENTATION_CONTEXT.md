@@ -159,7 +159,10 @@ this file in every turn:
    checkpointing policy now preserves reference gradients. Compare chunk sizes
    2,048/4,096/8,192 and collect target-XLA HLO/HBM/throughput evidence before
    selecting a default or marking the story complete.
-3. **M10+ kernels:** integrate TPU attention/projection/norm/optimizer/remat
+3. **M9-F4 TPU loss providers:** the pure catalog gates Pallas and Tokamax on
+   explicit runtime and backward evidence, with portable chunked loss as the
+   fallback. Implement and benchmark eligible providers before default use.
+4. **M10+ kernels:** integrate TPU attention/projection/norm/optimizer/remat
    providers only after shape, dtype, mask, and backward correctness tests.
 
 ## Definition of done for the public surface

@@ -36,6 +36,7 @@ class ProviderSpec:
     transformations: tuple[ModelTransformation, ...] = ()
     fallback: bool = False
     priority: int = 0
+    runtime_requirements: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         for name in ("provider_id", "component", "operation"):
@@ -49,6 +50,7 @@ class ProviderSpec:
             "precisions",
             "capability_kinds",
             "supported_requirements",
+            "runtime_requirements",
         ):
             object.__setattr__(self, name, _strings(name, getattr(self, name)))
         if not self.backends or not self.precisions:
@@ -109,8 +111,10 @@ class OptimizationPlanner:
         policy: OptimizationPolicy,
         requests: Iterable[OperationRequest],
         adapter_resolution: AdapterResolution | None = None,
+        runtime_features: tuple[str, ...] = (),
     ) -> ExecutionPlan:
         requests = tuple(requests)
+        runtime_features = _strings("runtime_features", runtime_features)
         if len({(item.component, item.operation) for item in requests}) != len(requests):
             raise ValueError("Operation requests must be unique by component and operation.")
         adapter_id = (
@@ -124,6 +128,7 @@ class OptimizationPlanner:
             "precision": precision,
             "policy": policy,
             "adapter": adapter_id,
+            "runtime_features": runtime_features,
             "requests": [
                 [item.component, item.operation, item.requirements, item.requested_provider]
                 for item in requests
@@ -156,7 +161,11 @@ class OptimizationPlanner:
         warnings: list[str] = []
         for request in requests:
             eligible, rejected = self._eligible(
-                request, capabilities, backend=backend, precision=precision
+                request,
+                capabilities,
+                backend=backend,
+                precision=precision,
+                runtime_features=runtime_features,
             )
             preferred = [item for item in eligible if not item.fallback]
             fallbacks = [item for item in eligible if item.fallback]
@@ -194,7 +203,9 @@ class OptimizationPlanner:
                 selected_provider=chosen.provider_id,
                 requested_provider=(requested or "auto") if is_fallback else requested,
                 requirements=request.requirements,
-                evidence=(f"capability.{request.component}",) + ((f"adapter.{adapter_id}",) if adapter_id else ()),
+                evidence=(f"capability.{request.component}",)
+                + ((f"adapter.{adapter_id}",) if adapter_id else ())
+                + (tuple(rejected) if is_fallback else ()),
             ))
             transformations.extend(chosen.transformations)
             if is_fallback:
@@ -212,7 +223,9 @@ class OptimizationPlanner:
             errors=tuple(errors),
         )
 
-    def _eligible(self, request, capabilities, *, backend, precision):
+    def _eligible(
+        self, request, capabilities, *, backend, precision, runtime_features
+    ):
         eligible: list[ProviderSpec] = []
         rejected: list[str] = []
         component = capabilities.component(request.component)
@@ -231,6 +244,11 @@ class OptimizationPlanner:
             missing = sorted(set(request.requirements) - set(provider.supported_requirements))
             if missing:
                 reasons.append(f"requirements {missing!r}")
+            missing_runtime = sorted(
+                set(provider.runtime_requirements) - set(runtime_features)
+            )
+            if missing_runtime:
+                reasons.append(f"runtime features {missing_runtime!r}")
             if reasons:
                 rejected.append(f"{provider.provider_id}: rejected by {', '.join(reasons)}")
             else:
