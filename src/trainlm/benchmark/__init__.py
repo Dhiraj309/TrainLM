@@ -12,6 +12,10 @@ from trainlm.benchmark.baseline import (
     evaluate_baseline,
     load_baseline_workload,
 )
+from trainlm.benchmark.attention_stage import (
+    AttentionStageEvaluation,
+    evaluate_attention_stage,
+)
 
 __all__ = [
     "BenchmarkResult",
@@ -20,6 +24,8 @@ __all__ = [
     "calculate_mfu",
     "BaselineEvaluation",
     "BaselineWorkload",
+    "AttentionStageEvaluation",
     "evaluate_baseline",
+    "evaluate_attention_stage",
     "load_baseline_workload",
 ]

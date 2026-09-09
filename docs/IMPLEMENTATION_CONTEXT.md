@@ -182,6 +182,10 @@ this file in every turn:
    keys hardware, provider/version, dtype, batch/sequence/head geometry, mask,
    and window and uses stable candidate-ID tie breaking. Populate candidate
    ranges and measurements on v5e before selecting production defaults.
+8. **M10-F7 loss/attention benchmark:** a matched-result gate now requires
+   v5e-8 geometry, at least 850K global tokens/s, lower HBM, stable compilation,
+   zero CPU fallback, eliminated full logits, named providers, and HLO evidence.
+   Run synchronized fake- and real-data measurements on target hardware.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

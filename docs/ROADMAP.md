@@ -936,10 +936,14 @@ optimizations, autotuning, and benchmark evidence remain.
   and equal-score selection are deterministic, and versioned results round-trip
   through stable JSON. Target-v5e measurements and candidate ranges remain.
 
-- [ ] **M10-F7 — Loss/attention benchmark**
+- [~] **M10-F7 — Loss/attention benchmark**
   `perf(benchmark): certify optimized loss and attention stage`
   Benchmark exact 135M geometry on fake and real data with HLO evidence.
   **Acceptance:** `>= 850K tok/s`, lower HBM, stable graph, no fallback.
+  A pure matched-result evaluator now enforces v5e-8 geometry, the 850K gate,
+  lower HBM, stable post-warmup compilation, zero CPU fallback, no full logits,
+  named loss/attention providers, and an HLO fingerprint. The story remains open
+  until real synchronized fake- and real-data measurements satisfy the gate.
 
 ### Exit gate
 
