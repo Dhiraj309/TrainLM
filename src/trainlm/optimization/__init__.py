@@ -48,6 +48,12 @@ from .attention import (
     OutputLayout,
     PositionEncoding,
 )
+from .hf_attention import (
+    HFAttentionInstallation,
+    HFAttentionProvider,
+    expected_causal_visibility,
+    install_hf_attention_provider,
+)
 
 __all__ = [
     "CapabilityFact",
@@ -63,6 +69,8 @@ __all__ = [
     "ComponentCapability",
     "DecisionStatus",
     "ExecutionPlan",
+    "HFAttentionInstallation",
+    "HFAttentionProvider",
     "LINEAR_CAUSAL_LOSS_REQUIREMENTS",
     "ModelCapabilities",
     "MaskLayout",
@@ -87,7 +95,9 @@ __all__ = [
     "TransformHandler",
     "TransformTransaction",
     "create_optimizer",
+    "expected_causal_visibility",
     "inspect_dense_causal_lm",
+    "install_hf_attention_provider",
     "causal_loss_provider_specs",
     "causal_loss_request",
 ]

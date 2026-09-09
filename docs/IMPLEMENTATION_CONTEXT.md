@@ -162,10 +162,10 @@ this file in every turn:
 3. **M9-F4 TPU loss providers:** the pure catalog gates Pallas and Tokamax on
    explicit runtime and backward evidence, with portable chunked loss as the
    fallback. Implement and benchmark eligible providers before default use.
-4. **M10-F2 HF attention integration:** the canonical attention schema now
-   captures head geometry, position/mask semantics, segments, scale, dropout,
-   soft-cap, QK normalization, and output layout without family-name guesses.
-   Integrate it through public HF attention/mask interfaces where sufficient.
+4. **M10-F3 XLA Pallas provider:** guarded HF attention/mask registration now
+   requires canonical semantic compatibility and registers both interfaces
+   under one key. Add the first version-guarded Pallas MHA provider with backward
+   and target-HLO evidence while retaining the registered portable fallback.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

@@ -873,9 +873,9 @@ TPU providers, and multi-family integration remain.
 
 ## M10 — TPU attention provider family
 
-**Status:** [~] In progress — the canonical attention semantics contract is
-implemented; HF integration, TPU providers, layout optimizations, autotuning,
-and benchmark evidence remain.
+**Status:** [~] In progress — the canonical attention semantics contract and
+guarded HF interface integration are implemented; TPU providers, layout
+optimizations, autotuning, and benchmark evidence remain.
 
 **Goal:** Correct memory-efficient attention across the full V1 semantic surface.
 
@@ -889,10 +889,14 @@ and benchmark evidence remain.
   positions, dropout, soft-cap, QK normalization, and BSH output. Capability
   mapping uses inspected facts only and rejects unknown semantics.
 
-- [ ] **M10-F2 — HF attention/mask integration**
+- [x] **M10-F2 — HF attention/mask integration**
   `feat(attention): integrate TrainLM attention with HF interfaces`
   Use public attention/mask interfaces when sufficient and adapters otherwise.
   **Acceptance:** Causal leakage tests detect missing/wrong mask registration.
+  A guarded adapter now registers attention and mask callables under the same HF
+  interface key only after the canonical spec passes layout, position, segment,
+  dropout, soft-cap, and QK-normalization checks. Reference visibility tests
+  detect future-token, sliding-window, and cross-segment leakage.
 
 - [ ] **M10-F3 — XLA Pallas provider**
   `feat(attention): add XLA Pallas causal attention provider`
