@@ -41,6 +41,7 @@ from trainlm.benchmark.export_certification import (
     PlainHFExportEvidence,
     evaluate_plain_hf_export,
 )
+from trainlm.benchmark.parity_report import ParityReport
 
 __all__ = [
     "BenchmarkResult",
@@ -60,6 +61,7 @@ __all__ = [
     "RealShardStabilityEvidence",
     "PlainHFExportEvaluation",
     "PlainHFExportEvidence",
+    "ParityReport",
     "evaluate_baseline",
     "evaluate_attention_stage",
     "evaluate_parity_closure",

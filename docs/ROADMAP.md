@@ -1073,10 +1073,14 @@ early-update evidence gate are implemented; target-run alignment remains.
   keys, and logits/loss within tolerance after plain Transformers reload.
   Execution in a clean target environment remains pending.
 
-- [ ] **M12-F5 — Parity report**
+- [~] **M12-F5 — Parity report**
   `docs(benchmark): publish LaughLM TrainLM parity report`
   Publish environment, commands, configs, metrics, limits, profile, and HLO.
   **Acceptance:** Reviewer can reproduce without hidden configuration.
+  A versioned report schema now requires environment versions, reproduction
+  commands, configuration/metric/profile/HLO artifacts, limitations, and the
+  pass state of numerical, repeated-run, stability, and plain-HF gates. Stable
+  JSON and reviewer-facing Markdown are available; real evidence remains.
 
 ### Exit gate
 

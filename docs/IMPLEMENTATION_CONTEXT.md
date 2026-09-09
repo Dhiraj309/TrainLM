@@ -232,6 +232,10 @@ this file in every turn:
     Transformers-only environment, canonical keys, preserved aliases, no
     missing/unexpected keys, and logits/loss within tolerance. Run it against
     the optimized checkpoint without TrainLM installed.
+20. **M12-F5 parity report:** a versioned report now records environment,
+    reproduction commands, configuration/metric/profile/HLO artifacts,
+    limitations, and all four M12 gate outcomes in stable JSON and Markdown.
+    Populate it only with real target evidence before declaring certification.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
