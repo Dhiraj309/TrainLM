@@ -90,6 +90,12 @@ from .xla_optimizer import (
     XLAOptimizerEvidence,
     evaluate_xla_optimizer_path,
 )
+from .batch_tuning import (
+    BatchPrefetchGeometry,
+    BatchPrefetchMeasurement,
+    BatchPrefetchSelection,
+    select_batch_prefetch_geometry,
+)
 
 __all__ = [
     "CapabilityFact",
@@ -103,6 +109,9 @@ __all__ = [
     "AttentionTuningCandidate",
     "AttentionTuningKey",
     "AttentionTuningResult",
+    "BatchPrefetchGeometry",
+    "BatchPrefetchMeasurement",
+    "BatchPrefetchSelection",
     "CapabilityStatus",
     "CanonicalAttentionSpec",
     "AdamWStateDtype",
@@ -161,6 +170,7 @@ __all__ = [
     "pallas_mha_provider",
     "pallas_grouped_attention_provider",
     "select_rematerialization_policy",
+    "select_batch_prefetch_geometry",
     "causal_loss_provider_specs",
     "causal_loss_request",
 ]

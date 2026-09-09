@@ -1005,10 +1005,14 @@ numerical/gradient/update evidence remain.
   requires update/resume parity, stable graphs, zero CPU fallback, bounded step
   regression, and lower HBM. Target-XLA measurements remain pending.
 
-- [ ] **M11-F6 — Batch/prefetch tuning**
+- [~] **M11-F6 — Batch/prefetch tuning**
   `perf(runtime): tune microbatch accumulation and prefetch geometry`
   Re-test MB2/GA32, MB1/GA64, safe alternatives, and prefetch near 16.
   **Acceptance:** One synchronized real-data production geometry is selected.
+  A deterministic selector now compares only equal token/update geometries and
+  requires real data, stable graphs, zero CPU fallback, bounded HBM, and bounded
+  input idle. It selects throughput first with stable HBM/idle/ID ties. Target
+  measurements for MB2/GA32, MB1/GA64, and prefetch near 16 remain pending.
 
 - [ ] **M11-F7 — Final HLO/host closure**
   `perf(hlo): remove residual parity path bottlenecks`

@@ -207,6 +207,10 @@ this file in every turn:
     second moment precision, clipping, decoupled decay, and gradient reduction.
     Its gate requires update/resume parity, stable graphs, no CPU fallback,
     bounded step regression, and lower HBM. Populate target-XLA evidence.
+14. **M11-F6 batch/prefetch tuning:** a deterministic production selector now
+    requires matched token/update geometry, real data, stable graphs, zero CPU
+    fallback, and HBM/input-idle budgets before ranking throughput. Measure
+    MB2/GA32, MB1/GA64, safe alternatives, and prefetch near 16 on target TPU.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
