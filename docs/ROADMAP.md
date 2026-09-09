@@ -829,10 +829,15 @@ TPU providers, and multi-family integration remain.
   supervised-token normalization, and z-loss. Tests compare loss and hidden,
   head, and bias gradients against full-logits cross entropy.
 
-- [ ] **M9-F2 — Optimized training view**
+- [x] **M9-F2 — Optimized training view**
   `feat(loss): bypass full HF logits during optimized training`
   Safely obtain final hidden state/output weight while preserving HF export.
   **Acceptance:** HLO contains no full `[B,S,V]` tensor.
+  A non-mutating training view now accepts an explicit hidden-state provider,
+  requires inspected linear-head evidence, obtains weights through the public
+  HF output-embedding contract, and feeds hidden states directly to chunked
+  loss without calling the model's full-logits forward. Target-XLA HLO evidence
+  remains required before enabling this path automatically.
 
 - [ ] **M9-F3 — Rematerialized chunks**
   `feat(loss): add rematerialized chunked loss backward`

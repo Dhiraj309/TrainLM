@@ -7,6 +7,7 @@ from .base import (
 )
 from .causal_lm import CausalLMTask
 from .chunked_loss import chunked_linear_causal_cross_entropy
+from .training_view import HiddenStateProvider, LinearCausalLMTrainingView
 
 __all__ = [
     "CausalLMTask",
@@ -16,4 +17,6 @@ __all__ = [
     "TaskResult",
     "TokenCounts",
     "chunked_linear_causal_cross_entropy",
+    "HiddenStateProvider",
+    "LinearCausalLMTrainingView",
 ]
