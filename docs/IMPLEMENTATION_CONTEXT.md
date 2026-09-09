@@ -211,6 +211,10 @@ this file in every turn:
     requires matched token/update geometry, real data, stable graphs, zero CPU
     fallback, and HBM/input-idle budgets before ranking throughput. Measure
     MB2/GA32, MB1/GA64, safe alternatives, and prefetch near 16 on target TPU.
+15. **M11-F7 final HLO/host closure:** a final gate now combines the 912.6K
+    throughput and 47.8% MFU thresholds with graph, fallback, transpose/layout,
+    host-sync, full-logits, input-idle, and collective evidence. Run the exact
+    reference on v5e and resolve every reported reason before closing M11.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

@@ -1014,10 +1014,14 @@ numerical/gradient/update evidence remain.
   input idle. It selects throughput first with stable HBM/idle/ID ties. Target
   measurements for MB2/GA32, MB1/GA64, and prefetch near 16 remain pending.
 
-- [ ] **M11-F7 — Final HLO/host closure**
+- [~] **M11-F7 — Final HLO/host closure**
   `perf(hlo): remove residual parity path bottlenecks`
   Resolve proven transpose, graph, fallback, collective, sync, or input issues.
   **Acceptance:** Exact reference reaches the hard 90% thresholds.
+  A final evidence gate now requires the 912.6K throughput and 47.8% MFU hard
+  thresholds, stable compilation, zero fallback, no unresolved transpose/layout
+  copies, no unplanned host sync, no full logits, and bounded input/collective
+  idle. The story remains open until target-v5e evidence satisfies every gate.
 
 ### Exit gate
 

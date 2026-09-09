@@ -16,6 +16,11 @@ from trainlm.benchmark.attention_stage import (
     AttentionStageEvaluation,
     evaluate_attention_stage,
 )
+from trainlm.benchmark.parity_closure import (
+    ParityClosureEvaluation,
+    ParityClosureEvidence,
+    evaluate_parity_closure,
+)
 
 __all__ = [
     "BenchmarkResult",
@@ -25,7 +30,10 @@ __all__ = [
     "BaselineEvaluation",
     "BaselineWorkload",
     "AttentionStageEvaluation",
+    "ParityClosureEvaluation",
+    "ParityClosureEvidence",
     "evaluate_baseline",
     "evaluate_attention_stage",
+    "evaluate_parity_closure",
     "load_baseline_workload",
 ]
