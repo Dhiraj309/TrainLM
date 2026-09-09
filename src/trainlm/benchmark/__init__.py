@@ -21,6 +21,12 @@ from trainlm.benchmark.parity_closure import (
     ParityClosureEvidence,
     evaluate_parity_closure,
 )
+from trainlm.benchmark.numerical_alignment import (
+    NumericalAlignmentReport,
+    NumericalDifference,
+    REQUIRED_NUMERICAL_PATHS,
+    compare_numerical_alignment,
+)
 
 __all__ = [
     "BenchmarkResult",
@@ -32,8 +38,12 @@ __all__ = [
     "AttentionStageEvaluation",
     "ParityClosureEvaluation",
     "ParityClosureEvidence",
+    "NumericalAlignmentReport",
+    "NumericalDifference",
+    "REQUIRED_NUMERICAL_PATHS",
     "evaluate_baseline",
     "evaluate_attention_stage",
     "evaluate_parity_closure",
+    "compare_numerical_alignment",
     "load_baseline_workload",
 ]

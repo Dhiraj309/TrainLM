@@ -215,6 +215,11 @@ this file in every turn:
     throughput and 47.8% MFU thresholds with graph, fallback, transpose/layout,
     host-sync, full-logits, input-idle, and collective evidence. Run the exact
     reference on v5e and resolve every reported reason before closing M11.
+16. **M12-F1 numerical alignment:** a locked semantic comparator now covers
+    initialization, residual/norm/position, shifted loss/z-loss, optimizer,
+    schedule, and dtype fields and requires deterministic early-update errors
+    within tolerance. Populate it from the exact reference and justify or remove
+    every difference before certification.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

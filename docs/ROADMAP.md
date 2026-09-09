@@ -322,7 +322,7 @@ TPU runtime foundation`; branch `milestone/m5-m7-xla-compatibility`.
 | [~] | M9 | Memory-efficient causal loss |
 | [~] | M10 | TPU attention and 850K gate |
 | [~] | M11 | Projection, optimizer, remat, and HLO tuning |
-| [ ] | M12 | Exact 135M parity certification |
+| [~] | M12 | Exact 135M parity certification |
 | [ ] | M13 | Cross-family certification and 1.3B scaling |
 | [ ] | M14 | Dense-AR V1 release |
 | [d] | M15 | TorchTPU migration |
@@ -1030,15 +1030,20 @@ numerical/gradient/update evidence remain.
 
 ## M12 — Exact LaughLM 135M parity certification
 
-**Status:** [ ] Not started
+**Status:** [~] In progress — the required semantic comparison and deterministic
+early-update evidence gate are implemented; target-run alignment remains.
 
 **Goal:** Convert the fast path into repeatable release evidence.
 
-- [ ] **M12-F1 — Numerical alignment**
+- [~] **M12-F1 — Numerical alignment**
   `test(parity): align 135M initialization and loss semantics`
   Match initialization, residual scale, eps, RoPE, shift, z-loss, optimizer,
   schedule, and dtype; compare early deterministic updates where possible.
   **Acceptance:** Every semantic difference is removed or justified.
+  A locked-path comparator now covers position/norm/residual, initialization,
+  shifted loss/z-loss, optimizer, schedule, and dtype semantics. Differences
+  must be explicitly justified, and at least one deterministic early-update
+  error must remain within tolerance. Target parity evidence remains pending.
 
 - [ ] **M12-F2 — Three-run benchmark**
   `perf(parity): certify repeated v5e 135M throughput`
