@@ -996,10 +996,14 @@ numerical/gradient/update evidence remain.
   graphs, and policies outside a configured slowdown budget, then chooses the
   lowest measured HBM with stable ties. Target-XLA measurements remain pending.
 
-- [ ] **M11-F5 — XLA optimizer-state path**
+- [~] **M11-F5 — XLA optimizer-state path**
   `feat(optim): optimize XLA AdamW state and update graph`
   Evaluate BF16 first moment, FP32 second, clip, decay, reduction, and resume.
   **Acceptance:** Correct update with measured HBM/step impact.
+  A versioned policy now fixes BF16-or-FP32 first moment, FP32 second moment,
+  clipping, decoupled decay, and reduction semantics. A matched evidence gate
+  requires update/resume parity, stable graphs, zero CPU fallback, bounded step
+  regression, and lower HBM. Target-XLA measurements remain pending.
 
 - [ ] **M11-F6 — Batch/prefetch tuning**
   `perf(runtime): tune microbatch accumulation and prefetch geometry`

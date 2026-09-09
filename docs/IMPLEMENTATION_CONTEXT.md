@@ -203,6 +203,10 @@ this file in every turn:
     loss-chunk policies now require pre-FSDP application, and selection uses
     measured gradient parity, graph stability, step slowdown, and peak HBM with
     deterministic ties. Populate target-XLA measurements before defaulting.
+13. **M11-F5 XLA optimizer state:** a versioned AdamW policy now locks first/
+    second moment precision, clipping, decoupled decay, and gradient reduction.
+    Its gate requires update/resume parity, stable graphs, no CPU fallback,
+    bounded step regression, and lower HBM. Populate target-XLA evidence.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

@@ -83,6 +83,13 @@ from .rematerialization import (
     RematerializationSelection,
     select_rematerialization_policy,
 )
+from .xla_optimizer import (
+    GradientReduction,
+    XLAAdamWPolicy,
+    XLAOptimizerEvaluation,
+    XLAOptimizerEvidence,
+    evaluate_xla_optimizer_path,
+)
 
 __all__ = [
     "CapabilityFact",
@@ -110,6 +117,7 @@ __all__ = [
     "HLOFusionDecision",
     "HLOFusionObservation",
     "GatedMLPProjectionSpec",
+    "GradientReduction",
     "LINEAR_CAUSAL_LOSS_REQUIREMENTS",
     "KVHeadMapping",
     "ModelCapabilities",
@@ -141,9 +149,13 @@ __all__ = [
     "TransformApplicationError",
     "TransformHandler",
     "TransformTransaction",
+    "XLAAdamWPolicy",
+    "XLAOptimizerEvaluation",
+    "XLAOptimizerEvidence",
     "create_optimizer",
     "audit_hlo_fusions",
     "expected_causal_visibility",
+    "evaluate_xla_optimizer_path",
     "inspect_dense_causal_lm",
     "install_hf_attention_provider",
     "pallas_mha_provider",
