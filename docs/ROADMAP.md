@@ -736,6 +736,9 @@ loaded HF models safely without family logic in core.
   callback metrics, and restore versioned training state. TPU worker summaries
   expose normalized public state and callback metrics without log parsing. TPU
   checkpoint/evaluation parity and target-hardware validation remain.
+  The private request/CLI boundary now validates and transports save cadence
+  and resume checkpoint paths; worker-side persistence and restoration are not
+  yet enabled through the public facade.
 
 - [~] **M8-F1 — Structural inspector**
   `feat(optimization): inspect dense causal LM capabilities`

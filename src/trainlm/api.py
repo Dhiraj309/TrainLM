@@ -403,7 +403,9 @@ class TrainLMTrainer:
                     "TPU checkpoint resume will be added after worker checkpoint wiring."
                 )
             return self._consume_tpu_result(
-                self._tpu_coordinator.run(self._make_tpu_request())
+                self._tpu_coordinator.run(
+                    self._make_tpu_request(resume_from_checkpoint=resume_from_checkpoint)
+                )
             )
         if self.engine is None:
             raise RuntimeError("Trainer engine was not initialized.")
@@ -495,7 +497,9 @@ class TrainLMTrainer:
             torch.cuda.set_rng_state_all(payload["cuda_rng_state"])
         return path
 
-    def _make_tpu_request(self):
+    def _make_tpu_request(
+        self, *, resume_from_checkpoint: str | Path | None = None
+    ):
         from trainlm._tpu_coordinator import _TPURunRequest
         from trainlm.data import PackedBinDataset
 
@@ -531,6 +535,12 @@ class TrainLMTrainer:
             scheduler=self.args.lr_scheduler_type,
             warmup_steps=self.args.warmup_steps,
             precision=precision,
+            save_every_steps=self.args.save_steps,
+            resume_from_checkpoint=(
+                Path(resume_from_checkpoint)
+                if resume_from_checkpoint is not None
+                else None
+            ),
         )
 
     def evaluate(self) -> dict[str, float]:

@@ -142,6 +142,52 @@ def _request(tmp_path):
     )
 
 
+def test_tpu_checkpoint_request_is_serialized_and_forwarded(tmp_path):
+    checkpoint = tmp_path / "checkpoint-4"
+    checkpoint.mkdir()
+    request = _TPURunRequest(
+        **{
+            **_request(tmp_path).to_dict(),
+            "model": _request(tmp_path).model,
+            "manifest_dir": tmp_path / "manifests",
+            "output_dir": tmp_path / "run",
+            "save_every_steps": 2,
+            "resume_from_checkpoint": checkpoint,
+        }
+    )
+
+    command = _TPUCoordinator(tmp_path / "worker.py")._command(request)
+
+    assert command[command.index("--save-every-steps") + 1] == "2"
+    assert command[command.index("--resume-from-checkpoint") + 1] == str(
+        checkpoint.resolve()
+    )
+    assert request.to_dict()["resume_from_checkpoint"] == str(checkpoint)
+
+
+def test_tpu_checkpoint_request_rejects_missing_resume_directory(tmp_path):
+    with pytest.raises(ValueError, match="does not exist"):
+        _TPURunRequest(
+            model=_request(tmp_path).model,
+            manifest_dir=tmp_path / "manifests",
+            output_dir=tmp_path / "run",
+            max_steps=2,
+            gradient_accumulation_steps=1,
+            micro_batch_per_device=1,
+            sequence_length=8,
+            seed=1,
+            log_every_steps=1,
+            learning_rate=1e-4,
+            betas=(0.9, 0.95),
+            eps=1e-8,
+            weight_decay=0.1,
+            scheduler="constant",
+            warmup_steps=0,
+            precision="bf16",
+            resume_from_checkpoint=tmp_path / "missing",
+        )
+
+
 def test_coordinator_owns_stages_logs_and_structured_summary(tmp_path, monkeypatch):
     worker = tmp_path / "worker.py"
     worker.write_text("# test worker\n", encoding="utf-8")

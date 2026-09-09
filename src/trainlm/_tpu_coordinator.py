@@ -34,12 +34,31 @@ class _TPURunRequest:
     scheduler: str
     warmup_steps: int
     precision: str
+    save_every_steps: int | None = None
+    resume_from_checkpoint: Path | None = None
     expected_world_size: int = 8
+
+    def __post_init__(self) -> None:
+        if self.save_every_steps is not None and (
+            isinstance(self.save_every_steps, bool)
+            or not isinstance(self.save_every_steps, int)
+            or self.save_every_steps < 1
+        ):
+            raise ValueError("save_every_steps must be positive when configured.")
+        if self.resume_from_checkpoint is not None:
+            checkpoint = Path(self.resume_from_checkpoint)
+            if not checkpoint.is_dir():
+                raise ValueError(
+                    f"TPU resume checkpoint directory does not exist: {checkpoint}"
+                )
+            object.__setattr__(self, "resume_from_checkpoint", checkpoint)
 
     def to_dict(self) -> dict[str, Any]:
         values = asdict(self)
         values["manifest_dir"] = str(self.manifest_dir)
         values["output_dir"] = str(self.output_dir)
+        if self.resume_from_checkpoint is not None:
+            values["resume_from_checkpoint"] = str(self.resume_from_checkpoint)
         return values
 
 
@@ -204,6 +223,12 @@ class _TPUCoordinator:
             command.extend(("--model-revision", model.revision))
         if model.trust_remote_code:
             command.append("--trust-remote-code")
+        if request.save_every_steps is not None:
+            command.extend(("--save-every-steps", str(request.save_every_steps)))
+        if request.resume_from_checkpoint is not None:
+            command.extend(
+                ("--resume-from-checkpoint", str(request.resume_from_checkpoint.resolve()))
+            )
         return command
 
     @staticmethod

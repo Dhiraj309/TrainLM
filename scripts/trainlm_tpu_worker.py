@@ -81,6 +81,8 @@ def parse_args():
     parser.add_argument("--sequence-length", type=int, default=2048)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--log-every-steps", type=int, default=10)
+    parser.add_argument("--save-every-steps", type=int)
+    parser.add_argument("--resume-from-checkpoint")
     parser.add_argument("--learning-rate", type=float, default=2e-4)
     parser.add_argument("--beta1", type=float, default=0.9)
     parser.add_argument("--beta2", type=float, default=0.95)
@@ -121,6 +123,12 @@ def parse_args():
             parser.error(f"--{name.replace('_', '-')} must be positive")
     if args.expected_world_size < 1:
         parser.error("--expected-world-size must be positive")
+    if args.save_every_steps is not None and args.save_every_steps < 1:
+        parser.error("--save-every-steps must be positive")
+    if args.resume_from_checkpoint is not None and not Path(
+        args.resume_from_checkpoint
+    ).is_dir():
+        parser.error("--resume-from-checkpoint must be an existing directory")
     if args.sequence_length < 2 or args.warmup_steps < 0:
         parser.error("sequence length must be >=2 and warmup steps >=0")
     if (
