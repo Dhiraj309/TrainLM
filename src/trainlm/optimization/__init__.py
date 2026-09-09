@@ -34,9 +34,11 @@ from .transforms import (
     TransformTransaction,
 )
 from .state_dict import ParameterLayoutMapping, StateDictLayoutConverter
+from .explanation import CertificationStatus, OptimizationExplanation
 
 __all__ = [
     "CapabilityFact",
+    "CertificationStatus",
     "AdapterCandidate",
     "AdapterResolution",
     "AdapterSpec",
@@ -51,6 +53,7 @@ __all__ = [
     "ModelTransformRegistry",
     "OptimizationPolicy",
     "OptimizationPlanner",
+    "OptimizationExplanation",
     "OperationRequest",
     "OptimizerFactory",
     "OptimizerStatePolicy",

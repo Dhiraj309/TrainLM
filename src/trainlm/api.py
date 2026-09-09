@@ -580,44 +580,50 @@ class TrainLMTrainer:
         torch.save(state, path)
         return path
 
-    def explain(self) -> dict[str, Any]:
+    def explain(
+        self, *, format: Literal["dict", "json", "text"] = "dict", strict: bool = False
+    ) -> dict[str, Any] | str:
+        """Explain capabilities and execution selection without launching work."""
+
+        from trainlm.optimization import OptimizationExplanation, inspect_dense_causal_lm
+
         if self._tpu_coordinator is not None:
-            return {
-                "support_level": "compatible",
-                "selected_path": "tpu_coordinator",
-                "model": asdict(self._model_source),
-                "backend": "xla",
-                "precision": (
+            report = OptimizationExplanation(
+                backend="xla",
+                selected_path="tpu_coordinator",
+                precision=(
                     "bf16"
                     if self.args.bf16
                     else "fp16"
                     if self.args.fp16
                     else "fp32"
                 ),
-            }
-        if self.loaded is None:
-            from trainlm.optimization import inspect_dense_causal_lm
-
-            return {
-                "support_level": "compatible",
-                "selected_path": "external_model",
-                "model_class": type(self.model).__name__,
-                "backend": self.runtime.name,
-                "capabilities": inspect_dense_causal_lm(self.model).to_dict(),
-            }
-        explanation = self.loaded
-        from trainlm.model import explain_huggingface_compatibility
-        from trainlm.optimization import inspect_dense_causal_lm
-
-        return {
-            "model": explanation.metadata.to_dict(),
-            "compatibility": explain_huggingface_compatibility(explanation).to_dict(),
-            "backend": self.runtime.name,
-            "precision": self.runtime.precision,
-            "capabilities": inspect_dense_causal_lm(
-                self.model, source_provider="huggingface"
-            ).to_dict(),
-        }
+                limitations=(
+                    "Capabilities are inspected inside TPU workers after model loading.",
+                    "TPU lifecycle parity and target-hardware certification remain pending.",
+                ),
+            )
+        else:
+            report = OptimizationExplanation(
+                backend=self.runtime.name,
+                precision=self.runtime.precision,
+                selected_path=("external_model" if self.loaded is None else "huggingface_model"),
+                certification="compatible",
+                capabilities=inspect_dense_causal_lm(
+                    self.model,
+                    source_provider=("unknown" if self.loaded is None else "huggingface"),
+                ),
+                limitations=("No optimized provider execution plan has been selected.",),
+            )
+        if strict:
+            report.require_supported()
+        if format == "dict":
+            return report.to_dict()
+        if format == "json":
+            return report.to_json()
+        if format == "text":
+            return report.to_text()
+        raise ValueError("format must be 'dict', 'json', or 'text'.")
 
 
 __all__ = ["TrainLMTrainer", "TrainLMTrainingArguments"]

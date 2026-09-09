@@ -125,6 +125,10 @@ matched runs; planning ranges are not guarantees.
 - a versioned state-dict layout converter for transformed resume and canonical
   Hugging Face export, with reversible concatenation/splitting plus strict key,
   shape, dtype, device, collision, and tied-alias validation.
+- a versioned optimization explanation report with stable dictionary, JSON,
+  and human-readable views covering capabilities, adapters, providers,
+  transforms, fallbacks, backend/precision, graph evidence, limitations, and
+  certification state; strict mode rejects unproven semantics before launch.
 
 This slice is intentionally not complete. `accelerator="tpu"` now reaches the
 private single-VM coordinator for reconstructible pretrained HF model sources
@@ -141,12 +145,9 @@ this file in every turn:
 
 1. **M8-F0 TPU checkpoint parity:** carry safe resume and save/evaluation
    cadence through worker coordination.
-2. **M8-F6 explain report:** combine capabilities, adapter/provider decisions,
-   transforms, fallbacks, backend evidence, and certification state in human
-   and JSON output.
-3. **M9 loss path:** add chunked/rematerialized causal loss and benchmark it
+2. **M9 loss path:** add chunked/rematerialized causal loss and benchmark it
    against the measured 319K baseline before enabling it by default.
-4. **M10+ kernels:** integrate TPU attention/projection/norm/optimizer/remat
+3. **M10+ kernels:** integrate TPU attention/projection/norm/optimizer/remat
    providers only after shape, dtype, mask, and backward correctness tests.
 
 ## Definition of done for the public surface

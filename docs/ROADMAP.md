@@ -712,8 +712,8 @@ trainer itself.
 **Status:** [~] In progress — the coordinator, packed-data adapter, local
 lifecycle facade, TPU metric/state bridge, structural inspector, and guarded
 adapter registry, pure provider planner, transactional transform registry, and
-reversible state-dict conversion are implemented; TPU checkpoint parity and
-the complete explain report remain.
+reversible state-dict conversion and the complete explain report are
+implemented; TPU checkpoint parity remains.
 
 **Goal:** Provide a minimal Hugging Face-like trainer surface while transforming
 loaded HF models safely without family logic in core.
@@ -784,11 +784,16 @@ loaded HF models safely without family logic in core.
   checks. The converter preserves unrelated state and restores declared tied
   keys as shared tensor objects for canonical export.
 
-- [ ] **M8-F6 — Explain report**
+- [x] **M8-F6 — Explain report**
   `feat(optimization): expose model optimization explanation`
   Human/JSON capabilities, providers, transforms, fallbacks, backend, graph,
   and certification.
   **Acceptance:** Strict mode fails before TPU allocation when unsupported.
+  A versioned `OptimizationExplanation` now combines inspected capabilities,
+  adapter resolution, provider decisions, reversible transforms, fallbacks,
+  backend/precision, graph evidence, limitations, and certification state in
+  stable dictionary, JSON, and human-readable views. Strict validation rejects
+  blocked plans and unknown or unsupported capabilities before execution.
 
 ### Exit gate
 
