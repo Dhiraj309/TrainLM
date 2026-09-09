@@ -1064,10 +1064,14 @@ early-update evidence gate are implemented; target-run alignment remains.
   checks, cursor continuity, finite loss/gradient ranges, stable compilation,
   zero fallback, and canonical export. The real target run remains pending.
 
-- [ ] **M12-F4 — Plain-HF export certification**
+- [~] **M12-F4 — Plain-HF export certification**
   `test(parity): certify optimized HF checkpoint interoperability`
   Reverse internal layouts and reload in clean Transformers-only environment.
   **Acceptance:** Logits/loss match without TrainLM installed.
+  A structured gate now requires a clean environment without TrainLM,
+  canonical-only state-dict keys, preserved tied aliases, zero missing/unexpected
+  keys, and logits/loss within tolerance after plain Transformers reload.
+  Execution in a clean target environment remains pending.
 
 - [ ] **M12-F5 — Parity report**
   `docs(benchmark): publish LaughLM TrainLM parity report`

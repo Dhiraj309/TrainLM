@@ -228,6 +228,10 @@ this file in every turn:
     on revision-pinned diverse shards with evaluation, resume, integrity,
     cursor continuity, finite loss/gradient ranges, stable compilation, zero
     fallback, and canonical export. Populate it from the target stability run.
+19. **M12-F4 plain-HF export:** a structured gate now requires a clean
+    Transformers-only environment, canonical keys, preserved aliases, no
+    missing/unexpected keys, and logits/loss within tolerance. Run it against
+    the optimized checkpoint without TrainLM installed.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
