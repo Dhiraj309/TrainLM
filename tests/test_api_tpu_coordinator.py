@@ -217,9 +217,10 @@ def test_tpu_evaluation_request_requires_dataset_and_cadence_together(tmp_path):
         "model": base.model,
         "manifest_dir": tmp_path / "manifests",
         "output_dir": tmp_path / "run",
+        "eval_every_steps": 2,
     }
     with pytest.raises(ValueError, match="configured together"):
-        _TPURunRequest(**values, eval_every_steps=2)
+        _TPURunRequest(**values)
 
 
 def test_tpu_evaluation_request_is_forwarded_to_worker(tmp_path):

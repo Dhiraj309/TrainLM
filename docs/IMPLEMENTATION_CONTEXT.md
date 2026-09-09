@@ -153,6 +153,8 @@ this file in every turn:
    Every replica currently evaluates the same stream to preserve exact global
    semantics until backend-level distributed evaluation reductions are added.
    Target-TPU lifecycle validation remains.
+   Coordinator contract coverage constructs mismatched evaluation requests by
+   replacing serialized optional fields, matching real request round trips.
 2. **M9 loss path:** add chunked/rematerialized causal loss and benchmark it
    against the measured 319K baseline before enabling it by default.
 3. **M10+ kernels:** integrate TPU attention/projection/norm/optimizer/remat

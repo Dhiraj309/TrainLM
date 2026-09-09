@@ -746,6 +746,7 @@ loaded HF models safely without family logic in core.
   lifecycle validation remains. Tensor serialization
   is isolated in a private TPU module, preserving the framework-independent
   checkpoint contracts.
+  Coordinator tests cover serialized evaluation-field mismatch rejection.
 
 - [~] **M8-F1 — Structural inspector**
   `feat(optimization): inspect dense causal LM capabilities`
