@@ -319,7 +319,7 @@ TPU runtime foundation`; branch `milestone/m5-m7-xla-compatibility`.
 | [~] | M6 | F1-F4 positional, attention, block-layout, and TPU round-trip coverage implemented; Llama preflight passed, cross-family validation pending |
 | [~] | M7 | F1-F5 distributed resume, async lifecycle, canonical HF export, telemetry, and integrity gates implemented; v5e-8 smoke and measured baseline passed, reliability certification pending |
 | [~] | M8 | HF-like public trainer facade plus reversible capability optimization engine |
-| [ ] | M9 | Memory-efficient causal loss |
+| [~] | M9 | Memory-efficient causal loss |
 | [ ] | M10 | TPU attention and 850K gate |
 | [ ] | M11 | Projection, optimizer, remat, and HLO tuning |
 | [ ] | M12 | Exact 135M parity certification |
