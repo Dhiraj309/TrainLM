@@ -60,6 +60,12 @@ from .pallas_attention import (
     pallas_grouped_attention_provider,
     pallas_mha_provider,
 )
+from .attention_tuning import (
+    AttentionTuningCache,
+    AttentionTuningCandidate,
+    AttentionTuningKey,
+    AttentionTuningResult,
+)
 
 __all__ = [
     "CapabilityFact",
@@ -69,6 +75,10 @@ __all__ = [
     "AdapterSpec",
     "AttentionLayout",
     "AttentionMaskSpec",
+    "AttentionTuningCache",
+    "AttentionTuningCandidate",
+    "AttentionTuningKey",
+    "AttentionTuningResult",
     "CapabilityStatus",
     "CanonicalAttentionSpec",
     "AdamWStateDtype",

@@ -927,10 +927,14 @@ optimizations, autotuning, and benchmark evidence remain.
   paths require independent runtime evidence and otherwise fail explicitly.
   Target-TPU boundary-token, numerical, gradient, and HBM evidence remains.
 
-- [ ] **M10-F6 — Attention autotuning**
+- [~] **M10-F6 — Attention autotuning**
   `perf(attention): tune v5e attention provider configurations`
   Tune/cache tiles by hardware, shape, dtype, mask, and provider version.
   **Acceptance:** Selection is deterministic and reproducible.
+  A pure exact-key cache now includes hardware, provider/version, dtype, batch,
+  head geometry, sequence length, mask, and window. Candidate measurement order
+  and equal-score selection are deterministic, and versioned results round-trip
+  through stable JSON. Target-v5e measurements and candidate ranges remain.
 
 - [ ] **M10-F7 — Loss/attention benchmark**
   `perf(benchmark): certify optimized loss and attention stage`

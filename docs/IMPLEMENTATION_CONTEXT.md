@@ -178,6 +178,10 @@ this file in every turn:
    window to the compact kernel without materializing a dense mask and requires
    explicit model-supplied ALiBi slopes rather than deriving family semantics.
    Both paths remain gated until target-TPU boundary, gradient, and HBM evidence.
+7. **M10-F6 attention autotuning:** a deterministic exact-key tuning cache now
+   keys hardware, provider/version, dtype, batch/sequence/head geometry, mask,
+   and window and uses stable candidate-ID tie breaking. Populate candidate
+   ranges and measurements on v5e before selecting production defaults.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
