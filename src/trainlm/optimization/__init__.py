@@ -66,6 +66,7 @@ from .attention_tuning import (
     AttentionTuningKey,
     AttentionTuningResult,
 )
+from .qkv import QKVProjectionSpec
 
 __all__ = [
     "CapabilityFact",
@@ -104,6 +105,7 @@ __all__ = [
     "PlanStatus",
     "ProviderDecision",
     "ProviderSpec",
+    "QKVProjectionSpec",
     "PositionEncoding",
     "PackageVersionGuard",
     "PallasAttentionRuntime",

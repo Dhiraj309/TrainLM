@@ -186,6 +186,10 @@ this file in every turn:
    v5e-8 geometry, at least 850K global tokens/s, lower HBM, stable compilation,
    zero CPU fallback, eliminated full logits, named providers, and HLO evidence.
    Run synchronized fake- and real-data measurements on target hardware.
+9. **M11-F1 reversible QKV packing:** a family-neutral descriptor now creates
+   reversible state-dict mappings for separate MHA/GQA/MQA weights and optional
+   biases using explicit head geometry and key names. Add partial-layout and
+   transactional live-module transforms, then validate output/gradient/update.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

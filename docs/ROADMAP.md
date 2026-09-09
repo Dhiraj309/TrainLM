@@ -321,7 +321,7 @@ TPU runtime foundation`; branch `milestone/m5-m7-xla-compatibility`.
 | [~] | M8 | HF-like public trainer facade plus reversible capability optimization engine |
 | [~] | M9 | Memory-efficient causal loss |
 | [~] | M10 | TPU attention and 850K gate |
-| [ ] | M11 | Projection, optimizer, remat, and HLO tuning |
+| [~] | M11 | Projection, optimizer, remat, and HLO tuning |
 | [ ] | M12 | Exact 135M parity certification |
 | [ ] | M13 | Cross-family certification and 1.3B scaling |
 | [ ] | M14 | Dense-AR V1 release |
@@ -952,14 +952,20 @@ optimizations, autotuning, and benchmark evidence remain.
 
 ## M11 — Projection, optimizer, rematerialization, and HLO tuning
 
-**Status:** [ ] Not started
+**Status:** [~] In progress — reversible separate Q/K/V weight and optional bias
+packing is implemented; partial source layouts, runtime module transforms, and
+numerical/gradient/update evidence remain.
 
 **Goal:** Close the parity gap one measured bottleneck at a time.
 
-- [ ] **M11-F1 — Reversible QKV packing**
+- [~] **M11-F1 — Reversible QKV packing**
   `feat(optimization): pack compatible QKV projections`
   Handle separate/partial/packed layouts, bias, heads, aliases, load/export.
   **Acceptance:** Output/gradient/update and round-trip parity pass.
+  A family-neutral geometry descriptor now builds versioned reversible mappings
+  for separate MHA/GQA/MQA Q/K/V weights and optional biases. Optimized resume
+  packs along output features and canonical export restores the original keys.
+  Partial layouts, live module transforms, and numerical/update parity remain.
 
 - [ ] **M11-F2 — Reversible gated-MLP packing**
   `feat(optimization): pack compatible gate and up projections`
