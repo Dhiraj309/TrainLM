@@ -24,6 +24,7 @@ from torch.utils.data import DataLoader, IterableDataset
 from trainlm.config import (
     CheckpointConfig,
     DatasetConfig,
+    EvaluationConfig,
     LossConfig,
     LoggingConfig,
     MonitoringConfig,
@@ -246,7 +247,7 @@ def model_preflight(args: argparse.Namespace) -> None:
 
 
 
-def train_fn(index: int, args: argparse.Namespace, shards) -> None:
+def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> None:
     del index
     rank = int(xr.global_ordinal())
     world_size = int(xr.world_size())
@@ -296,13 +297,46 @@ def train_fn(index: int, args: argparse.Namespace, shards) -> None:
         num_workers=0,
         pin_memory=False,
     )
+    eval_reader = None
+    eval_loader = None
+    if eval_shards is not None:
+        eval_reader = ContiguousPackedBatchReader(
+            eval_shards,
+            batch_size=args.micro_batch_per_device,
+            sequence_length=args.sequence_length,
+        )
+        eval_partition = plan_packed_batch_partition(
+            eval_reader,
+            split="validation",
+            seed=0,
+            epoch=0,
+            # Until evaluation reductions become part of the backend contract,
+            # each replica evaluates the same deterministic validation stream.
+            # This is more work than sharding, but produces globally correct
+            # metrics instead of reporting rank zero's shard as the full set.
+            world_size=1,
+            rank=0,
+            cross_shard_remainder="drop",
+            host_remainder="drop",
+        )
+        if not eval_partition.assignments:
+            raise ValueError(
+                "Evaluation data has no complete batch for the active TPU topology."
+            )
+        eval_loader = DataLoader(
+            BatchIterable(PartitionedPackedBatchReader(eval_reader, eval_partition)),
+            batch_size=None,
+            num_workers=0,
+            pin_memory=False,
+        )
     source = _source(args)
     print({"stage": "load_model", "rank": rank}, flush=True)
     loaded = load_huggingface_causal_lm(source)
     if hasattr(loaded.model.config, "use_cache"):
         loaded.model.config.use_cache = False
     input_vocab = loaded.model.get_input_embeddings().weight.shape[0]
-    if any(s.manifest.token_id_max >= input_vocab for s in shards):
+    all_shards = [*shards, *(eval_shards or ())]
+    if any(s.manifest.token_id_max >= input_vocab for s in all_shards):
         raise ValueError("Shard token IDs exceed the selected HF model vocabulary.")
     model = runtime.prepare_model(loaded.model)
     # Device conversion can replace Parameter objects and tied aliases.
@@ -373,6 +407,10 @@ def train_fn(index: int, args: argparse.Namespace, shards) -> None:
             memory_metrics=False,
             training_integrity=False,
         ),
+        evaluation=EvaluationConfig(
+            enabled=eval_loader is not None,
+            eval_every_steps=args.eval_every_steps,
+        ),
     )
     config.validate()
     optimizer = create_optimizer(model.parameters(), config.optimizer)
@@ -395,6 +433,7 @@ def train_fn(index: int, args: argparse.Namespace, shards) -> None:
         scheduler=scheduler,
         task=task,
         train_dataloader=device_loader,
+        eval_dataloader=eval_loader,
         callbacks=[metrics],
         checkpoint_saver=lambda engine, destination: save_tpu_worker_checkpoint(
             engine, Path(args.output_dir) / str(destination)
@@ -427,6 +466,8 @@ def train_fn(index: int, args: argparse.Namespace, shards) -> None:
     finally:
         parallel_loader.close()
         reader.close()
+        if eval_reader is not None:
+            eval_reader.close()
     # Rank-local timing alone can overstate DP throughput. Use the slowest
     # replica's synchronized window and report supervised and scheduled tokens.
     elapsed = None

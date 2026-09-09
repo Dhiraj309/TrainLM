@@ -116,6 +116,28 @@ def test_tpu_facade_accepts_public_packed_dataset(tmp_path, monkeypatch):
     assert coordinator.requests[0].manifest_dir == manifest_dir
 
 
+def test_tpu_facade_stages_evaluation_dataset_and_cadence(tmp_path):
+    coordinator = RecordingCoordinator()
+    trainer = TrainLMTrainer(
+        model="org/model",
+        train_dataset=tmp_path / "train",
+        eval_dataset=tmp_path / "eval",
+        args=TrainLMTrainingArguments(
+            accelerator="tpu",
+            output_dir=tmp_path / "run",
+            max_steps=4,
+            eval_steps=2,
+        ),
+    )
+    trainer._tpu_coordinator = coordinator
+
+    trainer.train()
+
+    request = coordinator.requests[0]
+    assert request.eval_manifest_dir == tmp_path / "eval"
+    assert request.eval_every_steps == 2
+
+
 def _request(tmp_path):
     return _TPURunRequest(
         model=ModelSourceConfig(
@@ -186,6 +208,39 @@ def test_tpu_checkpoint_request_rejects_missing_resume_directory(tmp_path):
             precision="bf16",
             resume_from_checkpoint=tmp_path / "missing",
         )
+
+
+def test_tpu_evaluation_request_requires_dataset_and_cadence_together(tmp_path):
+    base = _request(tmp_path)
+    values = {
+        **base.to_dict(),
+        "model": base.model,
+        "manifest_dir": tmp_path / "manifests",
+        "output_dir": tmp_path / "run",
+    }
+    with pytest.raises(ValueError, match="configured together"):
+        _TPURunRequest(**values, eval_every_steps=2)
+
+
+def test_tpu_evaluation_request_is_forwarded_to_worker(tmp_path):
+    base = _request(tmp_path)
+    request = _TPURunRequest(
+        **{
+            **base.to_dict(),
+            "model": base.model,
+            "manifest_dir": tmp_path / "manifests",
+            "output_dir": tmp_path / "run",
+            "eval_manifest_dir": tmp_path / "eval",
+            "eval_every_steps": 2,
+        }
+    )
+
+    command = _TPUCoordinator(tmp_path / "worker.py")._command(request)
+
+    assert command[command.index("--eval-manifest-dir") + 1] == str(
+        (tmp_path / "eval").resolve()
+    )
+    assert command[command.index("--eval-every-steps") + 1] == "2"
 
 
 def test_coordinator_owns_stages_logs_and_structured_summary(tmp_path, monkeypatch):

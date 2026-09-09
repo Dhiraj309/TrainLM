@@ -148,7 +148,11 @@ this file in every turn:
    and deterministic packed-data progress, and validates the committed topology
    before restoring. The tensor-aware implementation remains in the private
    `_tpu_checkpoint` boundary so `trainlm.checkpoint` contracts stay framework
-   independent. Evaluation cadence and target-TPU validation remain.
+   independent. TPU evaluation datasets now use the same validated packed-data
+   boundary and scheduled engine evaluation, with structured callback metrics.
+   Every replica currently evaluates the same stream to preserve exact global
+   semantics until backend-level distributed evaluation reductions are added.
+   Target-TPU lifecycle validation remains.
 2. **M9 loss path:** add chunked/rematerialized causal loss and benchmark it
    against the measured 319K baseline before enabling it by default.
 3. **M10+ kernels:** integrate TPU attention/projection/norm/optimizer/remat

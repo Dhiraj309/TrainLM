@@ -738,9 +738,14 @@ loaded HF models safely without family logic in core.
   checkpoint/evaluation parity and target-hardware validation remain.
   The private request/CLI boundary transports save cadence and resume paths;
   rank-local atomic shards preserve model, optimizer, scheduler, runtime,
-  trainer, host/device RNG, and deterministic packed-data progress. Evaluation cadence and
-  target-hardware resume validation remain. Tensor serialization is isolated in
-  a private TPU module, preserving the framework-independent checkpoint contracts.
+  trainer, host/device RNG, and deterministic packed-data progress. TPU
+  evaluation uses a separately validated packed-data source, deterministic
+  validation partition, scheduled engine evaluation, and structured callback
+  metrics. Replicas currently evaluate the same full validation stream for
+  correctness until distributed metric reductions land. Target-hardware
+  lifecycle validation remains. Tensor serialization
+  is isolated in a private TPU module, preserving the framework-independent
+  checkpoint contracts.
 
 - [~] **M8-F1 — Structural inspector**
   `feat(optimization): inspect dense causal LM capabilities`

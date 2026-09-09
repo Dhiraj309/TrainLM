@@ -197,10 +197,6 @@ class TrainLMTrainer:
                 )
             if self.args.fp16:
                 raise ValueError("TPU execution supports fp32 or bf16, not fp16.")
-            if self.args.eval_steps is not None:
-                raise NotImplementedError(
-                    "TPU eval_steps will be added with evaluation lifecycle parity."
-                )
             from trainlm._tpu_coordinator import _TPUCoordinator
 
             self._tpu_coordinator = _TPUCoordinator()
@@ -509,6 +505,18 @@ class TrainLMTrainer:
             raise TypeError(
                 "TPU training requires a PackedBinDataset or local manifest directory."
             )
+        eval_manifest_dir = None
+        if self.eval_dataset is not None:
+            if isinstance(self.eval_dataset, PackedBinDataset):
+                eval_manifest_dir = self.eval_dataset.coordinator_manifest_dir(
+                    Path(self.args.output_dir) / "eval_data"
+                )
+            elif isinstance(self.eval_dataset, (str, Path)):
+                eval_manifest_dir = Path(self.eval_dataset)
+            else:
+                raise TypeError(
+                    "TPU evaluation requires a PackedBinDataset or local manifest directory."
+                )
         if self._model_source is None or self.args.max_steps is None:
             raise RuntimeError("TPU request prerequisites were not initialized.")
         precision = (
@@ -537,6 +545,8 @@ class TrainLMTrainer:
                 if resume_from_checkpoint is not None
                 else None
             ),
+            eval_manifest_dir=eval_manifest_dir,
+            eval_every_steps=self.args.eval_steps,
         )
 
     def evaluate(self) -> dict[str, float]:

@@ -36,6 +36,8 @@ class _TPURunRequest:
     precision: str
     save_every_steps: int | None = None
     resume_from_checkpoint: Path | None = None
+    eval_manifest_dir: Path | None = None
+    eval_every_steps: int | None = None
     expected_world_size: int = 8
 
     def __post_init__(self) -> None:
@@ -52,6 +54,16 @@ class _TPURunRequest:
                     f"TPU resume checkpoint directory does not exist: {checkpoint}"
                 )
             object.__setattr__(self, "resume_from_checkpoint", checkpoint)
+        if (self.eval_manifest_dir is None) != (self.eval_every_steps is None):
+            raise ValueError(
+                "eval_manifest_dir and eval_every_steps must be configured together."
+            )
+        if self.eval_every_steps is not None and (
+            isinstance(self.eval_every_steps, bool)
+            or not isinstance(self.eval_every_steps, int)
+            or self.eval_every_steps < 1
+        ):
+            raise ValueError("eval_every_steps must be positive when configured.")
 
     def to_dict(self) -> dict[str, Any]:
         values = asdict(self)
@@ -59,6 +71,8 @@ class _TPURunRequest:
         values["output_dir"] = str(self.output_dir)
         if self.resume_from_checkpoint is not None:
             values["resume_from_checkpoint"] = str(self.resume_from_checkpoint)
+        if self.eval_manifest_dir is not None:
+            values["eval_manifest_dir"] = str(self.eval_manifest_dir)
         return values
 
 
@@ -229,6 +243,11 @@ class _TPUCoordinator:
             command.extend(
                 ("--resume-from-checkpoint", str(request.resume_from_checkpoint.resolve()))
             )
+        if request.eval_manifest_dir is not None:
+            command.extend(
+                ("--eval-manifest-dir", str(request.eval_manifest_dir.resolve()))
+            )
+            command.extend(("--eval-every-steps", str(request.eval_every_steps)))
         return command
 
     @staticmethod
