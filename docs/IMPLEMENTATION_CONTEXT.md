@@ -190,6 +190,10 @@ this file in every turn:
    reversible state-dict mappings for separate MHA/GQA/MQA weights and optional
    biases using explicit head geometry and key names. Add partial-layout and
    transactional live-module transforms, then validate output/gradient/update.
+10. **M11-F2 reversible gated-MLP packing:** explicit SwiGLU/GeGLU descriptors
+    now create reversible gate/up weight and optional-bias mappings, while GELU
+    remains an explicit no-transform path. Add transactional live transforms
+    and validate output/gradient/update parity before completing the story.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

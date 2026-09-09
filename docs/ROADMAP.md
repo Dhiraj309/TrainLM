@@ -967,10 +967,14 @@ numerical/gradient/update evidence remain.
   packs along output features and canonical export restores the original keys.
   Partial layouts, live module transforms, and numerical/update parity remain.
 
-- [ ] **M11-F2 — Reversible gated-MLP packing**
+- [~] **M11-F2 — Reversible gated-MLP packing**
   `feat(optimization): pack compatible gate and up projections`
   Pack compatible SwiGLU/GeGLU paths and preserve GELU paths.
   **Acceptance:** Output/gradient/update and export parity pass.
+  An explicit SwiGLU/GeGLU descriptor now packs equal-shape gate/up weights and
+  optional biases through the reversible state-dict converter, while GELU is an
+  explicit no-transform path. Live module transforms and numerical/update parity
+  remain pending.
 
 - [ ] **M11-F3 — Native fusion audit**
   `perf(hlo): audit norm RoPE residual and MLP fusion`

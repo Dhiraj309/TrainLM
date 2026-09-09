@@ -67,6 +67,7 @@ from .attention_tuning import (
     AttentionTuningResult,
 )
 from .qkv import QKVProjectionSpec
+from .mlp import GatedMLPProjectionSpec, MLPActivation
 
 __all__ = [
     "CapabilityFact",
@@ -88,10 +89,12 @@ __all__ = [
     "ExecutionPlan",
     "HFAttentionInstallation",
     "HFAttentionProvider",
+    "GatedMLPProjectionSpec",
     "LINEAR_CAUSAL_LOSS_REQUIREMENTS",
     "KVHeadMapping",
     "ModelCapabilities",
     "MaskLayout",
+    "MLPActivation",
     "ModelAdapterRegistry",
     "ModelTransformation",
     "ModelTransformRegistry",
