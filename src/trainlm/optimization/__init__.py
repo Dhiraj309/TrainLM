@@ -54,6 +54,7 @@ from .hf_attention import (
     expected_causal_visibility,
     install_hf_attention_provider,
 )
+from .pallas_attention import PallasAttentionRuntime, pallas_mha_provider
 
 __all__ = [
     "CapabilityFact",
@@ -89,6 +90,7 @@ __all__ = [
     "ProviderSpec",
     "PositionEncoding",
     "PackageVersionGuard",
+    "PallasAttentionRuntime",
     "ParameterLayoutMapping",
     "StateDictLayoutConverter",
     "TransformApplicationError",
@@ -98,6 +100,7 @@ __all__ = [
     "expected_causal_visibility",
     "inspect_dense_causal_lm",
     "install_hf_attention_provider",
+    "pallas_mha_provider",
     "causal_loss_provider_specs",
     "causal_loss_request",
 ]

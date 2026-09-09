@@ -166,6 +166,10 @@ this file in every turn:
    requires canonical semantic compatibility and registers both interfaces
    under one key. Add the first version-guarded Pallas MHA provider with backward
    and target-HLO evidence while retaining the registered portable fallback.
+   A dependency-free MHA bridge now gates construction on exact torch_xla
+   versions and explicit backward evidence, uses an injected stable kernel
+   adapter, and rejects unsupported dense masks/dropout. Keep M10-F3 open until
+   numerical, gradient, and HLO/custom-call checks pass on target TPU hardware.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

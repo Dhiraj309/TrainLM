@@ -898,10 +898,16 @@ optimizations, autotuning, and benchmark evidence remain.
   dropout, soft-cap, and QK-normalization checks. Reference visibility tests
   detect future-token, sliding-window, and cross-segment leakage.
 
-- [ ] **M10-F3 — XLA Pallas provider**
+- [~] **M10-F3 — XLA Pallas provider**
   `feat(attention): add XLA Pallas causal attention provider`
   Wrap supported Pallas attention with import/version guards and backward.
   **Acceptance:** MHA matches reference and emits expected HLO/custom call.
+  A dependency-free bridge now requires an exact tested torch_xla version and
+  explicit backward evidence before constructing an MHA-only provider. It uses
+  an injected public kernel adapter, rejects dense masks and dropout, and keeps
+  causal masking internal to avoid quadratic mask materialization. The story
+  remains open pending target-TPU numerical, backward, and HLO/custom-call
+  evidence.
 
 - [ ] **M10-F4 — GQA/MQA without KV repeat**
   `feat(attention): support grouped and multi query TPU attention`
