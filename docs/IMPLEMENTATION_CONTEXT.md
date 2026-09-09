@@ -170,6 +170,10 @@ this file in every turn:
    versions and explicit backward evidence, uses an injected stable kernel
    adapter, and rejects unsupported dense masks/dropout. Keep M10-F3 open until
    numerical, gradient, and HLO/custom-call checks pass on target TPU hardware.
+5. **M10-F4 GQA/MQA without KV repeat:** a logical head-owner mapping and
+   guarded provider now preserve compact K/V inputs for 8/8, 8/4, and 8/1 and
+   pass head geometry directly to the kernel adapter. Keep the story open until
+   target-TPU correctness, gradient, and HBM evidence proves no hidden repeat.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

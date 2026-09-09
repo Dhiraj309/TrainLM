@@ -54,7 +54,12 @@ from .hf_attention import (
     expected_causal_visibility,
     install_hf_attention_provider,
 )
-from .pallas_attention import PallasAttentionRuntime, pallas_mha_provider
+from .pallas_attention import (
+    KVHeadMapping,
+    PallasAttentionRuntime,
+    pallas_grouped_attention_provider,
+    pallas_mha_provider,
+)
 
 __all__ = [
     "CapabilityFact",
@@ -73,6 +78,7 @@ __all__ = [
     "HFAttentionInstallation",
     "HFAttentionProvider",
     "LINEAR_CAUSAL_LOSS_REQUIREMENTS",
+    "KVHeadMapping",
     "ModelCapabilities",
     "MaskLayout",
     "ModelAdapterRegistry",
@@ -101,6 +107,7 @@ __all__ = [
     "inspect_dense_causal_lm",
     "install_hf_attention_provider",
     "pallas_mha_provider",
+    "pallas_grouped_attention_provider",
     "causal_loss_provider_specs",
     "causal_loss_request",
 ]

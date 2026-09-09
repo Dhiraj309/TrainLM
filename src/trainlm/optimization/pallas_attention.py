@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from .attention import CanonicalAttentionSpec
 from .hf_attention import HFAttentionProvider
 
 
@@ -17,6 +18,7 @@ class PallasAttentionRuntime:
     kernel: Callable[..., Any]
     backward_verified: bool
     hlo_custom_call_verified: bool = False
+    grouped_query_verified: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.torch_xla_version, str) or not self.torch_xla_version:
@@ -36,6 +38,8 @@ class PallasAttentionRuntime:
             raise TypeError("backward_verified must be boolean.")
         if not isinstance(self.hlo_custom_call_verified, bool):
             raise TypeError("hlo_custom_call_verified must be boolean.")
+        if not isinstance(self.grouped_query_verified, bool):
+            raise TypeError("grouped_query_verified must be boolean.")
 
     def require_supported(self) -> None:
         if self.torch_xla_version not in self.tested_torch_xla_versions:
@@ -99,4 +103,98 @@ def pallas_mha_provider(
     )
 
 
-__all__ = ["PallasAttentionRuntime", "pallas_mha_provider"]
+@dataclass(frozen=True, slots=True)
+class KVHeadMapping:
+    """Logical query-to-KV ownership without materializing repeated K/V heads."""
+
+    query_heads: int
+    key_value_heads: int
+
+    def __post_init__(self) -> None:
+        for name in ("query_heads", "key_value_heads"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                raise ValueError(f"{name} must be a positive integer.")
+        if self.query_heads % self.key_value_heads:
+            raise ValueError("query_heads must be divisible by key_value_heads.")
+
+    @property
+    def queries_per_kv_head(self) -> int:
+        return self.query_heads // self.key_value_heads
+
+    def kv_head_for_query(self, query_head: int) -> int:
+        if (
+            isinstance(query_head, bool)
+            or not isinstance(query_head, int)
+            or not 0 <= query_head < self.query_heads
+        ):
+            raise ValueError("query_head is outside the configured head range.")
+        return query_head // self.queries_per_kv_head
+
+    def as_tuple(self) -> tuple[int, ...]:
+        return tuple(self.kv_head_for_query(head) for head in range(self.query_heads))
+
+
+def pallas_grouped_attention_provider(
+    runtime: PallasAttentionRuntime,
+    spec: CanonicalAttentionSpec,
+    *,
+    provider_id: str = "trainlm.pallas_grouped_attention",
+) -> HFAttentionProvider:
+    """Build an MHA/GQA/MQA provider that preserves compact K/V head storage."""
+
+    runtime.require_supported()
+    if spec.layout != "mha" and not runtime.grouped_query_verified:
+        raise RuntimeError(
+            "Grouped-query Pallas attention requires explicit GQA/MQA evidence."
+        )
+    if spec.mask.layout != "causal" or spec.mask.segment_ids:
+        raise ValueError("Grouped Pallas attention currently supports full causal masks.")
+    mapping = KVHeadMapping(spec.query_heads, spec.key_value_heads)
+
+    def attention_forward(
+        module: Any,
+        query: Any,
+        key: Any,
+        value: Any,
+        attention_mask: Any | None = None,
+        dropout: float = 0.0,
+        scaling: float | None = None,
+        **kwargs: Any,
+    ) -> tuple[Any, None]:
+        del module, kwargs
+        if attention_mask is not None:
+            raise ValueError("Grouped Pallas attention uses its registered causal mask.")
+        if dropout != 0.0:
+            raise ValueError("Grouped Pallas attention dropout is not implemented.")
+        output = runtime.kernel(
+            query,
+            key,
+            value,
+            causal=True,
+            scale=spec.effective_scale if scaling is None else scaling,
+            query_heads=mapping.query_heads,
+            key_value_heads=mapping.key_value_heads,
+        )
+        return output, None
+
+    def causal_mask_factory(*args: Any, **kwargs: Any) -> None:
+        del args, kwargs
+        return None
+
+    return HFAttentionProvider(
+        provider_id=provider_id,
+        attention_forward=attention_forward,
+        mask_factory=causal_mask_factory,
+        layouts=(spec.layout,),
+        mask_layouts=("causal",),
+        position_encodings=(spec.position_encoding,),
+    )
+
+
+__all__ = [
+    "KVHeadMapping",
+    "PallasAttentionRuntime",
+    "pallas_grouped_attention_provider",
+    "pallas_mha_provider",
+]

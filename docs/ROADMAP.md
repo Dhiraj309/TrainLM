@@ -909,10 +909,14 @@ optimizations, autotuning, and benchmark evidence remain.
   remains open pending target-TPU numerical, backward, and HLO/custom-call
   evidence.
 
-- [ ] **M10-F4 — GQA/MQA without KV repeat**
+- [~] **M10-F4 — GQA/MQA without KV repeat**
   `feat(attention): support grouped and multi query TPU attention`
   Support 8/8, 8/4, and 8/1 without silent K/V HBM expansion.
   **Acceptance:** Correctness and HBM tests pass or explicit fallback is used.
+  A compact logical query-to-KV mapping now covers 8/8, 8/4, and 8/1 without
+  repeating K/V objects. The guarded provider forwards compact head geometry to
+  an explicit kernel adapter and rejects GQA/MQA unless runtime evidence exists.
+  Target-TPU numerical, gradient, and HBM evidence remains pending.
 
 - [ ] **M10-F5 — ALiBi/sliding window**
   `feat(attention): add ALiBi and sliding window capabilities`
