@@ -163,7 +163,7 @@ Branch names describe repository work, not the tool or contributor:
 | [~] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 18 | Merged; post-merge data/trainer validation remains tracked by validation gates |
 | [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 16 | Implementation merge-ready; DP8 launcher/data/attention/optimizer fixes landed; v5e-8 baseline is 319,302 tok/s after sparse-loss fix, performance work pending |
 | [~] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11+ | HF-like public trainer facade, reversible planner, and optimized loss |
-| [ ] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | 850K and hard LaughLM parity |
+| [~] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | Canonical attention contract started; 850K and hard LaughLM parity pending |
 | [ ] | PR6 | `milestone/m13-m14-family-release` | M13-M14 | 12 | Cross-family certification and V1 release |
 
 Future tracks: `milestone/m15-torchtpu`, `milestone/m16-moe`, and
@@ -320,7 +320,7 @@ TPU runtime foundation`; branch `milestone/m5-m7-xla-compatibility`.
 | [~] | M7 | F1-F5 distributed resume, async lifecycle, canonical HF export, telemetry, and integrity gates implemented; v5e-8 smoke and measured baseline passed, reliability certification pending |
 | [~] | M8 | HF-like public trainer facade plus reversible capability optimization engine |
 | [~] | M9 | Memory-efficient causal loss |
-| [ ] | M10 | TPU attention and 850K gate |
+| [~] | M10 | TPU attention and 850K gate |
 | [ ] | M11 | Projection, optimizer, remat, and HLO tuning |
 | [ ] | M12 | Exact 135M parity certification |
 | [ ] | M13 | Cross-family certification and 1.3B scaling |
@@ -873,15 +873,21 @@ TPU providers, and multi-family integration remain.
 
 ## M10 — TPU attention provider family
 
-**Status:** [ ] Not started
+**Status:** [~] In progress — the canonical attention semantics contract is
+implemented; HF integration, TPU providers, layout optimizations, autotuning,
+and benchmark evidence remain.
 
 **Goal:** Correct memory-efficient attention across the full V1 semantic surface.
 
-- [ ] **M10-F1 — Canonical attention spec**
+- [x] **M10-F1 — Canonical attention spec**
   `feat(attention): define canonical causal attention specification`
   Represent layouts, head geometry, scale, masks, segments, ALiBi, dropout,
   soft-cap, QK norm, and output without model-name conditionals.
   **Acceptance:** Every V1 family maps to the specification.
+  A versioned model-family-neutral schema now validates MHA/GQA/MQA head
+  geometry, scale, full/sliding causal masks, segment IDs, learned/RoPE/ALiBi
+  positions, dropout, soft-cap, QK normalization, and BSH output. Capability
+  mapping uses inspected facts only and rejects unknown semantics.
 
 - [ ] **M10-F2 — HF attention/mask integration**
   `feat(attention): integrate TrainLM attention with HF interfaces`

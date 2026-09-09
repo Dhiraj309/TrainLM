@@ -162,8 +162,10 @@ this file in every turn:
 3. **M9-F4 TPU loss providers:** the pure catalog gates Pallas and Tokamax on
    explicit runtime and backward evidence, with portable chunked loss as the
    fallback. Implement and benchmark eligible providers before default use.
-4. **M10+ kernels:** integrate TPU attention/projection/norm/optimizer/remat
-   providers only after shape, dtype, mask, and backward correctness tests.
+4. **M10-F2 HF attention integration:** the canonical attention schema now
+   captures head geometry, position/mask semantics, segments, scale, dropout,
+   soft-cap, QK normalization, and output layout without family-name guesses.
+   Integrate it through public HF attention/mask interfaces where sufficient.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
