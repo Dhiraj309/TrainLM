@@ -146,7 +146,9 @@ this file in every turn:
    The coordinator and worker now carry save cadence and resume paths. Each TPU
    rank atomically persists model, optimizer, scheduler, runtime, host/device RNG,
    and deterministic packed-data progress, and validates the committed topology
-   before restoring. Evaluation cadence and target-TPU validation remain.
+   before restoring. The tensor-aware implementation remains in the private
+   `_tpu_checkpoint` boundary so `trainlm.checkpoint` contracts stay framework
+   independent. Evaluation cadence and target-TPU validation remain.
 2. **M9 loss path:** add chunked/rematerialized causal loss and benchmark it
    against the measured 319K baseline before enabling it by default.
 3. **M10+ kernels:** integrate TPU attention/projection/norm/optimizer/remat

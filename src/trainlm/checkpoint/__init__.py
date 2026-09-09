@@ -17,7 +17,6 @@ from .lifecycle import (
     CheckpointPhase,
 )
 from .canonical import CanonicalHFExportPlan, plan_canonical_hf_export
-from .tpu_worker import load_tpu_worker_checkpoint, save_tpu_worker_checkpoint
 
 __all__ = [
     "ArtifactRecord",
@@ -43,6 +42,4 @@ __all__ = [
     "CheckpointPhase",
     "CanonicalHFExportPlan",
     "plan_canonical_hf_export",
-    "load_tpu_worker_checkpoint",
-    "save_tpu_worker_checkpoint",
 ]

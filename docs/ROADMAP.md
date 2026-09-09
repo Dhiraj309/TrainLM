@@ -739,7 +739,8 @@ loaded HF models safely without family logic in core.
   The private request/CLI boundary transports save cadence and resume paths;
   rank-local atomic shards preserve model, optimizer, scheduler, runtime,
   trainer, host/device RNG, and deterministic packed-data progress. Evaluation cadence and
-  target-hardware resume validation remain.
+  target-hardware resume validation remain. Tensor serialization is isolated in
+  a private TPU module, preserving the framework-independent checkpoint contracts.
 
 - [~] **M8-F1 — Structural inspector**
   `feat(optimization): inspect dense causal LM capabilities`

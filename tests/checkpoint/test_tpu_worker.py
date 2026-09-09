@@ -4,7 +4,10 @@ import json
 import pytest
 import torch
 
-from trainlm.checkpoint import load_tpu_worker_checkpoint, save_tpu_worker_checkpoint
+from trainlm._tpu_checkpoint import (
+    load_tpu_worker_checkpoint,
+    save_tpu_worker_checkpoint,
+)
 from trainlm.training import TrainerPhase, TrainerState
 
 
