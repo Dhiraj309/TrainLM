@@ -7,7 +7,11 @@ from .base import (
 )
 from .causal_lm import CausalLMTask
 from .chunked_loss import RematerializationPolicy, chunked_linear_causal_cross_entropy
-from .training_view import HiddenStateProvider, LinearCausalLMTrainingView
+from .training_view import (
+    HiddenStateProvider,
+    LinearCausalLMTrainingView,
+    extract_hidden_state,
+)
 
 __all__ = [
     "CausalLMTask",
@@ -20,4 +24,5 @@ __all__ = [
     "HiddenStateProvider",
     "LinearCausalLMTrainingView",
     "RematerializationPolicy",
+    "extract_hidden_state",
 ]

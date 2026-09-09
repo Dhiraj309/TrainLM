@@ -164,6 +164,8 @@ this file in every turn:
    fallback. Implement and benchmark eligible providers before default use.
 4. **M10+ kernels:** integrate TPU attention/projection/norm/optimizer/remat
    providers only after shape, dtype, mask, and backward correctness tests.
+   M9-F5 software conformance now covers representative hidden-output forms and
+   tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
 ## Definition of done for the public surface
 

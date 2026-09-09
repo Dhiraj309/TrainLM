@@ -19,6 +19,38 @@ from .chunked_loss import (
 HiddenStateProvider = Callable[[nn.Module, Mapping[str, Any]], torch.Tensor]
 
 
+def extract_hidden_state(
+    output: Any,
+    *,
+    field: str = "last_hidden_state",
+    tuple_index: int = 0,
+) -> torch.Tensor:
+    """Extract an explicitly identified hidden state from common HF outputs."""
+
+    if isinstance(output, torch.Tensor):
+        hidden = output
+    elif isinstance(output, Mapping):
+        if field not in output:
+            raise KeyError(f"Hidden-state output does not contain field {field!r}.")
+        hidden = output[field]
+    elif isinstance(output, (tuple, list)):
+        if isinstance(tuple_index, bool) or not isinstance(tuple_index, int):
+            raise TypeError("tuple_index must be an integer.")
+        try:
+            hidden = output[tuple_index]
+        except IndexError as exc:
+            raise IndexError("Hidden-state tuple index is out of range.") from exc
+    else:
+        if not hasattr(output, field):
+            raise TypeError(
+                f"Hidden-state output does not expose attribute {field!r}."
+            )
+        hidden = getattr(output, field)
+    if not isinstance(hidden, torch.Tensor):
+        raise TypeError("Selected hidden-state output must be a tensor.")
+    return hidden
+
+
 @dataclass(frozen=True, slots=True)
 class LinearCausalLMTrainingView:
     """Non-mutating, capability-guarded access to hidden states and LM head.
@@ -105,4 +137,8 @@ class LinearCausalLMTrainingView:
         )
 
 
-__all__ = ["HiddenStateProvider", "LinearCausalLMTrainingView"]
+__all__ = [
+    "HiddenStateProvider",
+    "LinearCausalLMTrainingView",
+    "extract_hidden_state",
+]

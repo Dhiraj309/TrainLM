@@ -857,10 +857,14 @@ TPU providers, and multi-family integration remain.
   explained fallback. Provider implementation and matched TPU correctness,
   HBM, and throughput measurements remain pending.
 
-- [ ] **M9-F5 — Multi-family loss adapters**
+- [x] **M9-F5 — Multi-family loss adapters**
   `test(loss): certify chunked loss across dense output-head layouts`
   Cover tied/untied heads and representative backbone outputs.
   **Acceptance:** Loss/gradient/export parity passes without full logits.
+  Explicit output adapters now normalize tensor, mapping, tuple/list, and
+  attribute-based hidden-state results. The conformance matrix covers tied and
+  untied embeddings, biased and bias-free heads, rematerialized chunked loss,
+  parameter gradients, alias preservation, and canonical state-dict parity.
 
 ### Exit gate
 
