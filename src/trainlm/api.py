@@ -11,6 +11,9 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
+import warnings
+
+import yaml
 
 import torch
 from torch import nn
@@ -48,6 +51,39 @@ from trainlm.training import (
 
 if TYPE_CHECKING:
     from trainlm.model import LoadedCausalLM
+
+
+PUBLIC_API_VERSION = "1"
+DEPRECATED_CONFIG_KEYS = {"args": "training_args"}
+
+
+def _load_public_config(source: Mapping[str, Any] | str | Path) -> dict[str, Any]:
+    if isinstance(source, Mapping):
+        data = dict(source)
+    else:
+        path = Path(source)
+        if not path.is_file():
+            raise FileNotFoundError(f"Trainer configuration does not exist: {path}")
+        with path.open("r", encoding="utf-8") as handle:
+            data = yaml.safe_load(handle)
+        if not isinstance(data, dict):
+            raise ValueError("Trainer configuration root must be a mapping.")
+    unknown = set(data) - {"api_version", "model", "training_args", "args"}
+    if unknown:
+        raise ValueError(f"Unknown trainer configuration keys: {sorted(unknown)!r}")
+    version = str(data.get("api_version", PUBLIC_API_VERSION))
+    if version != PUBLIC_API_VERSION:
+        raise ValueError(f"Unsupported public API version: {version!r}.")
+    if "args" in data:
+        if "training_args" in data:
+            raise ValueError("Set only 'training_args'; deprecated 'args' is also present.")
+        warnings.warn(
+            "Configuration key 'args' is deprecated; use 'training_args'.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        data["training_args"] = data.pop("args")
+    return data
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,6 +183,62 @@ def _default_collator(features: Sequence[Any]) -> dict[str, torch.Tensor]:
 
 class TrainLMTrainer:
     """HF-like facade over TrainLM's backend-neutral trainer engine."""
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        model_name_or_path: str | Path,
+        *,
+        revision: str | None = None,
+        **kwargs: Any,
+    ) -> "TrainLMTrainer":
+        """Construct the trainer with an explicit HF pretrained model source."""
+
+        source = ModelSourceConfig(
+            provider="huggingface",
+            initialization="pretrained",
+            name_or_path=str(model_name_or_path),
+            revision=revision,
+        )
+        return cls(model=source, **kwargs)
+
+    @classmethod
+    def from_config(
+        cls,
+        config: Mapping[str, Any] | str | Path,
+        *,
+        train_dataset: Dataset | DataLoader | Any,
+        eval_dataset: Dataset | DataLoader | Any | None = None,
+        **kwargs: Any,
+    ) -> "TrainLMTrainer":
+        """Construct from a versioned mapping or YAML file plus dataset objects."""
+
+        data = _load_public_config(config)
+        if "model" not in data:
+            raise ValueError("Trainer configuration requires 'model'.")
+        model_data = data["model"]
+        if isinstance(model_data, (str, Path)):
+            model: str | Path | ModelSourceConfig = ModelSourceConfig(
+                provider="huggingface",
+                initialization="pretrained",
+                name_or_path=str(model_data),
+            )
+        elif isinstance(model_data, Mapping):
+            values = dict(model_data)
+            values.setdefault("provider", "huggingface")
+            model = ModelSourceConfig(**values)
+        else:
+            raise TypeError("'model' must be a model ID/path or mapping.")
+        argument_data = data.get("training_args", {})
+        if not isinstance(argument_data, Mapping):
+            raise TypeError("'training_args' must be a mapping.")
+        return cls(
+            model=model,
+            args=TrainLMTrainingArguments(**dict(argument_data)),
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            **kwargs,
+        )
 
     def __init__(
         self,
@@ -642,4 +734,9 @@ class TrainLMTrainer:
         raise ValueError("format must be 'dict', 'json', or 'text'.")
 
 
-__all__ = ["TrainLMTrainer", "TrainLMTrainingArguments"]
+__all__ = [
+    "DEPRECATED_CONFIG_KEYS",
+    "PUBLIC_API_VERSION",
+    "TrainLMTrainer",
+    "TrainLMTrainingArguments",
+]

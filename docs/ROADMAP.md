@@ -324,7 +324,7 @@ TPU runtime foundation`; branch `milestone/m5-m7-xla-compatibility`.
 | [~] | M11 | Projection, optimizer, remat, and HLO tuning |
 | [~] | M12 | Exact 135M parity certification |
 | [~] | M13 | Cross-family certification and 1.3B scaling |
-| [ ] | M14 | Dense-AR V1 release |
+| [~] | M14 | Dense-AR V1 release |
 | [d] | M15 | TorchTPU migration |
 | [d] | M16 | MoE extension |
 | [d] | M17 | DLLM extension |
@@ -1169,13 +1169,17 @@ early-update evidence gate are implemented; target-run alignment remains.
 
 ## M14 — Dense-AR V1 release
 
-**Status:** [ ] Not started
+**Status:** [~] In progress — versioned code/YAML construction exists; release certification remains
 
 **Goal:** Deliver a safe, documented, reproducible user release.
 
-- [ ] **M14-F1 — Stable public API**
+- [~] **M14-F1 — Stable public API**
   `feat(api): finalize TrainLM dense AR pretraining interface`
   Code/YAML from-config and from-pretrained workflows with deprecation policy.
+  The public trainer now has explicit `from_pretrained()` and versioned
+  mapping/YAML `from_config()` constructors, rejects worker/internal config
+  keys, and warns for one-version key aliases. The example imports only the
+  package root; clean-environment and release-compatibility checks remain.
   **Acceptance:** Examples use no internal packages/custom model class.
 
 - [ ] **M14-F2 — Secure `.bin` TPU guide**

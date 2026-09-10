@@ -127,6 +127,26 @@ trainer = TrainLMTrainer(
 trainer.train()
 ```
 
+The same public facade supports a versioned YAML workflow. Dataset objects stay
+in user code while model acquisition and familiar training arguments live in
+configuration:
+
+```python
+from trainlm import TrainLMTrainer
+
+trainer = TrainLMTrainer.from_config(
+    "examples/dense_ar_pretraining.yaml",
+    train_dataset=train_dataset,
+    eval_dataset=eval_dataset,
+)
+trainer.train(resume_from_checkpoint="runs/dense-ar/checkpoint-500")
+```
+
+Use `TrainLMTrainer.from_pretrained("org/model", revision="...")` for the
+equivalent code-first pretrained workflow. Public config files carry an
+`api_version`; renamed keys emit `DeprecationWarning` for one public API version
+before removal.
+
 On CPU and CUDA, `save_steps` and `eval_steps` are handled by the same
 backend-neutral lifecycle used for training. A local run can continue from a
 TrainLM training checkpoint with

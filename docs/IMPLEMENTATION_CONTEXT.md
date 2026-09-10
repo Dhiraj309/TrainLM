@@ -272,6 +272,11 @@ this file in every turn:
     hardware, and mesh geometry. It also requires throughput/MFU parity, stable
     compilation, zero CPU fallback, correctness/resume/export, and collective
     plus HBM artifacts. Lock the comparison and populate it on target hardware.
+28. **M14-F1 stable public API:** `TrainLMTrainer.from_pretrained()` and the
+    versioned mapping/YAML `from_config()` path now construct explicit HF model
+    sources and public training arguments while rejecting internal keys. The
+    first deprecated YAML alias warns before removal. Add clean-environment and
+    compatibility checks before declaring the release interface stable.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

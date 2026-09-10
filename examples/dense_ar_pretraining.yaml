@@ -1,0 +1,14 @@
+api_version: "1"
+model:
+  provider: huggingface
+  initialization: pretrained
+  name_or_path: org/model-name
+  revision: immutable-revision
+training_args:
+  output_dir: runs/dense-ar
+  max_steps: 1000
+  sequence_length: 2048
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 32
+  bf16: true
+  accelerator: auto
