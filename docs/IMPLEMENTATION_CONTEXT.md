@@ -257,6 +257,11 @@ this file in every turn:
     and GeGLU, and Gemma2 alternating windows plus attention soft-capping.
     Add QK-normalized variants where supported and complete shared correctness,
     graph, export, HBM, and target-TPU certification before advertising them.
+25. **M13-F5 cross-family matrix:** a structured evaluator now rejects missing
+    or duplicate advertised-family records, mismatched benchmark geometry,
+    failed correctness/graph/export evidence, and full-attention results below
+    45% architecture-adjusted MFU. Populate it with synchronized 135M target
+    runs using family-specific FLOPs/token before completing the matrix.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

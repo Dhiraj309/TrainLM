@@ -42,10 +42,18 @@ from trainlm.benchmark.export_certification import (
     evaluate_plain_hf_export,
 )
 from trainlm.benchmark.parity_report import ParityReport
+from trainlm.benchmark.cross_family_matrix import (
+    CrossFamilyMatrixEvaluation,
+    CrossFamilyRecord,
+    SupportLevel,
+    evaluate_cross_family_matrix,
+)
 
 __all__ = [
     "BenchmarkResult",
     "CausalLMFlopBreakdown",
+    "CrossFamilyMatrixEvaluation",
+    "CrossFamilyRecord",
     "calculate_causal_lm_flops",
     "calculate_mfu",
     "BaselineEvaluation",
@@ -57,6 +65,7 @@ __all__ = [
     "NumericalDifference",
     "REQUIRED_NUMERICAL_PATHS",
     "RepeatedParityEvaluation",
+    "SupportLevel",
     "RealShardStabilityEvaluation",
     "RealShardStabilityEvidence",
     "PlainHFExportEvaluation",
@@ -64,6 +73,7 @@ __all__ = [
     "ParityReport",
     "evaluate_baseline",
     "evaluate_attention_stage",
+    "evaluate_cross_family_matrix",
     "evaluate_parity_closure",
     "compare_numerical_alignment",
     "evaluate_repeated_parity",

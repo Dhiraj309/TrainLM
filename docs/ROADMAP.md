@@ -1133,10 +1133,14 @@ early-update evidence gate are implemented; target-run alignment remains.
   QK-normalized family variants remain outstanding.
   **Acceptance:** Difference fixtures and common certification pass.
 
-- [ ] **M13-F5 — 135M cross-family matrix**
+- [~] **M13-F5 — 135M cross-family matrix**
   `perf(certification): benchmark dense AR capability families`
   Report matched raw throughput and architecture-adjusted MFU; dense full
   attention targets 45% MFU absent a reviewed roofline.
+  A pure evidence evaluator now requires one unique support/performance record
+  per advertised family, matched workload/device/update geometry, correctness,
+  graph and export gates, and computes MFU from family-specific FLOPs/token.
+  Real synchronized 135M measurements remain outstanding.
   **Acceptance:** Every advertised family has a support/performance record.
 
 - [ ] **M13-F6 — SPMD FSDP**
