@@ -312,6 +312,10 @@ this file in every turn:
     staging/publication boundaries. Spawned child processes are terminated at
     each pre-commit persistence boundary, and recovery continues to select the
     prior committed generation. Target-TPU cursor-continuity evidence remains.
+36. **M14-F4 durable boundary:** spawned process termination now also covers
+    compute before checkpointing and the instant after atomic manifest publish.
+    Recovery rejects the former attempt and accepts the latter, establishing
+    the manifest rename as the host-side durability boundary.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

@@ -65,6 +65,11 @@ def _save_until_process_kill(destination, stage):
     save_tpu_worker_checkpoint(engine(), destination, _stage_hook=kill_at)
 
 
+def _kill_before_checkpoint(destination):
+    destination.mkdir(parents=True)
+    os._exit(92)
+
+
 def test_rank_checkpoint_round_trip(tmp_path):
     original = engine()
     expected = {key: value.detach().clone() for key, value in original.model.state_dict().items()}
@@ -131,6 +136,38 @@ def test_recovery_survives_real_process_kill_during_persistence(tmp_path, stage)
     assert process.exitcode == 91
     assert find_latest_committed_tpu_checkpoint(root) == durable
     assert not (interrupted / "manifest.json").exists()
+
+
+def test_recovery_survives_real_process_kill_during_compute(tmp_path):
+    root = tmp_path / "checkpoints"
+    durable = save_tpu_worker_checkpoint(engine(), root / "checkpoint-3")
+    interrupted = root / "checkpoint-compute-interrupted"
+    process = multiprocessing.get_context("spawn").Process(
+        target=_kill_before_checkpoint,
+        args=(interrupted,),
+    )
+
+    process.start()
+    process.join(timeout=30)
+
+    assert process.exitcode == 92
+    assert find_latest_committed_tpu_checkpoint(root) == durable
+
+
+def test_manifest_publish_is_the_durable_commit_boundary(tmp_path):
+    root = tmp_path / "checkpoints"
+    save_tpu_worker_checkpoint(engine(), root / "checkpoint-2")
+    published = root / "checkpoint-3-published"
+    process = multiprocessing.get_context("spawn").Process(
+        target=_save_until_process_kill,
+        args=(published, "manifest-published"),
+    )
+
+    process.start()
+    process.join(timeout=30)
+
+    assert process.exitcode == 91
+    assert find_latest_committed_tpu_checkpoint(root) == published
 
 
 def test_committed_checkpoint_is_immutable_and_progress_is_verified(tmp_path):
