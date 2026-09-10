@@ -103,6 +103,9 @@ resume, and the current canonical-export boundary.
 TrainLM distinguishes models that are **Compatible**, **Optimized**, and
 hardware **Certified**. Generic execution is never presented as TPU performance
 certification.
+See the [Dense-AR V1 development support status](docs/release/DENSE_AR_V1_STATUS.md)
+and its [machine-readable manifest](support/dense_ar_v1.json) for current
+versions, hardware paths, providers, fallbacks, and caveats.
 
 ## Public trainer (M8-F0 in progress)
 

@@ -291,6 +291,11 @@ this file in every turn:
     manifest/shard progress must agree, and recovery discovers only complete,
     safe, committed topologies. Add real compute/staging/persistence process-kill
     tests and target-TPU cursor-continuity evidence before closure.
+32. **M14-F5 support manifest:** the versioned machine manifest and development
+    release notes now publish dependency ranges, hardware support, execution
+    paths, providers, fallbacks, caveats, and deferred TorchTPU status. A pure
+    validator prevents `trainer.explain()` from exceeding published backend or
+    path support. Refresh the manifest from final certification evidence.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

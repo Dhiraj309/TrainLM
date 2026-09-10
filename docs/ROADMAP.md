@@ -1209,9 +1209,13 @@ early-update evidence gate are implemented; target-run alignment remains.
   Real process-kill and target-TPU recovery tests remain outstanding.
   **Acceptance:** No partial checkpoint or silently skipped data.
 
-- [ ] **M14-F5 — Support manifest/release notes**
+- [~] **M14-F5 — Support manifest/release notes**
   `docs(release): publish dense AR support and certification matrix`
   Publish versions, hardware, providers, caveats, fallbacks, TorchTPU status.
+  A versioned machine manifest and development status page now publish these
+  fields without certification overclaims, and a validator checks that public
+  explanation backend/path/certification values do not exceed the manifest.
+  Populate final release evidence and revalidate all claims before closure.
   **Acceptance:** Machine manifest agrees with `trainer.explain()`.
 
 ### Exit gate
