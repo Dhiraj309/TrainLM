@@ -1182,9 +1182,13 @@ early-update evidence gate are implemented; target-run alignment remains.
   package root; clean-environment and release-compatibility checks remain.
   **Acceptance:** Examples use no internal packages/custom model class.
 
-- [ ] **M14-F2 — Secure `.bin` TPU guide**
+- [~] **M14-F2 — Secure `.bin` TPU guide**
   `docs(tutorial): add HF model and binary shard TPU pretraining guide`
   Document token secret, revisions, splits, explain, resume, and export.
+  A public-surface-only guide now covers secret-manager token handling,
+  immutable model/data revisions, disjoint train/eval shard lists, preflight
+  explanation, committed-checkpoint resume, and explicitly documents that TPU
+  canonical export remains unavailable. Target clean-environment smoke remains.
   **Acceptance:** Secret scan and clean-environment smoke pass.
 
 - [ ] **M14-F3 — CI/hardware tiers**

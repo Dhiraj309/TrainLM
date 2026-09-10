@@ -6,10 +6,16 @@ from .api import (
     TrainLMTrainer,
     TrainLMTrainingArguments,
 )
-from .data import PackedBinDataset
+from .data import (
+    HuggingFaceShardSourceConfig,
+    HuggingFaceShardSpec,
+    PackedBinDataset,
+)
 
 __all__ = [
     "DEPRECATED_CONFIG_KEYS",
+    "HuggingFaceShardSourceConfig",
+    "HuggingFaceShardSpec",
     "PUBLIC_API_VERSION",
     "PackedBinDataset",
     "TrainLMTrainer",

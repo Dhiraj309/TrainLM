@@ -96,6 +96,9 @@ Packed reads can overlap training through the bounded, backend-aware
 [asynchronous prefetch contract](docs/data/ASYNC_PREFETCH.md).
 Exact next-batch restart state follows the
 [resumable cursor contract](docs/data/RESUMABLE_CURSOR.md).
+The [secure packed-bin TPU guide](docs/tutorials/TPU_PACKED_BIN_PRETRAINING.md)
+covers secret handling, immutable revisions, train/eval splits, explanation,
+resume, and the current canonical-export boundary.
 
 TrainLM distinguishes models that are **Compatible**, **Optimized**, and
 hardware **Certified**. Generic execution is never presented as TPU performance

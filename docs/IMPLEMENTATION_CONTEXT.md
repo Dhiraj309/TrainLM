@@ -277,6 +277,11 @@ this file in every turn:
     sources and public training arguments while rejecting internal keys. The
     first deprecated YAML alias warns before removal. Add clean-environment and
     compatibility checks before declaring the release interface stable.
+29. **M14-F2 secure packed-bin TPU guide:** the public tutorial now covers
+    secret-managed `HF_TOKEN`, immutable model/data revisions, separate
+    train/eval manifests, `explain()`, committed-checkpoint resume, private
+    artifacts, and the honest current TPU export limitation. Run the guide in a
+    clean target environment and implement canonical TPU export before closure.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
