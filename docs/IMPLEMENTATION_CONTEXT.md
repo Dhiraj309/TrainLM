@@ -359,6 +359,12 @@ this file in every turn:
     learning rate, betas, epsilon, and decay while preventing worker defaults
     from drifting away from the evidence contract. Target-XLA update/resume,
     graph, HBM, and step-time measurements remain outstanding.
+44. **M11-F6 input-policy integration:** `BatchPrefetchGeometry` now validates
+    both host and device prefetch depths, host-to-device transfer threads, and
+    batches per execution, and materializes the exact `ParallelLoader` keyword
+    arguments. The TPU worker builds the current production candidate through
+    that contract so future measured selections have one application boundary.
+    Real-data target-TPU geometry measurements remain outstanding.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

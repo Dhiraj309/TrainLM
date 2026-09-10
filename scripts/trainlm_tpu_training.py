@@ -49,6 +49,7 @@ from trainlm.data import (
 from trainlm.model import load_huggingface_causal_lm
 from trainlm.model.outputs import normalize_causal_lm_output
 from trainlm.optimization import (
+    BatchPrefetchGeometry,
     XLAAdamWPolicy,
     create_optimizer,
     materialize_xla_adamw_policy,
@@ -432,9 +433,22 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
     scheduler = create_scheduler(optimizer, config.scheduler)
     metrics = PrintMetrics(runtime, args)
     # Start prefetch after setup succeeds, and close it before closing mappings.
+    input_geometry = BatchPrefetchGeometry(
+        geometry_id=(
+            f"s{args.sequence_length}-mb{args.per_device_batch_size}-"
+            f"ga{args.gradient_accumulation_steps}-dp{world_size}-p16"
+        ),
+        sequence_length=args.sequence_length,
+        micro_batch_per_device=args.per_device_batch_size,
+        gradient_accumulation_steps=args.gradient_accumulation_steps,
+        data_parallel_replicas=world_size,
+        prefetch_depth=16,
+        device_prefetch_depth=8,
+        host_to_device_transfer_threads=1,
+        batches_per_execution=1,
+    )
     parallel_loader = pl.ParallelLoader(
-        loader, [device], loader_prefetch_size=16, device_prefetch_size=8,
-        host_to_device_transfer_threads=1, batches_per_execution=1,
+        loader, [device], **input_geometry.parallel_loader_kwargs()
     )
     device_loader = parallel_loader.per_device_loader(device)
     trainer = Trainer(

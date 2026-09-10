@@ -1030,7 +1030,9 @@ layouts and target update evidence remain.
   **Acceptance:** One synchronized real-data production geometry is selected.
   A deterministic selector now compares only equal token/update geometries and
   requires real data, stable graphs, zero CPU fallback, bounded HBM, and bounded
-  input idle. It selects throughput first with stable HBM/idle/ID ties. Target
+  input idle. It selects throughput first with stable HBM/idle/ID ties. The TPU
+  worker now constructs its `ParallelLoader` arguments from the validated
+  geometry contract rather than an unrelated hard-coded call site. Target
   measurements for MB2/GA32, MB1/GA64, and prefetch near 16 remain pending.
 
 - [~] **M11-F7 — Final HLO/host closure**

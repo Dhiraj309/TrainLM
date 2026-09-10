@@ -14,6 +14,9 @@ class BatchPrefetchGeometry:
     gradient_accumulation_steps: int
     data_parallel_replicas: int
     prefetch_depth: int
+    device_prefetch_depth: int = 8
+    host_to_device_transfer_threads: int = 1
+    batches_per_execution: int = 1
 
     def __post_init__(self) -> None:
         if not isinstance(self.geometry_id, str) or not self.geometry_id:
@@ -24,6 +27,9 @@ class BatchPrefetchGeometry:
             "gradient_accumulation_steps",
             "data_parallel_replicas",
             "prefetch_depth",
+            "device_prefetch_depth",
+            "host_to_device_transfer_threads",
+            "batches_per_execution",
         ):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or value < 1:
@@ -37,6 +43,16 @@ class BatchPrefetchGeometry:
             * self.gradient_accumulation_steps
             * self.data_parallel_replicas
         )
+
+    def parallel_loader_kwargs(self) -> dict[str, int]:
+        """Return the validated PyTorch/XLA ParallelLoader tuning values."""
+
+        return {
+            "loader_prefetch_size": self.prefetch_depth,
+            "device_prefetch_size": self.device_prefetch_depth,
+            "host_to_device_transfer_threads": self.host_to_device_transfer_threads,
+            "batches_per_execution": self.batches_per_execution,
+        }
 
 
 @dataclass(frozen=True, slots=True)

@@ -89,3 +89,35 @@ def test_mismatched_token_geometry_is_not_compared():
 def test_no_eligible_geometry_is_an_error():
     with pytest.raises(ValueError, match="No batch/prefetch geometry"):
         select((measurement("fake", 2, 32, 16, 1_000_000, real_data=False),))
+
+
+def test_geometry_materializes_parallel_loader_configuration():
+    geometry = measurement("production", 2, 32, 16, 900_000).geometry
+    assert geometry.parallel_loader_kwargs() == {
+        "loader_prefetch_size": 16,
+        "device_prefetch_size": 8,
+        "host_to_device_transfer_threads": 1,
+        "batches_per_execution": 1,
+    }
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "device_prefetch_depth",
+        "host_to_device_transfer_threads",
+        "batches_per_execution",
+    ],
+)
+def test_parallel_loader_geometry_values_must_be_positive(field):
+    values = dict(
+        geometry_id="invalid",
+        sequence_length=4096,
+        micro_batch_per_device=2,
+        gradient_accumulation_steps=32,
+        data_parallel_replicas=8,
+        prefetch_depth=16,
+        **{field: 0},
+    )
+    with pytest.raises(ValueError, match=field):
+        BatchPrefetchGeometry(**values)
