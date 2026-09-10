@@ -70,3 +70,110 @@ def test_manifest_reconstructs_identical_converter():
     converter = spec().converter()
     restored = type(converter).from_manifest(converter.manifest())
     assert restored.mappings == converter.mappings
+
+from copy import deepcopy
+from torch import nn
+
+from trainlm.optimization import (
+    ExecutionPlan,
+    ModelTransformation,
+    ModelTransformRegistry,
+    PackedQKVProjection,
+    qkv_pack_transform_handler,
+)
+from .test_capabilities import capabilities
+
+
+class _SeparateQKV(nn.Module):
+    def __init__(self, *, bias=False):
+        super().__init__()
+        self.q_proj = nn.Linear(6, 16, bias=bias)
+        self.k_proj = nn.Linear(6, 8, bias=bias)
+        self.v_proj = nn.Linear(6, 8, bias=bias)
+
+    def forward(self, hidden_states):
+        return self.q_proj(hidden_states), self.k_proj(hidden_states), self.v_proj(hidden_states)
+
+
+class _AttentionFixture(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.projections = _SeparateQKV()
+
+    def forward(self, hidden_states):
+        return self.projections(hidden_states)
+
+
+def _qkv_plan():
+    transform = ModelTransformation(
+        transform_id="pack-qkv",
+        component="attention",
+        provider="fixture",
+        target_paths=("projections",),
+        inverse_transform_id="unpack-qkv",
+        reason="exercise one packed projection",
+        parameter_layout_change=True,
+    )
+    return ExecutionPlan(
+        1,
+        "qkv-plan",
+        "ready",
+        "auto",
+        capabilities().fingerprint,
+        "pytorch",
+        "fp32",
+        transformations=(transform,),
+    )
+
+
+def test_live_qkv_transform_preserves_outputs_and_gradients():
+    torch.manual_seed(7)
+    original = _AttentionFixture()
+    transformed = deepcopy(original)
+    hidden_original = torch.randn(2, 3, 6, requires_grad=True)
+    hidden_transformed = hidden_original.detach().clone().requires_grad_(True)
+
+    registry = ModelTransformRegistry()
+    registry.register(qkv_pack_transform_handler(spec()))
+    transaction = registry.apply(transformed, _qkv_plan())
+
+    assert isinstance(transformed.projections, PackedQKVProjection)
+    expected = original(hidden_original)
+    actual = transformed(hidden_transformed)
+    assert all(torch.allclose(left, right) for left, right in zip(expected, actual))
+
+    sum(value.square().sum() for value in expected).backward()
+    sum(value.square().sum() for value in actual).backward()
+    expected_weight_grad = torch.cat(
+        [
+            original.projections.q_proj.weight.grad,
+            original.projections.k_proj.weight.grad,
+            original.projections.v_proj.weight.grad,
+        ]
+    )
+    assert torch.allclose(transformed.projections.weight.grad, expected_weight_grad)
+    assert torch.allclose(hidden_transformed.grad, hidden_original.grad)
+    transaction.commit()
+
+
+def test_live_qkv_transform_rolls_back_to_original_wrapper():
+    model = _AttentionFixture()
+    original = model.projections
+    registry = ModelTransformRegistry()
+    registry.register(qkv_pack_transform_handler(spec()))
+
+    transaction = registry.apply(model, _qkv_plan())
+    transaction.rollback()
+
+    assert model.projections is original
+
+
+def test_live_qkv_transform_rejects_mismatched_projection_geometry():
+    model = _AttentionFixture()
+    model.projections.k_proj = nn.Linear(6, 7, bias=False)
+    registry = ModelTransformRegistry()
+    registry.register(qkv_pack_transform_handler(spec()))
+
+    with pytest.raises(Exception, match="key projection geometry"):
+        registry.apply(model, _qkv_plan())
+    assert isinstance(model.projections, _SeparateQKV)
