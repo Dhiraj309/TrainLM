@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Callable, Literal
 
+import torch
+from torch import Tensor, nn
+from torch.nn import functional as F
+
+from .plan import ModelTransformation
 from .state_dict import ParameterLayoutMapping, StateDictLayoutConverter
+from .transforms import TransformHandler
 
 MLPActivation = Literal["swiglu", "geglu", "gelu"]
 
@@ -105,4 +111,133 @@ class GatedMLPProjectionSpec:
         return StateDictLayoutConverter(tuple(mappings))
 
 
-__all__ = ["GatedMLPProjectionSpec", "MLPActivation"]
+class PackedGatedMLPProjection(nn.Module):
+    """One packed gate/up projection with an explicit activation callable."""
+
+    def __init__(
+        self,
+        spec: GatedMLPProjectionSpec,
+        weight: Tensor,
+        bias: Tensor | None,
+        activation_fn: Callable[[Tensor], Tensor],
+    ) -> None:
+        super().__init__()
+        if spec.activation == "gelu":
+            raise ValueError("GELU paths do not use a gated packed projection.")
+        if not callable(activation_fn):
+            raise TypeError("activation_fn must be callable.")
+        expected_weight = (2 * spec.intermediate_size, spec.input_size)
+        if tuple(weight.shape) != expected_weight:
+            raise ValueError(
+                f"Packed gated MLP weight shape must be {expected_weight}, "
+                f"got {tuple(weight.shape)}."
+            )
+        if bias is not None and tuple(bias.shape) != (expected_weight[0],):
+            raise ValueError("Packed gated MLP bias shape does not match its weight.")
+        self.spec = spec
+        self.activation_fn = activation_fn
+        self.weight = nn.Parameter(weight)
+        self.bias = nn.Parameter(bias) if bias is not None else None
+
+    @classmethod
+    def from_separate(
+        cls,
+        spec: GatedMLPProjectionSpec,
+        gate_projection: nn.Linear,
+        up_projection: nn.Linear,
+        activation_fn: Callable[[Tensor], Tensor],
+    ) -> "PackedGatedMLPProjection":
+        projections = (gate_projection, up_projection)
+        if any(not isinstance(projection, nn.Linear) for projection in projections):
+            raise TypeError("Gated MLP packing requires two torch.nn.Linear projections.")
+        for name, projection in zip(("gate", "up"), projections):
+            if (
+                projection.in_features != spec.input_size
+                or projection.out_features != spec.intermediate_size
+            ):
+                raise ValueError(
+                    f"{name} projection geometry does not match the gated MLP specification."
+                )
+        bias_presence = tuple(projection.bias is not None for projection in projections)
+        if len(set(bias_presence)) != 1:
+            raise ValueError("Gate/up projections must both have bias or both be bias-free.")
+        if (spec.packed_bias_key is not None) != bias_presence[0]:
+            raise ValueError("Gate/up projection bias layout does not match the specification.")
+        weights = tuple(projection.weight.detach().clone() for projection in projections)
+        if len({(weight.dtype, weight.device) for weight in weights}) != 1:
+            raise ValueError("Gate/up weights must share dtype and device.")
+        bias = None
+        if bias_presence[0]:
+            biases = tuple(projection.bias.detach().clone() for projection in projections)
+            if len({(value.dtype, value.device) for value in biases}) != 1:
+                raise ValueError("Gate/up biases must share dtype and device.")
+            bias = torch.cat(biases, dim=0)
+        return cls(spec, torch.cat(weights, dim=0), bias, activation_fn)
+
+    def forward(self, hidden_states: Tensor) -> Tensor:
+        gate, up = F.linear(hidden_states, self.weight, self.bias).chunk(2, dim=-1)
+        return self.activation_fn(gate) * up
+
+
+def gated_mlp_pack_transform_handler(
+    spec: GatedMLPProjectionSpec,
+    activation_fn: Callable[[Tensor], Tensor],
+    *,
+    transform_id: str = "pack-gated-mlp",
+    inverse_transform_id: str = "unpack-gated-mlp",
+) -> TransformHandler:
+    """Create a reversible handler for an adapter-proven gated wrapper path."""
+
+    if spec.activation == "gelu":
+        raise ValueError("GELU paths must remain on their original projection.")
+
+    def capture(model: nn.Module, transformation: ModelTransformation) -> nn.Module:
+        return _resolve_module(model, transformation.target_paths[0])
+
+    def apply(model: nn.Module, transformation: ModelTransformation) -> None:
+        if len(transformation.target_paths) != 1:
+            raise ValueError("Gated MLP packing requires exactly one wrapper path.")
+        target = _resolve_module(model, transformation.target_paths[0])
+        packed = PackedGatedMLPProjection.from_separate(
+            spec, target.gate_proj, target.up_proj, activation_fn
+        )
+        _replace_module(model, transformation.target_paths[0], packed)
+
+    def rollback(
+        model: nn.Module, transformation: ModelTransformation, snapshot: nn.Module
+    ) -> None:
+        _replace_module(model, transformation.target_paths[0], snapshot)
+
+    return TransformHandler(transform_id, inverse_transform_id, capture, apply, rollback)
+
+
+def _resolve_module(model: nn.Module, path: str) -> nn.Module:
+    target: Any = model
+    for component in path.split("."):
+        if not component or not hasattr(target, component):
+            raise ValueError(f"Model has no module at path {path!r}.")
+        target = getattr(target, component)
+    if not isinstance(target, nn.Module):
+        raise TypeError(f"Target path {path!r} does not resolve to a module.")
+    return target
+
+
+def _replace_module(model: nn.Module, path: str, replacement: nn.Module) -> None:
+    components = path.split(".")
+    parent: Any = model
+    for component in components[:-1]:
+        if not component or not hasattr(parent, component):
+            raise ValueError(f"Model has no module at path {path!r}.")
+        parent = getattr(parent, component)
+    name = components[-1]
+    if not name or not hasattr(parent, name):
+        raise ValueError(f"Model has no module at path {path!r}.")
+    setattr(parent, name, replacement)
+
+
+__all__ = [
+    "GatedMLPProjectionSpec",
+    "MLPActivation",
+    "PackedGatedMLPProjection",
+    "gated_mlp_pack_transform_handler",
+]

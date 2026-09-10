@@ -67,7 +67,12 @@ from .attention_tuning import (
     AttentionTuningResult,
 )
 from .qkv import PackedQKVProjection, QKVProjectionSpec, qkv_pack_transform_handler
-from .mlp import GatedMLPProjectionSpec, MLPActivation
+from .mlp import (
+    GatedMLPProjectionSpec,
+    MLPActivation,
+    PackedGatedMLPProjection,
+    gated_mlp_pack_transform_handler,
+)
 from .hlo_audit import (
     FusionComponent,
     FusionDecision,
@@ -159,6 +164,7 @@ __all__ = [
     "HLOFusionDecision",
     "HLOFusionObservation",
     "GatedMLPProjectionSpec",
+    "PackedGatedMLPProjection",
     "GEMMA2_MAPPING",
     "GEMMA_MAPPING",
     "GradientReduction",
@@ -216,6 +222,7 @@ __all__ = [
     "install_hf_attention_provider",
     "pallas_mha_provider",
     "pallas_grouped_attention_provider",
+    "gated_mlp_pack_transform_handler",
     "qkv_pack_transform_handler",
     "register_learned_position_dense_adapters",
     "register_nonstandard_dense_adapters",
