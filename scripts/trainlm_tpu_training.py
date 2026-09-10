@@ -48,7 +48,11 @@ from trainlm.data import (
 )
 from trainlm.model import load_huggingface_causal_lm
 from trainlm.model.outputs import normalize_causal_lm_output
-from trainlm.optimization import create_optimizer
+from trainlm.optimization import (
+    XLAAdamWPolicy,
+    create_optimizer,
+    materialize_xla_adamw_policy,
+)
 from trainlm.runtime import XlaRuntime
 from trainlm.tasks import CausalLMTask
 from trainlm.training import Trainer, TrainerCallback, create_scheduler
@@ -345,6 +349,22 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
     if getattr(model.config, "tie_word_embeddings", False):
         if model.get_input_embeddings().weight is not model.get_output_embeddings().weight:
             raise RuntimeError("HF tied embedding aliases were lost during device placement.")
+    xla_optimizer = materialize_xla_adamw_policy(
+        XLAAdamWPolicy(
+            first_moment_dtype=(
+                "bfloat16" if args.precision == "bf16" else "float32"
+            ),
+            gradient_clip_norm=1.0,
+            gradient_reduction="mean",
+        ),
+        OptimizerConfig(
+            learning_rate=args.learning_rate,
+            betas=(args.beta1, args.beta2),
+            eps=args.eps,
+            weight_decay=args.weight_decay,
+            fused=False,
+        ),
+    )
     config = TrainConfig(
         model=source,
         dataset=DatasetConfig(
@@ -369,15 +389,7 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
             compilation_cache_dir=str(Path(args.cache_dir) / f"rank-{rank}"),
             accumulation_strategy="microstep",
         ),
-        optimizer=OptimizerConfig(
-            learning_rate=args.learning_rate,
-            betas=(args.beta1, args.beta2),
-            eps=args.eps,
-            weight_decay=args.weight_decay,
-            fused=False,
-            mu_dtype="bfloat16" if args.precision == "bf16" else "float32",
-            nu_dtype="float32",
-        ),
+        optimizer=xla_optimizer.optimizer,
         scheduler=SchedulerConfig(
             name=args.scheduler,
             horizon_steps=(
@@ -393,7 +405,7 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
             max_steps=args.max_steps,
             gradient_accumulation_steps=args.gradient_accumulation_steps,
             materialize_loss_every_steps=args.log_every_steps,
-            max_grad_norm=1.0,
+            max_grad_norm=xla_optimizer.gradient_clip_norm,
             seed=args.seed,
         ),
         checkpoint=CheckpointConfig(

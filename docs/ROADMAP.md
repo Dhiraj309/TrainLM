@@ -1019,7 +1019,10 @@ layouts and target update evidence remain.
   A versioned policy now fixes BF16-or-FP32 first moment, FP32 second moment,
   clipping, decoupled decay, and reduction semantics. A matched evidence gate
   requires update/resume parity, stable graphs, zero CPU fallback, bounded step
-  regression, and lower HBM. Target-XLA measurements remain pending.
+  regression, and lower HBM. The TPU worker now materializes its optimizer
+  configuration and trainer clipping value from that policy instead of
+  duplicating moment and clipping defaults. Target-XLA measurements remain
+  pending.
 
 - [~] **M11-F6 — Batch/prefetch tuning**
   `perf(runtime): tune microbatch accumulation and prefetch geometry`

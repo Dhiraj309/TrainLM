@@ -353,6 +353,12 @@ this file in every turn:
     state keys remain stable, and rollback restores the original callables.
     Loss chunks remain under the loss provider; target-XLA HBM and step-time
     measurements remain outstanding.
+43. **M11-F5 worker policy integration:** the TPU worker now derives AdamW
+    moment dtypes, non-fused execution, decoupled decay, and trainer clipping
+    from one validated `XLAAdamWPolicy`. Materialization preserves the user's
+    learning rate, betas, epsilon, and decay while preventing worker defaults
+    from drifting away from the evidence contract. Target-XLA update/resume,
+    graph, HBM, and step-time measurements remain outstanding.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
