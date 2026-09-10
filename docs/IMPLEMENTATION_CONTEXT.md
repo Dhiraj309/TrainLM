@@ -303,8 +303,10 @@ this file in every turn:
 34. **M14-F1 compatibility contract:** `support/public_api_v1.json` now records
     the versioned package-root symbols, accepted trainer configuration keys,
     and deprecated aliases. The release evaluator fails when an installed
-    surface changes without an API-version update. Add the isolated wheel
-    installation smoke before closing the stable-interface story.
+    surface changes without an API-version update. The CI test suite now also
+    builds and installs a wheel into an isolated environment, runs outside the
+    source checkout, and verifies the documented package-root construction
+    surface; M14-F1 is complete.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

@@ -1175,7 +1175,7 @@ early-update evidence gate are implemented; target-run alignment remains.
 
 **Goal:** Deliver a safe, documented, reproducible user release.
 
-- [~] **M14-F1 — Stable public API**
+- [x] **M14-F1 — Stable public API**
   `feat(api): finalize TrainLM dense AR pretraining interface`
   Code/YAML from-config and from-pretrained workflows with deprecation policy.
   The public trainer now has explicit `from_pretrained()` and versioned
@@ -1184,8 +1184,9 @@ early-update evidence gate are implemented; target-run alignment remains.
   package root, and the dependency contract includes the directly imported
   PyYAML runtime. A machine-readable v1 compatibility contract now freezes the
   root exports, accepted configuration keys, and deprecated aliases, with an
-  evaluator that detects unversioned breaking changes. A clean-environment
-  installation check remains.
+  evaluator that detects unversioned breaking changes. The CI test suite now
+  builds the wheel, installs it into an isolated environment, changes outside
+  the checkout, and smoke-tests only the documented package-root surface.
   **Acceptance:** Examples use no internal packages/custom model class.
 
 - [~] **M14-F2 — Secure `.bin` TPU guide**
