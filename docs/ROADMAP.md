@@ -976,8 +976,10 @@ layouts and target update evidence remain.
   **Acceptance:** Output/gradient/update and export parity pass.
   An explicit SwiGLU/GeGLU descriptor now packs equal-shape gate/up weights and
   optional biases through the reversible state-dict converter, while GELU is an
-  explicit no-transform path. Live module transforms and numerical/update parity
-  remain pending.
+  explicit no-transform path. An adapter-selected wrapper can now be replaced
+  transactionally by one packed linear call using an explicit model-owned
+  activation callable; rollback restores the original modules. Partial layouts
+  and target update parity remain pending.
 
 - [~] **M11-F3 — Native fusion audit**
   `perf(hlo): audit norm RoPE residual and MLP fusion`

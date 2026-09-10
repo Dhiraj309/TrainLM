@@ -326,6 +326,12 @@ this file in every turn:
     dtype/device agreement, returns compact query/key/value views, and restores
     the original wrapper on rollback. Partial source layouts and target-XLA
     update evidence remain outstanding.
+39. **M11-F2 live gated-MLP transform:** an adapter-selected gate/up wrapper can
+    now be replaced before optimizer construction by one packed linear call.
+    Activation semantics remain explicit through a supplied callable rather
+    than a family-name guess, GELU remains untransformed, and transactional
+    rollback restores the original wrapper. Partial layouts and target-XLA
+    update evidence remain outstanding.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
