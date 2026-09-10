@@ -262,6 +262,11 @@ this file in every turn:
     failed correctness/graph/export evidence, and full-attention results below
     45% architecture-adjusted MFU. Populate it with synchronized 135M target
     runs using family-specific FLOPs/token before completing the matrix.
+26. **M13-F6 SPMD FSDP:** a backend-neutral policy now locks data/FSDP mesh
+    dimensions, explicit decoder wrap classes, adapter-provided parameter
+    partitions, sharded optimizer state, pre-wrap rematerialization, and
+    topology-matched distributed checkpoints. Wire it into the XLA runtime and
+    complete the 1.3B train/resume/export v5e-8 smoke before enabling it.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

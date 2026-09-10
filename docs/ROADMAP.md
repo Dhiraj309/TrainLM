@@ -1143,9 +1143,13 @@ early-update evidence gate are implemented; target-run alignment remains.
   Real synchronized 135M measurements remain outstanding.
   **Acceptance:** Every advertised family has a support/performance record.
 
-- [ ] **M13-F6 — SPMD FSDP**
+- [~] **M13-F6 — SPMD FSDP**
   `feat(runtime): add backend-neutral FSDP mesh policy`
   Begin data=4/FSDP=2 with correct wrapping, remat, state sharding, checkpoint.
+  A backend-neutral policy now describes explicit wrap classes, adapter-owned
+  parameter partition rules, optimizer-state sharding, a data/FSDP logical
+  mesh, rematerialization-before-wrap ordering, and topology-matched rank-shard
+  checkpoints. Runtime application and the 1.3B target smoke remain outstanding.
   **Acceptance:** Correct 1.3B train/resume/export smoke on v5e-8.
 
 - [ ] **M13-F7 — 1.3B benchmark**
