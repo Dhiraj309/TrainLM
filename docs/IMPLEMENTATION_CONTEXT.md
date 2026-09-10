@@ -296,6 +296,10 @@ this file in every turn:
     paths, providers, fallbacks, caveats, and deferred TorchTPU status. A pure
     validator prevents `trainer.explain()` from exceeding published backend or
     path support. Refresh the manifest from final certification evidence.
+33. **CI contract regressions:** the core dependency assertion now includes the
+    directly imported PyYAML runtime, and the FSDP mismatch fixture uses a valid
+    16-device data=4/FSDP=4 mesh so mismatch rejection is exercised by the
+    evaluator rather than failing during evidence construction.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

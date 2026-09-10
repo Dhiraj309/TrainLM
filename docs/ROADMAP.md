@@ -1160,6 +1160,8 @@ early-update evidence gate are implemented; target-run alignment remains.
   parameter-count, v5e-8 and data/FSDP geometry matching, throughput/MFU gates,
   stable compilation, zero CPU fallback, lifecycle parity, and named
   collective/HBM artifacts. The matched target and real run remain outstanding.
+  Its mismatch regression fixture now remains internally valid (16 devices,
+  data=4/FSDP=4), leaving target mismatch rejection to the evidence evaluator.
   **Acceptance:** A matched target is locked before certification.
 
 ### Exit gate
@@ -1179,7 +1181,8 @@ early-update evidence gate are implemented; target-run alignment remains.
   The public trainer now has explicit `from_pretrained()` and versioned
   mapping/YAML `from_config()` constructors, rejects worker/internal config
   keys, and warns for one-version key aliases. The example imports only the
-  package root; clean-environment and release-compatibility checks remain.
+  package root, and the dependency contract includes the directly imported
+  PyYAML runtime. Clean-environment and release-compatibility checks remain.
   **Acceptance:** Examples use no internal packages/custom model class.
 
 - [~] **M14-F2 — Secure `.bin` TPU guide**

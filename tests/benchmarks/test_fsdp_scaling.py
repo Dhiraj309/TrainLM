@@ -56,7 +56,8 @@ def test_matched_1_3b_result_passes_locked_target():
 
 def test_unlocked_or_mismatched_target_cannot_certify():
     result = evaluate_fsdp_scaling(
-        replace(evidence(), fsdp_shards=4), replace(target(), locked=False)
+        replace(evidence(), device_count=16, fsdp_shards=4),
+        replace(target(), locked=False),
     )
 
     assert not result.passed
