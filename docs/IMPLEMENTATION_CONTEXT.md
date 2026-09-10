@@ -247,6 +247,11 @@ this file in every turn:
     residual semantics while sharing guarded MHA, fused-QKV, LayerNorm, GELU,
     and linear causal-loss operations. Complete shared target-TPU correctness,
     graph, export, and performance certification before enabling either path.
+23. **M13-F3 Falcon/Phi mapping:** explicit variants now prevent Falcon MQA
+    and GQA head ownership from being interchanged and preserve its fused-QKV
+    parallel block. Phi separately requires MHA, partial RoPE, separate QKV,
+    LayerNorm/GELU, and parallel residual semantics. Complete correctness,
+    HBM, graph, export, and target-TPU certification before enabling them.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

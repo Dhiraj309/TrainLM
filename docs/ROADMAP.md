@@ -1114,9 +1114,13 @@ early-update evidence gate are implemented; target-run alignment remains.
   remains required.
   **Acceptance:** Shared TPU certification passes.
 
-- [ ] **M13-F3 — Falcon/Phi mapping**
+- [~] **M13-F3 — Falcon/Phi mapping**
   `feat(adapters): optimize MQA GQA and nonstandard dense blocks`
   Preserve head geometry, parallel blocks, projections, and activations.
+  Explicit mappings now separate Falcon MQA and GQA eligibility and preserve
+  its fused-QKV parallel block, while Phi requires MHA, partial RoPE,
+  separate QKV, LayerNorm/GELU, and parallel residual semantics. Correctness,
+  HBM, graph, export, and target-TPU evidence remain required.
   **Acceptance:** Correctness, HBM, graph, and export pass.
 
 - [ ] **M13-F4 — Llama/Mistral/Qwen/Gemma mapping**

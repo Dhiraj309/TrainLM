@@ -109,6 +109,13 @@ from .parallel_family_adapters import (
     ROPE_ALIBI_DENSE_MAPPINGS,
     register_rope_alibi_dense_adapters,
 )
+from .nonstandard_family_adapters import (
+    FALCON_GQA_MAPPING,
+    FALCON_MQA_MAPPING,
+    NONSTANDARD_DENSE_MAPPINGS,
+    PHI_MAPPING,
+    register_nonstandard_dense_adapters,
+)
 
 __all__ = [
     "CapabilityFact",
@@ -133,6 +140,8 @@ __all__ = [
     "DecisionStatus",
     "DenseCausalFamilyMapping",
     "ExecutionPlan",
+    "FALCON_GQA_MAPPING",
+    "FALCON_MQA_MAPPING",
     "FusionComponent",
     "FusionDecision",
     "HFAttentionInstallation",
@@ -152,6 +161,7 @@ __all__ = [
     "MLPActivation",
     "ModelAdapterRegistry",
     "ModelTransformation",
+    "NONSTANDARD_DENSE_MAPPINGS",
     "ModelTransformRegistry",
     "OptimizationPolicy",
     "OptimizationPlanner",
@@ -174,6 +184,7 @@ __all__ = [
     "PackageVersionGuard",
     "PallasAttentionRuntime",
     "ParameterLayoutMapping",
+    "PHI_MAPPING",
     "StateDictLayoutConverter",
     "TransformApplicationError",
     "TransformHandler",
@@ -190,6 +201,7 @@ __all__ = [
     "pallas_mha_provider",
     "pallas_grouped_attention_provider",
     "register_learned_position_dense_adapters",
+    "register_nonstandard_dense_adapters",
     "register_rope_alibi_dense_adapters",
     "select_rematerialization_policy",
     "select_batch_prefetch_geometry",
