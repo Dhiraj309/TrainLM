@@ -92,6 +92,7 @@ from .rematerialization import (
     RematerializationPolicy,
     RematerializationScope,
     RematerializationSelection,
+    module_rematerialization_transform_handler,
     select_rematerialization_policy,
 )
 from .xla_optimizer import (
@@ -208,6 +209,7 @@ __all__ = [
     "RematerializationPolicy",
     "RematerializationScope",
     "RematerializationSelection",
+    "module_rematerialization_transform_handler",
     "ROPE_ALIBI_DENSE_MAPPINGS",
     "ROPE_GATED_DENSE_MAPPINGS",
     "PositionEncoding",

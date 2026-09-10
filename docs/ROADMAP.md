@@ -1006,7 +1006,11 @@ layouts and target update evidence remain.
   Explicit none/block/attention/MLP/loss-chunk policies now enforce pre-FSDP
   ordering. A deterministic selector rejects gradient mismatches, unstable
   graphs, and policies outside a configured slowdown budget, then chooses the
-  lowest measured HBM with stable ties. Target-XLA measurements remain pending.
+  lowest measured HBM with stable ties. Adapter-selected block, attention, or
+  MLP paths can now be patched transactionally with non-reentrant activation
+  checkpointing without changing module structure, parameter aliases, or state
+  keys; loss-chunk rematerialization remains owned by the loss provider.
+  Target-XLA measurements remain pending.
 
 - [~] **M11-F5 — XLA optimizer-state path**
   `feat(optim): optimize XLA AdamW state and update graph`

@@ -346,6 +346,13 @@ this file in every turn:
     materializations require explicit regex patterns, and native fusion remains
     caller-supplied evidence because opcode text cannot prove semantics. Real
     target-XLA captures and matched provider benchmarks remain outstanding.
+42. **M11-F4 live rematerialization:** an explicit policy can now install
+    non-reentrant activation checkpointing on adapter-selected block, attention,
+    or MLP paths through the transactional transform registry. Forward methods
+    are patched in place so module structure, parameter aliases, and canonical
+    state keys remain stable, and rollback restores the original callables.
+    Loss chunks remain under the loss provider; target-XLA HBM and step-time
+    measurements remain outstanding.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
