@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 import json
 import math
 from typing import Literal
+
+from trainlm.config import OptimizerConfig
 
 GradientReduction = Literal["mean", "sum"]
 
@@ -93,6 +95,40 @@ class XLAOptimizerEvaluation:
     hbm_change_fraction: float
 
 
+@dataclass(frozen=True, slots=True)
+class MaterializedXLAAdamWPolicy:
+    """Backend-neutral optimizer/trainer values derived from one XLA policy."""
+
+    optimizer: OptimizerConfig
+    gradient_clip_norm: float | None
+    gradient_reduction: GradientReduction
+
+
+def materialize_xla_adamw_policy(
+    policy: XLAAdamWPolicy,
+    optimizer: OptimizerConfig,
+) -> MaterializedXLAAdamWPolicy:
+    """Apply XLA state semantics to a validated AdamW configuration."""
+
+    if not isinstance(policy, XLAAdamWPolicy):
+        raise TypeError("policy must be an XLAAdamWPolicy.")
+    if not isinstance(optimizer, OptimizerConfig):
+        raise TypeError("optimizer must be an OptimizerConfig.")
+    if optimizer.decay_mode != "decoupled":
+        raise ValueError("XLA AdamW policy requires decoupled weight decay.")
+    return MaterializedXLAAdamWPolicy(
+        optimizer=replace(
+            optimizer,
+            fused=False,
+            mu_dtype=policy.first_moment_dtype,
+            nu_dtype=policy.second_moment_dtype,
+            decay_mode="decoupled",
+        ),
+        gradient_clip_norm=policy.gradient_clip_norm,
+        gradient_reduction=policy.gradient_reduction,
+    )
+
+
 def evaluate_xla_optimizer_path(
     policy: XLAAdamWPolicy,
     evidence: XLAOptimizerEvidence,
@@ -137,8 +173,10 @@ def evaluate_xla_optimizer_path(
 
 __all__ = [
     "GradientReduction",
+    "MaterializedXLAAdamWPolicy",
     "XLAAdamWPolicy",
     "XLAOptimizerEvaluation",
     "XLAOptimizerEvidence",
     "evaluate_xla_optimizer_path",
+    "materialize_xla_adamw_policy",
 ]

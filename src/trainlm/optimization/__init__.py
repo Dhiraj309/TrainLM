@@ -97,10 +97,12 @@ from .rematerialization import (
 )
 from .xla_optimizer import (
     GradientReduction,
+    MaterializedXLAAdamWPolicy,
     XLAAdamWPolicy,
     XLAOptimizerEvaluation,
     XLAOptimizerEvidence,
     evaluate_xla_optimizer_path,
+    materialize_xla_adamw_policy,
 )
 from .batch_tuning import (
     BatchPrefetchGeometry,
@@ -175,6 +177,7 @@ __all__ = [
     "GEMMA2_MAPPING",
     "GEMMA_MAPPING",
     "GradientReduction",
+    "MaterializedXLAAdamWPolicy",
     "GPT2_MAPPING",
     "GPT_NEOX_MAPPING",
     "LINEAR_CAUSAL_LOSS_REQUIREMENTS",
@@ -228,6 +231,7 @@ __all__ = [
     "audit_hlo_fusions",
     "expected_causal_visibility",
     "evaluate_xla_optimizer_path",
+    "materialize_xla_adamw_policy",
     "inspect_dense_causal_lm",
     "install_hf_attention_provider",
     "pallas_mha_provider",
