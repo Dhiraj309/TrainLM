@@ -286,6 +286,11 @@ this file in every turn:
     CPU, CUDA, scheduled v5e correctness, and v5e performance/stability evidence
     for the exact release commit, with Tier 3 mandatory. Provision explicit
     hardware workflows and populate real Tier 1-3 artifacts next.
+31. **M14-F4 preemption recovery:** TPU checkpoint shards now carry deterministic
+    step/micro-step generations, committed destinations cannot be overwritten,
+    manifest/shard progress must agree, and recovery discovers only complete,
+    safe, committed topologies. Add real compute/staging/persistence process-kill
+    tests and target-TPU cursor-continuity evidence before closure.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

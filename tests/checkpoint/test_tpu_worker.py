@@ -5,6 +5,7 @@ import pytest
 import torch
 
 from trainlm._tpu_checkpoint import (
+    find_latest_committed_tpu_checkpoint,
     load_tpu_worker_checkpoint,
     save_tpu_worker_checkpoint,
 )
@@ -45,7 +46,13 @@ def engine():
     model = torch.nn.Linear(2, 2)
     optimizer = torch.optim.AdamW(model.parameters(), lr=0.1)
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lambda _: 1.0)
-    return Engine(model, optimizer, scheduler, Runtime(), TrainerState(step=3, micro_step=6))
+    return Engine(
+        model,
+        optimizer,
+        scheduler,
+        Runtime(),
+        TrainerState(step=3, micro_step=6),
+    )
 
 
 def test_rank_checkpoint_round_trip(tmp_path):
@@ -78,3 +85,43 @@ def test_resume_rejects_incomplete_or_wrong_topology(tmp_path):
     (destination / "manifest.json").write_text(json.dumps(manifest))
     with pytest.raises(ValueError, match="world size"):
         load_tpu_worker_checkpoint(current, destination)
+
+
+def test_recovery_ignores_compute_staging_and_incomplete_persistence(tmp_path):
+    root = tmp_path / "checkpoints"
+    root.mkdir()
+    (root / "compute-interrupted").mkdir()
+    staging = root / "checkpoint-2"
+    staging.mkdir()
+    (staging / "step-000000000002-micro-000000000004-rank-00000.pt.tmp").write_bytes(
+        b"partial"
+    )
+
+    durable = save_tpu_worker_checkpoint(engine(), root / "checkpoint-3")
+
+    assert find_latest_committed_tpu_checkpoint(root) == durable
+
+
+def test_committed_checkpoint_is_immutable_and_progress_is_verified(tmp_path):
+    current = engine()
+    destination = save_tpu_worker_checkpoint(current, tmp_path / "checkpoint-3")
+    with pytest.raises(FileExistsError, match="Refusing to overwrite"):
+        save_tpu_worker_checkpoint(current, destination)
+
+    manifest_path = destination / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["micro_step"] += 1
+    manifest_path.write_text(json.dumps(manifest))
+    with pytest.raises(ValueError, match="progress"):
+        load_tpu_worker_checkpoint(current, destination)
+
+
+def test_recovery_rejects_manifest_with_missing_or_unsafe_shards(tmp_path):
+    root = tmp_path / "checkpoints"
+    destination = save_tpu_worker_checkpoint(engine(), root / "checkpoint-3")
+    manifest_path = destination / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["shards"] = ["../rank-00000.pt"]
+    manifest_path.write_text(json.dumps(manifest))
+
+    assert find_latest_committed_tpu_checkpoint(root) is None

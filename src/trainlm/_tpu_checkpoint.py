@@ -36,8 +36,14 @@ def save_tpu_worker_checkpoint(engine, destination: str | Path) -> Path:
 
     root = Path(destination)
     root.mkdir(parents=True, exist_ok=True)
+    manifest = root / "manifest.json"
+    if manifest.exists():
+        raise FileExistsError(
+            f"Refusing to overwrite committed checkpoint: {manifest}"
+        )
     rank = engine.runtime.rank
     world_size = engine.runtime.world_size
+    generation = f"step-{engine.state.step:012d}-micro-{engine.state.micro_step:012d}"
     payload = _cpu_tree({
         "schema_version": SCHEMA_VERSION,
         "world_size": world_size,
@@ -52,7 +58,7 @@ def save_tpu_worker_checkpoint(engine, destination: str | Path) -> Path:
         },
         "cpu_rng_state": torch.get_rng_state(),
     })
-    shard = root / f"rank-{rank:05d}.pt"
+    shard = root / f"{generation}-rank-{rank:05d}.pt"
     temporary = shard.with_suffix(".pt.tmp")
     torch.save(payload, temporary)
     temporary.replace(shard)
@@ -60,11 +66,10 @@ def save_tpu_worker_checkpoint(engine, destination: str | Path) -> Path:
     if engine.runtime.is_primary_process:
         missing = [
             index for index in range(world_size)
-            if not (root / f"rank-{index:05d}.pt").is_file()
+            if not (root / f"{generation}-rank-{index:05d}.pt").is_file()
         ]
         if missing:
             raise RuntimeError(f"Checkpoint is missing rank shards: {missing}")
-        manifest = root / "manifest.json"
         manifest_tmp = manifest.with_suffix(".json.tmp")
         manifest_tmp.write_text(json.dumps({
             "schema_version": SCHEMA_VERSION,
@@ -72,7 +77,11 @@ def save_tpu_worker_checkpoint(engine, destination: str | Path) -> Path:
             "world_size": world_size,
             "step": engine.state.step,
             "micro_step": engine.state.micro_step,
-            "shards": [f"rank-{index:05d}.pt" for index in range(world_size)],
+            "generation": generation,
+            "shards": [
+                f"{generation}-rank-{index:05d}.pt"
+                for index in range(world_size)
+            ],
         }, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         manifest_tmp.replace(manifest)
     engine.runtime.barrier(f"checkpoint-published:{engine.state.step}")
@@ -91,7 +100,20 @@ def load_tpu_worker_checkpoint(engine, source: str | Path) -> Path:
         raise ValueError("TPU checkpoint is not a committed schema-version-1 checkpoint.")
     if manifest.get("world_size") != engine.runtime.world_size:
         raise ValueError("TPU checkpoint world size does not match the active topology.")
-    shard = root / f"rank-{engine.runtime.rank:05d}.pt"
+    shards = manifest.get("shards")
+    if (
+        not isinstance(shards, list)
+        or len(shards) != engine.runtime.world_size
+        or len(shards) != len(set(shards))
+        or any(
+            not isinstance(name, str)
+            or not name
+            or Path(name).name != name
+            for name in shards
+        )
+    ):
+        raise ValueError("TPU checkpoint manifest has an invalid shard list.")
+    shard = root / shards[engine.runtime.rank]
     if not shard.is_file():
         raise FileNotFoundError(f"TPU checkpoint rank shard is missing: {shard}")
     payload = torch.load(shard, map_location="cpu", weights_only=False)
@@ -101,6 +123,11 @@ def load_tpu_worker_checkpoint(engine, source: str | Path) -> Path:
         raise ValueError("Unsupported TPU checkpoint rank-shard schema.")
     if payload["world_size"] != engine.runtime.world_size or payload["rank"] != engine.runtime.rank:
         raise ValueError("TPU checkpoint rank shard does not match the active topology.")
+    if (
+        payload["trainer"].get("step") != manifest.get("step")
+        or payload["trainer"].get("micro_step") != manifest.get("micro_step")
+    ):
+        raise ValueError("TPU checkpoint shard progress does not match its manifest.")
     if "device_rng_state" not in payload["runtime"]:
         raise ValueError("TPU checkpoint rank shard is missing device RNG state.")
     engine.model.load_state_dict(payload["model"], strict=True)
@@ -116,4 +143,61 @@ def load_tpu_worker_checkpoint(engine, source: str | Path) -> Path:
     return root
 
 
-__all__ = ["load_tpu_worker_checkpoint", "save_tpu_worker_checkpoint"]
+def find_latest_committed_tpu_checkpoint(directory: str | Path) -> Path | None:
+    """Return the newest durable checkpoint, ignoring all partial attempts."""
+
+    root = Path(directory)
+    if not root.is_dir():
+        return None
+    committed: list[tuple[int, int, str, Path]] = []
+    for candidate in root.iterdir():
+        manifest_path = candidate / "manifest.json"
+        if (
+            candidate.is_symlink()
+            or not candidate.is_dir()
+            or not manifest_path.is_file()
+        ):
+            continue
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            continue
+        step = manifest.get("step")
+        micro_step = manifest.get("micro_step")
+        world_size = manifest.get("world_size")
+        shards = manifest.get("shards")
+        if (
+            manifest.get("schema_version") != SCHEMA_VERSION
+            or manifest.get("status") != "committed"
+            or isinstance(step, bool)
+            or not isinstance(step, int)
+            or step < 0
+            or isinstance(micro_step, bool)
+            or not isinstance(micro_step, int)
+            or micro_step < 0
+            or isinstance(world_size, bool)
+            or not isinstance(world_size, int)
+            or world_size < 1
+            or not isinstance(shards, list)
+            or len(shards) != world_size
+            or len(shards) != len(set(shards))
+            or any(
+                not isinstance(name, str)
+                or not name
+                or Path(name).name != name
+                or not (candidate / name).is_file()
+                for name in shards
+            )
+        ):
+            continue
+        committed.append((step, micro_step, candidate.name, candidate))
+    if not committed:
+        return None
+    return max(committed)[-1]
+
+
+__all__ = [
+    "find_latest_committed_tpu_checkpoint",
+    "load_tpu_worker_checkpoint",
+    "save_tpu_worker_checkpoint",
+]

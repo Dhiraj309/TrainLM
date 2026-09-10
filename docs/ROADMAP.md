@@ -1200,9 +1200,13 @@ early-update evidence gate are implemented; target-run alignment remains.
   evidence. CUDA/v5e runners, schedules, and real evidence remain outstanding.
   **Acceptance:** Release requires current Tier 3 evidence.
 
-- [ ] **M14-F4 — Preemption recovery**
+- [~] **M14-F4 — Preemption recovery**
   `test(checkpoint): validate preemption and incomplete save recovery`
   Kill during compute, staging, and persistence; accept only durable state.
+  Rank shards are now generation-named, committed destinations are immutable,
+  shard progress must match the atomic manifest, and latest-checkpoint discovery
+  ignores temporary, incomplete, malformed, unsafe, and missing-shard attempts.
+  Real process-kill and target-TPU recovery tests remain outstanding.
   **Acceptance:** No partial checkpoint or silently skipped data.
 
 - [ ] **M14-F5 — Support manifest/release notes**
