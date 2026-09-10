@@ -240,3 +240,62 @@ def test_partial_q_kv_manifest_reconstructs_identical_converter():
     converter = partial_spec().converter()
     restored = type(converter).from_manifest(converter.manifest())
     assert restored.mappings == converter.mappings
+
+from trainlm.optimization import PackedQKVProjectionSpec
+
+
+def test_already_packed_layout_is_an_explicit_no_op():
+    layout = PackedQKVProjectionSpec(
+        prefix="layers.0.self_attn",
+        query_heads=8,
+        key_value_heads=4,
+        head_dim=2,
+        input_size=6,
+        packed_weight_key="query_key_value.weight",
+        packed_bias_key="query_key_value.bias",
+        dtype="float32",
+    )
+
+    assert layout.weight_shape == (32, 6)
+    assert layout.bias_shape == (32,)
+    assert layout.converter() is None
+
+
+def test_already_packed_mqa_geometry_remains_compact():
+    layout = PackedQKVProjectionSpec(
+        prefix="layers.0.self_attn",
+        query_heads=8,
+        key_value_heads=1,
+        head_dim=2,
+        input_size=16,
+        packed_weight_key="query_key_value.weight",
+    )
+
+    assert layout.q_size == 16
+    assert layout.kv_size == 2
+    assert layout.weight_shape == (20, 16)
+    assert layout.bias_shape is None
+
+
+def test_already_packed_layout_rejects_invalid_head_geometry():
+    with pytest.raises(ValueError, match="divisible"):
+        PackedQKVProjectionSpec(
+            prefix="layers.0.self_attn",
+            query_heads=8,
+            key_value_heads=3,
+            head_dim=2,
+            input_size=6,
+            packed_weight_key="query_key_value.weight",
+        )
+
+
+def test_already_packed_layout_rejects_empty_parameter_key():
+    with pytest.raises(ValueError, match="packed_weight_key cannot be empty"):
+        PackedQKVProjectionSpec(
+            prefix="layers.0.self_attn",
+            query_heads=8,
+            key_value_heads=4,
+            head_dim=2,
+            input_size=6,
+            packed_weight_key="",
+        )

@@ -970,8 +970,9 @@ layouts and target update evidence remain.
   compact GQA/MQA splits, validates geometry/bias/device/dtype, and rolls back
   transactionally. A second reversible descriptor covers canonical layouts with
   a separate query projection and an already-combined key/value projection
-  without inventing model keys. Packed-source no-op handling and target update
-  parity remain.
+  without inventing model keys. Already-packed canonical projections now use a
+  validated no-transform descriptor that preserves compact GQA/MQA geometry.
+  Target output/gradient/update parity remains.
 
 - [~] **M11-F2 — Reversible gated-MLP packing**
   `feat(optimization): pack compatible gate and up projections`

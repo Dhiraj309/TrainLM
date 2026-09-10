@@ -336,8 +336,10 @@ this file in every turn:
     combined key/value parameters now have an explicit reversible state-dict
     descriptor. It preserves the source key boundary, compact KV geometry,
     optional paired biases, and canonical export instead of pretending the
-    model exposes three separate projections. Packed-source no-op handling and
-    target-XLA update evidence remain outstanding.
+    model exposes three separate projections. Already-packed sources now use an
+    explicit validated no-transform descriptor with derived compact output
+    geometry, completing separate/partial/packed layout representation. Target-
+    XLA output, gradient, and update evidence remains outstanding.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
