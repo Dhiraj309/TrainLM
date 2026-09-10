@@ -370,6 +370,11 @@ this file in every turn:
     verify strict counter types, normalize and hash the HLO, and reject evidence
     whose declared fingerprint does not match the captured graph. Genuine v5e
     evidence satisfying every performance and graph gate remains outstanding.
+46. **M12-F1 numerical artifacts:** reference and candidate semantic manifests
+    can now be evaluated together with a strict versioned update-evidence file.
+    The loader rejects unknown schema fields, malformed error sequences, and
+    invalid justifications before applying the locked semantic and early-update
+    tolerances. Exact deterministic target-run artifacts remain outstanding.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

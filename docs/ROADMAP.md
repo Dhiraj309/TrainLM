@@ -1066,7 +1066,9 @@ early-update evidence gate are implemented; target-run alignment remains.
   A locked-path comparator now covers position/norm/residual, initialization,
   shifted loss/z-loss, optimizer, schedule, and dtype semantics. Differences
   must be explicitly justified, and at least one deterministic early-update
-  error must remain within tolerance. Target parity evidence remains pending.
+  error must remain within tolerance. A strict artifact loader now combines
+  reference and candidate configuration JSON with versioned update evidence and
+  rejects unknown evidence fields. Target parity evidence remains pending.
 
 - [~] **M12-F2 — Three-run benchmark**
   `perf(parity): certify repeated v5e 135M throughput`
