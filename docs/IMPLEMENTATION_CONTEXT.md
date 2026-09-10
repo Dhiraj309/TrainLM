@@ -267,6 +267,11 @@ this file in every turn:
     partitions, sharded optimizer state, pre-wrap rematerialization, and
     topology-matched distributed checkpoints. Wire it into the XLA runtime and
     complete the 1.3B train/resume/export v5e-8 smoke before enabling it.
+27. **M13-F7 1.3B benchmark:** a structured gate now compares measured FSDP
+    evidence only against a review-locked target with exact workload, parameter,
+    hardware, and mesh geometry. It also requires throughput/MFU parity, stable
+    compilation, zero CPU fallback, correctness/resume/export, and collective
+    plus HBM artifacts. Lock the comparison and populate it on target hardware.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

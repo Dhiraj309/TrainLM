@@ -48,12 +48,21 @@ from trainlm.benchmark.cross_family_matrix import (
     SupportLevel,
     evaluate_cross_family_matrix,
 )
+from trainlm.benchmark.fsdp_scaling import (
+    FSDPScalingEvaluation,
+    FSDPScalingEvidence,
+    FSDPScalingTarget,
+    evaluate_fsdp_scaling,
+)
 
 __all__ = [
     "BenchmarkResult",
     "CausalLMFlopBreakdown",
     "CrossFamilyMatrixEvaluation",
     "CrossFamilyRecord",
+    "FSDPScalingEvaluation",
+    "FSDPScalingEvidence",
+    "FSDPScalingTarget",
     "calculate_causal_lm_flops",
     "calculate_mfu",
     "BaselineEvaluation",
@@ -74,6 +83,7 @@ __all__ = [
     "evaluate_baseline",
     "evaluate_attention_stage",
     "evaluate_cross_family_matrix",
+    "evaluate_fsdp_scaling",
     "evaluate_parity_closure",
     "compare_numerical_alignment",
     "evaluate_repeated_parity",

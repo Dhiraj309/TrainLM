@@ -1152,10 +1152,14 @@ early-update evidence gate are implemented; target-run alignment remains.
   checkpoints. Runtime application and the 1.3B target smoke remain outstanding.
   **Acceptance:** Correct 1.3B train/resume/export smoke on v5e-8.
 
-- [ ] **M13-F7 — 1.3B benchmark**
+- [~] **M13-F7 — 1.3B benchmark**
   `perf(benchmark): certify 1.3B FSDP scaling path`
   Compare matched LaughLM approximately `41.9K tok/s`, `42.6%` MFU with
   collective/HBM analysis.
+  A pure evidence gate now requires a review-locked target, exact workload,
+  parameter-count, v5e-8 and data/FSDP geometry matching, throughput/MFU gates,
+  stable compilation, zero CPU fallback, lifecycle parity, and named
+  collective/HBM artifacts. The matched target and real run remain outstanding.
   **Acceptance:** A matched target is locked before certification.
 
 ### Exit gate
