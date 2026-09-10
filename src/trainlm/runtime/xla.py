@@ -307,6 +307,12 @@ class XlaRuntime:
             state["compilation_cache_dir"] = str(self._cache_dir)
         if self._diagnostics is not None:
             state["xla_diagnostics"] = self._diagnostics.snapshot()
+        get_rng_state = getattr(self._xm, "get_rng_state", None)
+        if not callable(get_rng_state):
+            raise RuntimeError(
+                "This torch_xla version cannot expose device RNG state for exact resume."
+            )
+        state["device_rng_state"] = int(get_rng_state(self.device))
         return state
 
     def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
@@ -314,6 +320,14 @@ class XlaRuntime:
             raise ValueError(
                 f"Cannot load runtime state for {state_dict.get('backend')!r}."
             )
+        if "device_rng_state" not in state_dict:
+            return
+        set_rng_state = getattr(self._xm, "set_rng_state", None)
+        if not callable(set_rng_state):
+            raise RuntimeError(
+                "This torch_xla version cannot restore device RNG state exactly."
+            )
+        set_rng_state(state_dict["device_rng_state"], self.device)
 
     def diagnostics(self) -> BackendDiagnostics:
         version = getattr(self._torch_xla, "__version__", None)
