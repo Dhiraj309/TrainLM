@@ -968,7 +968,10 @@ layouts and target update evidence remain.
   An explicit pre-optimizer transform now replaces an adapter-selected wrapper
   exposing separate linear projections with one packed linear call, preserves
   compact GQA/MQA splits, validates geometry/bias/device/dtype, and rolls back
-  transactionally. Partial layouts and target update parity remain.
+  transactionally. A second reversible descriptor covers canonical layouts with
+  a separate query projection and an already-combined key/value projection
+  without inventing model keys. Packed-source no-op handling and target update
+  parity remain.
 
 - [~] **M11-F2 — Reversible gated-MLP packing**
   `feat(optimization): pack compatible gate and up projections`

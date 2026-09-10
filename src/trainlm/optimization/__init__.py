@@ -66,7 +66,12 @@ from .attention_tuning import (
     AttentionTuningKey,
     AttentionTuningResult,
 )
-from .qkv import PackedQKVProjection, QKVProjectionSpec, qkv_pack_transform_handler
+from .qkv import (
+    PackedQKVProjection,
+    PartialQKVProjectionSpec,
+    QKVProjectionSpec,
+    qkv_pack_transform_handler,
+)
 from .mlp import (
     GatedMLPProjectionSpec,
     MLPActivation,
@@ -194,6 +199,7 @@ __all__ = [
     "ProviderDecision",
     "ProviderSpec",
     "PackedQKVProjection",
+    "PartialQKVProjectionSpec",
     "QKVProjectionSpec",
     "QWEN2_MAPPING",
     "RematerializationMeasurement",
