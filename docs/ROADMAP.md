@@ -1213,7 +1213,9 @@ early-update evidence gate are implemented; target-run alignment remains.
   Rank shards are now generation-named, committed destinations are immutable,
   shard progress must match the atomic manifest, and latest-checkpoint discovery
   ignores temporary, incomplete, malformed, unsafe, and missing-shard attempts.
-  Real process-kill and target-TPU recovery tests remain outstanding.
+  Spawned-process tests now terminate saves after shard staging, shard publish,
+  and manifest staging, proving discovery retains the prior durable generation.
+  Target-TPU recovery and cursor-continuity tests remain outstanding.
   **Acceptance:** No partial checkpoint or silently skipped data.
 
 - [~] **M14-F5 — Support manifest/release notes**

@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 import json
+import multiprocessing
+import os
 
 import pytest
 import torch
@@ -55,6 +57,14 @@ def engine():
     )
 
 
+def _save_until_process_kill(destination, stage):
+    def kill_at(current_stage, _path):
+        if current_stage == stage:
+            os._exit(91)
+
+    save_tpu_worker_checkpoint(engine(), destination, _stage_hook=kill_at)
+
+
 def test_rank_checkpoint_round_trip(tmp_path):
     original = engine()
     expected = {key: value.detach().clone() for key, value in original.model.state_dict().items()}
@@ -100,6 +110,27 @@ def test_recovery_ignores_compute_staging_and_incomplete_persistence(tmp_path):
     durable = save_tpu_worker_checkpoint(engine(), root / "checkpoint-3")
 
     assert find_latest_committed_tpu_checkpoint(root) == durable
+
+
+@pytest.mark.parametrize(
+    "stage",
+    ["shard-staged", "shard-published", "manifest-staged"],
+)
+def test_recovery_survives_real_process_kill_during_persistence(tmp_path, stage):
+    root = tmp_path / "checkpoints"
+    durable = save_tpu_worker_checkpoint(engine(), root / "checkpoint-3")
+    interrupted = root / f"checkpoint-interrupted-{stage}"
+    process = multiprocessing.get_context("spawn").Process(
+        target=_save_until_process_kill,
+        args=(interrupted, stage),
+    )
+
+    process.start()
+    process.join(timeout=30)
+
+    assert process.exitcode == 91
+    assert find_latest_committed_tpu_checkpoint(root) == durable
+    assert not (interrupted / "manifest.json").exists()
 
 
 def test_committed_checkpoint_is_immutable_and_progress_is_verified(tmp_path):

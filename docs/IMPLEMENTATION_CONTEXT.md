@@ -307,6 +307,11 @@ this file in every turn:
     builds and installs a wheel into an isolated environment, runs outside the
     source checkout, and verifies the documented package-root construction
     surface; M14-F1 is complete.
+35. **M14-F4 process-kill recovery:** the private rank-local saver exposes a
+    test-only stage hook at shard staging, shard publication, and manifest
+    staging/publication boundaries. Spawned child processes are terminated at
+    each pre-commit persistence boundary, and recovery continues to select the
+    prior committed generation. Target-TPU cursor-continuity evidence remains.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

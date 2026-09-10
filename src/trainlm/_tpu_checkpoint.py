@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict
 import json
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 import torch
 
@@ -31,8 +31,17 @@ def _cpu_tree(value: Any) -> Any:
     return value
 
 
-def save_tpu_worker_checkpoint(engine, destination: str | Path) -> Path:
+def save_tpu_worker_checkpoint(
+    engine,
+    destination: str | Path,
+    *,
+    _stage_hook: Callable[[str, Path], None] | None = None,
+) -> Path:
     """Atomically save one replicated-DP worker's exact training state."""
+
+    def stage(name: str, path: Path) -> None:
+        if _stage_hook is not None:
+            _stage_hook(name, path)
 
     root = Path(destination)
     root.mkdir(parents=True, exist_ok=True)
@@ -61,7 +70,9 @@ def save_tpu_worker_checkpoint(engine, destination: str | Path) -> Path:
     shard = root / f"{generation}-rank-{rank:05d}.pt"
     temporary = shard.with_suffix(".pt.tmp")
     torch.save(payload, temporary)
+    stage("shard-staged", temporary)
     temporary.replace(shard)
+    stage("shard-published", shard)
     engine.runtime.barrier(f"checkpoint-shards:{engine.state.step}")
     if engine.runtime.is_primary_process:
         missing = [
@@ -83,7 +94,9 @@ def save_tpu_worker_checkpoint(engine, destination: str | Path) -> Path:
                 for index in range(world_size)
             ],
         }, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        stage("manifest-staged", manifest_tmp)
         manifest_tmp.replace(manifest)
+        stage("manifest-published", manifest)
     engine.runtime.barrier(f"checkpoint-published:{engine.state.step}")
     return root
 
