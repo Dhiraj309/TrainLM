@@ -302,6 +302,19 @@ def test_training_emits_sparse_materialized_metrics():
     assert isinstance(callback.metrics[0]["loss"], float)
 
 
+def test_training_honors_evaluation_and_checkpoint_cadence():
+    events = []
+    trainer = create_trainer(checkpoint_saver=lambda trainer, path: events.append(path))
+    trainer.config.evaluation = type("Evaluation", (), {"eval_every_steps": 1})()
+    trainer.config.checkpoint = type(
+        "Checkpoint", (), {"save_training_every_steps": 1}
+    )()
+
+    trainer.train()
+
+    assert events == ["checkpoint-1"]
+
+
 class RecordingRuntime(Runtime):
 
     def __init__(self):

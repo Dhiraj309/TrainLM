@@ -127,8 +127,28 @@ trainer = TrainLMTrainer(
 trainer.train()
 ```
 
-The first facade slice currently delegates to the portable CPU/CUDA engine.
-TPU coordinator launch, validated packed-binary dataset construction, and
-automatic capability-based kernel planning are being added behind this same
-API. Until those stories are complete, the worker notebook remains a
-validation surface rather than the public UX.
+On CPU and CUDA, `save_steps` and `eval_steps` are handled by the same
+backend-neutral lifecycle used for training. A local run can continue from a
+TrainLM training checkpoint with
+`trainer.train(resume_from_checkpoint="runs/example/checkpoint-100")`.
+
+Packed token shards can be supplied through the validated public adapter. Local
+manifests and revision-pinned Hugging Face sources are checked before iteration,
+and rank ownership is deterministic:
+
+```python
+from trainlm import PackedBinDataset
+
+train_dataset = PackedBinDataset.from_directory(
+    "data/packed/train",
+    sequence_length=2048,
+)
+```
+
+The facade delegates local runs to the portable CPU/CUDA engine and routes
+`accelerator="tpu"` through a private single-VM coordinator. The initial TPU
+bridge accepts a reconstructible pretrained Hugging Face model source and a
+local directory of validated shard manifests; public packed-binary dataset
+construction, TPU checkpoint parity, and automatic capability-based kernel
+planning remain in progress. Structured worker metrics are delivered through
+public callbacks; worker scripts and stage logs are internal details.

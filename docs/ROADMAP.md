@@ -161,7 +161,7 @@ Branch names describe repository work, not the tool or contributor:
 |---|---|---|---|---:|---|
 | [x] | PR1 | `milestone/m0-m2-foundation` | M0-M2 | 15 | Contracts and generic HF CPU conformance |
 | [~] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 18 | Merged; post-merge data/trainer validation remains tracked by validation gates |
-| [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 16 | Implementation merged; DP8 launcher/data/attention/optimizer fixes landed; v5e-8 baseline is 319,302 tok/s after sparse-loss fix, performance work pending |
+| [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 16 | Implementation merge-ready; DP8 launcher/data/attention/optimizer fixes landed; v5e-8 baseline is 319,302 tok/s after sparse-loss fix, performance work pending |
 | [~] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11+ | HF-like public trainer facade, reversible planner, and optimized loss |
 | [ ] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | 850K and hard LaughLM parity |
 | [ ] | PR6 | `milestone/m13-m14-family-release` | M13-M14 | 12 | Cross-family certification and V1 release |
@@ -172,10 +172,11 @@ rebase that untouched branch onto the latest merged predecessor.
 
 ### Current branch handoff
 
-PR2 (`milestone/m3-m4-data-trainer`) and the PR3 implementation branch
-(`milestone/m5-m7-xla-compatibility`) are merged. PR3 delivered 16 feature
-commits; its DP8 probe, HF model preflight, data path, two-update optimizer
-smoke, and 100-update measured baseline are validated in Kaggle logs.
+PR2 (`milestone/m3-m4-data-trainer`) is merged. The PR3 implementation branch
+(`milestone/m5-m7-xla-compatibility`) is complete, CI-clean, and ready for a
+linear rebase merge. PR3 delivered 16 feature commits; its DP8 probe, HF model
+preflight, data path, two-update optimizer smoke, and 100-update measured
+baseline are validated in Kaggle logs.
 The framework-independent round-trip and precision-safe telemetry corrections
 passed CI before merge. The measured v5e-8 baseline is complete; PR4
 (`milestone/m8-m9-optimization-core`) begins with the public trainer facade
@@ -315,7 +316,7 @@ TPU runtime foundation`; branch `milestone/m5-m7-xla-compatibility`.
 | [x] | M2 | Universal HF dense-causal CPU path |
 | [~] | M3 | F1-F5 complete; resumable cursor awaiting validation |
 | [~] | M4 | F1-F7 implemented; validation pending |
-| [x] | M5 | F1-F7 implemented; DP8 launch, host data preparation, timing, expected-world-size gates, and two-update v5e-8 smoke passed |
+| [~] | M5 | F1-F7 implemented; DP8 launch, host data preparation, timing, expected-world-size gates, and two-update v5e-8 smoke passed; certification remains pending |
 | [~] | M6 | F1-F4 positional, attention, block-layout, and TPU round-trip coverage implemented; Llama preflight passed, cross-family validation pending |
 | [~] | M7 | F1-F5 distributed resume, async lifecycle, canonical HF export, telemetry, and integrity gates implemented; v5e-8 smoke and measured baseline passed, reliability certification pending |
 | [~] | M8 | HF-like public trainer facade plus reversible capability optimization engine |
@@ -709,7 +710,9 @@ trainer itself.
 
 ## M8 — Capability planner and reversible optimization
 
-**Status:** [~] In progress — the public facade first slice is implemented; TPU coordinator and optimization planner remain.
+**Status:** [~] In progress — the coordinator, packed-data adapter, local
+lifecycle facade, and TPU metric/state bridge are implemented; TPU checkpoint
+parity and planning remain.
 
 **Goal:** Provide a minimal Hugging Face-like trainer surface while transforming
 loaded HF models safely without family logic in core.
@@ -724,11 +727,21 @@ loaded HF models safely without family logic in core.
   **Acceptance:** A concise HF-style example trains on CPU and reaches the TPU
   coordinator without users constructing subprocess commands or parsing stage
   logs; raw validation remains an internal implementation detail.
+  The TPU branch now reaches a private coordinator that owns probe, model
+  preflight, worker launch, logs, and structured summaries for pretrained HF
+  sources plus validated `PackedBinDataset` inputs. Local and revision-pinned
+  Hub constructors validate shard integrity and deterministically partition
+  examples by rank. CPU/CUDA runs honor save/evaluation cadence, forward
+  callback metrics, and restore versioned training state. TPU worker summaries
+  expose normalized public state and callback metrics without log parsing. TPU
+  checkpoint/evaluation parity and target-hardware validation remain.
 
-- [ ] **M8-F1 — Structural inspector**
+- [~] **M8-F1 — Structural inspector**
   `feat(optimization): inspect dense causal LM capabilities`
   Prefer public HF contracts and expose unknown semantics explicitly.
   **Acceptance:** Reports match family fixtures; no name-only semantic guesses.
+  Implemented through config, module, parameter-alias, and forward-signature
+  evidence; unproven residual/custom-normalization semantics remain unknown.
 
 - [ ] **M8-F2 — Adapter registry**
   `feat(optimization): add optional model adapter registry`
