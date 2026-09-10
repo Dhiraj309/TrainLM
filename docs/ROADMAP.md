@@ -994,7 +994,10 @@ layouts and target update evidence remain.
   materialization, custom-call, and fallback observations for normalization,
   RoPE, residual, and MLP components. It retains proven clean native fusion,
   identifies custom-kernel candidates, and blocks unknown/fallback cases.
-  Target-XLA HLO captures and matched benchmarks remain pending.
+  A text-capture constructor now normalizes and fingerprints HLO, counts exact
+  copy/transpose/custom-call opcodes, and accepts explicit component-specific
+  materialization patterns without pretending text alone proves fusion.
+  Target-XLA captures and matched benchmarks remain pending.
 
 - [~] **M11-F4 — Decoder rematerialization**
   `feat(optimization): add structural decoder rematerialization policies`
