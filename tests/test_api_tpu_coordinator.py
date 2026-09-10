@@ -37,11 +37,20 @@ class MetricsRecorder(TrainerCallback):
         self.metrics.append(dict(metrics))
 
 
+def pinned_model():
+    return ModelSourceConfig(
+        provider="huggingface",
+        initialization="pretrained",
+        name_or_path="org/model",
+        revision="a" * 40,
+    )
+
+
 def test_tpu_facade_defers_model_and_runtime_construction(tmp_path):
     coordinator = RecordingCoordinator()
     recorder = MetricsRecorder()
     trainer = TrainLMTrainer(
-        model="org/model",
+        model=pinned_model(),
         train_dataset=tmp_path / "manifests",
         args=TrainLMTrainingArguments(
             output_dir=tmp_path / "run",
@@ -84,7 +93,7 @@ def test_tpu_facade_rejects_parent_owned_objects_and_unsupported_data(tmp_path):
         )
 
     trainer = TrainLMTrainer(
-        model="org/model",
+        model=pinned_model(),
         train_dataset=[{"input_ids": [1, 2]}],
         args=TrainLMTrainingArguments(accelerator="tpu"),
     )
@@ -103,7 +112,7 @@ def test_tpu_facade_accepts_public_packed_dataset(tmp_path, monkeypatch):
     )
     coordinator = RecordingCoordinator()
     trainer = TrainLMTrainer(
-        model="org/model",
+        model=pinned_model(),
         train_dataset=dataset,
         args=TrainLMTrainingArguments(
             accelerator="tpu", output_dir=tmp_path / "run", max_steps=1
@@ -119,7 +128,7 @@ def test_tpu_facade_accepts_public_packed_dataset(tmp_path, monkeypatch):
 def test_tpu_facade_stages_evaluation_dataset_and_cadence(tmp_path):
     coordinator = RecordingCoordinator()
     trainer = TrainLMTrainer(
-        model="org/model",
+        model=pinned_model(),
         train_dataset=tmp_path / "train",
         eval_dataset=tmp_path / "eval",
         args=TrainLMTrainingArguments(
@@ -136,6 +145,23 @@ def test_tpu_facade_stages_evaluation_dataset_and_cadence(tmp_path):
     request = coordinator.requests[0]
     assert request.eval_manifest_dir == tmp_path / "eval"
     assert request.eval_every_steps == 2
+
+
+def test_tpu_facade_rejects_mutable_hugging_face_model_revision(tmp_path):
+    trainer = TrainLMTrainer(
+        model=ModelSourceConfig(
+            provider="huggingface",
+            initialization="pretrained",
+            name_or_path="org/model",
+            revision="main",
+        ),
+        train_dataset=tmp_path / "train",
+        args=TrainLMTrainingArguments(accelerator="tpu", max_steps=1),
+    )
+    trainer._tpu_coordinator = RecordingCoordinator()
+
+    with pytest.raises(ValueError, match="40-character commit SHA"):
+        trainer.train()
 
 
 def _request(tmp_path):

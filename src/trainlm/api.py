@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
+import re
 from typing import TYPE_CHECKING, Any, Literal
 import warnings
 
@@ -55,6 +56,7 @@ if TYPE_CHECKING:
 
 PUBLIC_API_VERSION = "1"
 DEPRECATED_CONFIG_KEYS = {"args": "training_args"}
+_COMMIT_SHA = re.compile(r"[0-9a-f]{40}")
 
 
 def _load_public_config(source: Mapping[str, Any] | str | Path) -> dict[str, Any]:
@@ -587,6 +589,23 @@ class TrainLMTrainer:
         from trainlm._tpu_coordinator import _TPURunRequest
         from trainlm.data import PackedBinDataset
 
+        if self._model_source is None or self.args.max_steps is None:
+            raise RuntimeError("TPU request prerequisites were not initialized.")
+        model_path = self._model_source.name_or_path
+        is_local_model = model_path is not None and Path(model_path).exists()
+        if (
+            self._model_source.provider == "huggingface"
+            and self._model_source.initialization == "pretrained"
+            and not is_local_model
+            and (
+                self._model_source.revision is None
+                or _COMMIT_SHA.fullmatch(self._model_source.revision) is None
+            )
+        ):
+            raise ValueError(
+                "TPU Hugging Face models require revision to be a lowercase "
+                "40-character commit SHA."
+            )
         if isinstance(self.train_dataset, PackedBinDataset):
             manifest_dir = self.train_dataset.coordinator_manifest_dir(
                 self.args.output_dir
@@ -609,8 +628,6 @@ class TrainLMTrainer:
                 raise TypeError(
                     "TPU evaluation requires a PackedBinDataset or local manifest directory."
                 )
-        if self._model_source is None or self.args.max_steps is None:
-            raise RuntimeError("TPU request prerequisites were not initialized.")
         precision = (
             "bf16" if self.args.bf16 else "fp16" if self.args.fp16 else "fp32"
         )

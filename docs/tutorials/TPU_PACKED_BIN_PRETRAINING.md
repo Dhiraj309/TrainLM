@@ -17,6 +17,8 @@ suspected.
 
 Use lowercase 40-character commit SHAs for both the model and packed dataset.
 Keep training and evaluation manifests in separate, explicit shard lists.
+TrainLM rejects mutable Hub model revisions before starting the TPU coordinator;
+local model directories remain available for offline, immutable snapshots.
 
 ```python
 import os

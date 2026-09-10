@@ -316,6 +316,10 @@ this file in every turn:
     compute before checkpointing and the instant after atomic manifest publish.
     Recovery rejects the former attempt and accepts the latter, establishing
     the manifest rename as the host-side durability boundary.
+37. **M14-F2 immutable TPU model intake:** remote Hugging Face pretrained models
+    now require lowercase 40-character commit revisions before the coordinator
+    stages data or launches workers. Existing local model directories remain a
+    supported offline snapshot path. Target tutorial smoke remains outstanding.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

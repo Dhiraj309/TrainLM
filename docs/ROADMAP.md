@@ -1195,7 +1195,9 @@ early-update evidence gate are implemented; target-run alignment remains.
   A public-surface-only guide now covers secret-manager token handling,
   immutable model/data revisions, disjoint train/eval shard lists, preflight
   explanation, committed-checkpoint resume, and explicitly documents that TPU
-  canonical export remains unavailable. Target clean-environment smoke remains.
+  canonical export remains unavailable. The facade now rejects unpinned remote
+  model revisions before coordinator launch. Target clean-environment smoke
+  remains.
   **Acceptance:** Secret scan and clean-environment smoke pass.
 
 - [~] **M14-F3 — CI/hardware tiers**
