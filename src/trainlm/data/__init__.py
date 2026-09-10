@@ -39,7 +39,6 @@ from .reader import (
     PackedReaderLayout,
     PackedShardFile,
 )
-from .public import PackedBinDataset
 
 __all__ = [
     "AsyncBatchPrefetcher",
@@ -60,7 +59,6 @@ __all__ = [
     "HuggingFaceShardSpec",
     "IdentityBatchTransfer",
     "PackedBinaryShardManifest",
-    "PackedBinDataset",
     "PackedBatchLocation",
     "PackedReaderLayout",
     "PackedShardFile",

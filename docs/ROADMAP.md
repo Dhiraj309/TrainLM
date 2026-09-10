@@ -161,10 +161,10 @@ Branch names describe repository work, not the tool or contributor:
 |---|---|---|---|---:|---|
 | [x] | PR1 | `milestone/m0-m2-foundation` | M0-M2 | 15 | Contracts and generic HF CPU conformance |
 | [~] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 18 | Merged; post-merge data/trainer validation remains tracked by validation gates |
-| [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 16 | Implementation merge-ready; DP8 launcher/data/attention/optimizer fixes landed; v5e-8 baseline is 319,302 tok/s after sparse-loss fix, performance work pending |
+| [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 16 | Implementation merged; DP8 launcher/data/attention/optimizer fixes landed; v5e-8 baseline is 319,302 tok/s after sparse-loss fix, performance work pending |
 | [~] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11+ | HF-like public trainer facade, reversible planner, and optimized loss |
-| [~] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | Canonical attention contract started; 850K and hard LaughLM parity pending |
-| [~] | PR6 | `milestone/m13-m14-family-release` | M13-M14 | 12 | Cross-family certification and V1 release |
+| [ ] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | 850K and hard LaughLM parity |
+| [ ] | PR6 | `milestone/m13-m14-family-release` | M13-M14 | 12 | Cross-family certification and V1 release |
 
 Future tracks: `milestone/m15-torchtpu`, `milestone/m16-moe`, and
 `milestone/m17-dllm`, five commits each. Before activating a later PR branch,
@@ -315,16 +315,16 @@ TPU runtime foundation`; branch `milestone/m5-m7-xla-compatibility`.
 | [x] | M2 | Universal HF dense-causal CPU path |
 | [~] | M3 | F1-F5 complete; resumable cursor awaiting validation |
 | [~] | M4 | F1-F7 implemented; validation pending |
-| [~] | M5 | F1-F7 implemented; DP8 launch, host data preparation, timing, expected-world-size gates, and two-update v5e-8 smoke passed; certification remains pending |
+| [x] | M5 | F1-F7 implemented; DP8 launch, host data preparation, timing, expected-world-size gates, and two-update v5e-8 smoke passed |
 | [~] | M6 | F1-F4 positional, attention, block-layout, and TPU round-trip coverage implemented; Llama preflight passed, cross-family validation pending |
 | [~] | M7 | F1-F5 distributed resume, async lifecycle, canonical HF export, telemetry, and integrity gates implemented; v5e-8 smoke and measured baseline passed, reliability certification pending |
 | [~] | M8 | HF-like public trainer facade plus reversible capability optimization engine |
-| [~] | M9 | Memory-efficient causal loss |
-| [~] | M10 | TPU attention and 850K gate |
-| [~] | M11 | Projection, optimizer, remat, and HLO tuning |
-| [~] | M12 | Exact 135M parity certification |
-| [~] | M13 | Cross-family certification and 1.3B scaling |
-| [~] | M14 | Dense-AR V1 release |
+| [ ] | M9 | Memory-efficient causal loss |
+| [ ] | M10 | TPU attention and 850K gate |
+| [ ] | M11 | Projection, optimizer, remat, and HLO tuning |
+| [ ] | M12 | Exact 135M parity certification |
+| [ ] | M13 | Cross-family certification and 1.3B scaling |
+| [ ] | M14 | Dense-AR V1 release |
 | [d] | M15 | TorchTPU migration |
 | [d] | M16 | MoE extension |
 | [d] | M17 | DLLM extension |
@@ -709,11 +709,7 @@ trainer itself.
 
 ## M8 — Capability planner and reversible optimization
 
-**Status:** [~] In progress — the coordinator, packed-data adapter, local
-lifecycle facade, TPU metric/state bridge, structural inspector, and guarded
-adapter registry, pure provider planner, transactional transform registry, and
-reversible state-dict conversion and the complete explain report are
-implemented; TPU checkpoint parity remains.
+**Status:** [~] In progress — the public facade first slice is implemented; TPU coordinator and optimization planner remain.
 
 **Goal:** Provide a minimal Hugging Face-like trainer surface while transforming
 loaded HF models safely without family logic in core.
@@ -728,83 +724,40 @@ loaded HF models safely without family logic in core.
   **Acceptance:** A concise HF-style example trains on CPU and reaches the TPU
   coordinator without users constructing subprocess commands or parsing stage
   logs; raw validation remains an internal implementation detail.
-  The TPU branch now reaches a private coordinator that owns probe, model
-  preflight, worker launch, logs, and structured summaries for pretrained HF
-  sources plus validated `PackedBinDataset` inputs. Local and revision-pinned
-  Hub constructors validate shard integrity and deterministically partition
-  examples by rank. CPU/CUDA runs honor save/evaluation cadence, forward
-  callback metrics, and restore versioned training state. TPU worker summaries
-  expose normalized public state and callback metrics without log parsing. TPU
-  checkpoint/evaluation parity and target-hardware validation remain.
-  The private request/CLI boundary transports save cadence and resume paths;
-  rank-local atomic shards preserve model, optimizer, scheduler, runtime,
-  trainer, host/device RNG, and deterministic packed-data progress. TPU
-  evaluation uses a separately validated packed-data source, deterministic
-  validation partition, scheduled engine evaluation, and structured callback
-  metrics. Replicas currently evaluate the same full validation stream for
-  correctness until distributed metric reductions land. Target-hardware
-  lifecycle validation remains. Tensor serialization
-  is isolated in a private TPU module, preserving the framework-independent
-  checkpoint contracts.
-  Coordinator tests cover serialized evaluation-field mismatch rejection.
 
-- [~] **M8-F1 — Structural inspector**
+- [ ] **M8-F1 — Structural inspector**
   `feat(optimization): inspect dense causal LM capabilities`
   Prefer public HF contracts and expose unknown semantics explicitly.
   **Acceptance:** Reports match family fixtures; no name-only semantic guesses.
-  Implemented through config, module, parameter-alias, and forward-signature
-  evidence; unproven residual/custom-normalization semantics remain unknown.
 
-- [x] **M8-F2 — Adapter registry**
+- [ ] **M8-F2 — Adapter registry**
   `feat(optimization): add optional model adapter registry`
   Resolve explicit model/class adapters with semantic and version guards.
   **Acceptance:** Removing adapters preserves M6 compatibility.
-  The registry is declarative and optional: exact model/config class matches
-  are additionally gated by inspected component kinds, source provider, and
-  allow-listed tested package versions. Resolution has stable priority/ID
-  ordering, records every rejection reason, and never imports or mutates a
-  model, so an empty registry preserves the generic compatibility path.
 
-- [x] **M8-F3 — Pure planner**
+- [ ] **M8-F3 — Pure planner**
   `feat(optimization): select kernels transforms and fallbacks`
   Match capability to provider by backend, shape, dtype, mask, and backward
   support under auto/required/disabled/explicit policies.
   **Acceptance:** Deterministic snapshots explain every decision.
-  Provider specifications declare backend, precision, capability kind, runtime
-  requirements, fallback status, and reversible transformations. The pure
-  planner deterministically handles disabled, auto, required, and explicit
-  provider requests, producing a blocked plan before mutation when necessary.
 
-- [x] **M8-F4 — Transactional transforms**
+- [ ] **M8-F4 — Transactional transforms**
   `feat(optimization): apply validated reversible model transforms`
   Plan before mutation, transform before optimizer, preserve aliases, and roll
   back failure without global patches or hot-path hooks.
   **Acceptance:** Injected failure leaves the original model usable.
-  Transform handlers capture rollback state before mutation, validate declared
-  inverse IDs, apply plans in order, and roll back the failing transform plus
-  all earlier transforms in reverse order. Undeclared alias changes, missing
-  handlers, blocked plans, and downstream context failures cannot commit.
 
-- [x] **M8-F5 — State-dict conversion**
+- [ ] **M8-F5 — State-dict conversion**
   `feat(optimization): add reversible parameter layout mappings`
   Pack/split maps, aliases, dtype/shape validation, transformed resume, and
   canonical import/export.
   **Acceptance:** Train/save/reload matches canonical HF state.
-  Versioned layout manifests now validate and reversibly concatenate/split
-  parameter groups with exact key, shape, dtype, device, collision, and alias
-  checks. The converter preserves unrelated state and restores declared tied
-  keys as shared tensor objects for canonical export.
 
-- [x] **M8-F6 — Explain report**
+- [ ] **M8-F6 — Explain report**
   `feat(optimization): expose model optimization explanation`
   Human/JSON capabilities, providers, transforms, fallbacks, backend, graph,
   and certification.
   **Acceptance:** Strict mode fails before TPU allocation when unsupported.
-  A versioned `OptimizationExplanation` now combines inspected capabilities,
-  adapter resolution, provider decisions, reversible transforms, fallbacks,
-  backend/precision, graph evidence, limitations, and certification state in
-  stable dictionary, JSON, and human-readable views. Strict validation rejects
-  blocked plans and unknown or unsupported capabilities before execution.
 
 ### Exit gate
 
@@ -813,58 +766,35 @@ loaded HF models safely without family logic in core.
 
 ## M9 — Memory-efficient causal-LM loss
 
-**Status:** [~] In progress — the portable reference chunked linear causal
-cross-entropy is implemented; optimized hidden-state access, rematerialization,
-TPU providers, and multi-family integration remain.
+**Status:** [ ] Not started
 
 **Goal:** Remove the full FP32 logits bottleneck without changing semantics.
 
-- [x] **M9-F1 — Reference chunked linear CE**
+- [ ] **M9-F1 — Reference chunked linear CE**
   `feat(loss): add reference chunked linear causal cross entropy`
   Consume hidden state, output weight, labels, optional bias; support shift,
   ignore index, tied/untied, FP32 reduction, chunks, and z-loss.
   **Acceptance:** Loss and hidden/head gradients match full-logits reference.
-  The FP32 reference projects flattened shifted tokens in bounded chunks,
-  supports optional bias, masks/ignore index, tied or untied output weights,
-  supervised-token normalization, and z-loss. Tests compare loss and hidden,
-  head, and bias gradients against full-logits cross entropy.
 
-- [x] **M9-F2 — Optimized training view**
+- [ ] **M9-F2 — Optimized training view**
   `feat(loss): bypass full HF logits during optimized training`
   Safely obtain final hidden state/output weight while preserving HF export.
   **Acceptance:** HLO contains no full `[B,S,V]` tensor.
-  A non-mutating training view now accepts an explicit hidden-state provider,
-  requires inspected linear-head evidence, obtains weights through the public
-  HF output-embedding contract, and feeds hidden states directly to chunked
-  loss without calling the model's full-logits forward. Target-XLA HLO evidence
-  remains required before enabling this path automatically.
 
-- [~] **M9-F3 — Rematerialized chunks**
+- [ ] **M9-F3 — Rematerialized chunks**
   `feat(loss): add rematerialized chunked loss backward`
   Compare chunks 2,048/4,096/8,192 and bound HBM.
   **Acceptance:** Select size from matched throughput/HBM evidence.
-  An explicit `per_chunk` policy now uses non-reentrant activation checkpointing
-  around each linear-CE chunk and preserves reference loss/z-loss/gradient
-  semantics. Chunk-size selection and HBM/throughput evidence remain pending on
-  target TPU hardware, so this story is not complete.
 
-- [~] **M9-F4 — TPU loss providers**
+- [ ] **M9-F4 — TPU loss providers**
   `perf(loss): evaluate native XLA Pallas and Tokamax loss providers`
   Compare pure XLA, Pallas bridge, and Tokamax where versions/backward permit.
   **Acceptance:** Record correctness, HBM, speed, compatibility, and fallback.
-  The pure provider catalog keeps Pallas and Tokamax gated on explicit runtime
-  and backward evidence and otherwise selects portable chunked loss as an
-  explained fallback. Provider implementation and matched TPU correctness,
-  HBM, and throughput measurements remain pending.
 
-- [x] **M9-F5 — Multi-family loss adapters**
+- [ ] **M9-F5 — Multi-family loss adapters**
   `test(loss): certify chunked loss across dense output-head layouts`
   Cover tied/untied heads and representative backbone outputs.
   **Acceptance:** Loss/gradient/export parity passes without full logits.
-  Explicit output adapters now normalize tensor, mapping, tuple/list, and
-  attribute-based hidden-state results. The conformance matrix covers tied and
-  untied embeddings, biased and bias-free heads, rematerialized chunked loss,
-  parameter gradients, alias preservation, and canonical state-dict parity.
 
 ### Exit gate
 
@@ -873,77 +803,45 @@ TPU providers, and multi-family integration remain.
 
 ## M10 — TPU attention provider family
 
-**Status:** [~] In progress — the canonical attention semantics contract and
-guarded HF interface integration are implemented; TPU providers, layout
-optimizations, autotuning, and benchmark evidence remain.
+**Status:** [ ] Not started
 
 **Goal:** Correct memory-efficient attention across the full V1 semantic surface.
 
-- [x] **M10-F1 — Canonical attention spec**
+- [ ] **M10-F1 — Canonical attention spec**
   `feat(attention): define canonical causal attention specification`
   Represent layouts, head geometry, scale, masks, segments, ALiBi, dropout,
   soft-cap, QK norm, and output without model-name conditionals.
   **Acceptance:** Every V1 family maps to the specification.
-  A versioned model-family-neutral schema now validates MHA/GQA/MQA head
-  geometry, scale, full/sliding causal masks, segment IDs, learned/RoPE/ALiBi
-  positions, dropout, soft-cap, QK normalization, and BSH output. Capability
-  mapping uses inspected facts only and rejects unknown semantics.
 
-- [x] **M10-F2 — HF attention/mask integration**
+- [ ] **M10-F2 — HF attention/mask integration**
   `feat(attention): integrate TrainLM attention with HF interfaces`
   Use public attention/mask interfaces when sufficient and adapters otherwise.
   **Acceptance:** Causal leakage tests detect missing/wrong mask registration.
-  A guarded adapter now registers attention and mask callables under the same HF
-  interface key only after the canonical spec passes layout, position, segment,
-  dropout, soft-cap, and QK-normalization checks. Reference visibility tests
-  detect future-token, sliding-window, and cross-segment leakage.
 
-- [~] **M10-F3 — XLA Pallas provider**
+- [ ] **M10-F3 — XLA Pallas provider**
   `feat(attention): add XLA Pallas causal attention provider`
   Wrap supported Pallas attention with import/version guards and backward.
   **Acceptance:** MHA matches reference and emits expected HLO/custom call.
-  A dependency-free bridge now requires an exact tested torch_xla version and
-  explicit backward evidence before constructing an MHA-only provider. It uses
-  an injected public kernel adapter, rejects dense masks and dropout, and keeps
-  causal masking internal to avoid quadratic mask materialization. The story
-  remains open pending target-TPU numerical, backward, and HLO/custom-call
-  evidence.
 
-- [~] **M10-F4 — GQA/MQA without KV repeat**
+- [ ] **M10-F4 — GQA/MQA without KV repeat**
   `feat(attention): support grouped and multi query TPU attention`
   Support 8/8, 8/4, and 8/1 without silent K/V HBM expansion.
   **Acceptance:** Correctness and HBM tests pass or explicit fallback is used.
-  A compact logical query-to-KV mapping now covers 8/8, 8/4, and 8/1 without
-  repeating K/V objects. The guarded provider forwards compact head geometry to
-  an explicit kernel adapter and rejects GQA/MQA unless runtime evidence exists.
-  Target-TPU numerical, gradient, and HBM evidence remains pending.
 
-- [~] **M10-F5 — ALiBi/sliding window**
+- [ ] **M10-F5 — ALiBi/sliding window**
   `feat(attention): add ALiBi and sliding window capabilities`
   Provide optimized support or efficient explicit XLA fallback.
   **Acceptance:** Boundary-token, mask, and gradient fixtures pass.
-  The guarded provider now forwards a scalar sliding-window boundary without a
-  dense mask and forwards explicit model-supplied ALiBi slopes unchanged. Both
-  paths require independent runtime evidence and otherwise fail explicitly.
-  Target-TPU boundary-token, numerical, gradient, and HBM evidence remains.
 
-- [~] **M10-F6 — Attention autotuning**
+- [ ] **M10-F6 — Attention autotuning**
   `perf(attention): tune v5e attention provider configurations`
   Tune/cache tiles by hardware, shape, dtype, mask, and provider version.
   **Acceptance:** Selection is deterministic and reproducible.
-  A pure exact-key cache now includes hardware, provider/version, dtype, batch,
-  head geometry, sequence length, mask, and window. Candidate measurement order
-  and equal-score selection are deterministic, and versioned results round-trip
-  through stable JSON. Target-v5e measurements and candidate ranges remain.
 
-- [~] **M10-F7 — Loss/attention benchmark**
+- [ ] **M10-F7 — Loss/attention benchmark**
   `perf(benchmark): certify optimized loss and attention stage`
   Benchmark exact 135M geometry on fake and real data with HLO evidence.
   **Acceptance:** `>= 850K tok/s`, lower HBM, stable graph, no fallback.
-  A pure matched-result evaluator now enforces v5e-8 geometry, the 850K gate,
-  lower HBM, stable post-warmup compilation, zero CPU fallback, no full logits,
-  named loss/attention providers, and an HLO fingerprint. The story remains open
-  until real synchronized fake- and real-data measurements satisfy the gate.
 
 ### Exit gate
 
@@ -952,76 +850,45 @@ optimizations, autotuning, and benchmark evidence remain.
 
 ## M11 — Projection, optimizer, rematerialization, and HLO tuning
 
-**Status:** [~] In progress — reversible separate Q/K/V weight and optional bias
-packing is implemented; partial source layouts, runtime module transforms, and
-numerical/gradient/update evidence remain.
+**Status:** [ ] Not started
 
 **Goal:** Close the parity gap one measured bottleneck at a time.
 
-- [~] **M11-F1 — Reversible QKV packing**
+- [ ] **M11-F1 — Reversible QKV packing**
   `feat(optimization): pack compatible QKV projections`
   Handle separate/partial/packed layouts, bias, heads, aliases, load/export.
   **Acceptance:** Output/gradient/update and round-trip parity pass.
-  A family-neutral geometry descriptor now builds versioned reversible mappings
-  for separate MHA/GQA/MQA Q/K/V weights and optional biases. Optimized resume
-  packs along output features and canonical export restores the original keys.
-  Partial layouts, live module transforms, and numerical/update parity remain.
 
-- [~] **M11-F2 — Reversible gated-MLP packing**
+- [ ] **M11-F2 — Reversible gated-MLP packing**
   `feat(optimization): pack compatible gate and up projections`
   Pack compatible SwiGLU/GeGLU paths and preserve GELU paths.
   **Acceptance:** Output/gradient/update and export parity pass.
-  An explicit SwiGLU/GeGLU descriptor now packs equal-shape gate/up weights and
-  optional biases through the reversible state-dict converter, while GELU is an
-  explicit no-transform path. Live module transforms and numerical/update parity
-  remain pending.
 
-- [~] **M11-F3 — Native fusion audit**
+- [ ] **M11-F3 — Native fusion audit**
   `perf(hlo): audit norm RoPE residual and MLP fusion`
   Inspect copies, transposes, materialization, custom calls, and layout before
   writing kernels.
   **Acceptance:** Every candidate has evidence-backed native/custom decision.
-  A versioned pure audit now consumes HLO fingerprints plus copy, transpose,
-  materialization, custom-call, and fallback observations for normalization,
-  RoPE, residual, and MLP components. It retains proven clean native fusion,
-  identifies custom-kernel candidates, and blocks unknown/fallback cases.
-  Target-XLA HLO captures and matched benchmarks remain pending.
 
-- [~] **M11-F4 — Decoder rematerialization**
+- [ ] **M11-F4 — Decoder rematerialization**
   `feat(optimization): add structural decoder rematerialization policies`
   None/block/attention/MLP/loss-chunk with correct FSDP ordering.
   **Acceptance:** Selected policy is justified by step/HBM evidence.
-  Explicit none/block/attention/MLP/loss-chunk policies now enforce pre-FSDP
-  ordering. A deterministic selector rejects gradient mismatches, unstable
-  graphs, and policies outside a configured slowdown budget, then chooses the
-  lowest measured HBM with stable ties. Target-XLA measurements remain pending.
 
-- [~] **M11-F5 — XLA optimizer-state path**
+- [ ] **M11-F5 — XLA optimizer-state path**
   `feat(optim): optimize XLA AdamW state and update graph`
   Evaluate BF16 first moment, FP32 second, clip, decay, reduction, and resume.
   **Acceptance:** Correct update with measured HBM/step impact.
-  A versioned policy now fixes BF16-or-FP32 first moment, FP32 second moment,
-  clipping, decoupled decay, and reduction semantics. A matched evidence gate
-  requires update/resume parity, stable graphs, zero CPU fallback, bounded step
-  regression, and lower HBM. Target-XLA measurements remain pending.
 
-- [~] **M11-F6 — Batch/prefetch tuning**
+- [ ] **M11-F6 — Batch/prefetch tuning**
   `perf(runtime): tune microbatch accumulation and prefetch geometry`
   Re-test MB2/GA32, MB1/GA64, safe alternatives, and prefetch near 16.
   **Acceptance:** One synchronized real-data production geometry is selected.
-  A deterministic selector now compares only equal token/update geometries and
-  requires real data, stable graphs, zero CPU fallback, bounded HBM, and bounded
-  input idle. It selects throughput first with stable HBM/idle/ID ties. Target
-  measurements for MB2/GA32, MB1/GA64, and prefetch near 16 remain pending.
 
-- [~] **M11-F7 — Final HLO/host closure**
+- [ ] **M11-F7 — Final HLO/host closure**
   `perf(hlo): remove residual parity path bottlenecks`
   Resolve proven transpose, graph, fallback, collective, sync, or input issues.
   **Acceptance:** Exact reference reaches the hard 90% thresholds.
-  A final evidence gate now requires the 912.6K throughput and 47.8% MFU hard
-  thresholds, stable compilation, zero fallback, no unresolved transpose/layout
-  copies, no unplanned host sync, no full logits, and bounded input/collective
-  idle. The story remains open until target-v5e evidence satisfies every gate.
 
 ### Exit gate
 
@@ -1030,57 +897,35 @@ numerical/gradient/update evidence remain.
 
 ## M12 — Exact LaughLM 135M parity certification
 
-**Status:** [~] In progress — the required semantic comparison and deterministic
-early-update evidence gate are implemented; target-run alignment remains.
+**Status:** [ ] Not started
 
 **Goal:** Convert the fast path into repeatable release evidence.
 
-- [~] **M12-F1 — Numerical alignment**
+- [ ] **M12-F1 — Numerical alignment**
   `test(parity): align 135M initialization and loss semantics`
   Match initialization, residual scale, eps, RoPE, shift, z-loss, optimizer,
   schedule, and dtype; compare early deterministic updates where possible.
   **Acceptance:** Every semantic difference is removed or justified.
-  A locked-path comparator now covers position/norm/residual, initialization,
-  shifted loss/z-loss, optimizer, schedule, and dtype semantics. Differences
-  must be explicitly justified, and at least one deterministic early-update
-  error must remain within tolerance. Target parity evidence remains pending.
 
-- [~] **M12-F2 — Three-run benchmark**
+- [ ] **M12-F2 — Three-run benchmark**
   `perf(parity): certify repeated v5e 135M throughput`
   Report matched runs, dispersion, cache, HBM, HLO, compiles, idle, and MFU.
   **Acceptance:** Every run clears hard thresholds; preferred median clears 95%.
-  A repeated-run evaluator now requires exactly three matched warm-cache v5e-8
-  results, identical HLO fingerprints, stable graphs, zero fallback, and every
-  run above the hard throughput/MFU thresholds. It reports median throughput/
-  MFU, spread, and max HBM, with separate preferred-median status. Real runs
-  remain pending.
 
-- [~] **M12-F3 — Real-shard stability**
+- [ ] **M12-F3 — Real-shard stability**
   `test(parity): validate 200 update real data stability`
   Run pinned diverse shards with eval, integrity, checkpoint, resume, and graph.
   **Acceptance:** Finite/stable, continuous data, no recompile/fallback, export.
-  A structured gate now requires at least 200 updates across diverse
-  revision-pinned shards, scheduled evaluation, checkpoint resume, integrity
-  checks, cursor continuity, finite loss/gradient ranges, stable compilation,
-  zero fallback, and canonical export. The real target run remains pending.
 
-- [~] **M12-F4 — Plain-HF export certification**
+- [ ] **M12-F4 — Plain-HF export certification**
   `test(parity): certify optimized HF checkpoint interoperability`
   Reverse internal layouts and reload in clean Transformers-only environment.
   **Acceptance:** Logits/loss match without TrainLM installed.
-  A structured gate now requires a clean environment without TrainLM,
-  canonical-only state-dict keys, preserved tied aliases, zero missing/unexpected
-  keys, and logits/loss within tolerance after plain Transformers reload.
-  Execution in a clean target environment remains pending.
 
-- [~] **M12-F5 — Parity report**
+- [ ] **M12-F5 — Parity report**
   `docs(benchmark): publish LaughLM TrainLM parity report`
   Publish environment, commands, configs, metrics, limits, profile, and HLO.
   **Acceptance:** Reviewer can reproduce without hidden configuration.
-  A versioned report schema now requires environment versions, reproduction
-  commands, configuration/metric/profile/HLO artifacts, limitations, and the
-  pass state of numerical, repeated-run, stability, and plain-HF gates. Stable
-  JSON and reviewer-facing Markdown are available; real evidence remains.
 
 ### Exit gate
 
@@ -1089,79 +934,46 @@ early-update evidence gate are implemented; target-run alignment remains.
 
 ## M13 — Cross-family certification and larger-model scaling
 
-**Status:** [~] In progress — learned-position family mappings are declarative; target certification remains
+**Status:** [ ] Not started
 
 **Goal:** Prove TrainLM is a framework, not one optimized Llama geometry.
 
-- [~] **M13-F1 — GPT-2/OPT mapping**
+- [ ] **M13-F1 — GPT-2/OPT mapping**
   `feat(adapters): optimize learned-position dense causal models`
   Reuse QKV, GELU/LayerNorm, loss, and attention capabilities.
-  Explicit GPT-2 and OPT adapters now require exact model/config classes,
-  inspected MHA, learned-position, LayerNorm, GELU, residual, projection, and
-  LM-head semantics, plus the tested Transformers version. The catalog maps
-  both families to shared attention, QKV-layout, GELU-MLP, and chunked-loss
-  operations without importing Transformers or mutating models. Output,
-  gradient, update, graph, export, and target-TPU evidence remain required.
   **Acceptance:** Both pass output/gradient/update, graph, and export.
 
-- [~] **M13-F2 — GPT-NeoX/BLOOM mapping**
+- [ ] **M13-F2 — GPT-NeoX/BLOOM mapping**
   `feat(adapters): optimize parallel residual and ALiBi models`
   Preserve parallel residual, RoPE/ALiBi, and projection semantics.
-  Version-guarded mappings now keep GPT-NeoX's RoPE and parallel residual
-  operations distinct from BLOOM's ALiBi and serial residual operations while
-  requiring explicit MHA, LayerNorm, GELU, fused-QKV, and linear-head evidence.
-  Shared TPU output/gradient/update, graph, export, and performance evidence
-  remains required.
   **Acceptance:** Shared TPU certification passes.
 
-- [~] **M13-F3 — Falcon/Phi mapping**
+- [ ] **M13-F3 — Falcon/Phi mapping**
   `feat(adapters): optimize MQA GQA and nonstandard dense blocks`
   Preserve head geometry, parallel blocks, projections, and activations.
-  Explicit mappings now separate Falcon MQA and GQA eligibility and preserve
-  its fused-QKV parallel block, while Phi requires MHA, partial RoPE,
-  separate QKV, LayerNorm/GELU, and parallel residual semantics. Correctness,
-  HBM, graph, export, and target-TPU evidence remain required.
   **Acceptance:** Correctness, HBM, graph, and export pass.
 
-- [~] **M13-F4 — Llama/Mistral/Qwen/Gemma mapping**
+- [ ] **M13-F4 — Llama/Mistral/Qwen/Gemma mapping**
   `feat(adapters): certify RoPE gated dense model families`
   Share structure while preserving windows, activations, scaling, soft-cap,
   QK norm, and family differences.
-  Version-guarded mappings now keep plain Llama RoPE, Mistral sliding windows,
-  Qwen2 biased QKV, Gemma GeGLU/scaled embeddings, and Gemma2 alternating
-  windows/attention soft-capping explicit. Common certification and additional
-  QK-normalized family variants remain outstanding.
   **Acceptance:** Difference fixtures and common certification pass.
 
-- [~] **M13-F5 — 135M cross-family matrix**
+- [ ] **M13-F5 — 135M cross-family matrix**
   `perf(certification): benchmark dense AR capability families`
   Report matched raw throughput and architecture-adjusted MFU; dense full
   attention targets 45% MFU absent a reviewed roofline.
-  A pure evidence evaluator now requires one unique support/performance record
-  per advertised family, matched workload/device/update geometry, correctness,
-  graph and export gates, and computes MFU from family-specific FLOPs/token.
-  Real synchronized 135M measurements remain outstanding.
   **Acceptance:** Every advertised family has a support/performance record.
 
-- [~] **M13-F6 — SPMD FSDP**
+- [ ] **M13-F6 — SPMD FSDP**
   `feat(runtime): add backend-neutral FSDP mesh policy`
   Begin data=4/FSDP=2 with correct wrapping, remat, state sharding, checkpoint.
-  A backend-neutral policy now describes explicit wrap classes, adapter-owned
-  parameter partition rules, optimizer-state sharding, a data/FSDP logical
-  mesh, rematerialization-before-wrap ordering, and topology-matched rank-shard
-  checkpoints. Runtime application and the 1.3B target smoke remain outstanding.
   **Acceptance:** Correct 1.3B train/resume/export smoke on v5e-8.
 
-- [~] **M13-F7 — 1.3B benchmark**
+- [ ] **M13-F7 — 1.3B benchmark**
   `perf(benchmark): certify 1.3B FSDP scaling path`
   Compare matched LaughLM approximately `41.9K tok/s`, `42.6%` MFU with
   collective/HBM analysis.
-  A pure evidence gate now requires a review-locked target, exact workload,
-  parameter-count, v5e-8 and data/FSDP geometry matching, throughput/MFU gates,
-  stable compilation, zero CPU fallback, lifecycle parity, and named
-  collective/HBM artifacts. The matched target and real run remain outstanding.
-  Its mismatch regression fixture now remains internally valid (16 devices,
-  data=4/FSDP=4), leaving target mismatch rejection to the evidence evaluator.
   **Acceptance:** A matched target is locked before certification.
 
 ### Exit gate
@@ -1171,63 +983,34 @@ early-update evidence gate are implemented; target-run alignment remains.
 
 ## M14 — Dense-AR V1 release
 
-**Status:** [~] In progress — versioned code/YAML construction exists; release certification remains
+**Status:** [ ] Not started
 
 **Goal:** Deliver a safe, documented, reproducible user release.
 
-- [x] **M14-F1 — Stable public API**
+- [ ] **M14-F1 — Stable public API**
   `feat(api): finalize TrainLM dense AR pretraining interface`
   Code/YAML from-config and from-pretrained workflows with deprecation policy.
-  The public trainer now has explicit `from_pretrained()` and versioned
-  mapping/YAML `from_config()` constructors, rejects worker/internal config
-  keys, and warns for one-version key aliases. The example imports only the
-  package root, and the dependency contract includes the directly imported
-  PyYAML runtime. A machine-readable v1 compatibility contract now freezes the
-  root exports, accepted configuration keys, and deprecated aliases, with an
-  evaluator that detects unversioned breaking changes. The CI test suite now
-  builds the wheel, installs it into an isolated environment, changes outside
-  the checkout, and smoke-tests only the documented package-root surface.
   **Acceptance:** Examples use no internal packages/custom model class.
 
-- [~] **M14-F2 — Secure `.bin` TPU guide**
+- [ ] **M14-F2 — Secure `.bin` TPU guide**
   `docs(tutorial): add HF model and binary shard TPU pretraining guide`
   Document token secret, revisions, splits, explain, resume, and export.
-  A public-surface-only guide now covers secret-manager token handling,
-  immutable model/data revisions, disjoint train/eval shard lists, preflight
-  explanation, committed-checkpoint resume, and explicitly documents that TPU
-  canonical export remains unavailable. The facade now rejects unpinned remote
-  model revisions before coordinator launch. Target clean-environment smoke
-  remains.
   **Acceptance:** Secret scan and clean-environment smoke pass.
 
-- [~] **M14-F3 — CI/hardware tiers**
+- [ ] **M14-F3 — CI/hardware tiers**
   `ci(test): add dense AR release certification tiers`
   Tier 0 CPU, Tier 1 CUDA, Tier 2 scheduled v5e correctness, Tier 3 release
   performance/stability.
-  A commit-specific freshness gate now requires unique passing Tier 0-3
-  artifacts, including mandatory current Tier 3
-  evidence. CUDA/v5e runners, schedules, and real evidence remain outstanding.
   **Acceptance:** Release requires current Tier 3 evidence.
 
-- [~] **M14-F4 — Preemption recovery**
+- [ ] **M14-F4 — Preemption recovery**
   `test(checkpoint): validate preemption and incomplete save recovery`
   Kill during compute, staging, and persistence; accept only durable state.
-  Rank shards are now generation-named, committed destinations are immutable,
-  shard progress must match the atomic manifest, and latest-checkpoint discovery
-  ignores temporary, incomplete, malformed, unsafe, and missing-shard attempts.
-  Spawned-process tests now terminate during compute and after shard staging,
-  shard publish, manifest staging, and manifest publish. Discovery retains the
-  prior generation before the atomic manifest commit and accepts the new one
-  after it. Target-TPU recovery and cursor-continuity tests remain outstanding.
   **Acceptance:** No partial checkpoint or silently skipped data.
 
-- [~] **M14-F5 — Support manifest/release notes**
+- [ ] **M14-F5 — Support manifest/release notes**
   `docs(release): publish dense AR support and certification matrix`
   Publish versions, hardware, providers, caveats, fallbacks, TorchTPU status.
-  A versioned machine manifest and development status page now publish these
-  fields without certification overclaims, and a validator checks that public
-  explanation backend/path/certification values do not exceed the manifest.
-  Populate final release evidence and revalidate all claims before closure.
   **Acceptance:** Machine manifest agrees with `trainer.explain()`.
 
 ### Exit gate

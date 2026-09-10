@@ -96,16 +96,10 @@ Packed reads can overlap training through the bounded, backend-aware
 [asynchronous prefetch contract](docs/data/ASYNC_PREFETCH.md).
 Exact next-batch restart state follows the
 [resumable cursor contract](docs/data/RESUMABLE_CURSOR.md).
-The [secure packed-bin TPU guide](docs/tutorials/TPU_PACKED_BIN_PRETRAINING.md)
-covers secret handling, immutable revisions, train/eval splits, explanation,
-resume, and the current canonical-export boundary.
 
 TrainLM distinguishes models that are **Compatible**, **Optimized**, and
 hardware **Certified**. Generic execution is never presented as TPU performance
 certification.
-See the [Dense-AR V1 development support status](docs/release/DENSE_AR_V1_STATUS.md)
-and its [machine-readable manifest](support/dense_ar_v1.json) for current
-versions, hardware paths, providers, fallbacks, and caveats.
 
 ## Public trainer (M8-F0 in progress)
 
@@ -133,48 +127,8 @@ trainer = TrainLMTrainer(
 trainer.train()
 ```
 
-The same public facade supports a versioned YAML workflow. Dataset objects stay
-in user code while model acquisition and familiar training arguments live in
-configuration:
-
-```python
-from trainlm import TrainLMTrainer
-
-trainer = TrainLMTrainer.from_config(
-    "examples/dense_ar_pretraining.yaml",
-    train_dataset=train_dataset,
-    eval_dataset=eval_dataset,
-)
-trainer.train(resume_from_checkpoint="runs/dense-ar/checkpoint-500")
-```
-
-Use `TrainLMTrainer.from_pretrained("org/model", revision="...")` for the
-equivalent code-first pretrained workflow. Public config files carry an
-`api_version`; renamed keys emit `DeprecationWarning` for one public API version
-before removal.
-
-On CPU and CUDA, `save_steps` and `eval_steps` are handled by the same
-backend-neutral lifecycle used for training. A local run can continue from a
-TrainLM training checkpoint with
-`trainer.train(resume_from_checkpoint="runs/example/checkpoint-100")`.
-
-Packed token shards can be supplied through the validated public adapter. Local
-manifests and revision-pinned Hugging Face sources are checked before iteration,
-and rank ownership is deterministic:
-
-```python
-from trainlm import PackedBinDataset
-
-train_dataset = PackedBinDataset.from_directory(
-    "data/packed/train",
-    sequence_length=2048,
-)
-```
-
-The facade delegates local runs to the portable CPU/CUDA engine and routes
-`accelerator="tpu"` through a private single-VM coordinator. The initial TPU
-bridge accepts a reconstructible pretrained Hugging Face model source and a
-local directory of validated shard manifests; public packed-binary dataset
-construction, TPU checkpoint parity, and automatic capability-based kernel
-planning remain in progress. Structured worker metrics are delivered through
-public callbacks; worker scripts and stage logs are internal details.
+The first facade slice currently delegates to the portable CPU/CUDA engine.
+TPU coordinator launch, validated packed-binary dataset construction, and
+automatic capability-based kernel planning are being added behind this same
+API. Until those stories are complete, the worker notebook remains a
+validation surface rather than the public UX.

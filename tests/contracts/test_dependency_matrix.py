@@ -39,7 +39,6 @@ def test_core_dependencies_are_portable_and_transformers_v5():
 
     assert project["requires-python"] == ">=3.10"
     assert set(project["dependencies"]) == {
-        "PyYAML>=6,<7",
         "huggingface-hub>=1.0,<2",
         "torch>=2.9,<2.14",
         "transformers>=5.0,<6",
