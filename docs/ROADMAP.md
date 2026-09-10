@@ -1182,7 +1182,10 @@ early-update evidence gate are implemented; target-run alignment remains.
   mapping/YAML `from_config()` constructors, rejects worker/internal config
   keys, and warns for one-version key aliases. The example imports only the
   package root, and the dependency contract includes the directly imported
-  PyYAML runtime. Clean-environment and release-compatibility checks remain.
+  PyYAML runtime. A machine-readable v1 compatibility contract now freezes the
+  root exports, accepted configuration keys, and deprecated aliases, with an
+  evaluator that detects unversioned breaking changes. A clean-environment
+  installation check remains.
   **Acceptance:** Examples use no internal packages/custom model class.
 
 - [~] **M14-F2 — Secure `.bin` TPU guide**

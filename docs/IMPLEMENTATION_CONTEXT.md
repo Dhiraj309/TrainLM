@@ -300,6 +300,11 @@ this file in every turn:
     directly imported PyYAML runtime, and the FSDP mismatch fixture uses a valid
     16-device data=4/FSDP=4 mesh so mismatch rejection is exercised by the
     evaluator rather than failing during evidence construction.
+34. **M14-F1 compatibility contract:** `support/public_api_v1.json` now records
+    the versioned package-root symbols, accepted trainer configuration keys,
+    and deprecated aliases. The release evaluator fails when an installed
+    surface changes without an API-version update. Add the isolated wheel
+    installation smoke before closing the stable-interface story.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
