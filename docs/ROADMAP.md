@@ -1104,9 +1104,14 @@ early-update evidence gate are implemented; target-run alignment remains.
   gradient, update, graph, export, and target-TPU evidence remain required.
   **Acceptance:** Both pass output/gradient/update, graph, and export.
 
-- [ ] **M13-F2 — GPT-NeoX/BLOOM mapping**
+- [~] **M13-F2 — GPT-NeoX/BLOOM mapping**
   `feat(adapters): optimize parallel residual and ALiBi models`
   Preserve parallel residual, RoPE/ALiBi, and projection semantics.
+  Version-guarded mappings now keep GPT-NeoX's RoPE and parallel residual
+  operations distinct from BLOOM's ALiBi and serial residual operations while
+  requiring explicit MHA, LayerNorm, GELU, fused-QKV, and linear-head evidence.
+  Shared TPU output/gradient/update, graph, export, and performance evidence
+  remains required.
   **Acceptance:** Shared TPU certification passes.
 
 - [ ] **M13-F3 — Falcon/Phi mapping**

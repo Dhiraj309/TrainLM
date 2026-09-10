@@ -242,6 +242,11 @@ this file in every turn:
     attention, QKV-layout, GELU-MLP, and linear causal-loss operations. Run
     output/gradient/update, graph, export, and target-TPU certification before
     advertising either family as optimized.
+22. **M13-F2 GPT-NeoX/BLOOM mapping:** explicit adapters now preserve
+    GPT-NeoX RoPE plus parallel residual semantics and BLOOM ALiBi plus serial
+    residual semantics while sharing guarded MHA, fused-QKV, LayerNorm, GELU,
+    and linear causal-loss operations. Complete shared target-TPU correctness,
+    graph, export, and performance certification before enabling either path.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

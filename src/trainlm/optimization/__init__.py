@@ -103,6 +103,12 @@ from .dense_family_adapters import (
     OPT_MAPPING,
     register_learned_position_dense_adapters,
 )
+from .parallel_family_adapters import (
+    BLOOM_MAPPING,
+    GPT_NEOX_MAPPING,
+    ROPE_ALIBI_DENSE_MAPPINGS,
+    register_rope_alibi_dense_adapters,
+)
 
 __all__ = [
     "CapabilityFact",
@@ -119,6 +125,7 @@ __all__ = [
     "BatchPrefetchGeometry",
     "BatchPrefetchMeasurement",
     "BatchPrefetchSelection",
+    "BLOOM_MAPPING",
     "CapabilityStatus",
     "CanonicalAttentionSpec",
     "AdamWStateDtype",
@@ -136,6 +143,7 @@ __all__ = [
     "GatedMLPProjectionSpec",
     "GradientReduction",
     "GPT2_MAPPING",
+    "GPT_NEOX_MAPPING",
     "LINEAR_CAUSAL_LOSS_REQUIREMENTS",
     "LEARNED_POSITION_DENSE_MAPPINGS",
     "KVHeadMapping",
@@ -161,6 +169,7 @@ __all__ = [
     "RematerializationPolicy",
     "RematerializationScope",
     "RematerializationSelection",
+    "ROPE_ALIBI_DENSE_MAPPINGS",
     "PositionEncoding",
     "PackageVersionGuard",
     "PallasAttentionRuntime",
@@ -181,6 +190,7 @@ __all__ = [
     "pallas_mha_provider",
     "pallas_grouped_attention_provider",
     "register_learned_position_dense_adapters",
+    "register_rope_alibi_dense_adapters",
     "select_rematerialization_policy",
     "select_batch_prefetch_geometry",
     "causal_loss_provider_specs",
