@@ -24,7 +24,6 @@ from torch.utils.data import DataLoader, IterableDataset
 from trainlm.config import (
     CheckpointConfig,
     DatasetConfig,
-    EvaluationConfig,
     LossConfig,
     LoggingConfig,
     MonitoringConfig,
@@ -36,10 +35,6 @@ from trainlm.config import (
     TrainConfig,
     TrainerConfig,
     ModelSourceConfig,
-)
-from trainlm._tpu_checkpoint import (
-    load_tpu_worker_checkpoint,
-    save_tpu_worker_checkpoint,
 )
 from trainlm.data import (
     ContiguousPackedBatchReader,
@@ -247,7 +242,7 @@ def model_preflight(args: argparse.Namespace) -> None:
 
 
 
-def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> None:
+def train_fn(index: int, args: argparse.Namespace, shards) -> None:
     del index
     rank = int(xr.global_ordinal())
     world_size = int(xr.world_size())
@@ -297,46 +292,13 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
         num_workers=0,
         pin_memory=False,
     )
-    eval_reader = None
-    eval_loader = None
-    if eval_shards is not None:
-        eval_reader = ContiguousPackedBatchReader(
-            eval_shards,
-            batch_size=args.micro_batch_per_device,
-            sequence_length=args.sequence_length,
-        )
-        eval_partition = plan_packed_batch_partition(
-            eval_reader,
-            split="validation",
-            seed=0,
-            epoch=0,
-            # Until evaluation reductions become part of the backend contract,
-            # each replica evaluates the same deterministic validation stream.
-            # This is more work than sharding, but produces globally correct
-            # metrics instead of reporting rank zero's shard as the full set.
-            world_size=1,
-            rank=0,
-            cross_shard_remainder="drop",
-            host_remainder="drop",
-        )
-        if not eval_partition.assignments:
-            raise ValueError(
-                "Evaluation data has no complete batch for the active TPU topology."
-            )
-        eval_loader = DataLoader(
-            BatchIterable(PartitionedPackedBatchReader(eval_reader, eval_partition)),
-            batch_size=None,
-            num_workers=0,
-            pin_memory=False,
-        )
     source = _source(args)
     print({"stage": "load_model", "rank": rank}, flush=True)
     loaded = load_huggingface_causal_lm(source)
     if hasattr(loaded.model.config, "use_cache"):
         loaded.model.config.use_cache = False
     input_vocab = loaded.model.get_input_embeddings().weight.shape[0]
-    all_shards = [*shards, *(eval_shards or ())]
-    if any(s.manifest.token_id_max >= input_vocab for s in all_shards):
+    if any(s.manifest.token_id_max >= input_vocab for s in shards):
         raise ValueError("Shard token IDs exceed the selected HF model vocabulary.")
     model = runtime.prepare_model(loaded.model)
     # Device conversion can replace Parameter objects and tied aliases.
@@ -396,20 +358,13 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
             max_grad_norm=1.0,
             seed=args.seed,
         ),
-        checkpoint=CheckpointConfig(
-            output_dir=Path(args.output_dir),
-            save_training_every_steps=args.save_every_steps,
-        ),
+        checkpoint=CheckpointConfig(output_dir=Path(args.output_dir)),
         logging=LoggingConfig(log_every_steps=args.log_every_steps),
         monitoring=MonitoringConfig(
             enabled=True,
             compile_metrics=False,
             memory_metrics=False,
             training_integrity=False,
-        ),
-        evaluation=EvaluationConfig(
-            enabled=eval_loader is not None,
-            eval_every_steps=args.eval_every_steps,
         ),
     )
     config.validate()
@@ -433,27 +388,8 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
         scheduler=scheduler,
         task=task,
         train_dataloader=device_loader,
-        eval_dataloader=eval_loader,
         callbacks=[metrics],
-        checkpoint_saver=lambda engine, destination: save_tpu_worker_checkpoint(
-            engine, Path(args.output_dir) / str(destination)
-        ),
-        checkpoint_loader=lambda engine, source: load_tpu_worker_checkpoint(
-            engine, source
-        ),
     )
-    if args.resume_from_checkpoint is not None:
-        trainer.load_checkpoint(Path(args.resume_from_checkpoint))
-        # The packed schedule is deterministic. Rebuild its exact position
-        # before entering the training loop so the next batch is not repeated.
-        trainer._train_iterator = iter(trainer.train_dataloader)
-        for _ in range(trainer.state.micro_step):
-            try:
-                next(trainer._train_iterator)
-            except StopIteration as exc:
-                raise ValueError(
-                    "TPU checkpoint data position exceeds the available rank schedule."
-                ) from exc
     print({"stage": "train_start", "rank": rank,
            "parameters": sum(p.numel() for p in model.parameters()),
            "attention": attention_backend or getattr(model.config, "_attn_implementation", None),
@@ -466,8 +402,6 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
     finally:
         parallel_loader.close()
         reader.close()
-        if eval_reader is not None:
-            eval_reader.close()
     # Rank-local timing alone can overstate DP throughput. Use the slowest
     # replica's synchronized window and report supervised and scheduled tokens.
     elapsed = None
@@ -509,12 +443,6 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
         "launcher_cache": str(Path(args.cache_dir) / f"rank-{rank}"),
         "versions": {"torch": torch.__version__, "torch_xla": torch_xla.__version__},
         "performance_certified": False,
-        "resumed_from_checkpoint": args.resume_from_checkpoint,
-        "committed_checkpoints": sorted(
-            str(path)
-            for path in Path(args.output_dir).glob("checkpoint-*")
-            if (path / "manifest.json").is_file()
-        ),
     }
     if runtime.is_primary_process:
         output = Path(args.output_dir)

@@ -34,45 +34,12 @@ class _TPURunRequest:
     scheduler: str
     warmup_steps: int
     precision: str
-    save_every_steps: int | None = None
-    resume_from_checkpoint: Path | None = None
-    eval_manifest_dir: Path | None = None
-    eval_every_steps: int | None = None
     expected_world_size: int = 8
-
-    def __post_init__(self) -> None:
-        if self.save_every_steps is not None and (
-            isinstance(self.save_every_steps, bool)
-            or not isinstance(self.save_every_steps, int)
-            or self.save_every_steps < 1
-        ):
-            raise ValueError("save_every_steps must be positive when configured.")
-        if self.resume_from_checkpoint is not None:
-            checkpoint = Path(self.resume_from_checkpoint)
-            if not checkpoint.is_dir():
-                raise ValueError(
-                    f"TPU resume checkpoint directory does not exist: {checkpoint}"
-                )
-            object.__setattr__(self, "resume_from_checkpoint", checkpoint)
-        if (self.eval_manifest_dir is None) != (self.eval_every_steps is None):
-            raise ValueError(
-                "eval_manifest_dir and eval_every_steps must be configured together."
-            )
-        if self.eval_every_steps is not None and (
-            isinstance(self.eval_every_steps, bool)
-            or not isinstance(self.eval_every_steps, int)
-            or self.eval_every_steps < 1
-        ):
-            raise ValueError("eval_every_steps must be positive when configured.")
 
     def to_dict(self) -> dict[str, Any]:
         values = asdict(self)
         values["manifest_dir"] = str(self.manifest_dir)
         values["output_dir"] = str(self.output_dir)
-        if self.resume_from_checkpoint is not None:
-            values["resume_from_checkpoint"] = str(self.resume_from_checkpoint)
-        if self.eval_manifest_dir is not None:
-            values["eval_manifest_dir"] = str(self.eval_manifest_dir)
         return values
 
 
@@ -237,17 +204,6 @@ class _TPUCoordinator:
             command.extend(("--model-revision", model.revision))
         if model.trust_remote_code:
             command.append("--trust-remote-code")
-        if request.save_every_steps is not None:
-            command.extend(("--save-every-steps", str(request.save_every_steps)))
-        if request.resume_from_checkpoint is not None:
-            command.extend(
-                ("--resume-from-checkpoint", str(request.resume_from_checkpoint.resolve()))
-            )
-        if request.eval_manifest_dir is not None:
-            command.extend(
-                ("--eval-manifest-dir", str(request.eval_manifest_dir.resolve()))
-            )
-            command.extend(("--eval-every-steps", str(request.eval_every_steps)))
         return command
 
     @staticmethod
