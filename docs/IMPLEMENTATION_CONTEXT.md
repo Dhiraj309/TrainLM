@@ -252,6 +252,11 @@ this file in every turn:
     parallel block. Phi separately requires MHA, partial RoPE, separate QKV,
     LayerNorm/GELU, and parallel residual semantics. Complete correctness,
     HBM, graph, export, and target-TPU certification before enabling them.
+24. **M13-F4 RoPE gated families:** guarded mappings now distinguish Llama,
+    Mistral sliding-window attention, Qwen2 biased QKV, Gemma scaled embeddings
+    and GeGLU, and Gemma2 alternating windows plus attention soft-capping.
+    Add QK-normalized variants where supported and complete shared correctness,
+    graph, export, HBM, and target-TPU certification before advertising them.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

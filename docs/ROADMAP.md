@@ -1123,10 +1123,14 @@ early-update evidence gate are implemented; target-run alignment remains.
   HBM, graph, export, and target-TPU evidence remain required.
   **Acceptance:** Correctness, HBM, graph, and export pass.
 
-- [ ] **M13-F4 — Llama/Mistral/Qwen/Gemma mapping**
+- [~] **M13-F4 — Llama/Mistral/Qwen/Gemma mapping**
   `feat(adapters): certify RoPE gated dense model families`
   Share structure while preserving windows, activations, scaling, soft-cap,
   QK norm, and family differences.
+  Version-guarded mappings now keep plain Llama RoPE, Mistral sliding windows,
+  Qwen2 biased QKV, Gemma GeGLU/scaled embeddings, and Gemma2 alternating
+  windows/attention soft-capping explicit. Common certification and additional
+  QK-normalized family variants remain outstanding.
   **Acceptance:** Difference fixtures and common certification pass.
 
 - [ ] **M13-F5 — 135M cross-family matrix**
