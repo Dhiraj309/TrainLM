@@ -1,0 +1,91 @@
+from trainlm.optimization import (
+    ModelTransformation,
+    OperationRequest,
+    OptimizationPlanner,
+    ProviderSpec,
+)
+
+from .test_capabilities import capabilities
+
+
+def _providers():
+    transform = ModelTransformation(
+        transform_id="pack-qkv",
+        component="projections",
+        provider="xla-qkv",
+        target_paths=("model.layers.*.self_attn",),
+        inverse_transform_id="unpack-qkv",
+        reason="Provider consumes packed projections.",
+        parameter_layout_change=True,
+    )
+    return (
+        ProviderSpec(
+            "xla-qkv", "projections", "forward_backward",
+            ("pytorch-xla",), ("bf16",), ("separate_qkv",),
+            ("backward", "causal"), (transform,), priority=10,
+        ),
+        ProviderSpec(
+            "torch-reference", "projections", "forward_backward",
+            ("pytorch", "pytorch-xla"), ("fp32", "bf16"),
+            ("separate_qkv",), ("backward", "causal"), fallback=True,
+        ),
+    )
+
+
+def _request(requested_provider=None):
+    return OperationRequest(
+        "projections", "forward_backward", ("backward", "causal"),
+        requested_provider,
+    )
+
+
+def test_auto_plan_selects_highest_priority_eligible_provider_deterministically():
+    planner = OptimizationPlanner(reversed(_providers()))
+    first = planner.plan(
+        capabilities(), backend="pytorch-xla", precision="bf16",
+        policy="auto", requests=(_request(),),
+    )
+    second = planner.plan(
+        capabilities(), backend="pytorch-xla", precision="bf16",
+        policy="auto", requests=(_request(),),
+    )
+
+    assert first == second
+    assert first.status == "ready"
+    assert first.decisions[0].selected_provider == "xla-qkv"
+    assert first.transformations[0].inverse_transform_id == "unpack-qkv"
+
+
+def test_auto_plan_uses_explained_portable_fallback():
+    plan = OptimizationPlanner(_providers()).plan(
+        capabilities(), backend="pytorch", precision="fp32",
+        policy="auto", requests=(_request(),),
+    )
+
+    assert plan.decisions[0].status == "fallback"
+    assert plan.decisions[0].selected_provider == "torch-reference"
+    assert "fallback" in plan.warnings[0]
+
+
+def test_required_or_explicit_unsupported_provider_blocks_before_mutation():
+    planner = OptimizationPlanner(_providers())
+    plan = planner.plan(
+        capabilities(), backend="cuda", precision="fp16",
+        policy="required", requests=(_request("xla-qkv"),),
+    )
+
+    assert plan.status == "blocked"
+    assert not plan.is_executable
+    assert plan.transformations == ()
+    assert "backend 'cuda'" in plan.decisions[0].evidence[0]
+
+
+def test_disabled_policy_is_a_noop_even_when_providers_match():
+    plan = OptimizationPlanner(_providers()).plan(
+        capabilities(), backend="pytorch-xla", precision="bf16",
+        policy="disabled", requests=(_request(),),
+    )
+
+    assert plan.status == "noop"
+    assert plan.decisions[0].status == "skipped"
+    assert plan.transformations == ()
