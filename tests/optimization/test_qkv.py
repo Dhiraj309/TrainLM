@@ -177,3 +177,66 @@ def test_live_qkv_transform_rejects_mismatched_projection_geometry():
     with pytest.raises(Exception, match="key projection geometry"):
         registry.apply(model, _qkv_plan())
     assert isinstance(model.projections, _SeparateQKV)
+
+from trainlm.optimization import PartialQKVProjectionSpec
+
+
+def partial_spec(**values):
+    defaults = dict(
+        prefix="layers.0.self_attn",
+        query_heads=8,
+        key_value_heads=4,
+        head_dim=2,
+        input_size=6,
+        q_weight_key="q_proj.weight",
+        kv_weight_key="kv_proj.weight",
+        packed_weight_key="qkv_proj.weight",
+        dtype="float32",
+    )
+    return PartialQKVProjectionSpec(**{**defaults, **values})
+
+
+def test_partial_q_kv_layout_round_trip_preserves_source_keys():
+    canonical = {
+        "q_proj.weight": torch.arange(96, dtype=torch.float32).reshape(16, 6),
+        "kv_proj.weight": torch.arange(96, 192, dtype=torch.float32).reshape(16, 6),
+    }
+    converter = partial_spec().converter()
+
+    transformed = converter.to_transformed(canonical)
+    restored = converter.to_canonical(transformed)
+
+    assert transformed["qkv_proj.weight"].shape == (32, 6)
+    assert set(restored) == set(canonical)
+    assert all(torch.equal(restored[key], value) for key, value in canonical.items())
+
+
+def test_partial_q_kv_bias_layout_round_trip():
+    layout = partial_spec(
+        q_bias_key="q_proj.bias",
+        kv_bias_key="kv_proj.bias",
+        packed_bias_key="qkv_proj.bias",
+    )
+    canonical = {
+        "q_proj.weight": torch.zeros(16, 6),
+        "kv_proj.weight": torch.zeros(16, 6),
+        "q_proj.bias": torch.arange(16, dtype=torch.float32),
+        "kv_proj.bias": torch.arange(16, 32, dtype=torch.float32),
+    }
+
+    transformed = layout.converter().to_transformed(canonical)
+    restored = layout.converter().to_canonical(transformed)
+
+    assert transformed["qkv_proj.bias"].shape == (32,)
+    assert all(torch.equal(restored[key], value) for key, value in canonical.items())
+
+
+def test_partial_q_kv_layout_rejects_incomplete_bias_group():
+    with pytest.raises(ValueError, match="bias keys must be configured together"):
+        partial_spec(q_bias_key="q_proj.bias")
+
+
+def test_partial_q_kv_manifest_reconstructs_identical_converter():
+    converter = partial_spec().converter()
+    restored = type(converter).from_manifest(converter.manifest())
+    assert restored.mappings == converter.mappings

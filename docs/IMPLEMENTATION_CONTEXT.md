@@ -332,6 +332,12 @@ this file in every turn:
     than a family-name guess, GELU remains untransformed, and transactional
     rollback restores the original wrapper. Partial layouts and target-XLA
     update evidence remain outstanding.
+40. **M11-F1 partial QKV layouts:** canonical sources with separate query and
+    combined key/value parameters now have an explicit reversible state-dict
+    descriptor. It preserves the source key boundary, compact KV geometry,
+    optional paired biases, and canonical export instead of pretending the
+    model exposes three separate projections. Packed-source no-op handling and
+    target-XLA update evidence remain outstanding.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

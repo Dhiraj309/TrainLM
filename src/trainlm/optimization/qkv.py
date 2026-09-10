@@ -118,6 +118,95 @@ class QKVProjectionSpec:
         return StateDictLayoutConverter(tuple(mappings))
 
 
+@dataclass(frozen=True, slots=True)
+class PartialQKVProjectionSpec:
+    """Reversible mapping for a separate query plus combined key/value source."""
+
+    prefix: str
+    query_heads: int
+    key_value_heads: int
+    head_dim: int
+    input_size: int
+    q_weight_key: str
+    kv_weight_key: str
+    packed_weight_key: str
+    q_bias_key: str | None = None
+    kv_bias_key: str | None = None
+    packed_bias_key: str | None = None
+    dtype: str | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.prefix, str) or not self.prefix:
+            raise ValueError("prefix cannot be empty.")
+        for name in ("query_heads", "key_value_heads", "head_dim", "input_size"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                raise ValueError(f"{name} must be a positive integer.")
+        if self.query_heads % self.key_value_heads:
+            raise ValueError("query_heads must be divisible by key_value_heads.")
+        weight_keys = (self.q_weight_key, self.kv_weight_key, self.packed_weight_key)
+        self._validate_keys("weight", weight_keys, required=True)
+        self._validate_keys(
+            "bias",
+            (self.q_bias_key, self.kv_bias_key, self.packed_bias_key),
+            required=False,
+        )
+        if self.dtype is not None and (
+            not isinstance(self.dtype, str) or not self.dtype
+        ):
+            raise ValueError("dtype cannot be empty.")
+
+    @staticmethod
+    def _validate_keys(
+        label: str, keys: tuple[str | None, ...], *, required: bool
+    ) -> None:
+        configured = tuple(key is not None for key in keys)
+        if (required and not all(configured)) or (any(configured) and not all(configured)):
+            raise ValueError(f"Partial QKV {label} keys must be configured together.")
+        if all(configured) and (
+            any(not isinstance(key, str) or not key for key in keys)
+            or len(set(keys)) != len(keys)
+        ):
+            raise ValueError(f"Partial QKV {label} keys must be non-empty and unique.")
+
+    @property
+    def q_size(self) -> int:
+        return self.query_heads * self.head_dim
+
+    @property
+    def kv_size(self) -> int:
+        return self.key_value_heads * self.head_dim
+
+    def converter(self) -> StateDictLayoutConverter:
+        """Pack query and combined-KV source tensors without inventing K/V keys."""
+
+        mappings = [
+            ParameterLayoutMapping(
+                mapping_id=f"{self.prefix}.q_kv.weight",
+                canonical_keys=(self.q_weight_key, self.kv_weight_key),
+                transformed_key=self.packed_weight_key,
+                canonical_shapes=(
+                    (self.q_size, self.input_size),
+                    (2 * self.kv_size, self.input_size),
+                ),
+                axis=0,
+                dtype=self.dtype,
+            )
+        ]
+        if self.packed_bias_key is not None:
+            mappings.append(
+                ParameterLayoutMapping(
+                    mapping_id=f"{self.prefix}.q_kv.bias",
+                    canonical_keys=(self.q_bias_key, self.kv_bias_key),
+                    transformed_key=self.packed_bias_key,
+                    canonical_shapes=((self.q_size,), (2 * self.kv_size,)),
+                    axis=0,
+                    dtype=self.dtype,
+                )
+            )
+        return StateDictLayoutConverter(tuple(mappings))
+
+
 class PackedQKVProjection(nn.Module):
     """One linear projection that returns compact query, key, and value views."""
 
@@ -237,4 +326,9 @@ def _replace_module(model: nn.Module, path: str, replacement: nn.Module) -> None
     setattr(parent, name, replacement)
 
 
-__all__ = ["PackedQKVProjection", "QKVProjectionSpec", "qkv_pack_transform_handler"]
+__all__ = [
+    "PackedQKVProjection",
+    "PartialQKVProjectionSpec",
+    "QKVProjectionSpec",
+    "qkv_pack_transform_handler",
+]
