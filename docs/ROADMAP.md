@@ -1042,7 +1042,9 @@ layouts and target update evidence remain.
   A final evidence gate now requires the 912.6K throughput and 47.8% MFU hard
   thresholds, stable compilation, zero fallback, no unresolved transpose/layout
   copies, no unplanned host sync, no full logits, and bounded input/collective
-  idle. The story remains open until target-v5e evidence satisfies every gate.
+  idle. A strict artifact loader now binds the benchmark JSON and graph counters
+  to the exact normalized HLO capture by SHA-256 before evaluation. The story
+  remains open until target-v5e evidence satisfies every gate.
 
 ### Exit gate
 

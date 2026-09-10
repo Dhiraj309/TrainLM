@@ -1,7 +1,13 @@
+import hashlib
+import json
+
+import pytest
+
 from trainlm.benchmark import (
     BenchmarkResult,
     ParityClosureEvidence,
     evaluate_parity_closure,
+    load_parity_closure_evidence,
 )
 
 
@@ -92,3 +98,130 @@ def test_wrong_accelerator_is_rejected():
         evidence(result=result(accelerator_type="v4-8"))
     )
     assert "parity closure requires v5e-8" in evaluation.reasons
+
+
+def test_artifact_loader_binds_graph_evidence_to_hlo(tmp_path):
+    benchmark_path = tmp_path / "benchmark.json"
+    graph_path = tmp_path / "graph.json"
+    hlo_path = tmp_path / "model.hlo"
+    hlo_path.write_text("HloModule closure\n", encoding="utf-8")
+    fingerprint = "sha256:" + hashlib.sha256(b"HloModule closure\n").hexdigest()
+    benchmark_path.write_text(result().to_json(), encoding="utf-8")
+    graph_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "hlo_fingerprint": fingerprint,
+                "transpose_count": 0,
+                "layout_copy_count": 0,
+                "host_sync_count": 0,
+                "full_logits_materialized": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    loaded = load_parity_closure_evidence(
+        benchmark_result_path=benchmark_path,
+        graph_evidence_path=graph_path,
+        hlo_path=hlo_path,
+    )
+
+    assert loaded.result == result()
+    assert loaded.hlo_fingerprint == fingerprint
+    assert evaluate_parity_closure(loaded).passed
+
+
+def test_artifact_loader_rejects_hlo_fingerprint_mismatch(tmp_path):
+    benchmark_path = tmp_path / "benchmark.json"
+    graph_path = tmp_path / "graph.json"
+    hlo_path = tmp_path / "model.hlo"
+    benchmark_path.write_text(result().to_json(), encoding="utf-8")
+    hlo_path.write_text("HloModule actual\n", encoding="utf-8")
+    graph_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "hlo_fingerprint": "sha256:not-the-capture",
+                "transpose_count": 0,
+                "layout_copy_count": 0,
+                "host_sync_count": 0,
+                "full_logits_materialized": False,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="does not match"):
+        load_parity_closure_evidence(
+            benchmark_result_path=benchmark_path,
+            graph_evidence_path=graph_path,
+            hlo_path=hlo_path,
+        )
+
+
+def test_artifact_loader_rejects_unversioned_graph_fields(tmp_path):
+    benchmark_path = tmp_path / "benchmark.json"
+    graph_path = tmp_path / "graph.json"
+    hlo_path = tmp_path / "model.hlo"
+    hlo_path.write_text("HloModule closure\n", encoding="utf-8")
+    fingerprint = "sha256:" + hashlib.sha256(b"HloModule closure\n").hexdigest()
+    benchmark_path.write_text(result().to_json(), encoding="utf-8")
+    graph_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "hlo_fingerprint": fingerprint,
+                "transpose_count": 0,
+                "layout_copy_count": 0,
+                "host_sync_count": 0,
+                "full_logits_materialized": False,
+                "unversioned_counter": 1,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="versioned closure schema"):
+        load_parity_closure_evidence(
+            benchmark_result_path=benchmark_path,
+            graph_evidence_path=graph_path,
+            hlo_path=hlo_path,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("transpose_count", True, "non-negative integer"),
+        ("layout_copy_count", -1, "non-negative integer"),
+        ("host_sync_count", 1.5, "non-negative integer"),
+        ("full_logits_materialized", 0, "must be boolean"),
+    ],
+)
+def test_artifact_loader_rejects_invalid_graph_evidence(
+    tmp_path, field, value, message
+):
+    benchmark_path = tmp_path / "benchmark.json"
+    graph_path = tmp_path / "graph.json"
+    hlo_path = tmp_path / "model.hlo"
+    hlo_path.write_text("HloModule closure\n", encoding="utf-8")
+    fingerprint = "sha256:" + hashlib.sha256(b"HloModule closure\n").hexdigest()
+    benchmark_path.write_text(result().to_json(), encoding="utf-8")
+    graph = {
+        "schema_version": 1,
+        "hlo_fingerprint": fingerprint,
+        "transpose_count": 0,
+        "layout_copy_count": 0,
+        "host_sync_count": 0,
+        "full_logits_materialized": False,
+    }
+    graph[field] = value
+    graph_path.write_text(json.dumps(graph), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=message):
+        load_parity_closure_evidence(
+            benchmark_result_path=benchmark_path,
+            graph_evidence_path=graph_path,
+            hlo_path=hlo_path,
+        )
