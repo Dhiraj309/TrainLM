@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 import math
+from pathlib import Path
 from typing import Any, Mapping
 
 REQUIRED_NUMERICAL_PATHS = (
@@ -122,6 +124,57 @@ def compare_numerical_alignment(
     )
 
 
+def load_numerical_alignment_report(
+    *,
+    reference_path: str | Path,
+    candidate_path: str | Path,
+    update_evidence_path: str | Path,
+) -> NumericalAlignmentReport:
+    """Load versioned semantic/update artifacts and evaluate them together."""
+
+    reference = _load_json_object("reference_path", reference_path)
+    candidate = _load_json_object("candidate_path", candidate_path)
+    evidence = _load_json_object("update_evidence_path", update_evidence_path)
+    expected_keys = {
+        "schema_version",
+        "deterministic_update_max_abs_errors",
+        "update_tolerance",
+        "justifications",
+    }
+    if set(evidence) != expected_keys:
+        raise ValueError("Update evidence keys must match the versioned schema.")
+    if evidence.get("schema_version") != 1:
+        raise ValueError("Update evidence supports schema_version=1 only.")
+    errors = evidence["deterministic_update_max_abs_errors"]
+    if isinstance(errors, (str, bytes)) or not isinstance(errors, (list, tuple)):
+        raise ValueError("Deterministic update errors must be a list or tuple.")
+    justifications = evidence["justifications"]
+    if not isinstance(justifications, Mapping):
+        raise ValueError("Update evidence justifications must be an object.")
+    return compare_numerical_alignment(
+        reference,
+        candidate,
+        justifications=justifications,
+        deterministic_update_max_abs_errors=tuple(errors),
+        update_tolerance=evidence["update_tolerance"],
+    )
+
+
+def _load_json_object(name: str, value: str | Path) -> Mapping[str, Any]:
+    if not isinstance(value, (str, Path)):
+        raise TypeError(f"{name} must be a path.")
+    path = Path(value)
+    if not path.is_file():
+        raise ValueError(f"{name} must reference an existing file.")
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Invalid JSON artifact for {name}: {exc}") from exc
+    if not isinstance(loaded, Mapping):
+        raise ValueError(f"{name} must contain a JSON object.")
+    return loaded
+
+
 def _lookup(value: Mapping[str, Any], path: str) -> Any:
     current: Any = value
     for part in path.split("."):
@@ -144,4 +197,5 @@ __all__ = [
     "NumericalDifference",
     "REQUIRED_NUMERICAL_PATHS",
     "compare_numerical_alignment",
+    "load_numerical_alignment_report",
 ]

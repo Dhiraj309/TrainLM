@@ -27,6 +27,7 @@ from trainlm.benchmark.numerical_alignment import (
     NumericalDifference,
     REQUIRED_NUMERICAL_PATHS,
     compare_numerical_alignment,
+    load_numerical_alignment_report,
 )
 from trainlm.benchmark.repeated_parity import (
     RepeatedParityEvaluation,
@@ -88,6 +89,7 @@ __all__ = [
     "evaluate_parity_closure",
     "load_parity_closure_evidence",
     "compare_numerical_alignment",
+    "load_numerical_alignment_report",
     "evaluate_repeated_parity",
     "evaluate_real_shard_stability",
     "evaluate_plain_hf_export",
