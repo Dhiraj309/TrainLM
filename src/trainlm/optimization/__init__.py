@@ -66,7 +66,7 @@ from .attention_tuning import (
     AttentionTuningKey,
     AttentionTuningResult,
 )
-from .qkv import QKVProjectionSpec
+from .qkv import PackedQKVProjection, QKVProjectionSpec, qkv_pack_transform_handler
 from .mlp import GatedMLPProjectionSpec, MLPActivation
 from .hlo_audit import (
     FusionComponent,
@@ -187,6 +187,7 @@ __all__ = [
     "PlanStatus",
     "ProviderDecision",
     "ProviderSpec",
+    "PackedQKVProjection",
     "QKVProjectionSpec",
     "QWEN2_MAPPING",
     "RematerializationMeasurement",
@@ -215,6 +216,7 @@ __all__ = [
     "install_hf_attention_provider",
     "pallas_mha_provider",
     "pallas_grouped_attention_provider",
+    "qkv_pack_transform_handler",
     "register_learned_position_dense_adapters",
     "register_nonstandard_dense_adapters",
     "register_rope_alibi_dense_adapters",

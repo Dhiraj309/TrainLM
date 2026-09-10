@@ -3,8 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
+import torch
+from torch import Tensor, nn
+from torch.nn import functional as F
+
+from .plan import ModelTransformation
 from .state_dict import ParameterLayoutMapping, StateDictLayoutConverter
+from .transforms import TransformHandler
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,4 +118,123 @@ class QKVProjectionSpec:
         return StateDictLayoutConverter(tuple(mappings))
 
 
-__all__ = ["QKVProjectionSpec"]
+class PackedQKVProjection(nn.Module):
+    """One linear projection that returns compact query, key, and value views."""
+
+    def __init__(self, spec: QKVProjectionSpec, weight: Tensor, bias: Tensor | None) -> None:
+        super().__init__()
+        expected_weight = (spec.q_size + 2 * spec.kv_size, spec.input_size)
+        if tuple(weight.shape) != expected_weight:
+            raise ValueError(
+                f"Packed QKV weight shape must be {expected_weight}, got {tuple(weight.shape)}."
+            )
+        expected_bias = (expected_weight[0],)
+        if bias is not None and tuple(bias.shape) != expected_bias:
+            raise ValueError(
+                f"Packed QKV bias shape must be {expected_bias}, got {tuple(bias.shape)}."
+            )
+        self.spec = spec
+        self.weight = nn.Parameter(weight)
+        self.bias = nn.Parameter(bias) if bias is not None else None
+
+    @classmethod
+    def from_separate(
+        cls,
+        spec: QKVProjectionSpec,
+        q_projection: nn.Linear,
+        k_projection: nn.Linear,
+        v_projection: nn.Linear,
+    ) -> "PackedQKVProjection":
+        """Pack three validated linear projections before optimizer construction."""
+
+        projections = (q_projection, k_projection, v_projection)
+        if any(not isinstance(projection, nn.Linear) for projection in projections):
+            raise TypeError("QKV packing requires three torch.nn.Linear projections.")
+        expected_outputs = (spec.q_size, spec.kv_size, spec.kv_size)
+        for name, projection, output_size in zip(
+            ("query", "key", "value"), projections, expected_outputs
+        ):
+            if projection.in_features != spec.input_size or projection.out_features != output_size:
+                raise ValueError(
+                    f"{name} projection geometry does not match the QKV specification."
+                )
+        bias_presence = tuple(projection.bias is not None for projection in projections)
+        if len(set(bias_presence)) != 1:
+            raise ValueError("QKV projections must either all have bias or all be bias-free.")
+        if (spec.packed_bias_key is not None) != bias_presence[0]:
+            raise ValueError("QKV projection bias layout does not match the specification.")
+        weights = tuple(projection.weight.detach().clone() for projection in projections)
+        if len({(weight.dtype, weight.device) for weight in weights}) != 1:
+            raise ValueError("QKV projection weights must share dtype and device.")
+        bias = None
+        if bias_presence[0]:
+            biases = tuple(projection.bias.detach().clone() for projection in projections)
+            if len({(value.dtype, value.device) for value in biases}) != 1:
+                raise ValueError("QKV projection biases must share dtype and device.")
+            bias = torch.cat(biases, dim=0)
+        return cls(spec, torch.cat(weights, dim=0), bias)
+
+    def forward(self, hidden_states: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+        packed = F.linear(hidden_states, self.weight, self.bias)
+        return packed.split((self.spec.q_size, self.spec.kv_size, self.spec.kv_size), dim=-1)
+
+
+def qkv_pack_transform_handler(
+    spec: QKVProjectionSpec,
+    *,
+    transform_id: str = "pack-qkv",
+    inverse_transform_id: str = "unpack-qkv",
+) -> TransformHandler:
+    """Create an explicit reversible handler for a QKV projection wrapper path.
+
+    The selected target must expose ``q_proj``, ``k_proj``, and ``v_proj`` linear
+    modules and represent a call site whose output is the corresponding tuple.
+    Family adapters remain responsible for proving that interface.
+    """
+
+    def capture(model: nn.Module, transformation: ModelTransformation) -> Any:
+        target = _resolve_module(model, transformation.target_paths[0])
+        return target
+
+    def apply(model: nn.Module, transformation: ModelTransformation) -> None:
+        if len(transformation.target_paths) != 1:
+            raise ValueError("QKV packing requires exactly one explicit wrapper path.")
+        target = _resolve_module(model, transformation.target_paths[0])
+        packed = PackedQKVProjection.from_separate(
+            spec, target.q_proj, target.k_proj, target.v_proj
+        )
+        _replace_module(model, transformation.target_paths[0], packed)
+
+    def rollback(
+        model: nn.Module, transformation: ModelTransformation, snapshot: nn.Module
+    ) -> None:
+        _replace_module(model, transformation.target_paths[0], snapshot)
+
+    return TransformHandler(transform_id, inverse_transform_id, capture, apply, rollback)
+
+
+def _resolve_module(model: nn.Module, path: str) -> nn.Module:
+    target: Any = model
+    for component in path.split("."):
+        if not component or not hasattr(target, component):
+            raise ValueError(f"Model has no module at path {path!r}.")
+        target = getattr(target, component)
+    if not isinstance(target, nn.Module):
+        raise TypeError(f"Target path {path!r} does not resolve to a module.")
+    return target
+
+
+def _replace_module(model: nn.Module, path: str, replacement: nn.Module) -> None:
+    components = path.split(".")
+    parent: Any = model
+    for component in components[:-1]:
+        if not component or not hasattr(parent, component):
+            raise ValueError(f"Model has no module at path {path!r}.")
+        parent = getattr(parent, component)
+    name = components[-1]
+    if not name or not hasattr(parent, name):
+        raise ValueError(f"Model has no module at path {path!r}.")
+    setattr(parent, name, replacement)
+
+
+__all__ = ["PackedQKVProjection", "QKVProjectionSpec", "qkv_pack_transform_handler"]

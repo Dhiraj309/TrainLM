@@ -320,6 +320,12 @@ this file in every turn:
     now require lowercase 40-character commit revisions before the coordinator
     stages data or launches workers. Existing local model directories remain a
     supported offline snapshot path. Target tutorial smoke remains outstanding.
+38. **M11-F1 live QKV transform:** an explicit adapter-selected wrapper path can
+    now be replaced before optimizer construction by one packed linear QKV
+    projection. The transform validates MHA/GQA/MQA geometry, bias layout,
+    dtype/device agreement, returns compact query/key/value views, and restores
+    the original wrapper on rollback. Partial source layouts and target-XLA
+    update evidence remain outstanding.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

@@ -953,8 +953,8 @@ optimizations, autotuning, and benchmark evidence remain.
 ## M11 — Projection, optimizer, rematerialization, and HLO tuning
 
 **Status:** [~] In progress — reversible separate Q/K/V weight and optional bias
-packing is implemented; partial source layouts, runtime module transforms, and
-numerical/gradient/update evidence remain.
+packing plus an explicit live wrapper transform are implemented; partial source
+layouts and target update evidence remain.
 
 **Goal:** Close the parity gap one measured bottleneck at a time.
 
@@ -965,7 +965,10 @@ numerical/gradient/update evidence remain.
   A family-neutral geometry descriptor now builds versioned reversible mappings
   for separate MHA/GQA/MQA Q/K/V weights and optional biases. Optimized resume
   packs along output features and canonical export restores the original keys.
-  Partial layouts, live module transforms, and numerical/update parity remain.
+  An explicit pre-optimizer transform now replaces an adapter-selected wrapper
+  exposing separate linear projections with one packed linear call, preserves
+  compact GQA/MQA splits, validates geometry/bias/device/dtype, and rolls back
+  transactionally. Partial layouts and target update parity remain.
 
 - [~] **M11-F2 — Reversible gated-MLP packing**
   `feat(optimization): pack compatible gate and up projections`
