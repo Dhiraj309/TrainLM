@@ -340,6 +340,12 @@ this file in every turn:
     explicit validated no-transform descriptor with derived compact output
     geometry, completing separate/partial/packed layout representation. Target-
     XLA output, gradient, and update evidence remains outstanding.
+41. **M11-F3 HLO text capture:** fusion observations can now be constructed
+    reproducibly from normalized textual HLO with a SHA-256 fingerprint and
+    exact copy, transpose, and custom-call opcode counts. Component-specific
+    materializations require explicit regex patterns, and native fusion remains
+    caller-supplied evidence because opcode text cannot prove semantics. Real
+    target-XLA captures and matched provider benchmarks remain outstanding.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
