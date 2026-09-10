@@ -236,6 +236,12 @@ this file in every turn:
     reproduction commands, configuration/metric/profile/HLO artifacts,
     limitations, and all four M12 gate outcomes in stable JSON and Markdown.
     Populate it only with real target evidence before declaring certification.
+21. **M13-F1 GPT-2/OPT mapping:** an explicit, version-guarded catalog now
+    distinguishes GPT-2 fused QKV and learned absolute positions from OPT
+    separate QKV and offset learned positions while mapping both to shared
+    attention, QKV-layout, GELU-MLP, and linear causal-loss operations. Run
+    output/gradient/update, graph, export, and target-TPU certification before
+    advertising either family as optimized.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

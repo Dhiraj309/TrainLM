@@ -164,7 +164,7 @@ Branch names describe repository work, not the tool or contributor:
 | [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 16 | Implementation merge-ready; DP8 launcher/data/attention/optimizer fixes landed; v5e-8 baseline is 319,302 tok/s after sparse-loss fix, performance work pending |
 | [~] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11+ | HF-like public trainer facade, reversible planner, and optimized loss |
 | [~] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | Canonical attention contract started; 850K and hard LaughLM parity pending |
-| [ ] | PR6 | `milestone/m13-m14-family-release` | M13-M14 | 12 | Cross-family certification and V1 release |
+| [~] | PR6 | `milestone/m13-m14-family-release` | M13-M14 | 12 | Cross-family certification and V1 release |
 
 Future tracks: `milestone/m15-torchtpu`, `milestone/m16-moe`, and
 `milestone/m17-dllm`, five commits each. Before activating a later PR branch,
@@ -323,7 +323,7 @@ TPU runtime foundation`; branch `milestone/m5-m7-xla-compatibility`.
 | [~] | M10 | TPU attention and 850K gate |
 | [~] | M11 | Projection, optimizer, remat, and HLO tuning |
 | [~] | M12 | Exact 135M parity certification |
-| [ ] | M13 | Cross-family certification and 1.3B scaling |
+| [~] | M13 | Cross-family certification and 1.3B scaling |
 | [ ] | M14 | Dense-AR V1 release |
 | [d] | M15 | TorchTPU migration |
 | [d] | M16 | MoE extension |
@@ -1089,13 +1089,19 @@ early-update evidence gate are implemented; target-run alignment remains.
 
 ## M13 — Cross-family certification and larger-model scaling
 
-**Status:** [ ] Not started
+**Status:** [~] In progress — learned-position family mappings are declarative; target certification remains
 
 **Goal:** Prove TrainLM is a framework, not one optimized Llama geometry.
 
-- [ ] **M13-F1 — GPT-2/OPT mapping**
+- [~] **M13-F1 — GPT-2/OPT mapping**
   `feat(adapters): optimize learned-position dense causal models`
   Reuse QKV, GELU/LayerNorm, loss, and attention capabilities.
+  Explicit GPT-2 and OPT adapters now require exact model/config classes,
+  inspected MHA, learned-position, LayerNorm, GELU, residual, projection, and
+  LM-head semantics, plus the tested Transformers version. The catalog maps
+  both families to shared attention, QKV-layout, GELU-MLP, and chunked-loss
+  operations without importing Transformers or mutating models. Output,
+  gradient, update, graph, export, and target-TPU evidence remain required.
   **Acceptance:** Both pass output/gradient/update, graph, and export.
 
 - [ ] **M13-F2 — GPT-NeoX/BLOOM mapping**

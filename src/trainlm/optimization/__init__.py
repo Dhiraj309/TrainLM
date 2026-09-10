@@ -96,6 +96,13 @@ from .batch_tuning import (
     BatchPrefetchSelection,
     select_batch_prefetch_geometry,
 )
+from .dense_family_adapters import (
+    DenseCausalFamilyMapping,
+    GPT2_MAPPING,
+    LEARNED_POSITION_DENSE_MAPPINGS,
+    OPT_MAPPING,
+    register_learned_position_dense_adapters,
+)
 
 __all__ = [
     "CapabilityFact",
@@ -117,6 +124,7 @@ __all__ = [
     "AdamWStateDtype",
     "ComponentCapability",
     "DecisionStatus",
+    "DenseCausalFamilyMapping",
     "ExecutionPlan",
     "FusionComponent",
     "FusionDecision",
@@ -127,7 +135,9 @@ __all__ = [
     "HLOFusionObservation",
     "GatedMLPProjectionSpec",
     "GradientReduction",
+    "GPT2_MAPPING",
     "LINEAR_CAUSAL_LOSS_REQUIREMENTS",
+    "LEARNED_POSITION_DENSE_MAPPINGS",
     "KVHeadMapping",
     "ModelCapabilities",
     "MaskLayout",
@@ -140,6 +150,7 @@ __all__ = [
     "OutputLayout",
     "OptimizationExplanation",
     "OperationRequest",
+    "OPT_MAPPING",
     "OptimizerFactory",
     "OptimizerStatePolicy",
     "PlanStatus",
@@ -169,6 +180,7 @@ __all__ = [
     "install_hf_attention_provider",
     "pallas_mha_provider",
     "pallas_grouped_attention_provider",
+    "register_learned_position_dense_adapters",
     "select_rematerialization_policy",
     "select_batch_prefetch_geometry",
     "causal_loss_provider_specs",
