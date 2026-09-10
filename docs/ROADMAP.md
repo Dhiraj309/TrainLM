@@ -1191,10 +1191,13 @@ early-update evidence gate are implemented; target-run alignment remains.
   canonical export remains unavailable. Target clean-environment smoke remains.
   **Acceptance:** Secret scan and clean-environment smoke pass.
 
-- [ ] **M14-F3 — CI/hardware tiers**
+- [~] **M14-F3 — CI/hardware tiers**
   `ci(test): add dense AR release certification tiers`
   Tier 0 CPU, Tier 1 CUDA, Tier 2 scheduled v5e correctness, Tier 3 release
   performance/stability.
+  A commit-specific freshness gate now requires unique passing Tier 0-3
+  artifacts, including mandatory current Tier 3
+  evidence. CUDA/v5e runners, schedules, and real evidence remain outstanding.
   **Acceptance:** Release requires current Tier 3 evidence.
 
 - [ ] **M14-F4 — Preemption recovery**

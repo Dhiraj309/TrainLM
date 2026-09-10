@@ -282,6 +282,10 @@ this file in every turn:
     train/eval manifests, `explain()`, committed-checkpoint resume, private
     artifacts, and the honest current TPU export limitation. Run the guide in a
     clean target environment and implement canonical TPU export before closure.
+30. **M14-F3 CI/hardware tiers:** a release gate now requires current passing
+    CPU, CUDA, scheduled v5e correctness, and v5e performance/stability evidence
+    for the exact release commit, with Tier 3 mandatory. Provision explicit
+    hardware workflows and populate real Tier 1-3 artifacts next.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
