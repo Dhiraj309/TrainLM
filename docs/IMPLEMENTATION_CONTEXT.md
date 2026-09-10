@@ -365,6 +365,11 @@ this file in every turn:
     arguments. The TPU worker builds the current production candidate through
     that contract so future measured selections have one application boundary.
     Real-data target-TPU geometry measurements remain outstanding.
+45. **M11-F7 closure artifacts:** the final parity gate can now load a versioned
+    benchmark result, graph diagnostics, and textual HLO from separate files,
+    verify strict counter types, normalize and hash the HLO, and reject evidence
+    whose declared fingerprint does not match the captured graph. Genuine v5e
+    evidence satisfying every performance and graph gate remains outstanding.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

@@ -20,6 +20,7 @@ from trainlm.benchmark.parity_closure import (
     ParityClosureEvaluation,
     ParityClosureEvidence,
     evaluate_parity_closure,
+    load_parity_closure_evidence,
 )
 from trainlm.benchmark.numerical_alignment import (
     NumericalAlignmentReport,
@@ -85,6 +86,7 @@ __all__ = [
     "evaluate_cross_family_matrix",
     "evaluate_fsdp_scaling",
     "evaluate_parity_closure",
+    "load_parity_closure_evidence",
     "compare_numerical_alignment",
     "evaluate_repeated_parity",
     "evaluate_real_shard_stability",
