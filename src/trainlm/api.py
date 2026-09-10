@@ -10,7 +10,11 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
+import re
 from typing import TYPE_CHECKING, Any, Literal
+import warnings
+
+import yaml
 
 import torch
 from torch import nn
@@ -48,6 +52,40 @@ from trainlm.training import (
 
 if TYPE_CHECKING:
     from trainlm.model import LoadedCausalLM
+
+
+PUBLIC_API_VERSION = "1"
+DEPRECATED_CONFIG_KEYS = {"args": "training_args"}
+_COMMIT_SHA = re.compile(r"[0-9a-f]{40}")
+
+
+def _load_public_config(source: Mapping[str, Any] | str | Path) -> dict[str, Any]:
+    if isinstance(source, Mapping):
+        data = dict(source)
+    else:
+        path = Path(source)
+        if not path.is_file():
+            raise FileNotFoundError(f"Trainer configuration does not exist: {path}")
+        with path.open("r", encoding="utf-8") as handle:
+            data = yaml.safe_load(handle)
+        if not isinstance(data, dict):
+            raise ValueError("Trainer configuration root must be a mapping.")
+    unknown = set(data) - {"api_version", "model", "training_args", "args"}
+    if unknown:
+        raise ValueError(f"Unknown trainer configuration keys: {sorted(unknown)!r}")
+    version = str(data.get("api_version", PUBLIC_API_VERSION))
+    if version != PUBLIC_API_VERSION:
+        raise ValueError(f"Unsupported public API version: {version!r}.")
+    if "args" in data:
+        if "training_args" in data:
+            raise ValueError("Set only 'training_args'; deprecated 'args' is also present.")
+        warnings.warn(
+            "Configuration key 'args' is deprecated; use 'training_args'.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        data["training_args"] = data.pop("args")
+    return data
 
 
 @dataclass(frozen=True, slots=True)
@@ -148,6 +186,62 @@ def _default_collator(features: Sequence[Any]) -> dict[str, torch.Tensor]:
 class TrainLMTrainer:
     """HF-like facade over TrainLM's backend-neutral trainer engine."""
 
+    @classmethod
+    def from_pretrained(
+        cls,
+        model_name_or_path: str | Path,
+        *,
+        revision: str | None = None,
+        **kwargs: Any,
+    ) -> "TrainLMTrainer":
+        """Construct the trainer with an explicit HF pretrained model source."""
+
+        source = ModelSourceConfig(
+            provider="huggingface",
+            initialization="pretrained",
+            name_or_path=str(model_name_or_path),
+            revision=revision,
+        )
+        return cls(model=source, **kwargs)
+
+    @classmethod
+    def from_config(
+        cls,
+        config: Mapping[str, Any] | str | Path,
+        *,
+        train_dataset: Dataset | DataLoader | Any,
+        eval_dataset: Dataset | DataLoader | Any | None = None,
+        **kwargs: Any,
+    ) -> "TrainLMTrainer":
+        """Construct from a versioned mapping or YAML file plus dataset objects."""
+
+        data = _load_public_config(config)
+        if "model" not in data:
+            raise ValueError("Trainer configuration requires 'model'.")
+        model_data = data["model"]
+        if isinstance(model_data, (str, Path)):
+            model: str | Path | ModelSourceConfig = ModelSourceConfig(
+                provider="huggingface",
+                initialization="pretrained",
+                name_or_path=str(model_data),
+            )
+        elif isinstance(model_data, Mapping):
+            values = dict(model_data)
+            values.setdefault("provider", "huggingface")
+            model = ModelSourceConfig(**values)
+        else:
+            raise TypeError("'model' must be a model ID/path or mapping.")
+        argument_data = data.get("training_args", {})
+        if not isinstance(argument_data, Mapping):
+            raise TypeError("'training_args' must be a mapping.")
+        return cls(
+            model=model,
+            args=TrainLMTrainingArguments(**dict(argument_data)),
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            **kwargs,
+        )
+
     def __init__(
         self,
         *,
@@ -197,10 +291,6 @@ class TrainLMTrainer:
                 )
             if self.args.fp16:
                 raise ValueError("TPU execution supports fp32 or bf16, not fp16.")
-            if self.args.save_steps is not None or self.args.eval_steps is not None:
-                raise NotImplementedError(
-                    "TPU save_steps and eval_steps will be added with lifecycle parity."
-                )
             from trainlm._tpu_coordinator import _TPUCoordinator
 
             self._tpu_coordinator = _TPUCoordinator()
@@ -398,12 +488,10 @@ class TrainLMTrainer:
         """Run training and return the TrainLM trainer state."""
 
         if self._tpu_coordinator is not None:
-            if resume_from_checkpoint is not None:
-                raise NotImplementedError(
-                    "TPU checkpoint resume will be added after worker checkpoint wiring."
-                )
             return self._consume_tpu_result(
-                self._tpu_coordinator.run(self._make_tpu_request())
+                self._tpu_coordinator.run(
+                    self._make_tpu_request(resume_from_checkpoint=resume_from_checkpoint)
+                )
             )
         if self.engine is None:
             raise RuntimeError("Trainer engine was not initialized.")
@@ -495,10 +583,29 @@ class TrainLMTrainer:
             torch.cuda.set_rng_state_all(payload["cuda_rng_state"])
         return path
 
-    def _make_tpu_request(self):
+    def _make_tpu_request(
+        self, *, resume_from_checkpoint: str | Path | None = None
+    ):
         from trainlm._tpu_coordinator import _TPURunRequest
         from trainlm.data import PackedBinDataset
 
+        if self._model_source is None or self.args.max_steps is None:
+            raise RuntimeError("TPU request prerequisites were not initialized.")
+        model_path = self._model_source.name_or_path
+        is_local_model = model_path is not None and Path(model_path).exists()
+        if (
+            self._model_source.provider == "huggingface"
+            and self._model_source.initialization == "pretrained"
+            and not is_local_model
+            and (
+                self._model_source.revision is None
+                or _COMMIT_SHA.fullmatch(self._model_source.revision) is None
+            )
+        ):
+            raise ValueError(
+                "TPU Hugging Face models require revision to be a lowercase "
+                "40-character commit SHA."
+            )
         if isinstance(self.train_dataset, PackedBinDataset):
             manifest_dir = self.train_dataset.coordinator_manifest_dir(
                 self.args.output_dir
@@ -509,8 +616,18 @@ class TrainLMTrainer:
             raise TypeError(
                 "TPU training requires a PackedBinDataset or local manifest directory."
             )
-        if self._model_source is None or self.args.max_steps is None:
-            raise RuntimeError("TPU request prerequisites were not initialized.")
+        eval_manifest_dir = None
+        if self.eval_dataset is not None:
+            if isinstance(self.eval_dataset, PackedBinDataset):
+                eval_manifest_dir = self.eval_dataset.coordinator_manifest_dir(
+                    Path(self.args.output_dir) / "eval_data"
+                )
+            elif isinstance(self.eval_dataset, (str, Path)):
+                eval_manifest_dir = Path(self.eval_dataset)
+            else:
+                raise TypeError(
+                    "TPU evaluation requires a PackedBinDataset or local manifest directory."
+                )
         precision = (
             "bf16" if self.args.bf16 else "fp16" if self.args.fp16 else "fp32"
         )
@@ -531,6 +648,14 @@ class TrainLMTrainer:
             scheduler=self.args.lr_scheduler_type,
             warmup_steps=self.args.warmup_steps,
             precision=precision,
+            save_every_steps=self.args.save_steps,
+            resume_from_checkpoint=(
+                Path(resume_from_checkpoint)
+                if resume_from_checkpoint is not None
+                else None
+            ),
+            eval_manifest_dir=eval_manifest_dir,
+            eval_every_steps=self.args.eval_steps,
         )
 
     def evaluate(self) -> dict[str, float]:
@@ -580,44 +705,55 @@ class TrainLMTrainer:
         torch.save(state, path)
         return path
 
-    def explain(self) -> dict[str, Any]:
+    def explain(
+        self, *, format: Literal["dict", "json", "text"] = "dict", strict: bool = False
+    ) -> dict[str, Any] | str:
+        """Explain capabilities and execution selection without launching work."""
+
+        from trainlm.optimization import OptimizationExplanation, inspect_dense_causal_lm
+
         if self._tpu_coordinator is not None:
-            return {
-                "support_level": "compatible",
-                "selected_path": "tpu_coordinator",
-                "model": asdict(self._model_source),
-                "backend": "xla",
-                "precision": (
+            report = OptimizationExplanation(
+                backend="xla",
+                selected_path="tpu_coordinator",
+                precision=(
                     "bf16"
                     if self.args.bf16
                     else "fp16"
                     if self.args.fp16
                     else "fp32"
                 ),
-            }
-        if self.loaded is None:
-            from trainlm.optimization import inspect_dense_causal_lm
+                limitations=(
+                    "Capabilities are inspected inside TPU workers after model loading.",
+                    "TPU lifecycle parity and target-hardware certification remain pending.",
+                ),
+            )
+        else:
+            report = OptimizationExplanation(
+                backend=self.runtime.name,
+                precision=self.runtime.precision,
+                selected_path=("external_model" if self.loaded is None else "huggingface_model"),
+                certification="compatible",
+                capabilities=inspect_dense_causal_lm(
+                    self.model,
+                    source_provider=("unknown" if self.loaded is None else "huggingface"),
+                ),
+                limitations=("No optimized provider execution plan has been selected.",),
+            )
+        if strict:
+            report.require_supported()
+        if format == "dict":
+            return report.to_dict()
+        if format == "json":
+            return report.to_json()
+        if format == "text":
+            return report.to_text()
+        raise ValueError("format must be 'dict', 'json', or 'text'.")
 
-            return {
-                "support_level": "compatible",
-                "selected_path": "external_model",
-                "model_class": type(self.model).__name__,
-                "backend": self.runtime.name,
-                "capabilities": inspect_dense_causal_lm(self.model).to_dict(),
-            }
-        explanation = self.loaded
-        from trainlm.model import explain_huggingface_compatibility
-        from trainlm.optimization import inspect_dense_causal_lm
 
-        return {
-            "model": explanation.metadata.to_dict(),
-            "compatibility": explain_huggingface_compatibility(explanation).to_dict(),
-            "backend": self.runtime.name,
-            "precision": self.runtime.precision,
-            "capabilities": inspect_dense_causal_lm(
-                self.model, source_provider="huggingface"
-            ).to_dict(),
-        }
-
-
-__all__ = ["TrainLMTrainer", "TrainLMTrainingArguments"]
+__all__ = [
+    "DEPRECATED_CONFIG_KEYS",
+    "PUBLIC_API_VERSION",
+    "TrainLMTrainer",
+    "TrainLMTrainingArguments",
+]

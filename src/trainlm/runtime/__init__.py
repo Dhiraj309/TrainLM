@@ -9,11 +9,21 @@ from .accumulation import (
     select_accumulation_plan,
 )
 from .diagnostics import XlaDiagnostics
+from .fsdp import (
+    CheckpointLayout,
+    FSDPCheckpointPolicy,
+    FSDPMeshPolicy,
+    ParameterShardingRule,
+)
 
 __all__ = [
     "BackendDiagnostics",
+    "CheckpointLayout",
     "ExecutionBackend",
+    "FSDPCheckpointPolicy",
+    "FSDPMeshPolicy",
     "LogicalMesh",
+    "ParameterShardingRule",
     "Precision",
     "Runtime",
     "TorchRuntime",
