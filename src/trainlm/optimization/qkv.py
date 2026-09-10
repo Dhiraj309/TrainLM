@@ -207,6 +207,59 @@ class PartialQKVProjectionSpec:
         return StateDictLayoutConverter(tuple(mappings))
 
 
+@dataclass(frozen=True, slots=True)
+class PackedQKVProjectionSpec:
+    """Validated no-transform contract for models already exposing packed QKV."""
+
+    prefix: str
+    query_heads: int
+    key_value_heads: int
+    head_dim: int
+    input_size: int
+    packed_weight_key: str
+    packed_bias_key: str | None = None
+    dtype: str | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.prefix, str) or not self.prefix:
+            raise ValueError("prefix cannot be empty.")
+        for name in ("query_heads", "key_value_heads", "head_dim", "input_size"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                raise ValueError(f"{name} must be a positive integer.")
+        if self.query_heads % self.key_value_heads:
+            raise ValueError("query_heads must be divisible by key_value_heads.")
+        for name in ("packed_weight_key", "packed_bias_key", "dtype"):
+            value = getattr(self, name)
+            if value is not None and (not isinstance(value, str) or not value):
+                raise ValueError(f"{name} cannot be empty.")
+
+    @property
+    def q_size(self) -> int:
+        return self.query_heads * self.head_dim
+
+    @property
+    def kv_size(self) -> int:
+        return self.key_value_heads * self.head_dim
+
+    @property
+    def packed_output_size(self) -> int:
+        return self.q_size + 2 * self.kv_size
+
+    @property
+    def weight_shape(self) -> tuple[int, int]:
+        return (self.packed_output_size, self.input_size)
+
+    @property
+    def bias_shape(self) -> tuple[int] | None:
+        return (self.packed_output_size,) if self.packed_bias_key is not None else None
+
+    def converter(self) -> None:
+        """Return no conversion because the canonical source is already packed."""
+
+        return None
+
+
 class PackedQKVProjection(nn.Module):
     """One linear projection that returns compact query, key, and value views."""
 
@@ -328,6 +381,7 @@ def _replace_module(model: nn.Module, path: str, replacement: nn.Module) -> None
 
 __all__ = [
     "PackedQKVProjection",
+    "PackedQKVProjectionSpec",
     "PartialQKVProjectionSpec",
     "QKVProjectionSpec",
     "qkv_pack_transform_handler",

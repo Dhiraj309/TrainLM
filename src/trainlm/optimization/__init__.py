@@ -68,6 +68,7 @@ from .attention_tuning import (
 )
 from .qkv import (
     PackedQKVProjection,
+    PackedQKVProjectionSpec,
     PartialQKVProjectionSpec,
     QKVProjectionSpec,
     qkv_pack_transform_handler,
@@ -199,6 +200,7 @@ __all__ = [
     "ProviderDecision",
     "ProviderSpec",
     "PackedQKVProjection",
+    "PackedQKVProjectionSpec",
     "PartialQKVProjectionSpec",
     "QKVProjectionSpec",
     "QWEN2_MAPPING",
