@@ -804,6 +804,8 @@ loaded HF models safely without family logic in core.
   requirements, fallback status, and reversible transformations. The pure
   planner deterministically handles disabled, auto, required, and explicit
   provider requests, producing a blocked plan before mutation when necessary.
+  Its public planning boundary validates capability, backend, precision,
+  policy, request, and optional adapter-resolution types before selection.
 
 - [x] **M8-F4 — Transactional transforms**
   `feat(optimization): apply validated reversible model transforms`
