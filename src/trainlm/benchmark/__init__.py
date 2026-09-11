@@ -46,7 +46,7 @@ from trainlm.benchmark.export_certification import (
     evaluate_plain_hf_export,
     load_plain_hf_export_evaluation,
 )
-from trainlm.benchmark.parity_report import ParityReport
+from trainlm.benchmark.parity_report import ParityReport, load_parity_report
 from trainlm.benchmark.cross_family_matrix import (
     CrossFamilyMatrixEvaluation,
     CrossFamilyRecord,
@@ -85,6 +85,7 @@ __all__ = [
     "PlainHFExportEvaluation",
     "PlainHFExportEvidence",
     "ParityReport",
+    "load_parity_report",
     "evaluate_baseline",
     "evaluate_attention_stage",
     "evaluate_cross_family_matrix",
