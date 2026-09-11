@@ -375,6 +375,12 @@ this file in every turn:
     The loader rejects unknown schema fields, malformed error sequences, and
     invalid justifications before applying the locked semantic and early-update
     tolerances. Exact deterministic target-run artifacts remain outstanding.
+47. **M12-F2 repeated-run manifest:** repeated parity evidence can now be loaded
+    from a strict versioned manifest containing exactly three distinct result
+    artifacts and the complete hard/preferred threshold set. Result paths must
+    remain relative to and confined beneath the manifest directory, preventing
+    accidental evidence substitution. Three real synchronized v5e runs remain
+    outstanding.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
