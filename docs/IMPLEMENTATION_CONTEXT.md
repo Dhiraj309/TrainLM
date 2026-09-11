@@ -406,6 +406,11 @@ this file in every turn:
     rejects schema drift, and confines every per-family evidence reference
     beneath the manifest directory before applying geometry, correctness,
     export, graph, and architecture-adjusted MFU gates.
+53. **M13-F7 FSDP scaling bundle:** the review-locked 1.3B target and measured
+    scaling evidence can now be loaded from one strict versioned manifest.
+    Target/evidence schema drift is rejected, and collective plus HBM profile
+    paths must be relative, confined beneath the manifest, and present before
+    the performance, graph, correctness, resume, and export gates run.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

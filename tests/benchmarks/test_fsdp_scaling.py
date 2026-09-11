@@ -1,9 +1,13 @@
-from dataclasses import replace
+from dataclasses import asdict, replace
+import json
+
+import pytest
 
 from trainlm.benchmark import (
     FSDPScalingEvidence,
     FSDPScalingTarget,
     evaluate_fsdp_scaling,
+    load_fsdp_scaling_evaluation,
 )
 
 
@@ -82,3 +86,52 @@ def test_performance_graph_and_lifecycle_gates_are_required():
     assert any("compilation" in reason for reason in result.reasons)
     assert any("CPU fallback" in reason for reason in result.reasons)
     assert any("resume evidence failed" in reason for reason in result.reasons)
+
+
+def _write_bundle(tmp_path, *, measured=None, **extra):
+    measured = measured or evidence()
+    for reference in (measured.collective_artifact, measured.hbm_artifact):
+        artifact = tmp_path / reference
+        artifact.parent.mkdir(parents=True, exist_ok=True)
+        artifact.write_text("evidence", encoding="utf-8")
+    path = tmp_path / "fsdp-scaling.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "target": asdict(target()),
+                "evidence": asdict(measured),
+                **extra,
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_fsdp_scaling_loader_evaluates_complete_bundle(tmp_path):
+    result = load_fsdp_scaling_evaluation(_write_bundle(tmp_path))
+
+    assert result.passed
+    assert result.throughput_ratio > 1
+
+
+def test_fsdp_scaling_loader_rejects_schema_drift_and_missing_profiles(tmp_path):
+    path = _write_bundle(tmp_path, unexpected=True)
+    with pytest.raises(ValueError, match="manifest keys"):
+        load_fsdp_scaling_evaluation(path)
+
+    path = _write_bundle(tmp_path)
+    (tmp_path / evidence().hbm_artifact).unlink()
+    with pytest.raises(ValueError, match="escapes the manifest or is missing"):
+        load_fsdp_scaling_evaluation(path)
+
+
+def test_fsdp_scaling_loader_rejects_escaping_profile_path(tmp_path):
+    outside = tmp_path.parent / "outside-hbm.json"
+    outside.write_text("evidence", encoding="utf-8")
+    measured = replace(evidence(), hbm_artifact="../outside-hbm.json")
+    path = _write_bundle(tmp_path, measured=measured)
+
+    with pytest.raises(ValueError, match="escapes the manifest or is missing"):
+        load_fsdp_scaling_evaluation(path)
