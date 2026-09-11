@@ -972,6 +972,9 @@ layouts and target update evidence remain.
   a separate query projection and an already-combined key/value projection
   without inventing model keys. Already-packed canonical projections now use a
   validated no-transform descriptor that preserves compact GQA/MQA geometry.
+  Portable CPU regression coverage compares packed and separate float32 matrix
+  multiplications with explicit numerical tolerances for their valid
+  accumulation-order differences, including output and gradient parity.
   Target output/gradient/update parity remains.
 
 - [~] **M11-F2 — Reversible gated-MLP packing**
