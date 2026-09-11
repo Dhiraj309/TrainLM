@@ -812,7 +812,9 @@ loaded HF models safely without family logic in core.
   an unqualified `required` request rejects fallback-only candidates rather than
   reporting a portable fallback as satisfying an optimized-path requirement.
   Provider declarations require a real boolean fallback flag, preventing
-  truthy strings or integers from changing required-policy semantics.
+  truthy strings or integers from changing required-policy semantics. Plan IDs
+  include the complete sorted provider catalog, so distinct eligible providers
+  or transform declarations cannot produce the same audit identity.
 
 - [x] **M8-F4 — Transactional transforms**
   `feat(optimization): apply validated reversible model transforms`

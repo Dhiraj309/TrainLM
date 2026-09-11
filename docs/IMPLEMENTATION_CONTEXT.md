@@ -536,6 +536,10 @@ this file in every turn:
     integer, string, null, and other non-boolean fallback flags. Planner policy
     behavior can therefore depend on the flag without Python truthiness
     silently reclassifying a provider.
+81. **M8-F3 provider-bound plan identity:** plan fingerprints now include the
+    complete provider catalog in stable provider-ID order, including eligibility
+    fields and declared transforms. Identical requests evaluated against
+    different catalogs therefore cannot share an audit ID.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

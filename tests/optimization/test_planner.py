@@ -58,6 +58,26 @@ def test_auto_plan_selects_highest_priority_eligible_provider_deterministically(
     assert first.transformations[0].inverse_transform_id == "unpack-qkv"
 
 
+def test_plan_id_is_bound_to_provider_catalog():
+    complete = OptimizationPlanner(_providers()).plan(
+        capabilities(),
+        backend="pytorch-xla",
+        precision="bf16",
+        policy="auto",
+        requests=(_request(),),
+    )
+    fallback_only = OptimizationPlanner((_providers()[1],)).plan(
+        capabilities(),
+        backend="pytorch-xla",
+        precision="bf16",
+        policy="auto",
+        requests=(_request(),),
+    )
+
+    assert complete.decisions != fallback_only.decisions
+    assert complete.plan_id != fallback_only.plan_id
+
+
 def test_auto_plan_uses_explained_portable_fallback():
     plan = OptimizationPlanner(_providers()).plan(
         capabilities(), backend="pytorch", precision="fp32",
