@@ -1116,7 +1116,10 @@ early-update evidence gate are implemented; target-run alignment remains.
   A versioned report schema now requires environment versions, reproduction
   commands, configuration/metric/profile/HLO artifacts, limitations, and the
   pass state of numerical, repeated-run, stability, and plain-HF gates. Stable
-  JSON and reviewer-facing Markdown are available; real evidence remains.
+  JSON and reviewer-facing Markdown are available. A strict bundle loader now
+  reconstructs the immutable report and requires every configuration, metric,
+  profile, and HLO reference to be relative, confined, and present. Real
+  evidence remains.
 
 ### Exit gate
 

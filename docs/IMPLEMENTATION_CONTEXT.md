@@ -396,6 +396,11 @@ this file in every turn:
     layout, alias, reload-key, and numerical field; converts JSON key arrays to
     the immutable evaluation contract; and applies the recorded tolerance. A
     clean Transformers-only target execution remains outstanding.
+51. **M12-F5 parity report bundle:** versioned report JSON can now be loaded back
+    into the immutable report contract while rejecting unknown fields and
+    malformed array shapes. Every configuration, metric, profile, and HLO path
+    must be relative, confined beneath the report directory, and present, so a
+    reviewer cannot unknowingly consume an incomplete evidence bundle.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

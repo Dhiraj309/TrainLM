@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 import json
+from pathlib import Path
+from typing import Any, Mapping
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,7 +25,7 @@ class ParityReport:
     plain_hf_export_passed: bool
 
     def __post_init__(self) -> None:
-        if self.schema_version != 1:
+        if isinstance(self.schema_version, bool) or self.schema_version != 1:
             raise ValueError("ParityReport supports schema_version=1 only.")
         if not isinstance(self.report_id, str) or not self.report_id:
             raise ValueError("report_id cannot be empty.")
@@ -105,4 +107,63 @@ class ParityReport:
         return "\n".join(lines) + "\n"
 
 
-__all__ = ["ParityReport"]
+def load_parity_report(report_path: str | Path) -> ParityReport:
+    """Load a strict report and verify every referenced artifact is confined."""
+
+    if not isinstance(report_path, (str, Path)):
+        raise TypeError("report_path must be a path.")
+    path = Path(report_path)
+    if not path.is_file():
+        raise ValueError("report_path must reference an existing file.")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Invalid parity report: {exc}") from exc
+    if not isinstance(payload, Mapping):
+        raise ValueError("Parity report must contain a JSON object.")
+    expected = {field.name for field in fields(ParityReport)}
+    if set(payload) != expected:
+        raise ValueError("Parity report keys must match schema version 1.")
+
+    values: dict[str, Any] = dict(payload)
+    environment = values["environment"]
+    if isinstance(environment, (str, bytes)) or not isinstance(environment, list):
+        raise ValueError("environment must be a JSON array of name/value pairs.")
+    if any(not isinstance(item, list) or len(item) != 2 for item in environment):
+        raise ValueError("environment must contain two-item name/value arrays.")
+    values["environment"] = tuple(tuple(item) for item in environment)
+    for name in (
+        "commands",
+        "configuration_artifacts",
+        "metric_artifacts",
+        "limitations",
+    ):
+        items = values[name]
+        if isinstance(items, (str, bytes)) or not isinstance(items, list):
+            raise ValueError(f"{name} must be a JSON array.")
+        values[name] = tuple(items)
+    try:
+        report = ParityReport(**values)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid parity report evidence: {exc}") from exc
+
+    root = path.resolve().parent
+    references = (
+        *report.configuration_artifacts,
+        *report.metric_artifacts,
+        report.profile_artifact,
+        report.hlo_artifact,
+    )
+    for reference in references:
+        candidate = Path(reference)
+        if candidate.is_absolute():
+            raise ValueError("Parity report artifact paths must be relative.")
+        resolved = (root / candidate).resolve()
+        if not resolved.is_relative_to(root) or not resolved.is_file():
+            raise ValueError(
+                "Parity report artifact path escapes the report or is missing."
+            )
+    return report
+
+
+__all__ = ["ParityReport", "load_parity_report"]
