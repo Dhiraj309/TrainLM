@@ -111,6 +111,52 @@ class GatedMLPProjectionSpec:
         return StateDictLayoutConverter(tuple(mappings))
 
 
+@dataclass(frozen=True, slots=True)
+class PackedGatedMLPProjectionSpec:
+    """Validated no-transform contract for an already-packed gate/up source."""
+
+    prefix: str
+    activation: Literal["swiglu", "geglu"]
+    input_size: int
+    intermediate_size: int
+    packed_weight_key: str
+    packed_bias_key: str | None = None
+    dtype: str | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.prefix, str) or not self.prefix:
+            raise ValueError("prefix cannot be empty.")
+        if self.activation not in {"swiglu", "geglu"}:
+            raise ValueError(
+                "Already-packed gated MLP paths require SwiGLU or GeGLU."
+            )
+        for name in ("input_size", "intermediate_size"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                raise ValueError(f"{name} must be a positive integer.")
+        for name in ("packed_weight_key", "packed_bias_key", "dtype"):
+            value = getattr(self, name)
+            if value is not None and (not isinstance(value, str) or not value):
+                raise ValueError(f"{name} cannot be empty.")
+
+    @property
+    def packed_output_size(self) -> int:
+        return 2 * self.intermediate_size
+
+    @property
+    def weight_shape(self) -> tuple[int, int]:
+        return (self.packed_output_size, self.input_size)
+
+    @property
+    def bias_shape(self) -> tuple[int] | None:
+        return (self.packed_output_size,) if self.packed_bias_key is not None else None
+
+    def converter(self) -> None:
+        """Return no conversion because the canonical source is already packed."""
+
+        return None
+
+
 class PackedGatedMLPProjection(nn.Module):
     """One packed gate/up projection with an explicit activation callable."""
 
@@ -299,6 +345,7 @@ def _replace_module(model: nn.Module, path: str, replacement: nn.Module) -> None
 __all__ = [
     "GatedMLPProjectionSpec",
     "MLPActivation",
+    "PackedGatedMLPProjectionSpec",
     "PackedGatedMLPProjection",
     "gated_mlp_pack_transform_handler",
 ]
