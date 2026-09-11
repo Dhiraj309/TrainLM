@@ -1275,6 +1275,9 @@ early-update evidence gate are implemented; target-run alignment remains.
   A versioned machine manifest and development status page now publish these
   fields without certification overclaims, and a validator checks that public
   explanation backend/path/certification values do not exceed the manifest.
+  Manifest loading now rejects top-level and nested schema drift, malformed
+  JSON, incorrect container types, and boolean schema versions instead of
+  silently accepting unsupported release-claim fields.
   Populate final release evidence and revalidate all claims before closure.
   **Acceptance:** Machine manifest agrees with `trainer.explain()`.
 
