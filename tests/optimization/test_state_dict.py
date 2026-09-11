@@ -62,6 +62,26 @@ def test_alias_groups_are_validated_and_restored_as_shared_objects():
         )
 
 
+def test_converter_rejects_overlapping_alias_groups():
+    with pytest.raises(ValueError, match="multiple alias groups"):
+        StateDictLayoutConverter(
+            (),
+            alias_groups=(
+                ("embed.weight", "lm_head.weight"),
+                ("lm_head.weight", "output.weight"),
+            ),
+        )
+
+
+@pytest.mark.parametrize("alias_key", ("q.weight", "qkv.weight"))
+def test_converter_rejects_aliases_for_mapped_layout_keys(alias_key):
+    with pytest.raises(ValueError, match="cannot also belong to alias groups"):
+        StateDictLayoutConverter(
+            (_mapping(),),
+            alias_groups=((alias_key, "shared.weight"),),
+        )
+
+
 @pytest.mark.parametrize(
     ("state", "message"),
     [
