@@ -381,6 +381,11 @@ this file in every turn:
     remain relative to and confined beneath the manifest directory, preventing
     accidental evidence substitution. Three real synchronized v5e runs remain
     outstanding.
+48. **M11-F1 portable numerical parity:** the live packed-QKV regression uses
+    explicit float32 relative and absolute tolerances for output and gradient
+    comparisons. This accounts for valid accumulation-order differences between
+    three separate matrix multiplications and one packed matrix multiplication
+    while retaining strict semantic parity coverage across CI CPU backends.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

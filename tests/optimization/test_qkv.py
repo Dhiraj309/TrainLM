@@ -140,7 +140,13 @@ def test_live_qkv_transform_preserves_outputs_and_gradients():
     assert isinstance(transformed.projections, PackedQKVProjection)
     expected = original(hidden_original)
     actual = transformed(hidden_transformed)
-    assert all(torch.allclose(left, right) for left, right in zip(expected, actual))
+    for expected_projection, actual_projection in zip(expected, actual):
+        torch.testing.assert_close(
+            actual_projection,
+            expected_projection,
+            rtol=1e-5,
+            atol=1e-6,
+        )
 
     sum(value.square().sum() for value in expected).backward()
     sum(value.square().sum() for value in actual).backward()
@@ -151,8 +157,18 @@ def test_live_qkv_transform_preserves_outputs_and_gradients():
             original.projections.v_proj.weight.grad,
         ]
     )
-    assert torch.allclose(transformed.projections.weight.grad, expected_weight_grad)
-    assert torch.allclose(hidden_transformed.grad, hidden_original.grad)
+    torch.testing.assert_close(
+        transformed.projections.weight.grad,
+        expected_weight_grad,
+        rtol=1e-5,
+        atol=1e-6,
+    )
+    torch.testing.assert_close(
+        hidden_transformed.grad,
+        hidden_original.grad,
+        rtol=1e-5,
+        atol=1e-6,
+    )
     transaction.commit()
 
 
