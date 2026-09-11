@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from datetime import datetime, timedelta, timezone
-from typing import Literal
+import json
+from pathlib import Path
+from typing import Literal, Mapping
 
 CertificationTier = Literal[0, 1, 2, 3]
 
@@ -25,7 +27,7 @@ class CertificationTierEvidence:
     artifact: str
 
     def __post_init__(self) -> None:
-        if self.tier not in TIER_NAMES:
+        if isinstance(self.tier, bool) or self.tier not in TIER_NAMES:
             raise ValueError(f"Unsupported certification tier: {self.tier!r}.")
         if not isinstance(self.commit_sha, str) or len(self.commit_sha) != 40:
             raise ValueError("commit_sha must be a full 40-character Git SHA.")
@@ -101,10 +103,97 @@ def evaluate_release_certification(
     )
 
 
+def load_release_certification(manifest_path: str | Path) -> ReleaseCertification:
+    """Load current tier evidence from a strict, self-contained manifest."""
+
+    if not isinstance(manifest_path, (str, Path)):
+        raise TypeError("manifest_path must be a path.")
+    path = Path(manifest_path)
+    if not path.is_file():
+        raise ValueError("manifest_path must reference an existing file.")
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Invalid release certification manifest: {exc}") from exc
+    if not isinstance(manifest, Mapping):
+        raise ValueError("Release certification manifest must contain a JSON object.")
+    if set(manifest) != {
+        "schema_version",
+        "release_commit_sha",
+        "evaluated_at",
+        "maximum_age_seconds",
+        "evidence",
+    }:
+        raise ValueError(
+            "Release certification manifest keys must match schema version 1."
+        )
+    version = manifest["schema_version"]
+    if isinstance(version, bool) or version != 1:
+        raise ValueError(
+            "Release certification manifest supports schema_version=1 only."
+        )
+    evidence_payload = manifest["evidence"]
+    if isinstance(evidence_payload, (str, bytes)) or not isinstance(
+        evidence_payload, list
+    ):
+        raise ValueError("Release certification evidence must be a JSON array.")
+    maximum_age_seconds = manifest["maximum_age_seconds"]
+    if (
+        isinstance(maximum_age_seconds, bool)
+        or not isinstance(maximum_age_seconds, int)
+        or maximum_age_seconds <= 0
+    ):
+        raise ValueError("maximum_age_seconds must be a positive integer.")
+    evaluated_at = _parse_timestamp("evaluated_at", manifest["evaluated_at"])
+
+    expected = {field.name for field in fields(CertificationTierEvidence)}
+    root = path.resolve().parent
+    evidence = []
+    for index, payload in enumerate(evidence_payload):
+        if not isinstance(payload, Mapping) or set(payload) != expected:
+            raise ValueError(f"Tier evidence {index} keys must match the schema.")
+        values = dict(payload)
+        values["completed_at"] = _parse_timestamp(
+            f"evidence[{index}].completed_at", values["completed_at"]
+        )
+        try:
+            item = CertificationTierEvidence(**values)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid tier evidence {index}: {exc}") from exc
+        artifact = Path(item.artifact)
+        if artifact.is_absolute():
+            raise ValueError("Certification artifact paths must be relative.")
+        resolved = (root / artifact).resolve()
+        if not resolved.is_relative_to(root) or not resolved.is_file():
+            raise ValueError(
+                "Certification artifact path escapes the manifest or is missing."
+            )
+        evidence.append(item)
+    return evaluate_release_certification(
+        tuple(evidence),
+        release_commit_sha=manifest["release_commit_sha"],
+        now=evaluated_at,
+        maximum_age=timedelta(seconds=maximum_age_seconds),
+    )
+
+
+def _parse_timestamp(name: str, value: object) -> datetime:
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{name} must be a non-empty ISO-8601 timestamp.")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"{name} must be a valid ISO-8601 timestamp.") from exc
+    if parsed.tzinfo is None:
+        raise ValueError(f"{name} must be timezone-aware.")
+    return parsed
+
+
 __all__ = [
     "CertificationTier",
     "CertificationTierEvidence",
     "ReleaseCertification",
     "TIER_NAMES",
     "evaluate_release_certification",
+    "load_release_certification",
 ]
