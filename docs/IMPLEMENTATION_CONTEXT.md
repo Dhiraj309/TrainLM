@@ -503,6 +503,11 @@ this file in every turn:
     transforms now compare one post-transform SGD update against the separate
     reference, including split weight/bias state and subsequent forward output.
     Target-XLA update parity remains the hardware acceptance gate.
+73. **M11-F1 portable update parity:** separate and partial live QKV transforms
+    now compare one SGD update against their source layouts for biased and
+    bias-free projections. Split packed parameters and subsequent compact Q/K/V
+    outputs match the untransformed reference within explicit float32 bounds;
+    target-XLA parity remains outstanding.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
