@@ -532,6 +532,10 @@ this file in every turn:
     now considers only non-fallback providers. If only portable fallbacks are
     eligible, planning blocks with explicit fallback-only evidence; explicitly
     requesting that same provider remains a valid, intentional selection.
+80. **M8-F3 typed fallback declarations:** provider specifications reject
+    integer, string, null, and other non-boolean fallback flags. Planner policy
+    behavior can therefore depend on the flag without Python truthiness
+    silently reclassifying a provider.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
