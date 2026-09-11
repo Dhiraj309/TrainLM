@@ -38,6 +38,7 @@ from trainlm.benchmark.stability import (
     RealShardStabilityEvaluation,
     RealShardStabilityEvidence,
     evaluate_real_shard_stability,
+    load_real_shard_stability_evaluation,
 )
 from trainlm.benchmark.export_certification import (
     PlainHFExportEvaluation,
@@ -94,6 +95,7 @@ __all__ = [
     "evaluate_repeated_parity",
     "load_repeated_parity_evaluation",
     "evaluate_real_shard_stability",
+    "load_real_shard_stability_evaluation",
     "evaluate_plain_hf_export",
     "load_baseline_workload",
 ]

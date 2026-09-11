@@ -1093,6 +1093,9 @@ early-update evidence gate are implemented; target-run alignment remains.
   revision-pinned shards, scheduled evaluation, checkpoint resume, integrity
   checks, cursor continuity, finite loss/gradient ranges, stable compilation,
   zero fallback, and canonical export. The real target run remains pending.
+  A strict versioned artifact loader now validates the complete lifecycle and
+  numerical evidence schema together with explicit update/shard requirements
+  before evaluating a captured run; unknown or missing fields are rejected.
 
 - [~] **M12-F4 — Plain-HF export certification**
   `test(parity): certify optimized HF checkpoint interoperability`

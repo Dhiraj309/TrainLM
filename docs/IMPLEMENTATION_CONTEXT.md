@@ -386,6 +386,11 @@ this file in every turn:
     comparisons. This accounts for valid accumulation-order differences between
     three separate matrix multiplications and one packed matrix multiplication
     while retaining strict semantic parity coverage across CI CPU backends.
+49. **M12-F3 stability artifacts:** real-shard lifecycle evidence now has a
+    strict versioned JSON loader that requires the complete 200-update gate
+    payload and explicit update/shard thresholds. Unknown, missing, malformed,
+    and incorrectly typed evidence is rejected before evaluation. A real
+    revision-pinned target run remains outstanding.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
