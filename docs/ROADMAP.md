@@ -828,6 +828,8 @@ loaded HF models safely without family logic in core.
   preventing ambiguous restoration or silently lost ties. Manifest loading
   rejects unknown fields and malformed mapping, key, shape, or alias-group
   containers instead of coercing strings or accepting misspelled contracts.
+  All schema fields are mandatory, and booleans cannot masquerade as integer
+  schema versions.
 
 - [x] **M8-F6 — Explain report**
   `feat(optimization): expose model optimization explanation`
