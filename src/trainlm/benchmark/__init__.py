@@ -44,6 +44,7 @@ from trainlm.benchmark.export_certification import (
     PlainHFExportEvaluation,
     PlainHFExportEvidence,
     evaluate_plain_hf_export,
+    load_plain_hf_export_evaluation,
 )
 from trainlm.benchmark.parity_report import ParityReport
 from trainlm.benchmark.cross_family_matrix import (
@@ -97,5 +98,6 @@ __all__ = [
     "evaluate_real_shard_stability",
     "load_real_shard_stability_evaluation",
     "evaluate_plain_hf_export",
+    "load_plain_hf_export_evaluation",
     "load_baseline_workload",
 ]
