@@ -159,3 +159,16 @@ def test_planner_rejects_malformed_boundary_inputs(
 
     with pytest.raises(error, match=message):
         OptimizationPlanner(_providers()).plan(**arguments)
+
+
+@pytest.mark.parametrize("fallback", (0, 1, "false", None))
+def test_provider_rejects_non_boolean_fallback_flags(fallback):
+    with pytest.raises(ValueError, match="fallback must be a boolean"):
+        ProviderSpec(
+            provider_id="invalid-fallback",
+            component="projections",
+            operation="forward_backward",
+            backends=("pytorch",),
+            precisions=("fp32",),
+            fallback=fallback,
+        )
