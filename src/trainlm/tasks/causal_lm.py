@@ -112,6 +112,38 @@ class CausalLMTask:
             "eval_perplexity": perplexity,
         }
 
+    def aggregate_distributed_evaluation_stream(
+        self,
+        results: Iterable[TaskResult],
+        backend: ExecutionBackend,
+    ) -> dict[str, float]:
+        """Reduce the loss numerator and denominator across all replicas."""
+
+        weight_name = (
+            "supervised_tokens"
+            if self.normalization == "supervised_tokens"
+            else "sequences"
+        )
+        totals: torch.Tensor | None = None
+        for result in results:
+            weight = getattr(result.tokens, weight_name)
+            contribution = result.loss.detach().to(torch.float32) * weight
+            current = torch.stack(
+                (contribution, contribution.new_tensor(float(weight)))
+            )
+            totals = current if totals is None else totals + current
+        if totals is None:
+            raise ValueError("Evaluation contains no normalization units.")
+        totals = backend.reduce_sum(totals)
+        if totals[1].item() <= 0:
+            raise ValueError("Evaluation contains no normalization units.")
+        eval_loss = (totals[0] / totals[1]).item()
+        try:
+            perplexity = math.exp(eval_loss)
+        except OverflowError:
+            perplexity = float("inf")
+        return {"eval_loss": eval_loss, "eval_perplexity": perplexity}
+
     def _step(
         self,
         model: nn.Module,

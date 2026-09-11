@@ -194,7 +194,49 @@ def test_live_qkv_transform_rejects_mismatched_projection_geometry():
         registry.apply(model, _qkv_plan())
     assert isinstance(model.projections, _SeparateQKV)
 
-from trainlm.optimization import PartialQKVProjectionSpec
+
+def test_live_qkv_transform_preserves_uniform_frozen_parameters():
+    model = _AttentionFixture()
+    for parameter in model.projections.parameters():
+        parameter.requires_grad_(False)
+    registry = ModelTransformRegistry()
+    registry.register(qkv_pack_transform_handler(spec()))
+
+    registry.apply(model, _qkv_plan()).commit()
+
+    assert not model.projections.weight.requires_grad
+
+
+def test_live_qkv_transform_rejects_mixed_frozen_parameters():
+    model = _AttentionFixture()
+    model.projections.k_proj.weight.requires_grad_(False)
+    registry = ModelTransformRegistry()
+    registry.register(qkv_pack_transform_handler(spec()))
+
+    with pytest.raises(Exception, match="must share requires_grad"):
+        registry.apply(model, _qkv_plan())
+
+    assert isinstance(model.projections, _SeparateQKV)
+
+
+def test_live_qkv_transform_rejects_external_parameter_alias():
+    model = _AttentionFixture()
+    model.shared_query_weight = model.projections.q_proj.weight
+    original = model.projections
+    registry = ModelTransformRegistry()
+    registry.register(qkv_pack_transform_handler(spec()))
+
+    with pytest.raises(Exception, match="parameter aliases that packing cannot preserve"):
+        registry.apply(model, _qkv_plan())
+
+    assert model.projections is original
+    assert model.shared_query_weight is model.projections.q_proj.weight
+
+from trainlm.optimization import (
+    PackedPartialQKVProjection,
+    PartialQKVProjectionSpec,
+    partial_qkv_pack_transform_handler,
+)
 
 
 def partial_spec(**values):
@@ -256,6 +298,134 @@ def test_partial_q_kv_manifest_reconstructs_identical_converter():
     converter = partial_spec().converter()
     restored = type(converter).from_manifest(converter.manifest())
     assert restored.mappings == converter.mappings
+
+
+class _PartialQKV(nn.Module):
+    def __init__(self, *, bias=False):
+        super().__init__()
+        self.q_proj = nn.Linear(6, 16, bias=bias)
+        self.kv_proj = nn.Linear(6, 16, bias=bias)
+
+    def forward(self, hidden_states):
+        query = self.q_proj(hidden_states)
+        key, value = self.kv_proj(hidden_states).split((8, 8), dim=-1)
+        return query, key, value
+
+
+class _PartialAttentionFixture(nn.Module):
+    def __init__(self, *, bias=False):
+        super().__init__()
+        self.projections = _PartialQKV(bias=bias)
+
+    def forward(self, hidden_states):
+        return self.projections(hidden_states)
+
+
+def _partial_qkv_plan():
+    transform = ModelTransformation(
+        transform_id="pack-partial-qkv",
+        component="attention",
+        provider="fixture",
+        target_paths=("projections",),
+        inverse_transform_id="unpack-partial-qkv",
+        reason="exercise a query plus combined-KV projection",
+        parameter_layout_change=True,
+    )
+    return ExecutionPlan(
+        1,
+        "partial-qkv-plan",
+        "ready",
+        "auto",
+        capabilities().fingerprint,
+        "pytorch",
+        "fp32",
+        transformations=(transform,),
+    )
+
+
+@pytest.mark.parametrize("bias", (False, True))
+def test_live_partial_qkv_transform_preserves_outputs_gradients_and_rollback(bias):
+    torch.manual_seed(11)
+    original = _PartialAttentionFixture(bias=bias)
+    transformed = deepcopy(original)
+    hidden_original = torch.randn(2, 3, 6, requires_grad=True)
+    hidden_transformed = hidden_original.detach().clone().requires_grad_(True)
+    layout = partial_spec(
+        q_bias_key="q_proj.bias" if bias else None,
+        kv_bias_key="kv_proj.bias" if bias else None,
+        packed_bias_key="qkv_proj.bias" if bias else None,
+    )
+    registry = ModelTransformRegistry()
+    registry.register(partial_qkv_pack_transform_handler(layout))
+
+    transaction = registry.apply(transformed, _partial_qkv_plan())
+
+    assert isinstance(transformed.projections, PackedPartialQKVProjection)
+    expected = original(hidden_original)
+    actual = transformed(hidden_transformed)
+    for expected_projection, actual_projection in zip(expected, actual):
+        torch.testing.assert_close(actual_projection, expected_projection)
+
+    sum(value.square().sum() for value in expected).backward()
+    sum(value.square().sum() for value in actual).backward()
+    expected_weight_grad = torch.cat(
+        (
+            original.projections.q_proj.weight.grad,
+            original.projections.kv_proj.weight.grad,
+        )
+    )
+    torch.testing.assert_close(
+        transformed.projections.weight.grad,
+        expected_weight_grad,
+    )
+    torch.testing.assert_close(hidden_transformed.grad, hidden_original.grad)
+
+    transaction.rollback()
+    assert isinstance(transformed.projections, _PartialQKV)
+
+
+def test_live_partial_qkv_transform_rejects_mismatched_combined_geometry():
+    model = _PartialAttentionFixture()
+    model.projections.kv_proj = nn.Linear(6, 15, bias=False)
+    registry = ModelTransformRegistry()
+    registry.register(partial_qkv_pack_transform_handler(partial_spec()))
+
+    with pytest.raises(Exception, match="combined key/value projection geometry"):
+        registry.apply(model, _partial_qkv_plan())
+
+    assert isinstance(model.projections, _PartialQKV)
+
+
+def test_live_partial_qkv_transform_preserves_frozen_weight_and_bias():
+    model = _PartialAttentionFixture(bias=True)
+    for parameter in model.projections.parameters():
+        parameter.requires_grad_(False)
+    layout = partial_spec(
+        q_bias_key="q_proj.bias",
+        kv_bias_key="kv_proj.bias",
+        packed_bias_key="qkv_proj.bias",
+    )
+    registry = ModelTransformRegistry()
+    registry.register(partial_qkv_pack_transform_handler(layout))
+
+    registry.apply(model, _partial_qkv_plan()).commit()
+
+    assert not model.projections.weight.requires_grad
+    assert not model.projections.bias.requires_grad
+
+
+def test_live_partial_qkv_transform_rejects_internal_parameter_alias():
+    model = _PartialAttentionFixture()
+    model.projections.kv_proj.weight = model.projections.q_proj.weight
+    original = model.projections
+    registry = ModelTransformRegistry()
+    registry.register(partial_qkv_pack_transform_handler(partial_spec()))
+
+    with pytest.raises(Exception, match="parameter aliases that packing cannot preserve"):
+        registry.apply(model, _partial_qkv_plan())
+
+    assert model.projections is original
+    assert model.projections.kv_proj.weight is model.projections.q_proj.weight
 
 from trainlm.optimization import PackedQKVProjectionSpec
 

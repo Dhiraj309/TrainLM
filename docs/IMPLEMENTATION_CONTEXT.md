@@ -426,6 +426,71 @@ this file in every turn:
     now serialize and reconstruct through a strict versioned manifest. Unknown,
     missing, malformed, and incorrectly shaped nested settings fail before a
     runtime can consume the policy.
+57. **M13-F6 XLA policy application:** `XlaRuntime` now consumes the validated
+    policy directly, checks topology/rematerialization/module and parameter
+    evidence before mutation, and annotates model parameters plus initialized
+    optimizer tensors with the declared FSDP partitions. The Hugging Face model
+    tree is not replaced. A real 1.3B v5e-8 train/resume/export smoke remains
+    the acceptance gate.
+58. **M13-F6 topology-safe checkpoint resume:** TPU checkpoint schema v2 binds
+    each committed generation and rank payload to its logical mesh axes.
+    Restore rejects same-world-size data/FSDP topology changes and discovery
+    ignores manifests whose mesh product disagrees with their world size.
+    Existing schema-v1 checkpoints remain readable; their mesh is recovered
+    from rank runtime state and validated before any training state is mutated.
+59. **M8-F0 distributed TPU evaluation:** validation data is now partitioned by
+    worker rank instead of replicated. The causal task accumulates local loss
+    numerators and token/sequence denominators on device, performs one backend
+    sum reduction, and only then materializes global loss and perplexity.
+60. **M3 resumable reference split:** the 28-train/2-validation shard fixture
+    now proves disjoint exhaustive rank ownership and exact cursor restoration
+    at every rank-local interruption point, including terminal token counts.
+    M3 is complete; target TPU lifecycle checks remain tracked under M7/M8.
+61. **M4-F4 WSD validation:** exact transition fixtures cover warmup, stable,
+    linear decay, minimum learning rate, and post-horizon clamping. Restoring
+    optimizer and scheduler snapshots mid-run reproduces every subsequent
+    learning rate and scheduler state, closing M4-F4.
+62. **M4-F5 streaming evaluation validation:** variable-mask causal batches
+    match the token-weighted reference without retaining predictions or
+    changing trainer progress, model parameters, training mode, or gradients.
+    This closes M4-F5; callback synchronization and family overfit remain.
+63. **M4-F6 synchronization-safe callbacks:** tensor scalar extraction is now
+    instrumented across sparse logging. Non-logging steps produce no `.item()`
+    calls or live callback tensors; exactly one loss is materialized at the
+    requested boundary and callbacks receive host-only metric snapshots.
+64. **M4-F7 family resume/export matrix:** every tiny dense-AR Transformers
+    fixture now overfits for 30 updates, resumes model/optimizer/scheduler and
+    trainer progress from update 15 to identical final parameters, and reloads
+    the canonical export through `AutoModelForCausalLM` without family branches.
+65. **M8-F1 explicit opaque-semantic evidence:** structural inspection now
+    accepts narrowly scoped adapter evidence for residual and custom
+    normalization semantics that module traversal cannot prove. Claims must be
+    known, inferred, or unsupported and cite evidence; unknown or uncited
+    overrides fail closed. Evidence also names the exact model class, config
+    class, and source provider, and mismatched boundaries are rejected before
+    inspection. This closes M8-F1 without family-name guessing.
+66. **M8-F0 public CLI parity:** the optional `trainlm train` entry point accepts
+    the versioned public YAML plus validated local train/evaluation manifest
+    directories and an optional resume checkpoint. It constructs only public
+    dataset/trainer objects, delegates to `TrainLMTrainer.train()`, and prints a
+    structured result without exposing TPU worker or PJRT arguments. Dataset
+    readers derive sequence geometry and seed from the same validated YAML
+    training arguments passed to the trainer.
+67. **M11-F1 live partial-QKV transform:** adapter-selected wrappers exposing a
+    separate query linear and a combined key/value linear can now be replaced
+    transactionally by one packed projection before optimizer construction.
+    Geometry, bias, dtype, and device are validated; compact query/key/value
+    views preserve output and gradient semantics, and rollback restores the
+    original wrapper. Target-XLA update evidence remains outstanding.
+68. **M11-F1 QKV trainability preservation:** live separate and partial QKV
+    transforms preserve uniformly frozen weights and biases. Mixed
+    `requires_grad` states fail before replacement because one packed parameter
+    cannot represent independent source trainability without changing user
+    fine-tuning semantics.
+69. **M11-F1 QKV alias safety:** live QKV transforms inspect the complete model
+    alias graph before replacement and reject internal or external aliases that
+    concatenating source projections into one parameter cannot preserve. The
+    failure occurs before mutation, leaving tied source parameters intact.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

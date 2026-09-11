@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from copy import deepcopy
+from types import SimpleNamespace
+
 import pytest
 import torch
 from torch import nn
@@ -8,7 +11,7 @@ from torch.optim.lr_scheduler import LambdaLR
 from torch.utils.data import DataLoader
 
 from trainlm.runtime import Runtime
-from trainlm.tasks import TaskResult, TokenCounts
+from trainlm.tasks import CausalLMTask, TaskResult, TokenCounts
 from trainlm.training import Trainer, TrainerCallback
 from trainlm.training.loss import LanguageModelLoss
 
@@ -280,6 +283,61 @@ def test_evaluate_uses_streaming_task_aggregator():
     assert metrics["eval_loss"] == float(task.result_count)
 
 
+def test_streaming_causal_evaluation_matches_reference_without_mutation():
+    class CausalFixture(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.embedding = nn.Embedding(16, 4)
+            self.output = nn.Linear(4, 16, bias=False)
+
+        def forward(self, input_ids, attention_mask=None):
+            del attention_mask
+            return SimpleNamespace(logits=self.output(self.embedding(input_ids)))
+
+    batches = (
+        {
+            "input_ids": torch.tensor([[1, 2, 3, 4]]),
+            "attention_mask": torch.tensor([[1, 1, 1, 1]]),
+        },
+        {
+            "input_ids": torch.tensor([[5, 6, 7, 8]]),
+            "attention_mask": torch.tensor([[1, 1, 0, 0]]),
+        },
+    )
+    model = CausalFixture()
+    task = CausalLMTask(loss_implementation="causal_lm")
+    optimizer = SGD(model.parameters(), lr=0.1)
+    trainer = Trainer(
+        config=DummyConfig(),
+        model=model,
+        runtime=Runtime(),
+        optimizer=optimizer,
+        scheduler=LambdaLR(optimizer, lr_lambda=lambda _: 1.0),
+        task=task,
+        train_dataloader=DataLoader(batches, batch_size=None),
+        eval_dataloader=DataLoader(batches, batch_size=None),
+    )
+    reference = task.aggregate_evaluation(
+        tuple(task.evaluation_step(model, batch, trainer.runtime) for batch in batches)
+    )
+    state_before = deepcopy(trainer.state)
+    parameters_before = {
+        name: parameter.detach().clone()
+        for name, parameter in model.named_parameters()
+    }
+
+    metrics = trainer.evaluate()
+
+    assert metrics == pytest.approx(reference)
+    assert trainer.state == state_before
+    assert model.training
+    assert all(parameter.grad is None for parameter in model.parameters())
+    assert all(
+        torch.equal(parameters_before[name], parameter)
+        for name, parameter in model.state_dict().items()
+    )
+
+
 class MetricsRecordingCallback(TrainerCallback):
 
     def __init__(self):
@@ -300,6 +358,64 @@ def test_training_emits_sparse_materialized_metrics():
     assert len(callback.metrics) == 1
     assert callback.metrics[0]["step"] == 1.0
     assert isinstance(callback.metrics[0]["loss"], float)
+
+
+def test_callbacks_do_not_extract_live_scalars_between_logging_steps(monkeypatch):
+    class ThreeStepTrainerConfig(DummyTrainerConfig):
+        max_steps = 3
+        materialize_loss_every_steps = 3
+
+    class SparseLoggingConfig:
+        log_every_steps = 3
+
+    class SparseConfig:
+        trainer = ThreeStepTrainerConfig()
+        logging = SparseLoggingConfig()
+
+    class StateRecordingCallback(TrainerCallback):
+        def __init__(self):
+            self.step_losses = []
+            self.metrics = []
+
+        def on_step_end(self, state, control):
+            del control
+            self.step_losses.append(state.loss)
+
+        def on_metrics(self, state, control, metrics):
+            del state, control
+            self.metrics.append(dict(metrics))
+
+    callback = StateRecordingCallback()
+    model = DummyModel()
+    optimizer = SGD(model.parameters(), lr=0.1)
+    trainer = Trainer(
+        config=SparseConfig(),
+        model=model,
+        runtime=Runtime(),
+        optimizer=optimizer,
+        scheduler=LambdaLR(optimizer, lr_lambda=lambda _: 1.0),
+        loss_fn=ConstantLoss(),
+        train_dataloader=DataLoader(DummyDataset(), batch_size=2),
+        callbacks=(callback,),
+    )
+    original_item = torch.Tensor.item
+    item_calls = 0
+
+    def counted_item(tensor, *args, **kwargs):
+        nonlocal item_calls
+        item_calls += 1
+        return original_item(tensor, *args, **kwargs)
+
+    monkeypatch.setattr(torch.Tensor, "item", counted_item)
+
+    trainer.train()
+
+    assert item_calls == 1
+    assert callback.step_losses[:2] == [None, None]
+    assert isinstance(callback.step_losses[2], float)
+    assert len(callback.metrics) == 1
+    assert all(isinstance(value, float) for value in callback.metrics[0].values())
+    assert callback.metrics[0]["step"] == 3.0
 
 
 def test_training_honors_evaluation_and_checkpoint_cadence():

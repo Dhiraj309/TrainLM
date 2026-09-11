@@ -313,7 +313,7 @@ TPU runtime foundation`; branch `milestone/m5-m7-xla-compatibility`.
 | [x] | M0 | Scope, parity manifest, metrics, and dependencies |
 | [x] | M1 | Backend-neutral framework contracts |
 | [x] | M2 | Universal HF dense-causal CPU path |
-| [~] | M3 | F1-F5 complete; resumable cursor awaiting validation |
+| [x] | M3 | Packed data validates, partitions, streams, and resumes exactly |
 | [~] | M4 | F1-F7 implemented; validation pending |
 | [~] | M5 | F1-F7 implemented; DP8 launch, host data preparation, timing, expected-world-size gates, and two-update v5e-8 smoke passed; certification remains pending |
 | [~] | M6 | F1-F4 positional, attention, block-layout, and TPU round-trip coverage implemented; Llama preflight passed, cross-family validation pending |
@@ -454,7 +454,7 @@ path before optimization adapters exist.
 
 ## M3 — Production packed-binary data
 
-**Status:** [~] M3-F1-M3-F5 complete; M3-F6 implemented and awaiting validation
+**Status:** [x] Complete
 
 **Goal:** Provide safe, distributed, fixed-shape, exactly resumable `.bin` data.
 
@@ -484,14 +484,18 @@ path before optimization adapters exist.
   Keep reading backend-neutral; expose transfer wrappers, depth, and timing.
   **Acceptance:** Ordering/backpressure pass; TPU begins tuning at depth 16.
 
-- [~] **M3-F6 — Resumable cursor**
+- [x] **M3-F6 — Resumable cursor**
   `feat(data): make packed data iteration exactly resumable`
   Save revision, permutation, shard, offset, epoch/tokens, and RNG.
   **Acceptance:** Interrupted and uninterrupted next batches match.
+  The complete 28-train/2-validation reference split is exercised with eight
+  training ranks and two validation ranks. Rank ownership covers every retained
+  batch exactly once, and every possible rank-local interruption point resumes
+  to the identical remaining token windows and final token count.
 
 ### Exit gate
 
-- [ ] The 28/2 reference split validates, streams, partitions, and resumes.
+- [x] The 28/2 reference split validates, streams, partitions, and resumes.
 
 ## M4 — Correct backend-neutral trainer
 
@@ -515,25 +519,40 @@ path before optimization adapters exist.
   backend option validation.
   **Acceptance:** Match PyTorch AdamW under identical policy.
 
-- [~] **M4-F4 — Token-based WSD**
+- [x] **M4-F4 — Token-based WSD**
   `feat(scheduler): add token-based WSD schedule`
   Warmup/stable/decay/min-LR/horizon with token-based resume.
   **Acceptance:** Boundaries and resume match the locked schedule.
+  Boundary fixtures now cover the token immediately before, at, and after each
+  warmup/stable/decay transition plus post-horizon clamping. Optimizer and
+  scheduler snapshots restored mid-schedule produce the identical remaining
+  learning-rate sequence and serialized scheduler state.
 
-- [~] **M4-F5 — Streaming evaluation**
+- [x] **M4-F5 — Streaming evaluation**
   `feat(evaluation): add token-weighted causal LM evaluation`
   Compute loss/perplexity without retaining predictions; isolate eval state.
   **Acceptance:** Match reference without mutating training.
+  Variable-mask causal batches now match the task's token-weighted reference
+  loss and perplexity while preserving trainer state, model mode, parameters,
+  and empty gradients. Evaluation remains streaming and retains no predictions.
 
-- [~] **M4-F6 — Sync-safe callbacks**
+- [x] **M4-F6 — Sync-safe callbacks**
   `feat(training): separate host callbacks from compiled metrics`
   Callbacks consume sparse materialized metrics, never live hot-path tensors.
   **Acceptance:** Backend mock detects no hidden scalar extraction.
+  Scalar-extraction instrumentation over a three-update run now proves that
+  non-logging updates perform no tensor `.item()` calls. Step hooks receive
+  `None` for unmaterialized loss, and the sole metrics callback receives only
+  immutable host floats at the requested logging boundary.
 
-- [~] **M4-F7 — Multi-family overfit**
+- [x] **M4-F7 — Multi-family overfit**
   `test(training): overfit dense AR conformance models`
   Check falling loss, finite gradients, resume, and export across tiny families.
   **Acceptance:** Trainer contains no family branch.
+  Every dense-AR fixture now trains through 30 updates with falling finite loss
+  and finite gradients, captures an exact update-15 model/optimizer/scheduler/
+  trainer checkpoint, resumes to the identical update-30 parameters, and
+  reloads its canonical export through standard Transformers APIs.
 
 ### Exit gate
 
@@ -740,20 +759,31 @@ loaded HF models safely without family logic in core.
   rank-local atomic shards preserve model, optimizer, scheduler, runtime,
   trainer, host/device RNG, and deterministic packed-data progress. TPU
   evaluation uses a separately validated packed-data source, deterministic
-  validation partition, scheduled engine evaluation, and structured callback
-  metrics. Replicas currently evaluate the same full validation stream for
-  correctness until distributed metric reductions land. Target-hardware
-  lifecycle validation remains. Tensor serialization
+  rank partition, scheduled engine evaluation, and structured callback
+  metrics. Causal evaluation now reduces the loss numerator and normalization
+  denominator across replicas before producing global loss and perplexity.
+  Target-hardware lifecycle validation remains. Tensor serialization
   is isolated in a private TPU module, preserving the framework-independent
   checkpoint contracts.
   Coordinator tests cover serialized evaluation-field mismatch rejection.
+  The optional `trainlm train`/`python -m trainlm train` entry point now builds
+  validated local packed datasets and delegates YAML construction, resume, and
+  execution to the same public facade. It emits one structured result and does
+  not expose worker commands, PJRT settings, or coordinator log parsing. Packed
+  readers inherit sequence length and seed from the validated training arguments
+  instead of introducing a second CLI-only geometry configuration.
 
-- [~] **M8-F1 — Structural inspector**
+- [x] **M8-F1 — Structural inspector**
   `feat(optimization): inspect dense causal LM capabilities`
   Prefer public HF contracts and expose unknown semantics explicitly.
   **Acceptance:** Reports match family fixtures; no name-only semantic guesses.
   Implemented through config, module, parameter-alias, and forward-signature
-  evidence; unproven residual/custom-normalization semantics remain unknown.
+  evidence. Opaque residual and custom-normalization semantics remain unknown
+  unless a guarded adapter supplies an explicit known, inferred, or unsupported
+  capability with a non-empty evidence citation. Unknown or uncited overrides
+  are rejected, preserving the no-family-name rule. Evidence is also bound to
+  the exact model class, configuration class, and source provider so a valid
+  claim for one adapter boundary cannot be replayed against another model.
 
 - [x] **M8-F2 — Adapter registry**
   `feat(optimization): add optional model adapter registry`
@@ -952,9 +982,9 @@ optimizations, autotuning, and benchmark evidence remain.
 
 ## M11 — Projection, optimizer, rematerialization, and HLO tuning
 
-**Status:** [~] In progress — reversible separate Q/K/V weight and optional bias
-packing plus an explicit live wrapper transform are implemented; partial source
-layouts and target update evidence remain.
+**Status:** [~] In progress — reversible separate and partial QKV weight/bias
+packing plus explicit live wrapper transforms are implemented; target update
+evidence remains.
 
 **Goal:** Close the parity gap one measured bottleneck at a time.
 
@@ -972,6 +1002,13 @@ layouts and target update evidence remain.
   a separate query projection and an already-combined key/value projection
   without inventing model keys. Already-packed canonical projections now use a
   validated no-transform descriptor that preserves compact GQA/MQA geometry.
+  Partial query/combined-KV wrappers can now be transactionally replaced by a
+  single packed projection, preserving compact K/V outputs and restoring the
+  original wrapper on rollback. Separate and partial transforms preserve a
+  uniform frozen/trainable state and reject mixed source states that one packed
+  parameter cannot represent without changing fine-tuning semantics. They also
+  reject internal or external source-parameter aliases before replacement,
+  rather than silently breaking tied-parameter behavior.
   Portable CPU regression coverage compares packed and separate float32 matrix
   multiplications with explicit numerical tolerances for their valid
   accumulation-order differences, including output and gradient parity.
@@ -1195,6 +1232,19 @@ early-update evidence gate are implemented; target-run alignment remains.
   and checkpoint policy now round-trips through a strict versioned manifest so
   worker/runtime boundaries cannot silently drop or invent sharding settings.
   Runtime application and the 1.3B target smoke remain outstanding.
+  `XlaRuntime.apply_fsdp_policy()` now validates topology, rematerialization
+  order, explicit wrap-class evidence, parameter-rule coverage, tensor ranks,
+  and optimizer-state geometry before emitting any SPMD annotations. It marks
+  model parameters and matching optimizer tensors on the data/FSDP mesh while
+  leaving the Hugging Face module tree intact. A real 1.3B target smoke,
+  distributed checkpoint proof, and canonical export remain outstanding.
+  Rank-sharded TPU checkpoint schema v2 now records the logical mesh
+  axes in both the committed manifest and every rank payload. Resume requires
+  exact axis-name/size equality, rather than accepting a different data/FSDP
+  topology merely because its total world size happens to match.
+  The loader remains backward-compatible with schema-v1 checkpoints: it
+  derives their topology from the rank runtime state and still requires an
+  exact match before restoring model or optimizer tensors.
   **Acceptance:** Correct 1.3B train/resume/export smoke on v5e-8.
 
 - [~] **M13-F7 — 1.3B benchmark**
