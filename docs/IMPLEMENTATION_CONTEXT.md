@@ -391,6 +391,11 @@ this file in every turn:
     payload and explicit update/shard thresholds. Unknown, missing, malformed,
     and incorrectly typed evidence is rejected before evaluation. A real
     revision-pinned target run remains outstanding.
+50. **M12-F4 plain-HF artifacts:** clean-process interoperability evidence now
+    has a strict versioned JSON loader. It requires every environment, canonical
+    layout, alias, reload-key, and numerical field; converts JSON key arrays to
+    the immutable evaluation contract; and applies the recorded tolerance. A
+    clean Transformers-only target execution remains outstanding.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

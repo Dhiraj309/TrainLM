@@ -1104,6 +1104,9 @@ early-update evidence gate are implemented; target-run alignment remains.
   A structured gate now requires a clean environment without TrainLM,
   canonical-only state-dict keys, preserved tied aliases, zero missing/unexpected
   keys, and logits/loss within tolerance after plain Transformers reload.
+  A strict versioned artifact loader now ingests the clean-process evidence,
+  requires the complete schema, normalizes JSON reload-key arrays, and applies
+  the artifact's explicit numerical tolerance without importing Transformers.
   Execution in a clean target environment remains pending.
 
 - [~] **M12-F5 — Parity report**
