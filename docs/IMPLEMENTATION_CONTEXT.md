@@ -401,6 +401,11 @@ this file in every turn:
     malformed array shapes. Every configuration, metric, profile, and HLO path
     must be relative, confined beneath the report directory, and present, so a
     reviewer cannot unknowingly consume an incomplete evidence bundle.
+52. **M13-F5 cross-family bundle:** the 135M family matrix now has a strict
+    versioned manifest loader. It reconstructs complete typed family records,
+    rejects schema drift, and confines every per-family evidence reference
+    beneath the manifest directory before applying geometry, correctness,
+    export, graph, and architecture-adjusted MFU gates.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

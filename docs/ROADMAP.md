@@ -1179,6 +1179,9 @@ early-update evidence gate are implemented; target-run alignment remains.
   A pure evidence evaluator now requires one unique support/performance record
   per advertised family, matched workload/device/update geometry, correctness,
   graph and export gates, and computes MFU from family-specific FLOPs/token.
+  A strict versioned matrix loader now reconstructs every record and requires
+  each family evidence path to be relative, confined beneath the manifest, and
+  present before applying the advertised-family and MFU gates.
   Real synchronized 135M measurements remain outstanding.
   **Acceptance:** Every advertised family has a support/performance record.
 

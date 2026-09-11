@@ -52,6 +52,7 @@ from trainlm.benchmark.cross_family_matrix import (
     CrossFamilyRecord,
     SupportLevel,
     evaluate_cross_family_matrix,
+    load_cross_family_matrix_evaluation,
 )
 from trainlm.benchmark.fsdp_scaling import (
     FSDPScalingEvaluation,
@@ -89,6 +90,7 @@ __all__ = [
     "evaluate_baseline",
     "evaluate_attention_stage",
     "evaluate_cross_family_matrix",
+    "load_cross_family_matrix_evaluation",
     "evaluate_fsdp_scaling",
     "evaluate_parity_closure",
     "load_parity_closure_evidence",
