@@ -85,6 +85,23 @@ def test_explicit_fallback_provider_is_a_successful_selection():
     assert plan.warnings == ()
 
 
+def test_required_policy_rejects_automatic_fallback_only_provider():
+    fallback = _providers()[1]
+    plan = OptimizationPlanner((fallback,)).plan(
+        capabilities(),
+        backend="pytorch",
+        precision="fp32",
+        policy="required",
+        requests=(_request(),),
+    )
+
+    assert plan.status == "blocked"
+    assert plan.decisions[0].status == "blocked"
+    assert plan.decisions[0].selected_provider is None
+    assert "fallback-only provider" in plan.decisions[0].reason
+    assert plan.transformations == ()
+
+
 def test_required_or_explicit_unsupported_provider_blocks_before_mutation():
     planner = OptimizationPlanner(_providers())
     plan = planner.plan(

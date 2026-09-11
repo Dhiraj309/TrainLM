@@ -190,7 +190,14 @@ class OptimizationPlanner:
             requested = request.requested_provider
             chosen = next((item for item in eligible if item.provider_id == requested), None)
             if requested is None:
-                chosen = (preferred or fallbacks or [None])[0]
+                candidates = preferred if policy == "required" else preferred or fallbacks
+                chosen = (candidates or [None])[0]
+                if chosen is None and policy == "required" and fallbacks:
+                    rejected.extend(
+                        f"{item.provider_id}: fallback-only provider does not "
+                        "satisfy required policy"
+                        for item in fallbacks
+                    )
             if chosen is None and policy == "auto" and fallbacks:
                 chosen = fallbacks[0]
             if chosen is None:
