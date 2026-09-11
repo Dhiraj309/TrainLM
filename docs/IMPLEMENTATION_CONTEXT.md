@@ -416,6 +416,11 @@ this file in every turn:
     evaluation timestamp, and freshness window. Tier artifacts must be relative,
     confined beneath the manifest, and present before current-evidence
     certification is evaluated.
+55. **M14-F5 strict support schema:** support-manifest loading now enforces the
+    exact top-level, hardware, execution-path, provider, and TorchTPU field sets.
+    Malformed JSON, incorrect arrays/objects, unknown claim fields, and boolean
+    schema versions fail closed before public explanations are compared with
+    published support levels.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
