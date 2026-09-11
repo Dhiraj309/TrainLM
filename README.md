@@ -153,6 +153,22 @@ equivalent code-first pretrained workflow. Public config files carry an
 `api_version`; renamed keys emit `DeprecationWarning` for one public API version
 before removal.
 
+The equivalent packed-data command-line path delegates to the same public
+trainer and dataset adapters:
+
+```bash
+trainlm train \
+  --config examples/dense_ar_pretraining.yaml \
+  --train-manifest-dir data/packed/train \
+  --eval-manifest-dir data/packed/validation \
+  --resume-from-checkpoint runs/dense-ar/checkpoint-500
+```
+
+The CLI prints one structured JSON training result. TPU worker commands, PJRT
+configuration, coordinator stage logs, and raw manifests remain private.
+Packed readers use the YAML `sequence_length` and training seed; validation
+always uses its deterministic validation partition semantics.
+
 On CPU and CUDA, `save_steps` and `eval_steps` are handled by the same
 backend-neutral lifecycle used for training. A local run can continue from a
 TrainLM training checkpoint with

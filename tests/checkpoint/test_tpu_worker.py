@@ -28,6 +28,7 @@ class Runtime:
     def state_dict(self):
         return {
             "backend": "xla", "rank": 0, "world_size": 1,
+            "mesh_axes": {"data": 1},
             "device_rng_state": 17,
         }
 
@@ -100,6 +101,68 @@ def test_resume_rejects_incomplete_or_wrong_topology(tmp_path):
     (destination / "manifest.json").write_text(json.dumps(manifest))
     with pytest.raises(ValueError, match="world size"):
         load_tpu_worker_checkpoint(current, destination)
+
+
+def test_resume_rejects_same_world_size_with_different_mesh(tmp_path):
+    current = engine()
+    destination = save_tpu_worker_checkpoint(current, tmp_path / "checkpoint")
+    manifest_path = destination / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["mesh_axes"] = {"data": 1, "fsdp": 1}
+    manifest_path.write_text(json.dumps(manifest))
+
+    with pytest.raises(ValueError, match="mesh axes"):
+        load_tpu_worker_checkpoint(current, destination)
+
+
+def test_resume_migrates_legacy_checkpoint_using_rank_runtime_mesh(tmp_path):
+    current = engine()
+    destination = save_tpu_worker_checkpoint(current, tmp_path / "checkpoint")
+    manifest_path = destination / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["schema_version"] = 1
+    manifest.pop("mesh_axes")
+    manifest_path.write_text(json.dumps(manifest))
+    shard_path = destination / manifest["shards"][0]
+    payload = torch.load(shard_path, map_location="cpu", weights_only=False)
+    payload["schema_version"] = 1
+    payload.pop("mesh_axes")
+    torch.save(payload, shard_path)
+
+    load_tpu_worker_checkpoint(current, destination)
+
+    assert current.state.step == 3
+    assert current.runtime.loaded["mesh_axes"] == {"data": 1}
+
+
+def test_legacy_resume_rejects_rank_runtime_mesh_mismatch(tmp_path):
+    current = engine()
+    destination = save_tpu_worker_checkpoint(current, tmp_path / "checkpoint")
+    manifest_path = destination / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["schema_version"] = 1
+    manifest.pop("mesh_axes")
+    manifest_path.write_text(json.dumps(manifest))
+    shard_path = destination / manifest["shards"][0]
+    payload = torch.load(shard_path, map_location="cpu", weights_only=False)
+    payload["schema_version"] = 1
+    payload.pop("mesh_axes")
+    payload["runtime"]["mesh_axes"] = {"fsdp": 1}
+    torch.save(payload, shard_path)
+
+    with pytest.raises(ValueError, match="mesh axes"):
+        load_tpu_worker_checkpoint(current, destination)
+
+
+def test_recovery_rejects_mesh_geometry_that_disagrees_with_world_size(tmp_path):
+    root = tmp_path / "checkpoints"
+    destination = save_tpu_worker_checkpoint(engine(), root / "checkpoint-3")
+    manifest_path = destination / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["mesh_axes"] = {"data": 2}
+    manifest_path.write_text(json.dumps(manifest))
+
+    assert find_latest_committed_tpu_checkpoint(root) is None
 
 
 def test_recovery_ignores_compute_staging_and_incomplete_persistence(tmp_path):

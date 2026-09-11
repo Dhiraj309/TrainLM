@@ -41,6 +41,9 @@ dependencies = [
     "transformers>=5.0,<6",
 ]
 
+[project.scripts]
+trainlm = "trainlm.cli:main"
+
 [project.optional-dependencies]
 tpu-xla = [
     "torch==2.9.0",

@@ -263,7 +263,15 @@ class PackedQKVProjectionSpec:
 class PackedQKVProjection(nn.Module):
     """One linear projection that returns compact query, key, and value views."""
 
-    def __init__(self, spec: QKVProjectionSpec, weight: Tensor, bias: Tensor | None) -> None:
+    def __init__(
+        self,
+        spec: QKVProjectionSpec,
+        weight: Tensor,
+        bias: Tensor | None,
+        *,
+        weight_requires_grad: bool = True,
+        bias_requires_grad: bool = True,
+    ) -> None:
         super().__init__()
         expected_weight = (spec.q_size + 2 * spec.kv_size, spec.input_size)
         if tuple(weight.shape) != expected_weight:
@@ -276,8 +284,12 @@ class PackedQKVProjection(nn.Module):
                 f"Packed QKV bias shape must be {expected_bias}, got {tuple(bias.shape)}."
             )
         self.spec = spec
-        self.weight = nn.Parameter(weight)
-        self.bias = nn.Parameter(bias) if bias is not None else None
+        self.weight = nn.Parameter(weight, requires_grad=weight_requires_grad)
+        self.bias = (
+            nn.Parameter(bias, requires_grad=bias_requires_grad)
+            if bias is not None
+            else None
+        )
 
     @classmethod
     def from_separate(
@@ -308,17 +320,152 @@ class PackedQKVProjection(nn.Module):
         weights = tuple(projection.weight.detach().clone() for projection in projections)
         if len({(weight.dtype, weight.device) for weight in weights}) != 1:
             raise ValueError("QKV projection weights must share dtype and device.")
+        weight_requires_grad = _uniform_requires_grad(
+            tuple(projection.weight for projection in projections),
+            label="QKV projection weights",
+        )
         bias = None
+        bias_requires_grad = True
         if bias_presence[0]:
             biases = tuple(projection.bias.detach().clone() for projection in projections)
             if len({(value.dtype, value.device) for value in biases}) != 1:
                 raise ValueError("QKV projection biases must share dtype and device.")
+            bias_requires_grad = _uniform_requires_grad(
+                tuple(projection.bias for projection in projections),
+                label="QKV projection biases",
+            )
             bias = torch.cat(biases, dim=0)
-        return cls(spec, torch.cat(weights, dim=0), bias)
+        return cls(
+            spec,
+            torch.cat(weights, dim=0),
+            bias,
+            weight_requires_grad=weight_requires_grad,
+            bias_requires_grad=bias_requires_grad,
+        )
 
     def forward(self, hidden_states: Tensor) -> tuple[Tensor, Tensor, Tensor]:
         packed = F.linear(hidden_states, self.weight, self.bias)
         return packed.split((self.spec.q_size, self.spec.kv_size, self.spec.kv_size), dim=-1)
+
+
+class PackedPartialQKVProjection(nn.Module):
+    """One linear projection built from separate query and combined KV sources."""
+
+    def __init__(
+        self,
+        spec: PartialQKVProjectionSpec,
+        weight: Tensor,
+        bias: Tensor | None,
+        *,
+        weight_requires_grad: bool = True,
+        bias_requires_grad: bool = True,
+    ) -> None:
+        super().__init__()
+        expected_weight = (spec.q_size + 2 * spec.kv_size, spec.input_size)
+        if tuple(weight.shape) != expected_weight:
+            raise ValueError(
+                "Packed partial QKV weight shape must be "
+                f"{expected_weight}, got {tuple(weight.shape)}."
+            )
+        expected_bias = (expected_weight[0],)
+        if bias is not None and tuple(bias.shape) != expected_bias:
+            raise ValueError(
+                "Packed partial QKV bias shape must be "
+                f"{expected_bias}, got {tuple(bias.shape)}."
+            )
+        self.spec = spec
+        self.weight = nn.Parameter(weight, requires_grad=weight_requires_grad)
+        self.bias = (
+            nn.Parameter(bias, requires_grad=bias_requires_grad)
+            if bias is not None
+            else None
+        )
+
+    @classmethod
+    def from_partial(
+        cls,
+        spec: PartialQKVProjectionSpec,
+        q_projection: nn.Linear,
+        kv_projection: nn.Linear,
+    ) -> "PackedPartialQKVProjection":
+        """Pack validated query and combined-KV projections before optimization."""
+
+        if not isinstance(q_projection, nn.Linear) or not isinstance(
+            kv_projection, nn.Linear
+        ):
+            raise TypeError(
+                "Partial QKV packing requires query and combined-KV "
+                "torch.nn.Linear projections."
+            )
+        expected_outputs = (spec.q_size, 2 * spec.kv_size)
+        for name, projection, output_size in zip(
+            ("query", "combined key/value"),
+            (q_projection, kv_projection),
+            expected_outputs,
+        ):
+            if (
+                projection.in_features != spec.input_size
+                or projection.out_features != output_size
+            ):
+                raise ValueError(
+                    f"{name} projection geometry does not match the partial "
+                    "QKV specification."
+                )
+        bias_presence = (
+            q_projection.bias is not None,
+            kv_projection.bias is not None,
+        )
+        if len(set(bias_presence)) != 1:
+            raise ValueError(
+                "Partial QKV projections must either both have bias or both "
+                "be bias-free."
+            )
+        if (spec.packed_bias_key is not None) != bias_presence[0]:
+            raise ValueError(
+                "Partial QKV projection bias layout does not match the specification."
+            )
+        weights = (
+            q_projection.weight.detach().clone(),
+            kv_projection.weight.detach().clone(),
+        )
+        if len({(weight.dtype, weight.device) for weight in weights}) != 1:
+            raise ValueError(
+                "Partial QKV projection weights must share dtype and device."
+            )
+        weight_requires_grad = _uniform_requires_grad(
+            (q_projection.weight, kv_projection.weight),
+            label="Partial QKV projection weights",
+        )
+        bias = None
+        bias_requires_grad = True
+        if bias_presence[0]:
+            biases = (
+                q_projection.bias.detach().clone(),
+                kv_projection.bias.detach().clone(),
+            )
+            if len({(value.dtype, value.device) for value in biases}) != 1:
+                raise ValueError(
+                    "Partial QKV projection biases must share dtype and device."
+                )
+            bias_requires_grad = _uniform_requires_grad(
+                (q_projection.bias, kv_projection.bias),
+                label="Partial QKV projection biases",
+            )
+            bias = torch.cat(biases, dim=0)
+        return cls(
+            spec,
+            torch.cat(weights, dim=0),
+            bias,
+            weight_requires_grad=weight_requires_grad,
+            bias_requires_grad=bias_requires_grad,
+        )
+
+    def forward(self, hidden_states: Tensor) -> tuple[Tensor, Tensor, Tensor]:
+        packed = F.linear(hidden_states, self.weight, self.bias)
+        return packed.split(
+            (self.spec.q_size, self.spec.kv_size, self.spec.kv_size),
+            dim=-1,
+        )
 
 
 def qkv_pack_transform_handler(
@@ -341,11 +488,13 @@ def qkv_pack_transform_handler(
     def apply(model: nn.Module, transformation: ModelTransformation) -> None:
         if len(transformation.target_paths) != 1:
             raise ValueError("QKV packing requires exactly one explicit wrapper path.")
-        target = _resolve_module(model, transformation.target_paths[0])
+        target_path = transformation.target_paths[0]
+        target = _resolve_module(model, target_path)
+        _reject_packed_parameter_aliases(model, target, target_path=target_path)
         packed = PackedQKVProjection.from_separate(
             spec, target.q_proj, target.k_proj, target.v_proj
         )
-        _replace_module(model, transformation.target_paths[0], packed)
+        _replace_module(model, target_path, packed)
 
     def rollback(
         model: nn.Module, transformation: ModelTransformation, snapshot: nn.Module
@@ -353,6 +502,48 @@ def qkv_pack_transform_handler(
         _replace_module(model, transformation.target_paths[0], snapshot)
 
     return TransformHandler(transform_id, inverse_transform_id, capture, apply, rollback)
+
+
+def partial_qkv_pack_transform_handler(
+    spec: PartialQKVProjectionSpec,
+    *,
+    transform_id: str = "pack-partial-qkv",
+    inverse_transform_id: str = "unpack-partial-qkv",
+) -> TransformHandler:
+    """Create a reversible live transform for query plus combined-KV wrappers."""
+
+    def capture(model: nn.Module, transformation: ModelTransformation) -> Any:
+        return _resolve_module(model, transformation.target_paths[0])
+
+    def apply(model: nn.Module, transformation: ModelTransformation) -> None:
+        if len(transformation.target_paths) != 1:
+            raise ValueError(
+                "Partial QKV packing requires exactly one explicit wrapper path."
+            )
+        target_path = transformation.target_paths[0]
+        target = _resolve_module(model, target_path)
+        _reject_packed_parameter_aliases(model, target, target_path=target_path)
+        packed = PackedPartialQKVProjection.from_partial(
+            spec,
+            target.q_proj,
+            target.kv_proj,
+        )
+        _replace_module(model, target_path, packed)
+
+    def rollback(
+        model: nn.Module,
+        transformation: ModelTransformation,
+        snapshot: nn.Module,
+    ) -> None:
+        _replace_module(model, transformation.target_paths[0], snapshot)
+
+    return TransformHandler(
+        transform_id,
+        inverse_transform_id,
+        capture,
+        apply,
+        rollback,
+    )
 
 
 def _resolve_module(model: nn.Module, path: str) -> nn.Module:
@@ -364,6 +555,42 @@ def _resolve_module(model: nn.Module, path: str) -> nn.Module:
     if not isinstance(target, nn.Module):
         raise TypeError(f"Target path {path!r} does not resolve to a module.")
     return target
+
+
+def _uniform_requires_grad(parameters: tuple[nn.Parameter, ...], *, label: str) -> bool:
+    values = {parameter.requires_grad for parameter in parameters}
+    if len(values) != 1:
+        raise ValueError(
+            f"{label} must share requires_grad because packing creates one parameter."
+        )
+    return values.pop()
+
+
+def _reject_packed_parameter_aliases(
+    model: nn.Module,
+    target: nn.Module,
+    *,
+    target_path: str,
+) -> None:
+    """Reject aliases that concatenation cannot preserve in one parameter."""
+
+    target_parameter_ids = {
+        id(parameter)
+        for _, parameter in target.named_parameters(remove_duplicate=False)
+    }
+    aliases: dict[int, list[str]] = {}
+    for name, parameter in model.named_parameters(remove_duplicate=False):
+        if id(parameter) in target_parameter_ids:
+            aliases.setdefault(id(parameter), []).append(name)
+    conflicting = tuple(
+        tuple(sorted(names)) for names in aliases.values() if len(names) != 1
+    )
+    if conflicting:
+        formatted = ", ".join("/".join(names) for names in sorted(conflicting))
+        raise ValueError(
+            f"QKV target {target_path!r} has parameter aliases that packing "
+            f"cannot preserve: {formatted}."
+        )
 
 
 def _replace_module(model: nn.Module, path: str, replacement: nn.Module) -> None:
@@ -380,9 +607,11 @@ def _replace_module(model: nn.Module, path: str, replacement: nn.Module) -> None
 
 
 __all__ = [
+    "PackedPartialQKVProjection",
     "PackedQKVProjection",
     "PackedQKVProjectionSpec",
     "PartialQKVProjectionSpec",
     "QKVProjectionSpec",
+    "partial_qkv_pack_transform_handler",
     "qkv_pack_transform_handler",
 ]

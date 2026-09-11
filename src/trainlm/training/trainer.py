@@ -466,12 +466,21 @@ class Trainer:
 
         try:
             with torch.no_grad():
+                distributed_aggregator = getattr(
+                    self.task,
+                    "aggregate_distributed_evaluation_stream",
+                    None,
+                )
                 stream_aggregator = getattr(
                     self.task,
                     "aggregate_evaluation_stream",
                     None,
                 )
-                if callable(stream_aggregator):
+                if self.runtime.is_distributed and callable(distributed_aggregator):
+                    metrics = distributed_aggregator(
+                        self._evaluation_results(), self.runtime
+                    )
+                elif callable(stream_aggregator):
                     metrics = stream_aggregator(self._evaluation_results())
                 else:
                     results: list[TaskResult] = []

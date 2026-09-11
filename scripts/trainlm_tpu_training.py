@@ -315,12 +315,8 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
             split="validation",
             seed=0,
             epoch=0,
-            # Until evaluation reductions become part of the backend contract,
-            # each replica evaluates the same deterministic validation stream.
-            # This is more work than sharding, but produces globally correct
-            # metrics instead of reporting rank zero's shard as the full set.
-            world_size=1,
-            rank=0,
+            world_size=world_size,
+            rank=rank,
             cross_shard_remainder="drop",
             host_remainder="drop",
         )

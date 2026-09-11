@@ -18,7 +18,7 @@ from .optimizers import (
     OptimizerStatePolicy,
     create_optimizer,
 )
-from .inspection import inspect_dense_causal_lm
+from .inspection import StructuralInspectionEvidence, inspect_dense_causal_lm
 from .adapters import (
     AdapterCandidate,
     AdapterResolution,
@@ -67,10 +67,12 @@ from .attention_tuning import (
     AttentionTuningResult,
 )
 from .qkv import (
+    PackedPartialQKVProjection,
     PackedQKVProjection,
     PackedQKVProjectionSpec,
     PartialQKVProjectionSpec,
     QKVProjectionSpec,
+    partial_qkv_pack_transform_handler,
     qkv_pack_transform_handler,
 )
 from .mlp import (
@@ -204,9 +206,11 @@ __all__ = [
     "ProviderDecision",
     "ProviderSpec",
     "PackedQKVProjection",
+    "PackedPartialQKVProjection",
     "PackedQKVProjectionSpec",
     "PartialQKVProjectionSpec",
     "QKVProjectionSpec",
+    "partial_qkv_pack_transform_handler",
     "QWEN2_MAPPING",
     "RematerializationMeasurement",
     "RematerializationPolicy",
@@ -221,6 +225,7 @@ __all__ = [
     "ParameterLayoutMapping",
     "PHI_MAPPING",
     "StateDictLayoutConverter",
+    "StructuralInspectionEvidence",
     "TransformApplicationError",
     "TransformHandler",
     "TransformTransaction",

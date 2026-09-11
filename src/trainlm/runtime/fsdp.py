@@ -12,6 +12,17 @@ CheckpointLayout = Literal["distributed_rank_shards"]
 
 
 @dataclass(frozen=True, slots=True)
+class FSDPApplication:
+    """Summary of one validated XLA SPMD FSDP policy application."""
+
+    mesh_axes: Mapping[str, int]
+    sharded_parameters: tuple[str, ...]
+    replicated_parameters: tuple[str, ...]
+    sharded_optimizer_tensors: int
+    replicated_optimizer_tensors: int
+
+
+@dataclass(frozen=True, slots=True)
 class ParameterShardingRule:
     """Adapter-provided partitioning for parameters matching one suffix."""
 
@@ -213,6 +224,7 @@ class FSDPMeshPolicy:
 
 __all__ = [
     "CheckpointLayout",
+    "FSDPApplication",
     "FSDPCheckpointPolicy",
     "FSDPMeshPolicy",
     "ParameterShardingRule",

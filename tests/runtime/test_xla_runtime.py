@@ -7,13 +7,17 @@ from torch.optim import SGD
 
 from trainlm.runtime import (
     ExecutionBackend,
+    FSDPMeshPolicy,
     LogicalMesh,
+    ParameterShardingRule,
     XlaDiagnostics,
     XlaRuntime,
 )
 
 
 class FakeXlaModel:
+
+    REDUCE_SUM = "sum"
 
     def __init__(self):
         self.optimizer_steps = 0
@@ -39,6 +43,10 @@ class FakeXlaModel:
 
     def rendezvous(self, name):
         self.barriers.append(name)
+
+    def all_reduce(self, reduce_type, value):
+        assert reduce_type == self.REDUCE_SUM
+        return value
 
 
 class FakeSpmd:
@@ -123,6 +131,7 @@ def test_xla_runtime_uses_xla_step_and_barrier_hooks():
     assert xm.optimizer_steps == 1
     assert xm.mark_steps == 1
     assert xm.barriers == ["test"]
+    assert backend.reduce_sum(torch.tensor(2.0)).item() == 2.0
 
 
 def test_xla_runtime_validates_mesh_ownership_and_state():
@@ -152,6 +161,57 @@ def test_xla_runtime_marks_replicated_parameters_and_data_batches():
     batch_spec = spmd.shardings[-1][2]
     assert parameter_spec.axes == ()
     assert batch_spec.axes == ("data", None)
+
+
+def test_xla_runtime_applies_fsdp_parameter_and_optimizer_sharding():
+    backend, _, spmd = runtime(spmd=True)
+    model = nn.Sequential(nn.Linear(2, 2))
+    optimizer = SGD(model.parameters(), lr=0.1, momentum=0.9)
+    model(torch.ones(1, 2)).sum().backward()
+    optimizer.step()
+    policy = FSDPMeshPolicy(
+        data_replicas=1,
+        fsdp_shards=1,
+        wrap_module_classes=("Linear",),
+        parameter_rules=(
+            ParameterShardingRule("0.weight", ("fsdp", None)),
+            ParameterShardingRule("0.bias", ("fsdp",)),
+        ),
+    )
+
+    result = backend.apply_fsdp_policy(
+        model, optimizer, policy, rematerialization_applied=True
+    )
+
+    assert result.mesh_axes == {"data": 1, "fsdp": 1}
+    assert result.sharded_parameters == ("0.weight", "0.bias")
+    assert result.replicated_parameters == ()
+    assert result.sharded_optimizer_tensors == 2
+    assert [entry[2].axes for entry in spmd.shardings] == [
+        ("fsdp", None),
+        ("fsdp",),
+        ("fsdp", None),
+        ("fsdp",),
+    ]
+
+
+def test_xla_runtime_validates_fsdp_policy_before_marking_tensors():
+    backend, _, spmd = runtime(spmd=True)
+    model = nn.Linear(2, 2)
+    optimizer = SGD(model.parameters(), lr=0.1)
+    policy = FSDPMeshPolicy(
+        data_replicas=1,
+        fsdp_shards=1,
+        wrap_module_classes=("MissingDecoderLayer",),
+        parameter_rules=(ParameterShardingRule("weight", ("fsdp", None)),),
+    )
+
+    with pytest.raises(ValueError, match="wrap classes"):
+        backend.apply_fsdp_policy(
+            model, optimizer, policy, rematerialization_applied=True
+        )
+
+    assert spmd.shardings == []
 
 
 def test_xla_runtime_initializes_persistent_cache_before_device_use(tmp_path):
