@@ -69,6 +69,22 @@ def test_auto_plan_uses_explained_portable_fallback():
     assert "fallback" in plan.warnings[0]
 
 
+def test_explicit_fallback_provider_is_a_successful_selection():
+    plan = OptimizationPlanner(_providers()).plan(
+        capabilities(),
+        backend="pytorch",
+        precision="fp32",
+        policy="auto",
+        requests=(_request("torch-reference"),),
+    )
+
+    assert plan.status == "ready"
+    assert plan.decisions[0].status == "selected"
+    assert plan.decisions[0].selected_provider == "torch-reference"
+    assert plan.decisions[0].requested_provider == "torch-reference"
+    assert plan.warnings == ()
+
+
 def test_required_or_explicit_unsupported_provider_blocks_before_mutation():
     planner = OptimizationPlanner(_providers())
     plan = planner.plan(
