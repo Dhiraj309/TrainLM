@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 import hashlib
 import json
 from typing import Iterable
@@ -149,6 +149,13 @@ class OptimizationPlanner:
             "policy": policy,
             "adapter": adapter_id,
             "runtime_features": runtime_features,
+            "providers": [
+                asdict(provider)
+                for provider in sorted(
+                    self._providers.values(),
+                    key=lambda item: item.provider_id,
+                )
+            ],
             "requests": [
                 [item.component, item.operation, item.requirements, item.requested_provider]
                 for item in requests
