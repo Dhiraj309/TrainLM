@@ -516,6 +516,10 @@ this file in every turn:
     unknown fields, non-mapping entries, and malformed key, shape, mapping, or
     alias-group containers. String values are never silently expanded into
     character tuples, and schema errors fail before tensor conversion.
+76. **M8-F5 complete schema declarations:** state-dict layout manifests must
+    explicitly provide the schema version, mappings, and alias groups, including
+    empty collections. Boolean schema versions are rejected rather than being
+    accepted through Python's integer equality rules.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

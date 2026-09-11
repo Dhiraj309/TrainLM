@@ -55,7 +55,11 @@ def test_manifest_round_trip_is_checkpoint_safe():
             "unknown keys",
         ),
         (
-            {"schema_version": 1, "mappings": "not-a-list"},
+            {
+                "schema_version": 1,
+                "mappings": "not-a-list",
+                "alias_groups": [],
+            },
             TypeError,
             "mappings must be a list or tuple",
         ),
@@ -69,6 +73,26 @@ def test_manifest_round_trip_is_checkpoint_safe():
 def test_manifest_rejects_malformed_top_level_values(manifest, error, message):
     with pytest.raises(error, match=message):
         StateDictLayoutConverter.from_manifest(manifest)
+
+
+@pytest.mark.parametrize("missing_key", ("schema_version", "mappings", "alias_groups"))
+def test_manifest_requires_every_schema_field(missing_key):
+    manifest = {
+        "schema_version": 1,
+        "mappings": [],
+        "alias_groups": [],
+    }
+    del manifest[missing_key]
+
+    with pytest.raises(ValueError, match=f"missing keys: {missing_key}"):
+        StateDictLayoutConverter.from_manifest(manifest)
+
+
+def test_manifest_rejects_boolean_schema_version():
+    with pytest.raises(ValueError, match="schema_version=1 only"):
+        StateDictLayoutConverter.from_manifest(
+            {"schema_version": True, "mappings": [], "alias_groups": []}
+        )
 
 
 def test_manifest_rejects_unknown_and_missing_mapping_fields():

@@ -194,10 +194,16 @@ class StateDictLayoutConverter:
             raise ValueError(
                 "State-dict layout manifest has unknown keys: " + ", ".join(unknown)
             )
-        if value.get("schema_version") != 1:
+        missing = sorted(allowed - value.keys())
+        if missing:
+            raise ValueError(
+                "State-dict layout manifest is missing keys: " + ", ".join(missing)
+            )
+        schema_version = value["schema_version"]
+        if isinstance(schema_version, bool) or schema_version != 1:
             raise ValueError("State-dict layout manifest supports schema_version=1 only.")
-        mappings = value.get("mappings", ())
-        alias_groups = value.get("alias_groups", ())
+        mappings = value["mappings"]
+        alias_groups = value["alias_groups"]
         if not isinstance(mappings, (list, tuple)):
             raise TypeError("State-dict layout mappings must be a list or tuple.")
         if not isinstance(alias_groups, (list, tuple)) or any(
