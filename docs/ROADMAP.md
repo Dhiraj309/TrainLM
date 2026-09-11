@@ -825,7 +825,9 @@ loaded HF models safely without family logic in core.
   checks. The converter preserves unrelated state and restores declared tied
   keys as shared tensor objects for canonical export. Alias groups must be
   disjoint and cannot include keys consumed or produced by a layout mapping,
-  preventing ambiguous restoration or silently lost ties.
+  preventing ambiguous restoration or silently lost ties. Manifest loading
+  rejects unknown fields and malformed mapping, key, shape, or alias-group
+  containers instead of coercing strings or accepting misspelled contracts.
 
 - [x] **M8-F6 — Explain report**
   `feat(optimization): expose model optimization explanation`
