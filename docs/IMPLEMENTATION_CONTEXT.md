@@ -499,6 +499,10 @@ this file in every turn:
     already expose one gate/up parameter now use an explicit validated
     no-transform descriptor with derived weight and optional-bias geometry.
     This preserves their source layout without inventing separate model keys.
+72. **M11-F2 portable update parity:** biased and bias-free live gate/up
+    transforms now compare one post-transform SGD update against the separate
+    reference, including split weight/bias state and subsequent forward output.
+    Target-XLA update parity remains the hardware acceptance gate.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
