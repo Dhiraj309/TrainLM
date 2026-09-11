@@ -211,7 +211,11 @@ class OptimizationPlanner:
                 else:
                     warnings.append(reason)
                 continue
-            is_fallback = chosen.fallback or (requested is not None and chosen.provider_id != requested)
+            is_fallback = (
+                requested is None and chosen.fallback
+            ) or (
+                requested is not None and chosen.provider_id != requested
+            )
             decisions.append(ProviderDecision(
                 decision_id=f"{request.component}.{request.operation}",
                 component=request.component,

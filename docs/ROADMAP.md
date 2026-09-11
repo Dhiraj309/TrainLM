@@ -805,7 +805,10 @@ loaded HF models safely without family logic in core.
   planner deterministically handles disabled, auto, required, and explicit
   provider requests, producing a blocked plan before mutation when necessary.
   Its public planning boundary validates capability, backend, precision,
-  policy, request, and optional adapter-resolution types before selection.
+  policy, request, and optional adapter-resolution types before selection. A
+  compatible provider explicitly requested by ID is recorded as selected even
+  when it is designated as the automatic fallback, avoiding contradictory
+  fallback metadata where selected and requested IDs are identical.
 
 - [x] **M8-F4 — Transactional transforms**
   `feat(optimization): apply validated reversible model transforms`

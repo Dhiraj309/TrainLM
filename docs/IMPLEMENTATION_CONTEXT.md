@@ -524,6 +524,10 @@ this file in every turn:
     capability objects, empty backend or precision names, unknown policies,
     malformed operation requests, and invalid adapter resolutions before
     hashing or provider selection.
+78. **M8-F3 explicit fallback selection:** explicitly requesting an eligible
+    provider marked for automatic fallback now produces a normal selected
+    decision. Fallback status is reserved for automatic choice or substitution
+    after an unavailable explicit request, so decision invariants remain valid.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
