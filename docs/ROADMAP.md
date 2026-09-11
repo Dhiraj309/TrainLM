@@ -1012,7 +1012,8 @@ evidence remains.
   Portable CPU regression coverage compares packed and separate float32 matrix
   multiplications with explicit numerical tolerances for their valid
   accumulation-order differences, including output and gradient parity.
-  Target output/gradient/update parity remains.
+  Portable SGD update parity covers separate and partial layouts with and
+  without bias. Target-XLA output/gradient/update parity remains.
 
 - [~] **M11-F2 — Reversible gated-MLP packing**
   `feat(optimization): pack compatible gate and up projections`

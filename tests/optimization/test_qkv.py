@@ -1,5 +1,6 @@
 import pytest
 import torch
+from torch.optim import SGD
 
 from trainlm.optimization import QKVProjectionSpec
 
@@ -96,9 +97,9 @@ class _SeparateQKV(nn.Module):
 
 
 class _AttentionFixture(nn.Module):
-    def __init__(self):
+    def __init__(self, *, bias=False):
         super().__init__()
-        self.projections = _SeparateQKV()
+        self.projections = _SeparateQKV(bias=bias)
 
     def forward(self, hidden_states):
         return self.projections(hidden_states)
@@ -231,6 +232,50 @@ def test_live_qkv_transform_rejects_external_parameter_alias():
 
     assert model.projections is original
     assert model.shared_query_weight is model.projections.q_proj.weight
+
+
+@pytest.mark.parametrize("bias", (False, True))
+def test_live_qkv_transform_preserves_optimizer_update(bias):
+    torch.manual_seed(29)
+    original = _AttentionFixture(bias=bias)
+    transformed = deepcopy(original)
+    layout = spec(
+        q_bias_key="q_proj.bias" if bias else None,
+        k_bias_key="k_proj.bias" if bias else None,
+        v_bias_key="v_proj.bias" if bias else None,
+        packed_bias_key="qkv_proj.bias" if bias else None,
+    )
+    registry = ModelTransformRegistry()
+    registry.register(qkv_pack_transform_handler(layout))
+    registry.apply(transformed, _qkv_plan()).commit()
+    original_optimizer = SGD(original.parameters(), lr=0.05)
+    transformed_optimizer = SGD(transformed.parameters(), lr=0.05)
+    hidden_states = torch.randn(2, 3, 6)
+
+    sum(value.square().sum() for value in original(hidden_states)).backward()
+    sum(value.square().sum() for value in transformed(hidden_states)).backward()
+    original_optimizer.step()
+    transformed_optimizer.step()
+
+    packed_weights = transformed.projections.weight.split((16, 8, 8), dim=0)
+    original_weights = (
+        original.projections.q_proj.weight,
+        original.projections.k_proj.weight,
+        original.projections.v_proj.weight,
+    )
+    for packed, separate in zip(packed_weights, original_weights):
+        torch.testing.assert_close(packed, separate, rtol=1e-5, atol=1e-6)
+    if bias:
+        packed_biases = transformed.projections.bias.split((16, 8, 8))
+        original_biases = (
+            original.projections.q_proj.bias,
+            original.projections.k_proj.bias,
+            original.projections.v_proj.bias,
+        )
+        for packed, separate in zip(packed_biases, original_biases):
+            torch.testing.assert_close(packed, separate, rtol=1e-5, atol=1e-6)
+    for packed, separate in zip(transformed(hidden_states), original(hidden_states)):
+        torch.testing.assert_close(packed, separate, rtol=1e-5, atol=1e-6)
 
 from trainlm.optimization import (
     PackedPartialQKVProjection,
@@ -426,6 +471,62 @@ def test_live_partial_qkv_transform_rejects_internal_parameter_alias():
 
     assert model.projections is original
     assert model.projections.kv_proj.weight is model.projections.q_proj.weight
+
+
+@pytest.mark.parametrize("bias", (False, True))
+def test_live_partial_qkv_transform_preserves_optimizer_update(bias):
+    torch.manual_seed(31)
+    original = _PartialAttentionFixture(bias=bias)
+    transformed = deepcopy(original)
+    layout = partial_spec(
+        q_bias_key="q_proj.bias" if bias else None,
+        kv_bias_key="kv_proj.bias" if bias else None,
+        packed_bias_key="qkv_proj.bias" if bias else None,
+    )
+    registry = ModelTransformRegistry()
+    registry.register(partial_qkv_pack_transform_handler(layout))
+    registry.apply(transformed, _partial_qkv_plan()).commit()
+    original_optimizer = SGD(original.parameters(), lr=0.05)
+    transformed_optimizer = SGD(transformed.parameters(), lr=0.05)
+    hidden_states = torch.randn(2, 3, 6)
+
+    sum(value.square().sum() for value in original(hidden_states)).backward()
+    sum(value.square().sum() for value in transformed(hidden_states)).backward()
+    original_optimizer.step()
+    transformed_optimizer.step()
+
+    packed_query_weight, packed_kv_weight = transformed.projections.weight.split(
+        (16, 16),
+        dim=0,
+    )
+    torch.testing.assert_close(
+        packed_query_weight,
+        original.projections.q_proj.weight,
+        rtol=1e-5,
+        atol=1e-6,
+    )
+    torch.testing.assert_close(
+        packed_kv_weight,
+        original.projections.kv_proj.weight,
+        rtol=1e-5,
+        atol=1e-6,
+    )
+    if bias:
+        packed_query_bias, packed_kv_bias = transformed.projections.bias.split((16, 16))
+        torch.testing.assert_close(
+            packed_query_bias,
+            original.projections.q_proj.bias,
+            rtol=1e-5,
+            atol=1e-6,
+        )
+        torch.testing.assert_close(
+            packed_kv_bias,
+            original.projections.kv_proj.bias,
+            rtol=1e-5,
+            atol=1e-6,
+        )
+    for packed, separate in zip(transformed(hidden_states), original(hidden_states)):
+        torch.testing.assert_close(packed, separate, rtol=1e-5, atol=1e-6)
 
 from trainlm.optimization import PackedQKVProjectionSpec
 
