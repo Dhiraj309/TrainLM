@@ -512,6 +512,10 @@ this file in every turn:
     overlapping alias groups and aliases involving canonical or transformed
     mapping keys. This prevents order-dependent restoration and makes every
     declared tie either preserved unchanged or rejected before conversion.
+75. **M8-F5 strict layout manifests:** layout and mapping loaders now reject
+    unknown fields, non-mapping entries, and malformed key, shape, mapping, or
+    alias-group containers. String values are never silently expanded into
+    character tuples, and schema errors fail before tensor conversion.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
