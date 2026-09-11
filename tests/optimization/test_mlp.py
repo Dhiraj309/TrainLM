@@ -82,19 +82,19 @@ from .test_capabilities import capabilities
 
 
 class _SeparateGatedMLP(nn.Module):
-    def __init__(self):
+    def __init__(self, *, bias=False):
         super().__init__()
-        self.gate_proj = nn.Linear(4, 8, bias=False)
-        self.up_proj = nn.Linear(4, 8, bias=False)
+        self.gate_proj = nn.Linear(4, 8, bias=bias)
+        self.up_proj = nn.Linear(4, 8, bias=bias)
 
     def forward(self, hidden_states):
         return F.silu(self.gate_proj(hidden_states)) * self.up_proj(hidden_states)
 
 
 class _MLPFixture(nn.Module):
-    def __init__(self):
+    def __init__(self, *, bias=False):
         super().__init__()
-        self.input_projection = _SeparateGatedMLP()
+        self.input_projection = _SeparateGatedMLP(bias=bias)
 
     def forward(self, hidden_states):
         return self.input_projection(hidden_states)
@@ -171,3 +171,48 @@ def test_live_gated_mlp_transform_requires_explicit_non_gelu_semantics():
     )
     with pytest.raises(ValueError, match="must remain"):
         gated_mlp_pack_transform_handler(gelu, F.gelu)
+
+
+def test_live_gated_mlp_transform_preserves_frozen_weight_and_bias():
+    model = _MLPFixture(bias=True)
+    for parameter in model.input_projection.parameters():
+        parameter.requires_grad_(False)
+    layout = spec(
+        gate_bias_key="gate_proj.bias",
+        up_bias_key="up_proj.bias",
+        packed_bias_key="gate_up_proj.bias",
+    )
+    registry = ModelTransformRegistry()
+    registry.register(gated_mlp_pack_transform_handler(layout, F.silu))
+
+    registry.apply(model, _mlp_plan()).commit()
+
+    assert not model.input_projection.weight.requires_grad
+    assert not model.input_projection.bias.requires_grad
+
+
+def test_live_gated_mlp_transform_rejects_mixed_trainability():
+    model = _MLPFixture()
+    model.input_projection.up_proj.weight.requires_grad_(False)
+    original = model.input_projection
+    registry = ModelTransformRegistry()
+    registry.register(gated_mlp_pack_transform_handler(spec(), F.silu))
+
+    with pytest.raises(Exception, match="must share requires_grad"):
+        registry.apply(model, _mlp_plan())
+
+    assert model.input_projection is original
+
+
+def test_live_gated_mlp_transform_rejects_parameter_aliases():
+    model = _MLPFixture()
+    model.input_projection.up_proj.weight = model.input_projection.gate_proj.weight
+    original = model.input_projection
+    registry = ModelTransformRegistry()
+    registry.register(gated_mlp_pack_transform_handler(spec(), F.silu))
+
+    with pytest.raises(Exception, match="parameter aliases that packing cannot preserve"):
+        registry.apply(model, _mlp_plan())
+
+    assert model.input_projection is original
+    assert model.input_projection.up_proj.weight is model.input_projection.gate_proj.weight

@@ -491,6 +491,10 @@ this file in every turn:
     alias graph before replacement and reject internal or external aliases that
     concatenating source projections into one parameter cannot preserve. The
     failure occurs before mutation, leaving tied source parameters intact.
+70. **M11-F2 gated-MLP semantic guards:** live gate/up packing now preserves
+    uniformly frozen weights and biases and rejects mixed trainability. It also
+    checks the full model alias graph before replacement, so tied gate/up or
+    externally aliased parameters fail without mutating the source wrapper.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

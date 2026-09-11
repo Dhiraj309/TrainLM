@@ -1022,8 +1022,10 @@ evidence remains.
   optional biases through the reversible state-dict converter, while GELU is an
   explicit no-transform path. An adapter-selected wrapper can now be replaced
   transactionally by one packed linear call using an explicit model-owned
-  activation callable; rollback restores the original modules. Partial layouts
-  and target update parity remain pending.
+  activation callable; rollback restores the original modules. Packing
+  preserves uniform frozen/trainable state and rejects mixed trainability or
+  source aliases that a single parameter cannot represent. Partial layouts and
+  target update parity remain pending.
 
 - [~] **M11-F3 — Native fusion audit**
   `perf(hlo): audit norm RoPE residual and MLP fusion`
