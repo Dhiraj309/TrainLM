@@ -823,7 +823,9 @@ loaded HF models safely without family logic in core.
   Versioned layout manifests now validate and reversibly concatenate/split
   parameter groups with exact key, shape, dtype, device, collision, and alias
   checks. The converter preserves unrelated state and restores declared tied
-  keys as shared tensor objects for canonical export.
+  keys as shared tensor objects for canonical export. Alias groups must be
+  disjoint and cannot include keys consumed or produced by a layout mapping,
+  preventing ambiguous restoration or silently lost ties.
 
 - [x] **M8-F6 — Explain report**
   `feat(optimization): expose model optimization explanation`

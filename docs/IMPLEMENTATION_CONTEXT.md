@@ -508,6 +508,10 @@ this file in every turn:
     bias-free projections. Split packed parameters and subsequent compact Q/K/V
     outputs match the untransformed reference within explicit float32 bounds;
     target-XLA parity remains outstanding.
+74. **M8-F5 unambiguous alias manifests:** state-dict layout converters reject
+    overlapping alias groups and aliases involving canonical or transformed
+    mapping keys. This prevents order-dependent restoration and makes every
+    declared tie either preserved unchanged or rejected before conversion.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

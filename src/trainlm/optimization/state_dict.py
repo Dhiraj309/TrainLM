@@ -98,11 +98,22 @@ class StateDictLayoutConverter:
             raise ValueError("Transformed keys must be unique.")
         if set(canonical_keys) & set(transformed_keys):
             raise ValueError("Canonical and transformed key sets cannot overlap.")
+        alias_keys: list[str] = []
         for group in alias_groups:
             if len(group) < 2 or len(group) != len(set(group)) or any(
                 not isinstance(key, str) or not key.strip() for key in group
             ):
                 raise ValueError("Alias groups require at least two unique keys.")
+            alias_keys.extend(group)
+        if len(alias_keys) != len(set(alias_keys)):
+            raise ValueError("State-dict keys cannot participate in multiple alias groups.")
+        mapped_keys = set(canonical_keys) | set(transformed_keys)
+        conflicting_aliases = sorted(mapped_keys & set(alias_keys))
+        if conflicting_aliases:
+            raise ValueError(
+                "Mapped layout keys cannot also belong to alias groups: "
+                + ", ".join(conflicting_aliases)
+            )
         self.mappings = mappings
         self.alias_groups = alias_groups
 
