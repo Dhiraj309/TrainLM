@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Literal
+from dataclasses import asdict, dataclass
+import json
+from typing import Any, Literal, Mapping
 
 from .base import LogicalMesh
 
@@ -93,6 +94,103 @@ class FSDPMeshPolicy:
     def logical_mesh(self) -> LogicalMesh:
         return LogicalMesh({"data": self.data_replicas, "fsdp": self.fsdp_shards})
 
+    def to_manifest(self, *, indent: int | None = 2) -> str:
+        """Serialize the complete backend-neutral policy with a schema version."""
+
+        return json.dumps(
+            {"schema_version": 1, "policy": asdict(self)},
+            indent=indent,
+            sort_keys=True,
+        )
+
+    @classmethod
+    def from_manifest(
+        cls, value: str | bytes | Mapping[str, Any]
+    ) -> "FSDPMeshPolicy":
+        """Reconstruct a policy while rejecting unknown or incomplete fields."""
+
+        if isinstance(value, (str, bytes)):
+            try:
+                manifest = json.loads(value)
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"Invalid FSDP policy manifest: {exc}") from exc
+        elif isinstance(value, Mapping):
+            manifest = value
+        else:
+            raise TypeError("FSDP policy manifest must be JSON text or a mapping.")
+        if not isinstance(manifest, Mapping):
+            raise ValueError("FSDP policy manifest must contain a JSON object.")
+        if set(manifest) != {"schema_version", "policy"}:
+            raise ValueError("FSDP policy manifest keys must match schema version 1.")
+        version = manifest["schema_version"]
+        if isinstance(version, bool) or version != 1:
+            raise ValueError("FSDP policy manifest supports schema_version=1 only.")
+        policy = manifest["policy"]
+        expected_policy = {
+            "data_replicas",
+            "fsdp_shards",
+            "wrap_module_classes",
+            "parameter_rules",
+            "checkpoint",
+            "shard_optimizer_state",
+        }
+        if not isinstance(policy, Mapping) or set(policy) != expected_policy:
+            raise ValueError("FSDP policy keys must match the schema.")
+        checkpoint = policy["checkpoint"]
+        expected_checkpoint = {
+            "layout",
+            "save_optimizer_state",
+            "save_scheduler_state",
+            "save_rng_state",
+            "require_topology_match",
+        }
+        if (
+            not isinstance(checkpoint, Mapping)
+            or set(checkpoint) != expected_checkpoint
+        ):
+            raise ValueError("FSDP checkpoint policy keys must match the schema.")
+        rules = policy["parameter_rules"]
+        if isinstance(rules, (str, bytes)) or not isinstance(rules, (list, tuple)):
+            raise ValueError("FSDP parameter_rules must be an array.")
+        loaded_rules = []
+        for index, rule in enumerate(rules):
+            if not isinstance(rule, Mapping) or set(rule) != {
+                "parameter_suffix",
+                "partition_spec",
+            }:
+                raise ValueError(
+                    f"FSDP parameter rule {index} keys must match the schema."
+                )
+            partition_spec = rule["partition_spec"]
+            if isinstance(partition_spec, (str, bytes)) or not isinstance(
+                partition_spec, (list, tuple)
+            ):
+                raise ValueError(
+                    f"FSDP parameter rule {index} partition_spec must be an array."
+                )
+            loaded_rules.append(
+                ParameterShardingRule(
+                    parameter_suffix=rule["parameter_suffix"],
+                    partition_spec=tuple(partition_spec),
+                )
+            )
+        classes = policy["wrap_module_classes"]
+        if isinstance(classes, (str, bytes)) or not isinstance(
+            classes, (list, tuple)
+        ):
+            raise ValueError("FSDP wrap_module_classes must be an array.")
+        try:
+            return cls(
+                data_replicas=policy["data_replicas"],
+                fsdp_shards=policy["fsdp_shards"],
+                wrap_module_classes=tuple(classes),
+                parameter_rules=tuple(loaded_rules),
+                checkpoint=FSDPCheckpointPolicy(**dict(checkpoint)),
+                shard_optimizer_state=policy["shard_optimizer_state"],
+            )
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid FSDP policy values: {exc}") from exc
+
     def validate_application_order(
         self,
         *,
@@ -104,7 +202,8 @@ class FSDPMeshPolicy:
 
         if world_size != self.world_size:
             raise ValueError(
-                f"FSDP mesh requires world_size={self.world_size}; observed {world_size}."
+                f"FSDP mesh requires world_size={self.world_size}; "
+                f"observed {world_size}."
             )
         if not rematerialization_applied:
             raise ValueError("Rematerialization must be applied before FSDP wrapping.")

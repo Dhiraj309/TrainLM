@@ -421,6 +421,11 @@ this file in every turn:
     Malformed JSON, incorrect arrays/objects, unknown claim fields, and boolean
     schema versions fail closed before public explanations are compared with
     published support levels.
+56. **M13-F6 FSDP policy manifest:** the complete data/FSDP mesh, wrap classes,
+    parameter partition rules, optimizer-state setting, and checkpoint contract
+    now serialize and reconstruct through a strict versioned manifest. Unknown,
+    missing, malformed, and incorrectly shaped nested settings fail before a
+    runtime can consume the policy.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
