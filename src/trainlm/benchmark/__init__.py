@@ -59,6 +59,7 @@ from trainlm.benchmark.fsdp_scaling import (
     FSDPScalingEvidence,
     FSDPScalingTarget,
     evaluate_fsdp_scaling,
+    load_fsdp_scaling_evaluation,
 )
 
 __all__ = [
@@ -92,6 +93,7 @@ __all__ = [
     "evaluate_cross_family_matrix",
     "load_cross_family_matrix_evaluation",
     "evaluate_fsdp_scaling",
+    "load_fsdp_scaling_evaluation",
     "evaluate_parity_closure",
     "load_parity_closure_evidence",
     "compare_numerical_alignment",

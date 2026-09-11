@@ -1202,6 +1202,9 @@ early-update evidence gate are implemented; target-run alignment remains.
   parameter-count, v5e-8 and data/FSDP geometry matching, throughput/MFU gates,
   stable compilation, zero CPU fallback, lifecycle parity, and named
   collective/HBM artifacts. The matched target and real run remain outstanding.
+  A strict versioned bundle loader now reconstructs the review-locked target and
+  measured evidence together, rejecting schema drift and requiring collective
+  and HBM profiles to be relative, confined, and present before evaluation.
   Its mismatch regression fixture now remains internally valid (16 devices,
   data=4/FSDP=4), leaving target mismatch rejection to the evidence evaluator.
   **Acceptance:** A matched target is locked before certification.
