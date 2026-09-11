@@ -1,3 +1,5 @@
+import pytest
+
 from trainlm.optimization import (
     ModelTransformation,
     OperationRequest,
@@ -89,3 +91,38 @@ def test_disabled_policy_is_a_noop_even_when_providers_match():
     assert plan.status == "noop"
     assert plan.decisions[0].status == "skipped"
     assert plan.transformations == ()
+
+
+@pytest.mark.parametrize(
+    ("argument", "value", "error", "message"),
+    [
+        ("capabilities", object(), TypeError, "must be ModelCapabilities"),
+        ("backend", "", ValueError, "backend must be a non-empty string"),
+        ("precision", " ", ValueError, "precision must be a non-empty string"),
+        ("policy", "sometimes", ValueError, "Unsupported optimization policy"),
+        ("requests", (object(),), TypeError, "must contain OperationRequest"),
+        (
+            "adapter_resolution",
+            object(),
+            TypeError,
+            "must be AdapterResolution or None",
+        ),
+    ],
+)
+def test_planner_rejects_malformed_boundary_inputs(
+    argument,
+    value,
+    error,
+    message,
+):
+    arguments = {
+        "capabilities": capabilities(),
+        "backend": "pytorch-xla",
+        "precision": "bf16",
+        "policy": "auto",
+        "requests": (_request(),),
+    }
+    arguments[argument] = value
+
+    with pytest.raises(error, match=message):
+        OptimizationPlanner(_providers()).plan(**arguments)

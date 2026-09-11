@@ -113,7 +113,25 @@ class OptimizationPlanner:
         adapter_resolution: AdapterResolution | None = None,
         runtime_features: tuple[str, ...] = (),
     ) -> ExecutionPlan:
+        if not isinstance(capabilities, ModelCapabilities):
+            raise TypeError("capabilities must be ModelCapabilities.")
+        for name, value in (("backend", backend), ("precision", precision)):
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{name} must be a non-empty string.")
+        if not isinstance(policy, str) or policy not in {
+            "disabled",
+            "auto",
+            "required",
+        }:
+            raise ValueError(f"Unsupported optimization policy: {policy}")
+        if adapter_resolution is not None and not isinstance(
+            adapter_resolution,
+            AdapterResolution,
+        ):
+            raise TypeError("adapter_resolution must be AdapterResolution or None.")
         requests = tuple(requests)
+        if any(not isinstance(item, OperationRequest) for item in requests):
+            raise TypeError("requests must contain OperationRequest values.")
         runtime_features = _strings("runtime_features", runtime_features)
         if len({(item.component, item.operation) for item in requests}) != len(requests):
             raise ValueError("Operation requests must be unique by component and operation.")

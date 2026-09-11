@@ -520,6 +520,10 @@ this file in every turn:
     explicitly provide the schema version, mappings, and alias groups, including
     empty collections. Boolean schema versions are rejected rather than being
     accepted through Python's integer equality rules.
+77. **M8-F3 planner boundary validation:** the pure planner now rejects invalid
+    capability objects, empty backend or precision names, unknown policies,
+    malformed operation requests, and invalid adapter resolutions before
+    hashing or provider selection.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
