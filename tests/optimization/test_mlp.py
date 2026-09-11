@@ -1,5 +1,6 @@
 import pytest
 import torch
+from torch.optim import SGD
 
 from trainlm.optimization import (
     GatedMLPProjectionSpec,
@@ -258,3 +259,63 @@ def test_live_gated_mlp_transform_rejects_parameter_aliases():
 
     assert model.input_projection is original
     assert model.input_projection.up_proj.weight is model.input_projection.gate_proj.weight
+
+
+@pytest.mark.parametrize("bias", (False, True))
+def test_live_gated_mlp_transform_preserves_optimizer_update(bias):
+    torch.manual_seed(23)
+    original = _MLPFixture(bias=bias)
+    transformed = deepcopy(original)
+    layout = spec(
+        gate_bias_key="gate_proj.bias" if bias else None,
+        up_bias_key="up_proj.bias" if bias else None,
+        packed_bias_key="gate_up_proj.bias" if bias else None,
+    )
+    registry = ModelTransformRegistry()
+    registry.register(gated_mlp_pack_transform_handler(layout, F.silu))
+    registry.apply(transformed, _mlp_plan()).commit()
+    original_optimizer = SGD(original.parameters(), lr=0.05)
+    transformed_optimizer = SGD(transformed.parameters(), lr=0.05)
+    hidden_states = torch.randn(2, 3, 4)
+
+    original(hidden_states).square().sum().backward()
+    transformed(hidden_states).square().sum().backward()
+    original_optimizer.step()
+    transformed_optimizer.step()
+
+    packed_gate_weight, packed_up_weight = transformed.input_projection.weight.chunk(
+        2,
+        dim=0,
+    )
+    torch.testing.assert_close(
+        packed_gate_weight,
+        original.input_projection.gate_proj.weight,
+        rtol=1e-5,
+        atol=1e-6,
+    )
+    torch.testing.assert_close(
+        packed_up_weight,
+        original.input_projection.up_proj.weight,
+        rtol=1e-5,
+        atol=1e-6,
+    )
+    if bias:
+        packed_gate_bias, packed_up_bias = transformed.input_projection.bias.chunk(2)
+        torch.testing.assert_close(
+            packed_gate_bias,
+            original.input_projection.gate_proj.bias,
+            rtol=1e-5,
+            atol=1e-6,
+        )
+        torch.testing.assert_close(
+            packed_up_bias,
+            original.input_projection.up_proj.bias,
+            rtol=1e-5,
+            atol=1e-6,
+        )
+    torch.testing.assert_close(
+        transformed(hidden_states),
+        original(hidden_states),
+        rtol=1e-5,
+        atol=1e-6,
+    )

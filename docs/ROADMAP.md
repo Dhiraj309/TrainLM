@@ -1026,8 +1026,9 @@ evidence remains.
   preserves uniform frozen/trainable state and rejects mixed trainability or
   source aliases that a single parameter cannot represent. Already-packed
   SwiGLU/GeGLU sources now have a validated no-transform descriptor, avoiding
-  invented separate keys or needless repacking. Target update parity remains
-  pending.
+  invented separate keys or needless repacking. Portable SGD update parity now
+  covers biased and bias-free live packed layouts; target-XLA update parity
+  remains pending.
 
 - [~] **M11-F3 — Native fusion audit**
   `perf(hlo): audit norm RoPE residual and MLP fusion`
