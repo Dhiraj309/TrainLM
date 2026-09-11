@@ -120,6 +120,9 @@ class PackedGatedMLPProjection(nn.Module):
         weight: Tensor,
         bias: Tensor | None,
         activation_fn: Callable[[Tensor], Tensor],
+        *,
+        weight_requires_grad: bool = True,
+        bias_requires_grad: bool = True,
     ) -> None:
         super().__init__()
         if spec.activation == "gelu":
@@ -136,8 +139,12 @@ class PackedGatedMLPProjection(nn.Module):
             raise ValueError("Packed gated MLP bias shape does not match its weight.")
         self.spec = spec
         self.activation_fn = activation_fn
-        self.weight = nn.Parameter(weight)
-        self.bias = nn.Parameter(bias) if bias is not None else None
+        self.weight = nn.Parameter(weight, requires_grad=weight_requires_grad)
+        self.bias = (
+            nn.Parameter(bias, requires_grad=bias_requires_grad)
+            if bias is not None
+            else None
+        )
 
     @classmethod
     def from_separate(
@@ -166,13 +173,29 @@ class PackedGatedMLPProjection(nn.Module):
         weights = tuple(projection.weight.detach().clone() for projection in projections)
         if len({(weight.dtype, weight.device) for weight in weights}) != 1:
             raise ValueError("Gate/up weights must share dtype and device.")
+        weight_requires_grad = _uniform_requires_grad(
+            tuple(projection.weight for projection in projections),
+            label="Gate/up weights",
+        )
         bias = None
+        bias_requires_grad = True
         if bias_presence[0]:
             biases = tuple(projection.bias.detach().clone() for projection in projections)
             if len({(value.dtype, value.device) for value in biases}) != 1:
                 raise ValueError("Gate/up biases must share dtype and device.")
+            bias_requires_grad = _uniform_requires_grad(
+                tuple(projection.bias for projection in projections),
+                label="Gate/up biases",
+            )
             bias = torch.cat(biases, dim=0)
-        return cls(spec, torch.cat(weights, dim=0), bias, activation_fn)
+        return cls(
+            spec,
+            torch.cat(weights, dim=0),
+            bias,
+            activation_fn,
+            weight_requires_grad=weight_requires_grad,
+            bias_requires_grad=bias_requires_grad,
+        )
 
     def forward(self, hidden_states: Tensor) -> Tensor:
         gate, up = F.linear(hidden_states, self.weight, self.bias).chunk(2, dim=-1)
@@ -197,11 +220,13 @@ def gated_mlp_pack_transform_handler(
     def apply(model: nn.Module, transformation: ModelTransformation) -> None:
         if len(transformation.target_paths) != 1:
             raise ValueError("Gated MLP packing requires exactly one wrapper path.")
-        target = _resolve_module(model, transformation.target_paths[0])
+        target_path = transformation.target_paths[0]
+        target = _resolve_module(model, target_path)
+        _reject_packed_parameter_aliases(model, target, target_path=target_path)
         packed = PackedGatedMLPProjection.from_separate(
             spec, target.gate_proj, target.up_proj, activation_fn
         )
-        _replace_module(model, transformation.target_paths[0], packed)
+        _replace_module(model, target_path, packed)
 
     def rollback(
         model: nn.Module, transformation: ModelTransformation, snapshot: nn.Module
@@ -220,6 +245,42 @@ def _resolve_module(model: nn.Module, path: str) -> nn.Module:
     if not isinstance(target, nn.Module):
         raise TypeError(f"Target path {path!r} does not resolve to a module.")
     return target
+
+
+def _uniform_requires_grad(parameters: tuple[nn.Parameter, ...], *, label: str) -> bool:
+    values = {parameter.requires_grad for parameter in parameters}
+    if len(values) != 1:
+        raise ValueError(
+            f"{label} must share requires_grad because packing creates one parameter."
+        )
+    return values.pop()
+
+
+def _reject_packed_parameter_aliases(
+    model: nn.Module,
+    target: nn.Module,
+    *,
+    target_path: str,
+) -> None:
+    """Reject source aliases that a packed gate/up parameter cannot preserve."""
+
+    target_parameter_ids = {
+        id(parameter)
+        for _, parameter in target.named_parameters(remove_duplicate=False)
+    }
+    aliases: dict[int, list[str]] = {}
+    for name, parameter in model.named_parameters(remove_duplicate=False):
+        if id(parameter) in target_parameter_ids:
+            aliases.setdefault(id(parameter), []).append(name)
+    conflicting = tuple(
+        tuple(sorted(names)) for names in aliases.values() if len(names) != 1
+    )
+    if conflicting:
+        formatted = ", ".join("/".join(names) for names in sorted(conflicting))
+        raise ValueError(
+            f"Gated MLP target {target_path!r} has parameter aliases that "
+            f"packing cannot preserve: {formatted}."
+        )
 
 
 def _replace_module(model: nn.Module, path: str, replacement: nn.Module) -> None:
