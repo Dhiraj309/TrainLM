@@ -32,6 +32,7 @@ from trainlm.benchmark.numerical_alignment import (
 from trainlm.benchmark.repeated_parity import (
     RepeatedParityEvaluation,
     evaluate_repeated_parity,
+    load_repeated_parity_evaluation,
 )
 from trainlm.benchmark.stability import (
     RealShardStabilityEvaluation,
@@ -91,6 +92,7 @@ __all__ = [
     "compare_numerical_alignment",
     "load_numerical_alignment_report",
     "evaluate_repeated_parity",
+    "load_repeated_parity_evaluation",
     "evaluate_real_shard_stability",
     "evaluate_plain_hf_export",
     "load_baseline_workload",

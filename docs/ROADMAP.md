@@ -1078,7 +1078,9 @@ early-update evidence gate are implemented; target-run alignment remains.
   results, identical HLO fingerprints, stable graphs, zero fallback, and every
   run above the hard throughput/MFU thresholds. It reports median throughput/
   MFU, spread, and max HBM, with separate preferred-median status. Real runs
-  remain pending.
+  remain pending. A versioned manifest loader now requires three distinct,
+  confined result artifacts and explicit hard/preferred thresholds before
+  evaluation.
 
 - [~] **M12-F3 — Real-shard stability**
   `test(parity): validate 200 update real data stability`
