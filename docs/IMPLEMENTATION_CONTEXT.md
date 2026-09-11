@@ -528,6 +528,10 @@ this file in every turn:
     provider marked for automatic fallback now produces a normal selected
     decision. Fallback status is reserved for automatic choice or substitution
     after an unavailable explicit request, so decision invariants remain valid.
+79. **M8-F3 required-policy fallback guard:** an unqualified required operation
+    now considers only non-fallback providers. If only portable fallbacks are
+    eligible, planning blocks with explicit fallback-only evidence; explicitly
+    requesting that same provider remains a valid, intentional selection.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

@@ -808,7 +808,9 @@ loaded HF models safely without family logic in core.
   policy, request, and optional adapter-resolution types before selection. A
   compatible provider explicitly requested by ID is recorded as selected even
   when it is designated as the automatic fallback, avoiding contradictory
-  fallback metadata where selected and requested IDs are identical.
+  fallback metadata where selected and requested IDs are identical. Conversely,
+  an unqualified `required` request rejects fallback-only candidates rather than
+  reporting a portable fallback as satisfying an optimized-path requirement.
 
 - [x] **M8-F4 — Transactional transforms**
   `feat(optimization): apply validated reversible model transforms`
