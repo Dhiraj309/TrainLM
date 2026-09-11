@@ -1252,6 +1252,9 @@ early-update evidence gate are implemented; target-run alignment remains.
   A commit-specific freshness gate now requires unique passing Tier 0-3
   artifacts, including mandatory current Tier 3
   evidence. CUDA/v5e runners, schedules, and real evidence remain outstanding.
+  A strict versioned release manifest now binds all tier artifacts to the
+  release commit, evaluation timestamp, and freshness window while requiring
+  each referenced artifact to be relative, confined, and present.
   **Acceptance:** Release requires current Tier 3 evidence.
 
 - [~] **M14-F4 — Preemption recovery**

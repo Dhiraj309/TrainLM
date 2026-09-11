@@ -411,6 +411,11 @@ this file in every turn:
     Target/evidence schema drift is rejected, and collective plus HBM profile
     paths must be relative, confined beneath the manifest, and present before
     the performance, graph, correctness, resume, and export gates run.
+54. **M14-F3 certification bundle:** Tier 0-3 evidence can now be loaded from a
+    strict versioned release manifest that records the exact release commit,
+    evaluation timestamp, and freshness window. Tier artifacts must be relative,
+    confined beneath the manifest, and present before current-evidence
+    certification is evaluated.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
