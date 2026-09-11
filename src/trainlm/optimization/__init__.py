@@ -79,6 +79,7 @@ from .mlp import (
     GatedMLPProjectionSpec,
     MLPActivation,
     PackedGatedMLPProjection,
+    PackedGatedMLPProjectionSpec,
     gated_mlp_pack_transform_handler,
 )
 from .hlo_audit import (
@@ -176,6 +177,7 @@ __all__ = [
     "HLOFusionObservation",
     "GatedMLPProjectionSpec",
     "PackedGatedMLPProjection",
+    "PackedGatedMLPProjectionSpec",
     "GEMMA2_MAPPING",
     "GEMMA_MAPPING",
     "GradientReduction",

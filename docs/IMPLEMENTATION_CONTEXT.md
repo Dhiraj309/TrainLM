@@ -495,6 +495,10 @@ this file in every turn:
     uniformly frozen weights and biases and rejects mixed trainability. It also
     checks the full model alias graph before replacement, so tied gate/up or
     externally aliased parameters fail without mutating the source wrapper.
+71. **M11-F2 already-packed gated MLP:** canonical SwiGLU/GeGLU sources that
+    already expose one gate/up parameter now use an explicit validated
+    no-transform descriptor with derived weight and optional-bias geometry.
+    This preserves their source layout without inventing separate model keys.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

@@ -1024,8 +1024,10 @@ evidence remains.
   transactionally by one packed linear call using an explicit model-owned
   activation callable; rollback restores the original modules. Packing
   preserves uniform frozen/trainable state and rejects mixed trainability or
-  source aliases that a single parameter cannot represent. Partial layouts and
-  target update parity remain pending.
+  source aliases that a single parameter cannot represent. Already-packed
+  SwiGLU/GeGLU sources now have a validated no-transform descriptor, avoiding
+  invented separate keys or needless repacking. Target update parity remains
+  pending.
 
 - [~] **M11-F3 — Native fusion audit**
   `perf(hlo): audit norm RoPE residual and MLP fusion`

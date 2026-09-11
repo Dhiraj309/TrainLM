@@ -1,7 +1,10 @@
 import pytest
 import torch
 
-from trainlm.optimization import GatedMLPProjectionSpec
+from trainlm.optimization import (
+    GatedMLPProjectionSpec,
+    PackedGatedMLPProjectionSpec,
+)
 
 
 def spec(**values):
@@ -66,6 +69,45 @@ def test_gelu_rejects_accidental_gated_keys():
 def test_partial_bias_layout_is_rejected():
     with pytest.raises(ValueError, match="bias keys must be configured together"):
         spec(gate_bias_key="gate_proj.bias")
+
+
+@pytest.mark.parametrize("activation", ("swiglu", "geglu"))
+def test_already_packed_gated_layout_is_an_explicit_no_op(activation):
+    layout = PackedGatedMLPProjectionSpec(
+        prefix="layers.0.mlp",
+        activation=activation,
+        input_size=4,
+        intermediate_size=8,
+        packed_weight_key="gate_up_proj.weight",
+        packed_bias_key="gate_up_proj.bias",
+        dtype="float32",
+    )
+
+    assert layout.weight_shape == (16, 4)
+    assert layout.bias_shape == (16,)
+    assert layout.converter() is None
+
+
+def test_already_packed_gated_layout_rejects_plain_gelu():
+    with pytest.raises(ValueError, match="require SwiGLU or GeGLU"):
+        PackedGatedMLPProjectionSpec(
+            prefix="layers.0.mlp",
+            activation="gelu",
+            input_size=4,
+            intermediate_size=8,
+            packed_weight_key="up_proj.weight",
+        )
+
+
+def test_already_packed_gated_layout_rejects_empty_weight_key():
+    with pytest.raises(ValueError, match="packed_weight_key cannot be empty"):
+        PackedGatedMLPProjectionSpec(
+            prefix="layers.0.mlp",
+            activation="swiglu",
+            input_size=4,
+            intermediate_size=8,
+            packed_weight_key="",
+        )
 
 from copy import deepcopy
 from torch import nn
