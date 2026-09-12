@@ -107,3 +107,38 @@ def test_blocked_and_noop_plan_invariants_are_enforced():
             precision="fp32",
             transformations=plan().transformations,
         )
+
+
+@pytest.mark.parametrize("schema_version", (True, False))
+def test_execution_plan_rejects_boolean_schema_versions(schema_version):
+    values = plan().to_dict()
+    values["schema_version"] = schema_version
+
+    with pytest.raises(ValueError, match="schema_version=1 only"):
+        ExecutionPlan.from_dict(values)
+
+
+@pytest.mark.parametrize("field", ("decisions", "transformations", "warnings", "errors"))
+def test_execution_plan_requires_complete_serialized_fields(field):
+    values = plan().to_dict()
+    del values[field]
+
+    with pytest.raises(ValueError, match=rf"missing=.*{field}"):
+        ExecutionPlan.from_dict(values)
+
+
+def test_execution_plan_rejects_unknown_serialized_fields():
+    values = plan().to_dict()
+    values["typo"] = "ignored"
+
+    with pytest.raises(ValueError, match="unknown=.*typo"):
+        ExecutionPlan.from_dict(values)
+
+
+@pytest.mark.parametrize("field", ("decisions", "transformations"))
+def test_execution_plan_rejects_non_mapping_nested_entries(field):
+    values = plan().to_dict()
+    values[field] = ["not-a-mapping"]
+
+    with pytest.raises(ValueError, match=rf"{field} must contain mappings"):
+        ExecutionPlan.from_dict(values)

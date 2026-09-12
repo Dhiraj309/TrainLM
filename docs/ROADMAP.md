@@ -832,6 +832,8 @@ loaded HF models safely without family logic in core.
   inverse IDs, apply plans in order, and roll back the failing transform plus
   all earlier transforms in reverse order. Undeclared alias changes, missing
   handlers, blocked plans, and downstream context failures cannot commit.
+  Serialized execution plans require every schema field, reject unknown fields
+  and malformed nested entries, and do not accept booleans as schema versions.
 
 - [x] **M8-F5 — State-dict conversion**
   `feat(optimization): add reversible parameter layout mappings`
