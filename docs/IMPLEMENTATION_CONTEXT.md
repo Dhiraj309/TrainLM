@@ -587,6 +587,10 @@ this file in every turn:
 93. **M8-F4 serialized overlap fixture:** the tampered-plan regression extends
     the serialized transformation tuple immutably. It no longer fails in test
     setup by assuming `dataclasses.asdict()` changes tuples into lists.
+94. **M8-F0 public dry run:** `trainlm train --dry-run` constructs the same
+    versioned configuration, validates local packed datasets, and prints the
+    trainer's dictionary explanation without calling `train()`. This is the
+    final allocation-free command to run before the owner starts a TPU smoke.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

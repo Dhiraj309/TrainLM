@@ -24,6 +24,11 @@ def _parser() -> argparse.ArgumentParser:
     train.add_argument("--train-manifest-dir", type=Path, required=True)
     train.add_argument("--eval-manifest-dir", type=Path)
     train.add_argument("--resume-from-checkpoint", type=Path)
+    train.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Validate inputs and print the trainer explanation without training.",
+    )
     return parser
 
 
@@ -68,7 +73,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
     )
-    result = trainer.train(resume_from_checkpoint=args.resume_from_checkpoint)
+    result = (
+        trainer.explain(format="dict")
+        if args.dry_run
+        else trainer.train(resume_from_checkpoint=args.resume_from_checkpoint)
+    )
     print(json.dumps(_result_payload(result), sort_keys=True, default=str))
     return 0
 

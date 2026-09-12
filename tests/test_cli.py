@@ -76,3 +76,52 @@ def test_train_command_builds_public_datasets_and_delegates(
         ("train", tmp_path / "checkpoint-12"),
     ]
     assert capsys.readouterr().out == '{"step": 12}\n'
+
+
+def test_train_dry_run_validates_and_explains_without_training(
+    monkeypatch, tmp_path, capsys
+):
+    config = tmp_path / "train.yaml"
+    config.write_text(
+        "api_version: '1'\n"
+        "model: local-model\n"
+        "training_args:\n"
+        "  sequence_length: 128\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        cli.PackedBinDataset,
+        "from_directory",
+        lambda path, **kwargs: (path, kwargs),
+    )
+
+    class Trainer:
+        def explain(self, *, format):
+            assert format == "dict"
+            return {"backend": "xla", "selected_path": "tpu_coordinator"}
+
+        def train(self, **kwargs):
+            raise AssertionError(f"dry-run launched training: {kwargs!r}")
+
+    monkeypatch.setattr(
+        cli.TrainLMTrainer,
+        "from_config",
+        lambda *args, **kwargs: Trainer(),
+    )
+
+    result = cli.main(
+        (
+            "train",
+            "--config",
+            str(config),
+            "--train-manifest-dir",
+            str(tmp_path / "train"),
+            "--dry-run",
+        )
+    )
+
+    assert result == 0
+    assert capsys.readouterr().out == (
+        '{"backend": "xla", "selected_path": "tpu_coordinator"}\n'
+    )
