@@ -426,11 +426,11 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
     # Start prefetch after setup succeeds, and close it before closing mappings.
     input_geometry = BatchPrefetchGeometry(
         geometry_id=(
-            f"s{args.sequence_length}-mb{args.per_device_batch_size}-"
+            f"s{args.sequence_length}-mb{args.micro_batch_per_device}-"
             f"ga{args.gradient_accumulation_steps}-dp{world_size}-p16"
         ),
         sequence_length=args.sequence_length,
-        micro_batch_per_device=args.per_device_batch_size,
+        micro_batch_per_device=args.micro_batch_per_device,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         data_parallel_replicas=world_size,
         prefetch_depth=16,

@@ -8,9 +8,9 @@ import json
 import os
 from pathlib import Path
 import shutil
-import struct
 from typing import Any, Iterable
 
+import torch
 from torch.utils.data import IterableDataset, get_worker_info
 
 from .huggingface import HuggingFacePackedShardSource, HuggingFaceShardSourceConfig
@@ -373,9 +373,17 @@ def _inspect_legacy_uint16_bin(
             digest.update(chunk)
             if len(chunk) % 2:
                 raise ValueError("Packed uint16 shard ends with an incomplete token.")
-            for (token,) in struct.iter_unpack("<H", chunk):
-                minimum = token if minimum is None else min(minimum, token)
-                maximum = token if maximum is None else max(maximum, token)
+            tokens = torch.frombuffer(bytearray(chunk), dtype=torch.uint16).to(
+                dtype=torch.int32
+            )
+            chunk_minimum = int(tokens.min().item())
+            chunk_maximum = int(tokens.max().item())
+            minimum = (
+                chunk_minimum if minimum is None else min(minimum, chunk_minimum)
+            )
+            maximum = (
+                chunk_maximum if maximum is None else max(maximum, chunk_maximum)
+            )
     if minimum is None or maximum is None:
         raise ValueError("Packed token shard contains no tokens.")
     if maximum >= vocab_size:
