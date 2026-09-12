@@ -560,6 +560,11 @@ this file in every turn:
     transformations require their complete exact field sets. Transformation
     layout-change flags must be booleans, preventing truthy strings or integers
     from altering checkpoint/export behavior after plan restoration.
+87. **M8-F0 full-suite fixture isolation:** packed-reader fixtures size their
+    synthetic vocabulary from the generated disjoint shard ranges. Sparse
+    callback synchronization coverage uses a materialized batch iterable so
+    PyTorch DataLoader's internal seed `.item()` is not misattributed to the
+    trainer's loss-materialization boundary.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

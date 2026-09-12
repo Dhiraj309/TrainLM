@@ -395,7 +395,13 @@ def test_callbacks_do_not_extract_live_scalars_between_logging_steps(monkeypatch
         optimizer=optimizer,
         scheduler=LambdaLR(optimizer, lr_lambda=lambda _: 1.0),
         loss_fn=ConstantLoss(),
-        train_dataloader=DataLoader(DummyDataset(), batch_size=2),
+        # Use an already materialized iterable so this assertion measures
+        # trainer loss materialization rather than DataLoader's internal
+        # iterator seed extraction, which also calls Tensor.item().
+        train_dataloader=[
+            {"input_ids": torch.randn(2, 4)}
+            for _ in range(ThreeStepTrainerConfig.max_steps)
+        ],
         callbacks=(callback,),
     )
     original_item = torch.Tensor.item

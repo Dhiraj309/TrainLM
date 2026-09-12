@@ -772,6 +772,9 @@ loaded HF models safely without family logic in core.
   not expose worker commands, PJRT settings, or coordinator log parsing. Packed
   readers inherit sequence length and seed from the validated training arguments
   instead of introducing a second CLI-only geometry configuration.
+  The 28/2 shard lifecycle fixture now derives a valid synthetic vocabulary for
+  its disjoint per-shard token ranges, and callback synchronization tests isolate
+  trainer loss extraction from DataLoader's private iterator-seeding scalar read.
 
 - [x] **M8-F1 — Structural inspector**
   `feat(optimization): inspect dense causal LM capabilities`
