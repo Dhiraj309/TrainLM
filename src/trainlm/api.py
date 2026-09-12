@@ -8,7 +8,7 @@ be added behind the same API without changing user code.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 import re
 from typing import TYPE_CHECKING, Any, Literal
@@ -57,6 +57,23 @@ if TYPE_CHECKING:
 PUBLIC_API_VERSION = "1"
 DEPRECATED_CONFIG_KEYS = {"args": "training_args"}
 _COMMIT_SHA = re.compile(r"[0-9a-f]{40}")
+
+
+def _resolve_hugging_face_model_revision(
+    repo_id: str, revision: str | None
+) -> str:
+    """Resolve a user-friendly model revision before private TPU launch."""
+
+    from huggingface_hub import HfApi
+
+    info = HfApi().model_info(repo_id=repo_id, revision=revision or "main")
+    resolved = getattr(info, "sha", None)
+    if not isinstance(resolved, str) or _COMMIT_SHA.fullmatch(resolved) is None:
+        raise ValueError(
+            "Hugging Face did not resolve the model to a lowercase "
+            "40-character commit SHA."
+        )
+    return resolved
 
 
 def _load_public_config(source: Mapping[str, Any] | str | Path) -> dict[str, Any]:
@@ -597,15 +614,15 @@ class TrainLMTrainer:
             self._model_source.provider == "huggingface"
             and self._model_source.initialization == "pretrained"
             and not is_local_model
-            and (
-                self._model_source.revision is None
-                or _COMMIT_SHA.fullmatch(self._model_source.revision) is None
-            )
         ):
-            raise ValueError(
-                "TPU Hugging Face models require revision to be a lowercase "
-                "40-character commit SHA."
-            )
+            revision = self._model_source.revision
+            if revision is None or _COMMIT_SHA.fullmatch(revision) is None:
+                self._model_source = replace(
+                    self._model_source,
+                    revision=_resolve_hugging_face_model_revision(
+                        self._model_source.name_or_path, revision
+                    ),
+                )
         if isinstance(self.train_dataset, PackedBinDataset):
             manifest_dir = self.train_dataset.coordinator_manifest_dir(
                 self.args.output_dir
