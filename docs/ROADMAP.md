@@ -795,6 +795,11 @@ loaded HF models safely without family logic in core.
   pinned to one resolved commit, fully scanned and validated, then passed into
   the same reader, dataloader, train/eval partition, and coordinator staging
   paths as manifest-backed data. Sidecar authoring is no longer user work.
+  Download and full-file validation are startup costs only: training uses local
+  cached files through lazy memory maps and never downloads during iteration.
+  Validation scans token bounds in vectorized chunks, and the TPU prefetch
+  geometry now uses the same canonical microbatch argument forwarded by the
+  public trainer.
 
 - [x] **M8-F1 — Structural inspector**
   `feat(optimization): inspect dense causal LM capabilities`
