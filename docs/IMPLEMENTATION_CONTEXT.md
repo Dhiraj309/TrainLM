@@ -602,6 +602,11 @@ this file in every turn:
     scheduled evaluation and committed checkpoints, exact resume, and public
     evidence fields. Worker scripts, PJRT/rank setup, private coordinator types,
     and stage-log parsing are absent from the user workflow.
+97. **M8-F0 runtime-owned TPU topology:** world size is discovered after
+    Torch/XLA launches the worker group and is never a public input or a hidden
+    fixed v5e-8 assumption. The collective probe derives its expected result
+    from the discovered topology, while summaries may report the observed world
+    size as evidence. The HF-like call remains `trainer.train()`.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

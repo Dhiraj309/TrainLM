@@ -38,7 +38,6 @@ class _TPURunRequest:
     resume_from_checkpoint: Path | None = None
     eval_manifest_dir: Path | None = None
     eval_every_steps: int | None = None
-    expected_world_size: int = 8
 
     def __post_init__(self) -> None:
         if self.save_every_steps is not None and (
@@ -211,7 +210,6 @@ class _TPUCoordinator:
         command = [
             sys.executable,
             str(self.worker_script),
-            "--expected-world-size", str(request.expected_world_size),
             "--max-steps", str(request.max_steps),
             "--gradient-accumulation-steps", str(request.gradient_accumulation_steps),
             "--micro-batch-per-device", str(request.micro_batch_per_device),

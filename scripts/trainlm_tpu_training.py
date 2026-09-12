@@ -256,11 +256,6 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
     del index
     rank = int(xr.global_ordinal())
     world_size = int(xr.world_size())
-    if world_size != args.expected_world_size:
-        raise RuntimeError(
-            f"Torch/XLA launched {world_size} process(es); "
-            f"expected {args.expected_world_size}."
-        )
 
     torch.manual_seed(args.seed)
     device = torch_xla.device()
@@ -507,7 +502,6 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
         "global_supervised_tokens": state.tokens_seen * world_size,
         "last_loss_rank0": state.loss,
         "world_size": world_size,
-        "expected_world_size": args.expected_world_size,
         "scheduled_tokens_per_update": args.sequence_length * args.micro_batch_per_device
             * args.gradient_accumulation_steps * world_size,
         "measured_global_supervised_tokens": metrics.measured_tokens,

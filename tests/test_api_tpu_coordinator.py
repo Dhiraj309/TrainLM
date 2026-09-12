@@ -213,6 +213,15 @@ def test_tpu_checkpoint_request_is_serialized_and_forwarded(tmp_path):
     assert request.to_dict()["resume_from_checkpoint"] == str(checkpoint)
 
 
+def test_tpu_request_does_not_expose_or_assume_world_size(tmp_path):
+    request = _request(tmp_path)
+
+    assert "expected_world_size" not in request.to_dict()
+    assert "--expected-world-size" not in _TPUCoordinator(
+        tmp_path / "worker.py"
+    )._command(request)
+
+
 def test_tpu_checkpoint_request_rejects_missing_resume_directory(tmp_path):
     with pytest.raises(ValueError, match="does not exist"):
         _TPURunRequest(
