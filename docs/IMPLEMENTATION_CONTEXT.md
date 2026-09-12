@@ -556,6 +556,10 @@ this file in every turn:
     versioned schema and reject unknown keys, malformed collection containers,
     non-mapping decision/transform entries, and boolean schema versions. A
     checkpoint cannot silently default omitted plan evidence or accept typos.
+86. **M8-F4 strict nested plan evidence:** serialized provider decisions and
+    transformations require their complete exact field sets. Transformation
+    layout-change flags must be booleans, preventing truthy strings or integers
+    from altering checkpoint/export behavior after plan restoration.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

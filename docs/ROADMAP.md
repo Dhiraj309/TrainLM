@@ -834,6 +834,8 @@ loaded HF models safely without family logic in core.
   handlers, blocked plans, and downstream context failures cannot commit.
   Serialized execution plans require every schema field, reject unknown fields
   and malformed nested entries, and do not accept booleans as schema versions.
+  Nested provider decisions and transformations also require complete exact
+  schemas, including a real boolean parameter-layout flag.
 
 - [x] **M8-F5 — State-dict conversion**
   `feat(optimization): add reversible parameter layout mappings`
