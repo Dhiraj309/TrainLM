@@ -112,6 +112,14 @@ class PrintMetrics(TrainerCallback):
 
 
 def _source(args: argparse.Namespace) -> ModelSourceConfig:
+    if getattr(args, "model_source_json", ""):
+        values = json.loads(args.model_source_json)
+        if not isinstance(values, dict):
+            raise ValueError("--model-source-json must contain a JSON object.")
+        try:
+            return ModelSourceConfig(**values)
+        except TypeError as exc:
+            raise ValueError("--model-source-json has unknown model fields.") from exc
     if args.model_id:
         return ModelSourceConfig(
             provider="huggingface",

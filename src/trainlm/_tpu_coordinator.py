@@ -219,25 +219,10 @@ class _TPUCoordinator:
 
     def _command(self, request: _TPURunRequest) -> list[str]:
         model = request.model
-        if model.initialization != "pretrained" or model.name_or_path is None:
+        if model.provider != "huggingface":
             raise TPUCoordinatorError(
-                "The current TPU coordinator requires a reconstructible pretrained "
-                "Hugging Face model ID or path."
-            )
-        unsupported = {
-            "cache_dir": model.cache_dir is not None,
-            "config_overrides": bool(model.config_overrides),
-            "dtype": model.dtype is not None,
-            "local_files_only": model.local_files_only,
-            "subfolder": model.subfolder is not None,
-            "use_safetensors": model.use_safetensors is not None,
-        }
-        enabled = sorted(name for name, present in unsupported.items() if present)
-        if enabled:
-            raise TPUCoordinatorError(
-                "The current TPU worker cannot preserve these model-source options: "
-                + ", ".join(enabled)
-                + "."
+                "The current TPU coordinator requires a reconstructible Hugging "
+                "Face model source."
             )
         command = [
             sys.executable,
@@ -252,7 +237,7 @@ class _TPUCoordinator:
             "--cache-dir", str((request.output_dir / "xla_cache").resolve()),
             "--data-mode", "local",
             "--manifest-dir", str(request.manifest_dir.resolve()),
-            "--model-id", model.name_or_path,
+            "--model-source-json", json.dumps(asdict(model), sort_keys=True),
             "--learning-rate", str(request.learning_rate),
             "--beta1", str(request.betas[0]),
             "--beta2", str(request.betas[1]),
@@ -263,10 +248,6 @@ class _TPUCoordinator:
             "--warmup-steps", str(request.warmup_steps),
             "--precision", request.precision,
         ]
-        if model.revision is not None:
-            command.extend(("--model-revision", model.revision))
-        if model.trust_remote_code:
-            command.append("--trust-remote-code")
         if request.save_every_steps is not None:
             command.extend(("--save-every-steps", str(request.save_every_steps)))
         if request.resume_from_checkpoint is not None:
