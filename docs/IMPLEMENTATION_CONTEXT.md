@@ -633,6 +633,14 @@ this file in every turn:
      and explains the lifecycle accurately: download and validation occur
      before launch, while `trainer.train()` consumes lazy memory-mapped local
      files without network access in the training loop.
+102. **M8-F0 Kaggle parent-process isolation:** constructing the public trainer
+     exposed Kaggle's preinstalled TensorFlow conflict through Torch/XLA and the
+     notebook kernel terminated before `train()`. The installation section now
+     removes TensorFlow and incompatible vision/audio wheels before installing
+     the pinned TPU profile, requires exactly one session restart, and verifies
+     TensorFlow is no longer importable before importing TrainLM. TPU worker
+     launch remains private; this is environment preparation, not user-managed
+     PJRT or topology configuration.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
