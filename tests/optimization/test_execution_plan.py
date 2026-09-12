@@ -235,7 +235,7 @@ def test_execution_plan_rejects_overlapping_transform_targets():
     duplicate = dict(values["transformations"][0])
     duplicate["transform_id"] = "pack-qkv-again"
     duplicate["inverse_transform_id"] = "unpack-qkv-again"
-    values["transformations"].append(duplicate)
+    values["transformations"] = (*values["transformations"], duplicate)
 
     with pytest.raises(ValueError, match="must not share target paths"):
         ExecutionPlan.from_dict(values)
