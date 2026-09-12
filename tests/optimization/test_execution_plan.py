@@ -142,3 +142,26 @@ def test_execution_plan_rejects_non_mapping_nested_entries(field):
 
     with pytest.raises(ValueError, match=rf"{field} must contain mappings"):
         ExecutionPlan.from_dict(values)
+
+
+@pytest.mark.parametrize("field", ("decisions", "transformations"))
+@pytest.mark.parametrize("change", ("missing", "unknown"))
+def test_execution_plan_rejects_incomplete_nested_schemas(field, change):
+    values = plan().to_dict()
+    entry = values[field][0]
+    if change == "missing":
+        entry.pop(next(iter(entry)))
+    else:
+        entry["typo"] = "ignored"
+
+    with pytest.raises(ValueError, match=rf"fields mismatch;.*{change}"):
+        ExecutionPlan.from_dict(values)
+
+
+@pytest.mark.parametrize("value", (0, 1, "false", None))
+def test_model_transformation_requires_boolean_layout_flag(value):
+    values = plan().to_dict()["transformations"][0]
+    values["parameter_layout_change"] = value
+
+    with pytest.raises(ValueError, match="parameter_layout_change must be a boolean"):
+        ModelTransformation.from_dict(values)

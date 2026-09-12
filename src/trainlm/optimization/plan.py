@@ -17,6 +17,23 @@ def _tuple_field(name: str, value: Any) -> tuple[Any, ...]:
     return tuple(value)
 
 
+def _strict_mapping(
+    name: str,
+    value: Mapping[str, Any],
+    required: set[str],
+) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{name} must be a mapping.")
+    fields = set(value)
+    if fields != required:
+        missing = sorted(required - fields)
+        unknown = sorted(fields - required)
+        raise ValueError(
+            f"{name} fields mismatch; missing={missing!r}, unknown={unknown!r}."
+        )
+    return dict(value)
+
+
 @dataclass(frozen=True, slots=True)
 class ProviderDecision:
     """Provider selection or explicit non-selection for one operation."""
@@ -71,6 +88,25 @@ class ProviderDecision:
         ):
             raise ValueError("Fallback decisions must select a different provider.")
 
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "ProviderDecision":
+        values = _strict_mapping(
+            "Provider decision",
+            value,
+            {
+                "decision_id",
+                "component",
+                "operation",
+                "status",
+                "reason",
+                "selected_provider",
+                "requested_provider",
+                "requirements",
+                "evidence",
+            },
+        )
+        return cls(**values)
+
 
 @dataclass(frozen=True, slots=True)
 class ModelTransformation:
@@ -109,6 +145,25 @@ class ModelTransformation:
             raise ValueError("Model transformation target paths must be unique.")
         if self.transform_id == self.inverse_transform_id:
             raise ValueError("A transformation and its inverse must have different IDs.")
+        if not isinstance(self.parameter_layout_change, bool):
+            raise ValueError("parameter_layout_change must be a boolean.")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "ModelTransformation":
+        values = _strict_mapping(
+            "Model transformation",
+            value,
+            {
+                "transform_id",
+                "component",
+                "provider",
+                "target_paths",
+                "inverse_transform_id",
+                "reason",
+                "parameter_layout_change",
+            },
+        )
+        return cls(**values)
 
 
 @dataclass(frozen=True, slots=True)
@@ -249,29 +304,23 @@ class ExecutionPlan:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ExecutionPlan":
-        if not isinstance(data, Mapping):
-            raise ValueError("Execution plan must be a mapping.")
-        required = {
-            "schema_version",
-            "plan_id",
-            "status",
-            "policy",
-            "capability_fingerprint",
-            "backend",
-            "precision",
-            "decisions",
-            "transformations",
-            "warnings",
-            "errors",
-        }
-        fields = set(data)
-        if fields != required:
-            missing = sorted(required - fields)
-            unknown = sorted(fields - required)
-            raise ValueError(
-                f"Execution plan fields mismatch; missing={missing!r}, unknown={unknown!r}."
-            )
-        values = dict(data)
+        values = _strict_mapping(
+            "Execution plan",
+            data,
+            {
+                "schema_version",
+                "plan_id",
+                "status",
+                "policy",
+                "capability_fingerprint",
+                "backend",
+                "precision",
+                "decisions",
+                "transformations",
+                "warnings",
+                "errors",
+            },
+        )
         for name in ("decisions", "transformations", "warnings", "errors"):
             value = values[name]
             if isinstance(value, (str, bytes)) or not isinstance(value, (list, tuple)):
@@ -284,10 +333,10 @@ class ExecutionPlan:
         ):
             raise ValueError("Execution plan transformations must contain mappings.")
         values["decisions"] = tuple(
-            ProviderDecision(**decision) for decision in values["decisions"]
+            ProviderDecision.from_dict(decision) for decision in values["decisions"]
         )
         values["transformations"] = tuple(
-            ModelTransformation(**transform)
+            ModelTransformation.from_dict(transform)
             for transform in values["transformations"]
         )
         values["warnings"] = tuple(values["warnings"])
