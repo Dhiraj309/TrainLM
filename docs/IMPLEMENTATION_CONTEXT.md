@@ -540,6 +540,10 @@ this file in every turn:
     complete provider catalog in stable provider-ID order, including eligibility
     fields and declared transforms. Identical requests evaluated against
     different catalogs therefore cannot share an audit ID.
+82. **M8-F3 immutable provider transforms:** provider specifications accept
+    transformation declarations only as tuples. Mutable lists cannot be retained
+    inside a frozen provider and changed after registration, preserving stable
+    selection behavior and provider-bound plan fingerprints.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
