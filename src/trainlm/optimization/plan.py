@@ -242,6 +242,18 @@ class ExecutionPlan:
             raise ValueError("Execution plan decision IDs must be unique.")
         if len(transform_ids) != len(set(transform_ids)):
             raise ValueError("Execution plan transformation IDs must be unique.")
+        target_owners: dict[str, str] = {}
+        conflicting_targets: set[str] = set()
+        for transform in self.transformations:
+            for target in transform.target_paths:
+                owner = target_owners.setdefault(target, transform.transform_id)
+                if owner != transform.transform_id:
+                    conflicting_targets.add(target)
+        if conflicting_targets:
+            raise ValueError(
+                "Execution plan transformations must not share target paths: "
+                f"{sorted(conflicting_targets)!r}."
+            )
         if self.status == "blocked" and not self.errors:
             raise ValueError("Blocked execution plans must explain their errors.")
         if self.status == "blocked" and self.transformations:

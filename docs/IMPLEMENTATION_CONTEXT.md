@@ -581,6 +581,9 @@ this file in every turn:
     violations are classified before ready-plan provider authorization. This
     preserves actionable lifecycle errors while retaining the authorization
     guard for executable plans.
+92. **M8-F4 disjoint transform targets:** execution plans reject target paths
+    claimed by more than one transform. Transaction capture and rollback cannot
+    become order-dependent through overlapping mutations of the same module.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
