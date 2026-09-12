@@ -15,11 +15,11 @@ suspected.
 
 ## 2. Pin immutable revisions and splits
 
-Use a lowercase 40-character commit SHA for the model. TrainLM accepts a Hub
-dataset branch for convenience but resolves it to one immutable commit before
-downloading any files. Keep training and evaluation shard ranges disjoint.
-TrainLM rejects mutable Hub model revisions before starting the TPU coordinator;
-local model directories remain available for offline, immutable snapshots.
+TrainLM accepts a model or dataset branch such as `main` for convenience and
+resolves each one to an immutable commit before downloading or launching TPU
+workers. Keep training and evaluation shard ranges disjoint. A literal example
+SHA such as `012345...` is not a valid revision; use `main`, a real tag, or a
+real commit. Local model directories remain available for offline snapshots.
 
 ```python
 import os
@@ -33,7 +33,7 @@ from trainlm import (
 if "HF_TOKEN" not in os.environ:
     raise RuntimeError("Configure HF_TOKEN in the platform secret manager.")
 
-model_revision = os.environ["MODEL_REVISION"]
+model_revision = os.environ.get("MODEL_REVISION", "main")
 train_data = PackedBinDataset.from_hub(
     "LaughTaleAI/LaughLM-Tokenized-Fine",
     revision="main",
