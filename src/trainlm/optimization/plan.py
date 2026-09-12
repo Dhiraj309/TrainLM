@@ -128,7 +128,7 @@ class ExecutionPlan:
     errors: tuple[str, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
-        if self.schema_version != 1:
+        if isinstance(self.schema_version, bool) or self.schema_version != 1:
             raise ValueError("ExecutionPlan supports schema_version=1 only.")
         for name in ("plan_id", "capability_fingerprint", "backend", "precision"):
             value = getattr(self, name)
@@ -249,16 +249,49 @@ class ExecutionPlan:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ExecutionPlan":
+        if not isinstance(data, Mapping):
+            raise ValueError("Execution plan must be a mapping.")
+        required = {
+            "schema_version",
+            "plan_id",
+            "status",
+            "policy",
+            "capability_fingerprint",
+            "backend",
+            "precision",
+            "decisions",
+            "transformations",
+            "warnings",
+            "errors",
+        }
+        fields = set(data)
+        if fields != required:
+            missing = sorted(required - fields)
+            unknown = sorted(fields - required)
+            raise ValueError(
+                f"Execution plan fields mismatch; missing={missing!r}, unknown={unknown!r}."
+            )
         values = dict(data)
+        for name in ("decisions", "transformations", "warnings", "errors"):
+            value = values[name]
+            if isinstance(value, (str, bytes)) or not isinstance(value, (list, tuple)):
+                raise ValueError(f"Execution plan {name} must be a list or tuple.")
+        if any(not isinstance(decision, Mapping) for decision in values["decisions"]):
+            raise ValueError("Execution plan decisions must contain mappings.")
+        if any(
+            not isinstance(transform, Mapping)
+            for transform in values["transformations"]
+        ):
+            raise ValueError("Execution plan transformations must contain mappings.")
         values["decisions"] = tuple(
-            ProviderDecision(**decision) for decision in values.get("decisions", ())
+            ProviderDecision(**decision) for decision in values["decisions"]
         )
         values["transformations"] = tuple(
             ModelTransformation(**transform)
-            for transform in values.get("transformations", ())
+            for transform in values["transformations"]
         )
-        values["warnings"] = tuple(values.get("warnings", ()))
-        values["errors"] = tuple(values.get("errors", ()))
+        values["warnings"] = tuple(values["warnings"])
+        values["errors"] = tuple(values["errors"])
         return cls(**values)
 
     @classmethod

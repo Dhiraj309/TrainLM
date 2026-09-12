@@ -552,6 +552,10 @@ this file in every turn:
     repeated transformation IDs, and planner registration rejects IDs already
     owned by another provider. Multi-operation selection therefore cannot fail
     late while constructing an execution plan with ambiguous transformations.
+85. **M8-F4 strict execution-plan loading:** serialized plans require the full
+    versioned schema and reject unknown keys, malformed collection containers,
+    non-mapping decision/transform entries, and boolean schema versions. A
+    checkpoint cannot silently default omitted plan evidence or accept typos.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
