@@ -800,6 +800,10 @@ loaded HF models safely without family logic in core.
   Validation scans token bounds in vectorized chunks, and the TPU prefetch
   geometry now uses the same canonical microbatch argument forwarded by the
   public trainer.
+  The notebook exposes one local cache directory for both disjoint train and
+  evaluation ranges and makes the startup boundary explicit. Its training cell
+  remains only `trainer.train()`; downloaded files are reused locally and no
+  network operation is part of batch iteration.
 
 - [x] **M8-F1 — Structural inspector**
   `feat(optimization): inspect dense causal LM capabilities`
