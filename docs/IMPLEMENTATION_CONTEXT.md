@@ -544,6 +544,10 @@ this file in every turn:
     transformation declarations only as tuples. Mutable lists cannot be retained
     inside a frozen provider and changed after registration, preserving stable
     selection behavior and provider-bound plan fingerprints.
+83. **M8-F3 component-bound provider transforms:** every provider transformation
+    must name the provider's component as well as its provider ID. A provider
+    selected for one inspected capability therefore cannot smuggle a mutation
+    for an unrelated model component into an otherwise valid execution plan.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

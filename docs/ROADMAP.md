@@ -816,7 +816,9 @@ loaded HF models safely without family logic in core.
   include the complete sorted provider catalog, so distinct eligible providers
   or transform declarations cannot produce the same audit identity. Transform
   declarations must use immutable tuples, preventing catalog mutation after a
-  provider has been registered or a plan ID has been recorded.
+  provider has been registered or a plan ID has been recorded. Every declared
+  transform must also target the provider's own component, preventing a
+  provider selected for one capability from mutating an unrelated component.
 
 - [x] **M8-F4 — Transactional transforms**
   `feat(optimization): apply validated reversible model transforms`

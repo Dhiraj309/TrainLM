@@ -64,6 +64,8 @@ class ProviderSpec:
             raise ValueError("Provider transformations must be ModelTransformation values.")
         if any(transform.provider != self.provider_id for transform in self.transformations):
             raise ValueError("Provider transformations must name their owning provider.")
+        if any(transform.component != self.component for transform in self.transformations):
+            raise ValueError("Provider transformations must target their owning component.")
         if not isinstance(self.fallback, bool):
             raise ValueError("Provider fallback must be a boolean.")
         if isinstance(self.priority, bool) or not isinstance(self.priority, int):
