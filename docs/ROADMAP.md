@@ -804,6 +804,12 @@ loaded HF models safely without family logic in core.
   evaluation ranges and makes the startup boundary explicit. Its training cell
   remains only `trainer.train()`; downloaded files are reused locally and no
   network operation is part of batch iteration.
+  A Kaggle construction attempt emitted Torch/XLA's TensorFlow-conflict warning
+  and killed the notebook kernel before `trainer.train()`. The setup cell now
+  removes the unused TensorFlow and mismatched vision/audio installations,
+  installs the pinned TPU profile, and requires one explicit session restart.
+  A pre-import assertion prevents users from continuing in the contaminated
+  parent process and receiving the same opaque kernel death.
 
 - [x] **M8-F1 — Structural inspector**
   `feat(optimization): inspect dense causal LM capabilities`

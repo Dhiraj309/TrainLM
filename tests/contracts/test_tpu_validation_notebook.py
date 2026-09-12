@@ -20,6 +20,9 @@ def test_tpu_notebook_demonstrates_the_public_hf_like_workflow():
     source = _source()
 
     for required in (
+        "%pip uninstall -y tensorflow torchvision torchaudio",
+        "Restart Session",
+        "TensorFlow is still importable",
         "TrainLMTrainer.from_pretrained",
         "TrainLMTrainingArguments",
         "PackedBinDataset.from_hub",
@@ -38,6 +41,8 @@ def test_tpu_notebook_demonstrates_the_public_hf_like_workflow():
 
 def test_tpu_notebook_hides_orchestration_and_topology_inputs():
     source = _source()
+
+    assert source.index("%pip uninstall") < source.index("from trainlm import")
 
     for private_detail in (
         "trainlm_tpu_worker.py",
