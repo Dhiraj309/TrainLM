@@ -584,6 +584,9 @@ this file in every turn:
 92. **M8-F4 disjoint transform targets:** execution plans reject target paths
     claimed by more than one transform. Transaction capture and rollback cannot
     become order-dependent through overlapping mutations of the same module.
+93. **M8-F4 serialized overlap fixture:** the tampered-plan regression extends
+    the serialized transformation tuple immutably. It no longer fails in test
+    setup by assuming `dataclasses.asdict()` changes tuples into lists.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
