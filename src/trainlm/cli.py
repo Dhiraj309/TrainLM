@@ -21,8 +21,15 @@ def _parser() -> argparse.ArgumentParser:
     commands = parser.add_subparsers(dest="command", required=True)
     train = commands.add_parser("train", help="Train from a public YAML config.")
     train.add_argument("--config", type=Path, required=True)
-    train.add_argument("--train-manifest-dir", type=Path, required=True)
+    data = train.add_mutually_exclusive_group(required=True)
+    data.add_argument("--train-manifest-dir", type=Path)
+    data.add_argument("--dataset-repo")
     train.add_argument("--eval-manifest-dir", type=Path)
+    train.add_argument("--dataset-revision", default="main")
+    train.add_argument("--train-shard-start", type=int, default=0)
+    train.add_argument("--train-shard-stop", type=int)
+    train.add_argument("--eval-shard-start", type=int)
+    train.add_argument("--eval-shard-stop", type=int)
     train.add_argument("--resume-from-checkpoint", type=Path)
     train.add_argument(
         "--dry-run",
@@ -56,21 +63,50 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not isinstance(training_values, dict):
         raise TypeError("'training_args' must be a mapping.")
     training_args = TrainLMTrainingArguments(**training_values)
-    train_dataset = PackedBinDataset.from_directory(
-        args.train_manifest_dir,
-        sequence_length=training_args.sequence_length,
-        split="train",
-        seed=training_args.seed,
-    )
-    eval_dataset = (
-        PackedBinDataset.from_directory(
-            args.eval_manifest_dir,
+    if args.dataset_repo is not None:
+        if args.train_shard_stop is None:
+            parser.error("--dataset-repo requires --train-shard-stop")
+        if (args.eval_shard_start is None) != (args.eval_shard_stop is None):
+            parser.error(
+                "--eval-shard-start and --eval-shard-stop must be used together"
+            )
+        if args.eval_manifest_dir is not None:
+            parser.error("--eval-manifest-dir cannot be combined with --dataset-repo")
+        train_dataset = PackedBinDataset.from_hub(
+            args.dataset_repo,
+            revision=args.dataset_revision,
+            shard_range=(args.train_shard_start, args.train_shard_stop),
             sequence_length=training_args.sequence_length,
-            split="validation",
+            split="train",
+            seed=training_args.seed,
         )
-        if args.eval_manifest_dir is not None
-        else None
-    )
+        eval_dataset = (
+            PackedBinDataset.from_hub(
+                args.dataset_repo,
+                revision=train_dataset.hub_revision,
+                shard_range=(args.eval_shard_start, args.eval_shard_stop),
+                sequence_length=training_args.sequence_length,
+                split="validation",
+            )
+            if args.eval_shard_start is not None
+            else None
+        )
+    else:
+        train_dataset = PackedBinDataset.from_directory(
+            args.train_manifest_dir,
+            sequence_length=training_args.sequence_length,
+            split="train",
+            seed=training_args.seed,
+        )
+        eval_dataset = (
+            PackedBinDataset.from_directory(
+                args.eval_manifest_dir,
+                sequence_length=training_args.sequence_length,
+                split="validation",
+            )
+            if args.eval_manifest_dir is not None
+            else None
+        )
     trainer = TrainLMTrainer.from_config(
         config,
         train_dataset=train_dataset,

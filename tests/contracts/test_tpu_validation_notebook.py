@@ -22,7 +22,9 @@ def test_tpu_notebook_demonstrates_the_public_hf_like_workflow():
     for required in (
         "TrainLMTrainer.from_pretrained",
         "TrainLMTrainingArguments",
-        "PackedBinDataset.from_directory",
+        "PackedBinDataset.from_hub",
+        "shard_range=(0, TRAIN_SHARD_STOP)",
+        "shard_range=(TRAIN_SHARD_STOP, TRAIN_SHARD_STOP + 1)",
         "result = trainer.train()",
         'trainer.explain(format="text")',
         "eval_steps=2",

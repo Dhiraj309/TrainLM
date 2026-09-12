@@ -790,6 +790,11 @@ loaded HF models safely without family logic in core.
   arguments, coordinator request, CLI, nor notebook asks users to predict a
   world size; collective validation derives its expected rank sum from the
   actual topology selected by Torch/XLA.
+  Public Hub data intake now accepts a repository and end-exclusive numeric
+  shard range. LaughLM legacy `.bin` files are downloaded through the Hub cache,
+  pinned to one resolved commit, fully scanned and validated, then passed into
+  the same reader, dataloader, train/eval partition, and coordinator staging
+  paths as manifest-backed data. Sidecar authoring is no longer user work.
 
 - [x] **M8-F1 — Structural inspector**
   `feat(optimization): inspect dense causal LM capabilities`

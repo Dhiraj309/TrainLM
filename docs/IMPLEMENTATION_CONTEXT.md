@@ -613,6 +613,13 @@ this file in every turn:
     `trainer.train()`. Evaluation and checkpoint cadence happen within that
     call; explanation and resume are concise optional examples. Operational
     artifacts are mentioned only as outputs to archive for maintainers.
+99. **M8-F0 ranged raw-bin Hub intake:** `PackedBinDataset.from_hub()` accepts a
+    dataset repo plus an end-exclusive `(start, stop)` shard range, resolves a
+    mutable selector once to its immutable Hub commit, downloads numbered
+    LaughLM legacy `.bin` files through the standard cache, and streams each
+    payload to derive checksum, token count, and bounds. Generated descriptors
+    feed the existing deterministic reader, train/eval partitions, and private
+    coordinator staging path; users do not create or publish sidecar manifests.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

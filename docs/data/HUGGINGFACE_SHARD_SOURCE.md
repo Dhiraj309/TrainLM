@@ -14,9 +14,10 @@ Every source requires:
 - an ordered tuple of unique shard IDs and manifest paths; and
 - an optional Hub cache directory and cache-only policy.
 
-Branches such as `main` and mutable tags are rejected. Using one immutable
-revision for every manifest, payload, and document index prevents a repository
-update from mixing files from different dataset versions during one resolve.
+The low-level manifest configuration requires a commit SHA. The public raw-bin
+range API may accept a branch such as `main`, but resolves it once to its commit
+SHA before downloading any shard. Using one immutable revision for every file
+prevents a repository update from mixing dataset versions during one run.
 The declared tuple order is preserved; the source never relies on Hub listing
 order or filename globbing.
 
@@ -43,6 +44,22 @@ source = HuggingFacePackedShardSource(HuggingFaceShardSourceConfig(
 ))
 
 train_shards = source.resolve()
+```
+
+Repositories containing the LaughLM legacy 1024-byte-header `uint16` files do
+not need published sidecar manifests. The public adapter downloads an
+end-exclusive numeric range and generates validated private descriptors after
+streaming the full payload once:
+
+```python
+from trainlm import PackedBinDataset
+
+train_data = PackedBinDataset.from_hub(
+    "LaughTaleAI/LaughLM-Tokenized-Fine",
+    revision="main",       # resolved to an immutable commit before download
+    shard_range=(0, 8),    # shard 00000 through shard 00007
+    sequence_length=2048,
+)
 ```
 
 Each manifest's `shard_id` must match the requested ID. Duplicate manifest or
