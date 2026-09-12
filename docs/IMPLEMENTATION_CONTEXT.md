@@ -664,6 +664,11 @@ this file in every turn:
      8 heads, 2816 intermediate) instead of preflighting the 3.8B Phi-3.5
      checkpoint independently on every data-parallel replica. This validates
      the lifecycle within v5e-8 HBM before users attempt larger-model sharding.
+107. **M8-F0 config-model worker reconstruction:** the coordinator now
+     serializes the complete validated `ModelSourceConfig` for private workers
+     instead of restricting launch to pretrained IDs. Config-initialized HF
+     models therefore follow the same probe, preflight, train, evaluation, and
+     checkpoint lifecycle without exposing worker arguments to notebook users.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

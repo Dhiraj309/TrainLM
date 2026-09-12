@@ -231,6 +231,36 @@ def test_tpu_request_does_not_expose_or_assume_world_size(tmp_path):
     )._command(request)
 
 
+def test_tpu_config_model_is_serialized_for_worker_reconstruction(tmp_path):
+    base = _request(tmp_path)
+    model = ModelSourceConfig(
+        provider="huggingface",
+        initialization="config",
+        model_type="llama",
+        dtype="float32",
+        config_overrides={"hidden_size": 1024, "num_hidden_layers": 8},
+    )
+    request = _TPURunRequest(
+        **{
+            **base.to_dict(),
+            "model": model,
+            "manifest_dir": tmp_path / "manifests",
+            "output_dir": tmp_path / "run",
+        }
+    )
+
+    command = _TPUCoordinator(tmp_path / "worker.py")._command(request)
+    payload = json.loads(command[command.index("--model-source-json") + 1])
+
+    assert payload["initialization"] == "config"
+    assert payload["model_type"] == "llama"
+    assert payload["config_overrides"] == {
+        "hidden_size": 1024,
+        "num_hidden_layers": 8,
+    }
+    assert "--model-id" not in command
+
+
 def test_tpu_checkpoint_request_rejects_missing_resume_directory(tmp_path):
     with pytest.raises(ValueError, match="does not exist"):
         _TPURunRequest(

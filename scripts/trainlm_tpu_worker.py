@@ -110,6 +110,7 @@ def parse_args():
     parser.add_argument("--model-id", default="")
     parser.add_argument("--model-revision", default="")
     parser.add_argument("--trust-remote-code", action="store_true")
+    parser.add_argument("--model-source-json", default="")
     parser.add_argument("--export-hf", action="store_true")
     args = parser.parse_args()
     for name in ("max_steps", "gradient_accumulation_steps", "micro_batch_per_device",
