@@ -45,9 +45,12 @@ def _result_payload(result: Any) -> Any:
 def main(argv: Sequence[str] | None = None) -> int:
     """Run a public TrainLM command without exposing private worker arguments."""
 
-    args = _parser().parse_args(argv)
+    parser = _parser()
+    args = parser.parse_args(argv)
     if args.command != "train":  # pragma: no cover - argparse owns this guard
         raise AssertionError(f"Unexpected command: {args.command}")
+    if args.dry_run and args.resume_from_checkpoint is not None:
+        parser.error("--dry-run cannot be combined with --resume-from-checkpoint")
     config = _load_public_config(args.config)
     training_values = config.get("training_args", {})
     if not isinstance(training_values, dict):

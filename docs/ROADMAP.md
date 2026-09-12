@@ -778,6 +778,8 @@ loaded HF models safely without family logic in core.
   `trainlm train --dry-run` performs the same YAML and packed-manifest validation
   and emits the public optimization explanation without launching training,
   providing a safe final host-side check before TPU allocation.
+  Dry-run rejects a resume argument instead of silently implying that checkpoint
+  contents were validated without entering the training lifecycle.
 
 - [x] **M8-F1 — Structural inspector**
   `feat(optimization): inspect dense causal LM capabilities`
