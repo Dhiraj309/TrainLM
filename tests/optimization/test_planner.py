@@ -206,3 +206,24 @@ def test_provider_rejects_mutable_transformation_collections():
             precisions=("bf16",),
             transformations=[transformation],
         )
+
+
+def test_provider_rejects_transformations_for_another_component():
+    transformation = ModelTransformation(
+        transform_id="wrong-component",
+        component="attention",
+        provider="xla-qkv",
+        target_paths=("model.layers.*.self_attn",),
+        inverse_transform_id="restore-wrong-component",
+        reason="Invalid cross-component declaration.",
+    )
+
+    with pytest.raises(ValueError, match="target their owning component"):
+        ProviderSpec(
+            provider_id="xla-qkv",
+            component="projections",
+            operation="forward_backward",
+            backends=("pytorch-xla",),
+            precisions=("bf16",),
+            transformations=(transformation,),
+        )
