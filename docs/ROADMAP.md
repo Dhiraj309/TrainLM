@@ -1,5 +1,10 @@
 # TrainLM Roadmap
 
+The concise current-state checklist and continuation order live in
+[`HANDOFF.md`](HANDOFF.md). Its `[x]`, `[~]`, and `[ ]` marks distinguish tested
+implementation, partial or target-evidence-pending work, and future work; this
+roadmap remains the detailed milestone specification.
+
 - **Status:** Active implementation plan
 - **Product:** Hugging Face-native, TPU-optimized autoregressive pretraining
 - **Primary hardware:** Google TPU v5e-8, single VM

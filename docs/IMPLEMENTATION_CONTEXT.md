@@ -4,6 +4,10 @@ This document is the handoff for continuing TrainLM work in another Codex
 session or in Codex Cloud. It records the agreed product direction and the
 current implementation boundary; update it whenever a milestone changes.
 
+For the status-focused checklist of implemented work, target-hardware evidence,
+immediate priorities, architecture research, and telemetry work, see
+[`HANDOFF.md`](HANDOFF.md).
+
 ## Product intent
 
 TrainLM is a Hugging Face-like trainer for decoder-only autoregressive models.
@@ -669,6 +673,10 @@ this file in every turn:
      instead of restricting launch to pretrained IDs. Config-initialized HF
      models therefore follow the same probe, preflight, train, evaluation, and
      checkpoint lifecycle without exposing worker arguments to notebook users.
+108. **Consolidated continuation handoff:** `docs/HANDOFF.md` now records the
+     public/data/runtime/optimization implementation state, uses distinct done,
+     partial/evidence-pending, and planned marks, and carries the proposed
+     parallelism, architecture-lab, telemetry, and closed-loop tuning backlog.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
