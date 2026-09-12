@@ -137,6 +137,7 @@ class Trainer:
                     self.control,
                 )
                 self._emit_step_metrics()
+                self._run_scheduled_actions()
 
         except BaseException as exc:
             self.state.mark_failed(exc)
@@ -145,6 +146,24 @@ class Trainer:
             self._finish_training()
 
         return self.state
+
+    def _run_scheduled_actions(self) -> None:
+        """Honor configured and callback-requested save/evaluation boundaries."""
+
+        evaluation = getattr(self.config, "evaluation", None)
+        eval_interval = getattr(evaluation, "eval_every_steps", None)
+        should_evaluate = self.control.should_evaluate or (
+            eval_interval is not None and self.state.step % eval_interval == 0
+        )
+        checkpoint = getattr(self.config, "checkpoint", None)
+        save_interval = getattr(checkpoint, "save_training_every_steps", None)
+        should_save = self.control.should_save_checkpoint or (
+            save_interval is not None and self.state.step % save_interval == 0
+        )
+        if should_evaluate:
+            self.evaluate()
+        if should_save:
+            self.save_checkpoint(f"checkpoint-{self.state.step}")
 
     def _finish_training(self) -> None:
         """Run end hooks and finalize resources exactly once."""
@@ -447,12 +466,21 @@ class Trainer:
 
         try:
             with torch.no_grad():
+                distributed_aggregator = getattr(
+                    self.task,
+                    "aggregate_distributed_evaluation_stream",
+                    None,
+                )
                 stream_aggregator = getattr(
                     self.task,
                     "aggregate_evaluation_stream",
                     None,
                 )
-                if callable(stream_aggregator):
+                if self.runtime.is_distributed and callable(distributed_aggregator):
+                    metrics = distributed_aggregator(
+                        self._evaluation_results(), self.runtime
+                    )
+                elif callable(stream_aggregator):
                     metrics = stream_aggregator(self._evaluation_results())
                 else:
                     results: list[TaskResult] = []

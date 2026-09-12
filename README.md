@@ -96,10 +96,20 @@ Packed reads can overlap training through the bounded, backend-aware
 [asynchronous prefetch contract](docs/data/ASYNC_PREFETCH.md).
 Exact next-batch restart state follows the
 [resumable cursor contract](docs/data/RESUMABLE_CURSOR.md).
+The [public TPU validation notebook](notebooks/TrainLM_TPU_Validation.ipynb)
+shows the proposed end-user workflow: construct familiar arguments and call
+`trainer.train()`. TrainLM keeps topology discovery, worker orchestration,
+preflight, evaluation cadence, checkpointing, and resume behind that call. The
+[secure packed-bin TPU guide](docs/tutorials/TPU_PACKED_BIN_PRETRAINING.md)
+covers secret handling, immutable revisions, train/eval splits, explanation,
+resume, and the current canonical-export boundary.
 
 TrainLM distinguishes models that are **Compatible**, **Optimized**, and
 hardware **Certified**. Generic execution is never presented as TPU performance
 certification.
+See the [Dense-AR V1 development support status](docs/release/DENSE_AR_V1_STATUS.md)
+and its [machine-readable manifest](support/dense_ar_v1.json) for current
+versions, hardware paths, providers, fallbacks, and caveats.
 
 ## Public trainer (M8-F0 in progress)
 
@@ -127,8 +137,78 @@ trainer = TrainLMTrainer(
 trainer.train()
 ```
 
-The first facade slice currently delegates to the portable CPU/CUDA engine.
-TPU coordinator launch, validated packed-binary dataset construction, and
-automatic capability-based kernel planning are being added behind this same
-API. Until those stories are complete, the worker notebook remains a
-validation surface rather than the public UX.
+The same public facade supports a versioned YAML workflow. Dataset objects stay
+in user code while model acquisition and familiar training arguments live in
+configuration:
+
+```python
+from trainlm import TrainLMTrainer
+
+trainer = TrainLMTrainer.from_config(
+    "examples/dense_ar_pretraining.yaml",
+    train_dataset=train_dataset,
+    eval_dataset=eval_dataset,
+)
+trainer.train(resume_from_checkpoint="runs/dense-ar/checkpoint-500")
+```
+
+Use `TrainLMTrainer.from_pretrained("org/model", revision="...")` for the
+equivalent code-first pretrained workflow. Public config files carry an
+`api_version`; renamed keys emit `DeprecationWarning` for one public API version
+before removal.
+
+The equivalent packed-data command-line path delegates to the same public
+trainer and dataset adapters:
+
+```bash
+trainlm train \
+  --config examples/dense_ar_pretraining.yaml \
+  --train-manifest-dir data/packed/train \
+  --eval-manifest-dir data/packed/validation \
+  --resume-from-checkpoint runs/dense-ar/checkpoint-500
+```
+
+The CLI prints one structured JSON training result. TPU worker commands, PJRT
+configuration, coordinator stage logs, and raw manifests remain private.
+Packed readers use the YAML `sequence_length` and training seed; validation
+always uses its deterministic validation partition semantics.
+
+Numbered Hub `.bin` shards can be selected directly without downloading or
+authoring manifests by hand:
+
+```bash
+trainlm train --config examples/dense_ar_pretraining.yaml \
+  --dataset-repo LaughTaleAI/LaughLM-Tokenized-Fine \
+  --dataset-revision main \
+  --train-shard-start 0 --train-shard-stop 8 \
+  --eval-shard-start 8 --eval-shard-stop 9
+```
+
+On CPU and CUDA, `save_steps` and `eval_steps` are handled by the same
+backend-neutral lifecycle used for training. A local run can continue from a
+TrainLM training checkpoint with
+`trainer.train(resume_from_checkpoint="runs/example/checkpoint-100")`.
+
+Packed token shards can be downloaded by end-exclusive numeric range. TrainLM
+resolves the requested Hub revision to an immutable commit, uses the standard
+Hugging Face cache, validates every downloaded token payload, and partitions
+examples deterministically:
+
+```python
+from trainlm import PackedBinDataset
+
+train_dataset = PackedBinDataset.from_hub(
+    "LaughTaleAI/LaughLM-Tokenized-Fine",
+    revision="main",
+    shard_range=(0, 4),  # downloads 00000 through 00003
+    sequence_length=2048,
+)
+```
+
+The facade delegates local runs to the portable CPU/CUDA engine and routes
+`accelerator="tpu"` through a private single-VM coordinator. The initial TPU
+bridge accepts a reconstructible pretrained Hugging Face model source and a
+local directory of validated shard manifests; public packed-binary dataset
+construction, TPU checkpoint parity, and automatic capability-based kernel
+planning remain in progress. Structured worker metrics are delivered through
+public callbacks; worker scripts and stage logs are internal details.

@@ -1,0 +1,219 @@
+"""Public CLI delegates exclusively to the HF-like facade."""
+
+from types import SimpleNamespace
+
+import pytest
+
+from trainlm import cli
+
+
+def test_train_command_builds_public_datasets_and_delegates(
+    monkeypatch, tmp_path, capsys
+):
+    config = tmp_path / "train.yaml"
+    config.write_text(
+        "api_version: '1'\n"
+        "model: local-model\n"
+        "training_args:\n"
+        "  sequence_length: 128\n"
+        "  seed: 17\n",
+        encoding="utf-8",
+    )
+    calls = []
+
+    def dataset_from_directory(path, **kwargs):
+        calls.append(("dataset", path, kwargs))
+        return f"dataset:{path.name}"
+
+    class Trainer:
+        def train(self, *, resume_from_checkpoint=None):
+            calls.append(("train", resume_from_checkpoint))
+            return SimpleNamespace(to_dict=lambda: {"step": 12})
+
+    def trainer_from_config(path, *, train_dataset, eval_dataset):
+        calls.append(("trainer", path, train_dataset, eval_dataset))
+        return Trainer()
+
+    monkeypatch.setattr(
+        cli.PackedBinDataset, "from_directory", dataset_from_directory
+    )
+    monkeypatch.setattr(cli.TrainLMTrainer, "from_config", trainer_from_config)
+
+    result = cli.main(
+        (
+            "train",
+            "--config",
+            str(config),
+            "--train-manifest-dir",
+            str(tmp_path / "train"),
+            "--eval-manifest-dir",
+            str(tmp_path / "eval"),
+            "--resume-from-checkpoint",
+            str(tmp_path / "checkpoint-12"),
+        )
+    )
+
+    assert result == 0
+    assert calls == [
+        (
+            "dataset",
+            tmp_path / "train",
+            {"sequence_length": 128, "split": "train", "seed": 17},
+        ),
+        (
+            "dataset",
+            tmp_path / "eval",
+            {"sequence_length": 128, "split": "validation"},
+        ),
+        (
+            "trainer",
+            {
+                "api_version": "1",
+                "model": "local-model",
+                "training_args": {"sequence_length": 128, "seed": 17},
+            },
+            "dataset:train",
+            "dataset:eval",
+        ),
+        ("train", tmp_path / "checkpoint-12"),
+    ]
+    assert capsys.readouterr().out == '{"step": 12}\n'
+
+
+def test_train_dry_run_validates_and_explains_without_training(
+    monkeypatch, tmp_path, capsys
+):
+    config = tmp_path / "train.yaml"
+    config.write_text(
+        "api_version: '1'\n"
+        "model: local-model\n"
+        "training_args:\n"
+        "  sequence_length: 128\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        cli.PackedBinDataset,
+        "from_directory",
+        lambda path, **kwargs: (path, kwargs),
+    )
+
+    class Trainer:
+        def explain(self, *, format):
+            assert format == "dict"
+            return {"backend": "xla", "selected_path": "tpu_coordinator"}
+
+        def train(self, **kwargs):
+            raise AssertionError(f"dry-run launched training: {kwargs!r}")
+
+    monkeypatch.setattr(
+        cli.TrainLMTrainer,
+        "from_config",
+        lambda *args, **kwargs: Trainer(),
+    )
+
+    result = cli.main(
+        (
+            "train",
+            "--config",
+            str(config),
+            "--train-manifest-dir",
+            str(tmp_path / "train"),
+            "--dry-run",
+        )
+    )
+
+    assert result == 0
+    assert capsys.readouterr().out == (
+        '{"backend": "xla", "selected_path": "tpu_coordinator"}\n'
+    )
+
+
+def test_train_dry_run_rejects_ignored_resume_argument(tmp_path, capsys):
+    with pytest.raises(SystemExit) as error:
+        cli.main(
+            (
+                "train",
+                "--config",
+                str(tmp_path / "train.yaml"),
+                "--train-manifest-dir",
+                str(tmp_path / "train"),
+                "--resume-from-checkpoint",
+                str(tmp_path / "checkpoint-1"),
+                "--dry-run",
+            )
+        )
+
+    assert error.value.code == 2
+    assert "cannot be combined" in capsys.readouterr().err
+
+
+def test_train_command_builds_hub_bin_ranges(monkeypatch, tmp_path, capsys):
+    config = tmp_path / "train.yaml"
+    config.write_text(
+        "api_version: '1'\n"
+        "model: local-model\n"
+        "training_args:\n"
+        "  sequence_length: 128\n"
+        "  eval_steps: 2\n",
+        encoding="utf-8",
+    )
+    calls = []
+
+    def dataset_from_hub(repo_id, **kwargs):
+        calls.append((repo_id, kwargs))
+        return SimpleNamespace(
+            split=kwargs["split"], hub_revision="b" * 40
+        )
+
+    class Trainer:
+        def train(self, *, resume_from_checkpoint=None):
+            assert resume_from_checkpoint is None
+            return {"step": 2}
+
+    monkeypatch.setattr(cli.PackedBinDataset, "from_hub", dataset_from_hub)
+    monkeypatch.setattr(
+        cli.TrainLMTrainer,
+        "from_config",
+        lambda config, *, train_dataset, eval_dataset: Trainer(),
+    )
+
+    result = cli.main((
+        "train",
+        "--config",
+        str(config),
+        "--dataset-repo",
+        "LaughTaleAI/LaughLM-Tokenized-Fine",
+        "--dataset-revision",
+        "main",
+        "--train-shard-stop",
+        "4",
+        "--eval-shard-start",
+        "4",
+        "--eval-shard-stop",
+        "5",
+    ))
+
+    assert result == 0
+    assert calls == [
+        (
+            "LaughTaleAI/LaughLM-Tokenized-Fine",
+            {
+                "revision": "main",
+                "shard_range": (0, 4),
+                "sequence_length": 128,
+                "split": "train",
+                "seed": 42,
+            },
+        ),
+        (
+            "LaughTaleAI/LaughLM-Tokenized-Fine",
+            {
+                "revision": "b" * 40,
+                "shard_range": (4, 5),
+                "sequence_length": 128,
+                "split": "validation",
+            },
+        ),
+    ]
+    assert capsys.readouterr().out == '{"step": 2}\n'

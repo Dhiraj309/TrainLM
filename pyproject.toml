@@ -36,9 +36,13 @@ classifiers = [
 
 dependencies = [
     "huggingface-hub>=1.0,<2",
+    "PyYAML>=6,<7",
     "torch>=2.9,<2.14",
     "transformers>=5.0,<6",
 ]
+
+[project.scripts]
+trainlm = "trainlm.cli:main"
 
 [project.optional-dependencies]
 tpu-xla = [

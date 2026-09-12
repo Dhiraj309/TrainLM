@@ -161,10 +161,10 @@ Branch names describe repository work, not the tool or contributor:
 |---|---|---|---|---:|---|
 | [x] | PR1 | `milestone/m0-m2-foundation` | M0-M2 | 15 | Contracts and generic HF CPU conformance |
 | [~] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 18 | Merged; post-merge data/trainer validation remains tracked by validation gates |
-| [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 16 | Implementation merged; DP8 launcher/data/attention/optimizer fixes landed; v5e-8 baseline is 319,302 tok/s after sparse-loss fix, performance work pending |
+| [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 16 | Implementation merge-ready; DP8 launcher/data/attention/optimizer fixes landed; v5e-8 baseline is 319,302 tok/s after sparse-loss fix, performance work pending |
 | [~] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11+ | HF-like public trainer facade, reversible planner, and optimized loss |
-| [ ] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | 850K and hard LaughLM parity |
-| [ ] | PR6 | `milestone/m13-m14-family-release` | M13-M14 | 12 | Cross-family certification and V1 release |
+| [~] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | Canonical attention contract started; 850K and hard LaughLM parity pending |
+| [~] | PR6 | `milestone/m13-m14-family-release` | M13-M14 | 12 | Cross-family certification and V1 release |
 
 Future tracks: `milestone/m15-torchtpu`, `milestone/m16-moe`, and
 `milestone/m17-dllm`, five commits each. Before activating a later PR branch,
@@ -186,12 +186,14 @@ baseline are complete; M6 cross-family and M7 reliability gates remain
 tracked validation work. Do not run the full 20B-token workload yet; use the
 evidence to decide whether each optimization is ready for TPU measurement.
 
-Validation artifact: `notebooks/TrainLM_TPU_Validation.ipynb` now provides the
-repeatable installation, environment check, HF model acquisition, packed `.bin`
-manifest validation, XLA trainer construction, smoke run, measured run, and
-optional plain-Transformers export. It must be run on TPU; no local execution
-is implied. The notebook deliberately leaves exact-resume checkpoint writing
-to the application-owned callback required by the M7 contract.
+Validation artifact: `notebooks/TrainLM_TPU_Validation.ipynb` now exercises the
+public facade from a fresh TPU session with the same concise workflow proposed
+to end users: provide immutable model and validated packed-data inputs, create
+familiar training arguments, and call `trainer.train()`. Evaluation and save
+cadence are demonstrated in the same run, with one optional public resume
+example. It must be run on TPU; no local execution is implied. The notebook
+never invokes worker scripts, selects a world size, configures PJRT/ranks,
+imports private coordinator types, or parses stage logs.
 
 The notebook includes a corrected Kaggle/Colab bootstrap and consolidated
 import order; the attached reference notebook's import cell was marked as
@@ -313,18 +315,18 @@ TPU runtime foundation`; branch `milestone/m5-m7-xla-compatibility`.
 | [x] | M0 | Scope, parity manifest, metrics, and dependencies |
 | [x] | M1 | Backend-neutral framework contracts |
 | [x] | M2 | Universal HF dense-causal CPU path |
-| [~] | M3 | F1-F5 complete; resumable cursor awaiting validation |
+| [x] | M3 | Packed data validates, partitions, streams, and resumes exactly |
 | [~] | M4 | F1-F7 implemented; validation pending |
-| [x] | M5 | F1-F7 implemented; DP8 launch, host data preparation, timing, expected-world-size gates, and two-update v5e-8 smoke passed |
+| [~] | M5 | F1-F7 implemented; DP8 launch, host data preparation, timing, expected-world-size gates, and two-update v5e-8 smoke passed; certification remains pending |
 | [~] | M6 | F1-F4 positional, attention, block-layout, and TPU round-trip coverage implemented; Llama preflight passed, cross-family validation pending |
 | [~] | M7 | F1-F5 distributed resume, async lifecycle, canonical HF export, telemetry, and integrity gates implemented; v5e-8 smoke and measured baseline passed, reliability certification pending |
 | [~] | M8 | HF-like public trainer facade plus reversible capability optimization engine |
-| [ ] | M9 | Memory-efficient causal loss |
-| [ ] | M10 | TPU attention and 850K gate |
-| [ ] | M11 | Projection, optimizer, remat, and HLO tuning |
-| [ ] | M12 | Exact 135M parity certification |
-| [ ] | M13 | Cross-family certification and 1.3B scaling |
-| [ ] | M14 | Dense-AR V1 release |
+| [~] | M9 | Memory-efficient causal loss |
+| [~] | M10 | TPU attention and 850K gate |
+| [~] | M11 | Projection, optimizer, remat, and HLO tuning |
+| [~] | M12 | Exact 135M parity certification |
+| [~] | M13 | Cross-family certification and 1.3B scaling |
+| [~] | M14 | Dense-AR V1 release |
 | [d] | M15 | TorchTPU migration |
 | [d] | M16 | MoE extension |
 | [d] | M17 | DLLM extension |
@@ -454,7 +456,7 @@ path before optimization adapters exist.
 
 ## M3 — Production packed-binary data
 
-**Status:** [~] M3-F1-M3-F5 complete; M3-F6 implemented and awaiting validation
+**Status:** [x] Complete
 
 **Goal:** Provide safe, distributed, fixed-shape, exactly resumable `.bin` data.
 
@@ -484,14 +486,18 @@ path before optimization adapters exist.
   Keep reading backend-neutral; expose transfer wrappers, depth, and timing.
   **Acceptance:** Ordering/backpressure pass; TPU begins tuning at depth 16.
 
-- [~] **M3-F6 — Resumable cursor**
+- [x] **M3-F6 — Resumable cursor**
   `feat(data): make packed data iteration exactly resumable`
   Save revision, permutation, shard, offset, epoch/tokens, and RNG.
   **Acceptance:** Interrupted and uninterrupted next batches match.
+  The complete 28-train/2-validation reference split is exercised with eight
+  training ranks and two validation ranks. Rank ownership covers every retained
+  batch exactly once, and every possible rank-local interruption point resumes
+  to the identical remaining token windows and final token count.
 
 ### Exit gate
 
-- [ ] The 28/2 reference split validates, streams, partitions, and resumes.
+- [x] The 28/2 reference split validates, streams, partitions, and resumes.
 
 ## M4 — Correct backend-neutral trainer
 
@@ -515,25 +521,40 @@ path before optimization adapters exist.
   backend option validation.
   **Acceptance:** Match PyTorch AdamW under identical policy.
 
-- [~] **M4-F4 — Token-based WSD**
+- [x] **M4-F4 — Token-based WSD**
   `feat(scheduler): add token-based WSD schedule`
   Warmup/stable/decay/min-LR/horizon with token-based resume.
   **Acceptance:** Boundaries and resume match the locked schedule.
+  Boundary fixtures now cover the token immediately before, at, and after each
+  warmup/stable/decay transition plus post-horizon clamping. Optimizer and
+  scheduler snapshots restored mid-schedule produce the identical remaining
+  learning-rate sequence and serialized scheduler state.
 
-- [~] **M4-F5 — Streaming evaluation**
+- [x] **M4-F5 — Streaming evaluation**
   `feat(evaluation): add token-weighted causal LM evaluation`
   Compute loss/perplexity without retaining predictions; isolate eval state.
   **Acceptance:** Match reference without mutating training.
+  Variable-mask causal batches now match the task's token-weighted reference
+  loss and perplexity while preserving trainer state, model mode, parameters,
+  and empty gradients. Evaluation remains streaming and retains no predictions.
 
-- [~] **M4-F6 — Sync-safe callbacks**
+- [x] **M4-F6 — Sync-safe callbacks**
   `feat(training): separate host callbacks from compiled metrics`
   Callbacks consume sparse materialized metrics, never live hot-path tensors.
   **Acceptance:** Backend mock detects no hidden scalar extraction.
+  Scalar-extraction instrumentation over a three-update run now proves that
+  non-logging updates perform no tensor `.item()` calls. Step hooks receive
+  `None` for unmaterialized loss, and the sole metrics callback receives only
+  immutable host floats at the requested logging boundary.
 
-- [~] **M4-F7 — Multi-family overfit**
+- [x] **M4-F7 — Multi-family overfit**
   `test(training): overfit dense AR conformance models`
   Check falling loss, finite gradients, resume, and export across tiny families.
   **Acceptance:** Trainer contains no family branch.
+  Every dense-AR fixture now trains through 30 updates with falling finite loss
+  and finite gradients, captures an exact update-15 model/optimizer/scheduler/
+  trainer checkpoint, resumes to the identical update-30 parameters, and
+  reloads its canonical export through standard Transformers APIs.
 
 ### Exit gate
 
@@ -709,7 +730,11 @@ trainer itself.
 
 ## M8 — Capability planner and reversible optimization
 
-**Status:** [~] In progress — the public facade first slice is implemented; TPU coordinator and optimization planner remain.
+**Status:** [~] In progress — the coordinator, packed-data adapter, local
+lifecycle facade, TPU metric/state bridge, structural inspector, and guarded
+adapter registry, pure provider planner, transactional transform registry, and
+reversible state-dict conversion and the complete explain report are
+implemented; TPU checkpoint parity remains.
 
 **Goal:** Provide a minimal Hugging Face-like trainer surface while transforming
 loaded HF models safely without family logic in core.
@@ -724,40 +749,164 @@ loaded HF models safely without family logic in core.
   **Acceptance:** A concise HF-style example trains on CPU and reaches the TPU
   coordinator without users constructing subprocess commands or parsing stage
   logs; raw validation remains an internal implementation detail.
+  The TPU branch now reaches a private coordinator that owns probe, model
+  preflight, worker launch, logs, and structured summaries for pretrained HF
+  sources plus validated `PackedBinDataset` inputs. Local and revision-pinned
+  Hub constructors validate shard integrity and deterministically partition
+  examples by rank. CPU/CUDA runs honor save/evaluation cadence, forward
+  callback metrics, and restore versioned training state. TPU worker summaries
+  expose normalized public state and callback metrics without log parsing. TPU
+  checkpoint/evaluation parity and target-hardware validation remain.
+  The private request/CLI boundary transports save cadence and resume paths;
+  rank-local atomic shards preserve model, optimizer, scheduler, runtime,
+  trainer, host/device RNG, and deterministic packed-data progress. TPU
+  evaluation uses a separately validated packed-data source, deterministic
+  rank partition, scheduled engine evaluation, and structured callback
+  metrics. Causal evaluation now reduces the loss numerator and normalization
+  denominator across replicas before producing global loss and perplexity.
+  Target-hardware lifecycle validation remains. Tensor serialization
+  is isolated in a private TPU module, preserving the framework-independent
+  checkpoint contracts.
+  Coordinator tests cover serialized evaluation-field mismatch rejection.
+  The optional `trainlm train`/`python -m trainlm train` entry point now builds
+  validated local packed datasets and delegates YAML construction, resume, and
+  execution to the same public facade. It emits one structured result and does
+  not expose worker commands, PJRT settings, or coordinator log parsing. Packed
+  readers inherit sequence length and seed from the validated training arguments
+  instead of introducing a second CLI-only geometry configuration.
+  The 28/2 shard lifecycle fixture now derives a valid synthetic vocabulary for
+  its disjoint per-shard token ranges, and callback synchronization tests isolate
+  trainer loss extraction from DataLoader's private iterator-seeding scalar read.
+  `trainlm train --dry-run` performs the same YAML and packed-manifest validation
+  and emits the public optimization explanation without launching training,
+  providing a safe final host-side check before TPU allocation.
+  Dry-run rejects a resume argument instead of silently implying that checkpoint
+  contents were validated without entering the training lifecycle.
+  The TPU validation notebook now presents one uncluttered end-user run rather
+  than a coordinator test harness: construct datasets and familiar arguments,
+  then call `trainer.train()`. Scheduled evaluation/checkpoint cadence is part
+  of that run, and exact resume is a separate optional public call.
+  TPU topology is runtime-discovered inside launched workers. Neither the public
+  arguments, coordinator request, CLI, nor notebook asks users to predict a
+  world size; collective validation derives its expected rank sum from the
+  actual topology selected by Torch/XLA.
+  Public Hub data intake now accepts a repository and end-exclusive numeric
+  shard range. LaughLM legacy `.bin` files are downloaded through the Hub cache,
+  pinned to one resolved commit, fully scanned and validated, then passed into
+  the same reader, dataloader, train/eval partition, and coordinator staging
+  paths as manifest-backed data. Sidecar authoring is no longer user work.
+  Download and full-file validation are startup costs only: training uses local
+  cached files through lazy memory maps and never downloads during iteration.
+  Validation scans token bounds in vectorized chunks, and the TPU prefetch
+  geometry now uses the same canonical microbatch argument forwarded by the
+  public trainer.
+  The notebook exposes one local cache directory for both disjoint train and
+  evaluation ranges and makes the startup boundary explicit. Its training cell
+  remains only `trainer.train()`; downloaded files are reused locally and no
+  network operation is part of batch iteration.
 
-- [ ] **M8-F1 — Structural inspector**
+- [x] **M8-F1 — Structural inspector**
   `feat(optimization): inspect dense causal LM capabilities`
   Prefer public HF contracts and expose unknown semantics explicitly.
   **Acceptance:** Reports match family fixtures; no name-only semantic guesses.
+  Implemented through config, module, parameter-alias, and forward-signature
+  evidence. Opaque residual and custom-normalization semantics remain unknown
+  unless a guarded adapter supplies an explicit known, inferred, or unsupported
+  capability with a non-empty evidence citation. Unknown or uncited overrides
+  are rejected, preserving the no-family-name rule. Evidence is also bound to
+  the exact model class, configuration class, and source provider so a valid
+  claim for one adapter boundary cannot be replayed against another model.
 
-- [ ] **M8-F2 — Adapter registry**
+- [x] **M8-F2 — Adapter registry**
   `feat(optimization): add optional model adapter registry`
   Resolve explicit model/class adapters with semantic and version guards.
   **Acceptance:** Removing adapters preserves M6 compatibility.
+  The registry is declarative and optional: exact model/config class matches
+  are additionally gated by inspected component kinds, source provider, and
+  allow-listed tested package versions. Resolution has stable priority/ID
+  ordering, records every rejection reason, and never imports or mutates a
+  model, so an empty registry preserves the generic compatibility path.
 
-- [ ] **M8-F3 — Pure planner**
+- [x] **M8-F3 — Pure planner**
   `feat(optimization): select kernels transforms and fallbacks`
   Match capability to provider by backend, shape, dtype, mask, and backward
   support under auto/required/disabled/explicit policies.
   **Acceptance:** Deterministic snapshots explain every decision.
+  Provider specifications declare backend, precision, capability kind, runtime
+  requirements, fallback status, and reversible transformations. The pure
+  planner deterministically handles disabled, auto, required, and explicit
+  provider requests, producing a blocked plan before mutation when necessary.
+  Its public planning boundary validates capability, backend, precision,
+  policy, request, and optional adapter-resolution types before selection. A
+  compatible provider explicitly requested by ID is recorded as selected even
+  when it is designated as the automatic fallback, avoiding contradictory
+  fallback metadata where selected and requested IDs are identical. Conversely,
+  an unqualified `required` request rejects fallback-only candidates rather than
+  reporting a portable fallback as satisfying an optimized-path requirement.
+  Provider declarations require a real boolean fallback flag, preventing
+  truthy strings or integers from changing required-policy semantics. Plan IDs
+  include the complete sorted provider catalog, so distinct eligible providers
+  or transform declarations cannot produce the same audit identity. Transform
+  declarations must use immutable tuples, preventing catalog mutation after a
+  provider has been registered or a plan ID has been recorded. Every declared
+  transform must also target the provider's own component, preventing a
+  provider selected for one capability from mutating an unrelated component.
+  Transformation IDs are unique within each provider and across the registered
+  catalog, so independently selected operations cannot produce an invalid plan
+  with ambiguous transform identity.
 
-- [ ] **M8-F4 — Transactional transforms**
+- [x] **M8-F4 — Transactional transforms**
   `feat(optimization): apply validated reversible model transforms`
   Plan before mutation, transform before optimizer, preserve aliases, and roll
   back failure without global patches or hot-path hooks.
   **Acceptance:** Injected failure leaves the original model usable.
+  Transform handlers capture rollback state before mutation, validate declared
+  inverse IDs, apply plans in order, and roll back the failing transform plus
+  all earlier transforms in reverse order. Undeclared alias changes, missing
+  handlers, blocked plans, and downstream context failures cannot commit.
+  Serialized execution plans require every schema field, reject unknown fields
+  and malformed nested entries, and do not accept booleans as schema versions.
+  Nested provider decisions and transformations also require complete exact
+  schemas, including a real boolean parameter-layout flag. Ready plans must
+  select a provider, blocked plans cannot retain transforms, and an explicit
+  selected decision must name the provider that was actually requested.
+  Transform, QKV, MLP, and rematerialization fixtures construct valid ready
+  plans with explicit provider decisions rather than bypassing that invariant.
+  Every executable transform must match both the component and provider of a
+  selected or fallback decision, preventing unauthorised restored mutations.
+  Status-specific validation runs before transform authorization so malformed
+  blocked/no-op plans retain their actionable lifecycle error classification.
+  Distinct transforms cannot claim the same target path in one plan, avoiding
+  order-dependent capture, apply, and rollback behavior.
+  The overlapping-target regression preserves the tuple container emitted by
+  `to_dict()`, so it reaches the intended plan invariant in the full CI suite.
 
-- [ ] **M8-F5 — State-dict conversion**
+- [x] **M8-F5 — State-dict conversion**
   `feat(optimization): add reversible parameter layout mappings`
   Pack/split maps, aliases, dtype/shape validation, transformed resume, and
   canonical import/export.
   **Acceptance:** Train/save/reload matches canonical HF state.
+  Versioned layout manifests now validate and reversibly concatenate/split
+  parameter groups with exact key, shape, dtype, device, collision, and alias
+  checks. The converter preserves unrelated state and restores declared tied
+  keys as shared tensor objects for canonical export. Alias groups must be
+  disjoint and cannot include keys consumed or produced by a layout mapping,
+  preventing ambiguous restoration or silently lost ties. Manifest loading
+  rejects unknown fields and malformed mapping, key, shape, or alias-group
+  containers instead of coercing strings or accepting misspelled contracts.
+  All schema fields are mandatory, and booleans cannot masquerade as integer
+  schema versions.
 
-- [ ] **M8-F6 — Explain report**
+- [x] **M8-F6 — Explain report**
   `feat(optimization): expose model optimization explanation`
   Human/JSON capabilities, providers, transforms, fallbacks, backend, graph,
   and certification.
   **Acceptance:** Strict mode fails before TPU allocation when unsupported.
+  A versioned `OptimizationExplanation` now combines inspected capabilities,
+  adapter resolution, provider decisions, reversible transforms, fallbacks,
+  backend/precision, graph evidence, limitations, and certification state in
+  stable dictionary, JSON, and human-readable views. Strict validation rejects
+  blocked plans and unknown or unsupported capabilities before execution.
 
 ### Exit gate
 
@@ -766,35 +915,58 @@ loaded HF models safely without family logic in core.
 
 ## M9 — Memory-efficient causal-LM loss
 
-**Status:** [ ] Not started
+**Status:** [~] In progress — the portable reference chunked linear causal
+cross-entropy is implemented; optimized hidden-state access, rematerialization,
+TPU providers, and multi-family integration remain.
 
 **Goal:** Remove the full FP32 logits bottleneck without changing semantics.
 
-- [ ] **M9-F1 — Reference chunked linear CE**
+- [x] **M9-F1 — Reference chunked linear CE**
   `feat(loss): add reference chunked linear causal cross entropy`
   Consume hidden state, output weight, labels, optional bias; support shift,
   ignore index, tied/untied, FP32 reduction, chunks, and z-loss.
   **Acceptance:** Loss and hidden/head gradients match full-logits reference.
+  The FP32 reference projects flattened shifted tokens in bounded chunks,
+  supports optional bias, masks/ignore index, tied or untied output weights,
+  supervised-token normalization, and z-loss. Tests compare loss and hidden,
+  head, and bias gradients against full-logits cross entropy.
 
-- [ ] **M9-F2 — Optimized training view**
+- [x] **M9-F2 — Optimized training view**
   `feat(loss): bypass full HF logits during optimized training`
   Safely obtain final hidden state/output weight while preserving HF export.
   **Acceptance:** HLO contains no full `[B,S,V]` tensor.
+  A non-mutating training view now accepts an explicit hidden-state provider,
+  requires inspected linear-head evidence, obtains weights through the public
+  HF output-embedding contract, and feeds hidden states directly to chunked
+  loss without calling the model's full-logits forward. Target-XLA HLO evidence
+  remains required before enabling this path automatically.
 
-- [ ] **M9-F3 — Rematerialized chunks**
+- [~] **M9-F3 — Rematerialized chunks**
   `feat(loss): add rematerialized chunked loss backward`
   Compare chunks 2,048/4,096/8,192 and bound HBM.
   **Acceptance:** Select size from matched throughput/HBM evidence.
+  An explicit `per_chunk` policy now uses non-reentrant activation checkpointing
+  around each linear-CE chunk and preserves reference loss/z-loss/gradient
+  semantics. Chunk-size selection and HBM/throughput evidence remain pending on
+  target TPU hardware, so this story is not complete.
 
-- [ ] **M9-F4 — TPU loss providers**
+- [~] **M9-F4 — TPU loss providers**
   `perf(loss): evaluate native XLA Pallas and Tokamax loss providers`
   Compare pure XLA, Pallas bridge, and Tokamax where versions/backward permit.
   **Acceptance:** Record correctness, HBM, speed, compatibility, and fallback.
+  The pure provider catalog keeps Pallas and Tokamax gated on explicit runtime
+  and backward evidence and otherwise selects portable chunked loss as an
+  explained fallback. Provider implementation and matched TPU correctness,
+  HBM, and throughput measurements remain pending.
 
-- [ ] **M9-F5 — Multi-family loss adapters**
+- [x] **M9-F5 — Multi-family loss adapters**
   `test(loss): certify chunked loss across dense output-head layouts`
   Cover tied/untied heads and representative backbone outputs.
   **Acceptance:** Loss/gradient/export parity passes without full logits.
+  Explicit output adapters now normalize tensor, mapping, tuple/list, and
+  attribute-based hidden-state results. The conformance matrix covers tied and
+  untied embeddings, biased and bias-free heads, rematerialized chunked loss,
+  parameter gradients, alias preservation, and canonical state-dict parity.
 
 ### Exit gate
 
@@ -803,45 +975,77 @@ loaded HF models safely without family logic in core.
 
 ## M10 — TPU attention provider family
 
-**Status:** [ ] Not started
+**Status:** [~] In progress — the canonical attention semantics contract and
+guarded HF interface integration are implemented; TPU providers, layout
+optimizations, autotuning, and benchmark evidence remain.
 
 **Goal:** Correct memory-efficient attention across the full V1 semantic surface.
 
-- [ ] **M10-F1 — Canonical attention spec**
+- [x] **M10-F1 — Canonical attention spec**
   `feat(attention): define canonical causal attention specification`
   Represent layouts, head geometry, scale, masks, segments, ALiBi, dropout,
   soft-cap, QK norm, and output without model-name conditionals.
   **Acceptance:** Every V1 family maps to the specification.
+  A versioned model-family-neutral schema now validates MHA/GQA/MQA head
+  geometry, scale, full/sliding causal masks, segment IDs, learned/RoPE/ALiBi
+  positions, dropout, soft-cap, QK normalization, and BSH output. Capability
+  mapping uses inspected facts only and rejects unknown semantics.
 
-- [ ] **M10-F2 — HF attention/mask integration**
+- [x] **M10-F2 — HF attention/mask integration**
   `feat(attention): integrate TrainLM attention with HF interfaces`
   Use public attention/mask interfaces when sufficient and adapters otherwise.
   **Acceptance:** Causal leakage tests detect missing/wrong mask registration.
+  A guarded adapter now registers attention and mask callables under the same HF
+  interface key only after the canonical spec passes layout, position, segment,
+  dropout, soft-cap, and QK-normalization checks. Reference visibility tests
+  detect future-token, sliding-window, and cross-segment leakage.
 
-- [ ] **M10-F3 — XLA Pallas provider**
+- [~] **M10-F3 — XLA Pallas provider**
   `feat(attention): add XLA Pallas causal attention provider`
   Wrap supported Pallas attention with import/version guards and backward.
   **Acceptance:** MHA matches reference and emits expected HLO/custom call.
+  A dependency-free bridge now requires an exact tested torch_xla version and
+  explicit backward evidence before constructing an MHA-only provider. It uses
+  an injected public kernel adapter, rejects dense masks and dropout, and keeps
+  causal masking internal to avoid quadratic mask materialization. The story
+  remains open pending target-TPU numerical, backward, and HLO/custom-call
+  evidence.
 
-- [ ] **M10-F4 — GQA/MQA without KV repeat**
+- [~] **M10-F4 — GQA/MQA without KV repeat**
   `feat(attention): support grouped and multi query TPU attention`
   Support 8/8, 8/4, and 8/1 without silent K/V HBM expansion.
   **Acceptance:** Correctness and HBM tests pass or explicit fallback is used.
+  A compact logical query-to-KV mapping now covers 8/8, 8/4, and 8/1 without
+  repeating K/V objects. The guarded provider forwards compact head geometry to
+  an explicit kernel adapter and rejects GQA/MQA unless runtime evidence exists.
+  Target-TPU numerical, gradient, and HBM evidence remains pending.
 
-- [ ] **M10-F5 — ALiBi/sliding window**
+- [~] **M10-F5 — ALiBi/sliding window**
   `feat(attention): add ALiBi and sliding window capabilities`
   Provide optimized support or efficient explicit XLA fallback.
   **Acceptance:** Boundary-token, mask, and gradient fixtures pass.
+  The guarded provider now forwards a scalar sliding-window boundary without a
+  dense mask and forwards explicit model-supplied ALiBi slopes unchanged. Both
+  paths require independent runtime evidence and otherwise fail explicitly.
+  Target-TPU boundary-token, numerical, gradient, and HBM evidence remains.
 
-- [ ] **M10-F6 — Attention autotuning**
+- [~] **M10-F6 — Attention autotuning**
   `perf(attention): tune v5e attention provider configurations`
   Tune/cache tiles by hardware, shape, dtype, mask, and provider version.
   **Acceptance:** Selection is deterministic and reproducible.
+  A pure exact-key cache now includes hardware, provider/version, dtype, batch,
+  head geometry, sequence length, mask, and window. Candidate measurement order
+  and equal-score selection are deterministic, and versioned results round-trip
+  through stable JSON. Target-v5e measurements and candidate ranges remain.
 
-- [ ] **M10-F7 — Loss/attention benchmark**
+- [~] **M10-F7 — Loss/attention benchmark**
   `perf(benchmark): certify optimized loss and attention stage`
   Benchmark exact 135M geometry on fake and real data with HLO evidence.
   **Acceptance:** `>= 850K tok/s`, lower HBM, stable graph, no fallback.
+  A pure matched-result evaluator now enforces v5e-8 geometry, the 850K gate,
+  lower HBM, stable post-warmup compilation, zero CPU fallback, no full logits,
+  named loss/attention providers, and an HLO fingerprint. The story remains open
+  until real synchronized fake- and real-data measurements satisfy the gate.
 
 ### Exit gate
 
@@ -850,45 +1054,115 @@ loaded HF models safely without family logic in core.
 
 ## M11 — Projection, optimizer, rematerialization, and HLO tuning
 
-**Status:** [ ] Not started
+**Status:** [~] In progress — reversible separate and partial QKV weight/bias
+packing plus explicit live wrapper transforms are implemented; target update
+evidence remains.
 
 **Goal:** Close the parity gap one measured bottleneck at a time.
 
-- [ ] **M11-F1 — Reversible QKV packing**
+- [~] **M11-F1 — Reversible QKV packing**
   `feat(optimization): pack compatible QKV projections`
   Handle separate/partial/packed layouts, bias, heads, aliases, load/export.
   **Acceptance:** Output/gradient/update and round-trip parity pass.
+  A family-neutral geometry descriptor now builds versioned reversible mappings
+  for separate MHA/GQA/MQA Q/K/V weights and optional biases. Optimized resume
+  packs along output features and canonical export restores the original keys.
+  An explicit pre-optimizer transform now replaces an adapter-selected wrapper
+  exposing separate linear projections with one packed linear call, preserves
+  compact GQA/MQA splits, validates geometry/bias/device/dtype, and rolls back
+  transactionally. A second reversible descriptor covers canonical layouts with
+  a separate query projection and an already-combined key/value projection
+  without inventing model keys. Already-packed canonical projections now use a
+  validated no-transform descriptor that preserves compact GQA/MQA geometry.
+  Partial query/combined-KV wrappers can now be transactionally replaced by a
+  single packed projection, preserving compact K/V outputs and restoring the
+  original wrapper on rollback. Separate and partial transforms preserve a
+  uniform frozen/trainable state and reject mixed source states that one packed
+  parameter cannot represent without changing fine-tuning semantics. They also
+  reject internal or external source-parameter aliases before replacement,
+  rather than silently breaking tied-parameter behavior.
+  Portable CPU regression coverage compares packed and separate float32 matrix
+  multiplications with explicit numerical tolerances for their valid
+  accumulation-order differences, including output and gradient parity.
+  Portable SGD update parity covers separate and partial layouts with and
+  without bias. Target-XLA output/gradient/update parity remains.
 
-- [ ] **M11-F2 — Reversible gated-MLP packing**
+- [~] **M11-F2 — Reversible gated-MLP packing**
   `feat(optimization): pack compatible gate and up projections`
   Pack compatible SwiGLU/GeGLU paths and preserve GELU paths.
   **Acceptance:** Output/gradient/update and export parity pass.
+  An explicit SwiGLU/GeGLU descriptor now packs equal-shape gate/up weights and
+  optional biases through the reversible state-dict converter, while GELU is an
+  explicit no-transform path. An adapter-selected wrapper can now be replaced
+  transactionally by one packed linear call using an explicit model-owned
+  activation callable; rollback restores the original modules. Packing
+  preserves uniform frozen/trainable state and rejects mixed trainability or
+  source aliases that a single parameter cannot represent. Already-packed
+  SwiGLU/GeGLU sources now have a validated no-transform descriptor, avoiding
+  invented separate keys or needless repacking. Portable SGD update parity now
+  covers biased and bias-free live packed layouts; target-XLA update parity
+  remains pending.
 
-- [ ] **M11-F3 — Native fusion audit**
+- [~] **M11-F3 — Native fusion audit**
   `perf(hlo): audit norm RoPE residual and MLP fusion`
   Inspect copies, transposes, materialization, custom calls, and layout before
   writing kernels.
   **Acceptance:** Every candidate has evidence-backed native/custom decision.
+  A versioned pure audit now consumes HLO fingerprints plus copy, transpose,
+  materialization, custom-call, and fallback observations for normalization,
+  RoPE, residual, and MLP components. It retains proven clean native fusion,
+  identifies custom-kernel candidates, and blocks unknown/fallback cases.
+  A text-capture constructor now normalizes and fingerprints HLO, counts exact
+  copy/transpose/custom-call opcodes, and accepts explicit component-specific
+  materialization patterns without pretending text alone proves fusion.
+  Target-XLA captures and matched benchmarks remain pending.
 
-- [ ] **M11-F4 — Decoder rematerialization**
+- [~] **M11-F4 — Decoder rematerialization**
   `feat(optimization): add structural decoder rematerialization policies`
   None/block/attention/MLP/loss-chunk with correct FSDP ordering.
   **Acceptance:** Selected policy is justified by step/HBM evidence.
+  Explicit none/block/attention/MLP/loss-chunk policies now enforce pre-FSDP
+  ordering. A deterministic selector rejects gradient mismatches, unstable
+  graphs, and policies outside a configured slowdown budget, then chooses the
+  lowest measured HBM with stable ties. Adapter-selected block, attention, or
+  MLP paths can now be patched transactionally with non-reentrant activation
+  checkpointing without changing module structure, parameter aliases, or state
+  keys; loss-chunk rematerialization remains owned by the loss provider.
+  Target-XLA measurements remain pending.
 
-- [ ] **M11-F5 — XLA optimizer-state path**
+- [~] **M11-F5 — XLA optimizer-state path**
   `feat(optim): optimize XLA AdamW state and update graph`
   Evaluate BF16 first moment, FP32 second, clip, decay, reduction, and resume.
   **Acceptance:** Correct update with measured HBM/step impact.
+  A versioned policy now fixes BF16-or-FP32 first moment, FP32 second moment,
+  clipping, decoupled decay, and reduction semantics. A matched evidence gate
+  requires update/resume parity, stable graphs, zero CPU fallback, bounded step
+  regression, and lower HBM. The TPU worker now materializes its optimizer
+  configuration and trainer clipping value from that policy instead of
+  duplicating moment and clipping defaults. Target-XLA measurements remain
+  pending.
 
-- [ ] **M11-F6 — Batch/prefetch tuning**
+- [~] **M11-F6 — Batch/prefetch tuning**
   `perf(runtime): tune microbatch accumulation and prefetch geometry`
   Re-test MB2/GA32, MB1/GA64, safe alternatives, and prefetch near 16.
   **Acceptance:** One synchronized real-data production geometry is selected.
+  A deterministic selector now compares only equal token/update geometries and
+  requires real data, stable graphs, zero CPU fallback, bounded HBM, and bounded
+  input idle. It selects throughput first with stable HBM/idle/ID ties. The TPU
+  worker now constructs its `ParallelLoader` arguments from the validated
+  geometry contract rather than an unrelated hard-coded call site. Target
+  measurements for MB2/GA32, MB1/GA64, and prefetch near 16 remain pending.
 
-- [ ] **M11-F7 — Final HLO/host closure**
+- [~] **M11-F7 — Final HLO/host closure**
   `perf(hlo): remove residual parity path bottlenecks`
   Resolve proven transpose, graph, fallback, collective, sync, or input issues.
   **Acceptance:** Exact reference reaches the hard 90% thresholds.
+  A final evidence gate now requires the 912.6K throughput and 47.8% MFU hard
+  thresholds, stable compilation, zero fallback, no unresolved transpose/layout
+  copies, no unplanned host sync, no full logits, and bounded input/collective
+  idle. A strict artifact loader now binds the benchmark JSON and graph counters
+  to the exact normalized HLO capture by SHA-256 before evaluation. The story
+  remains open until target-v5e evidence satisfies every gate.
 
 ### Exit gate
 
@@ -897,35 +1171,70 @@ loaded HF models safely without family logic in core.
 
 ## M12 — Exact LaughLM 135M parity certification
 
-**Status:** [ ] Not started
+**Status:** [~] In progress — the required semantic comparison and deterministic
+early-update evidence gate are implemented; target-run alignment remains.
 
 **Goal:** Convert the fast path into repeatable release evidence.
 
-- [ ] **M12-F1 — Numerical alignment**
+- [~] **M12-F1 — Numerical alignment**
   `test(parity): align 135M initialization and loss semantics`
   Match initialization, residual scale, eps, RoPE, shift, z-loss, optimizer,
   schedule, and dtype; compare early deterministic updates where possible.
   **Acceptance:** Every semantic difference is removed or justified.
+  A locked-path comparator now covers position/norm/residual, initialization,
+  shifted loss/z-loss, optimizer, schedule, and dtype semantics. Differences
+  must be explicitly justified, and at least one deterministic early-update
+  error must remain within tolerance. A strict artifact loader now combines
+  reference and candidate configuration JSON with versioned update evidence and
+  rejects unknown evidence fields. Target parity evidence remains pending.
 
-- [ ] **M12-F2 — Three-run benchmark**
+- [~] **M12-F2 — Three-run benchmark**
   `perf(parity): certify repeated v5e 135M throughput`
   Report matched runs, dispersion, cache, HBM, HLO, compiles, idle, and MFU.
   **Acceptance:** Every run clears hard thresholds; preferred median clears 95%.
+  A repeated-run evaluator now requires exactly three matched warm-cache v5e-8
+  results, identical HLO fingerprints, stable graphs, zero fallback, and every
+  run above the hard throughput/MFU thresholds. It reports median throughput/
+  MFU, spread, and max HBM, with separate preferred-median status. Real runs
+  remain pending. A versioned manifest loader now requires three distinct,
+  confined result artifacts and explicit hard/preferred thresholds before
+  evaluation.
 
-- [ ] **M12-F3 — Real-shard stability**
+- [~] **M12-F3 — Real-shard stability**
   `test(parity): validate 200 update real data stability`
   Run pinned diverse shards with eval, integrity, checkpoint, resume, and graph.
   **Acceptance:** Finite/stable, continuous data, no recompile/fallback, export.
+  A structured gate now requires at least 200 updates across diverse
+  revision-pinned shards, scheduled evaluation, checkpoint resume, integrity
+  checks, cursor continuity, finite loss/gradient ranges, stable compilation,
+  zero fallback, and canonical export. The real target run remains pending.
+  A strict versioned artifact loader now validates the complete lifecycle and
+  numerical evidence schema together with explicit update/shard requirements
+  before evaluating a captured run; unknown or missing fields are rejected.
 
-- [ ] **M12-F4 — Plain-HF export certification**
+- [~] **M12-F4 — Plain-HF export certification**
   `test(parity): certify optimized HF checkpoint interoperability`
   Reverse internal layouts and reload in clean Transformers-only environment.
   **Acceptance:** Logits/loss match without TrainLM installed.
+  A structured gate now requires a clean environment without TrainLM,
+  canonical-only state-dict keys, preserved tied aliases, zero missing/unexpected
+  keys, and logits/loss within tolerance after plain Transformers reload.
+  A strict versioned artifact loader now ingests the clean-process evidence,
+  requires the complete schema, normalizes JSON reload-key arrays, and applies
+  the artifact's explicit numerical tolerance without importing Transformers.
+  Execution in a clean target environment remains pending.
 
-- [ ] **M12-F5 — Parity report**
+- [~] **M12-F5 — Parity report**
   `docs(benchmark): publish LaughLM TrainLM parity report`
   Publish environment, commands, configs, metrics, limits, profile, and HLO.
   **Acceptance:** Reviewer can reproduce without hidden configuration.
+  A versioned report schema now requires environment versions, reproduction
+  commands, configuration/metric/profile/HLO artifacts, limitations, and the
+  pass state of numerical, repeated-run, stability, and plain-HF gates. Stable
+  JSON and reviewer-facing Markdown are available. A strict bundle loader now
+  reconstructs the immutable report and requires every configuration, metric,
+  profile, and HLO reference to be relative, confined, and present. Real
+  evidence remains.
 
 ### Exit gate
 
@@ -934,46 +1243,101 @@ loaded HF models safely without family logic in core.
 
 ## M13 — Cross-family certification and larger-model scaling
 
-**Status:** [ ] Not started
+**Status:** [~] In progress — learned-position family mappings are declarative; target certification remains
 
 **Goal:** Prove TrainLM is a framework, not one optimized Llama geometry.
 
-- [ ] **M13-F1 — GPT-2/OPT mapping**
+- [~] **M13-F1 — GPT-2/OPT mapping**
   `feat(adapters): optimize learned-position dense causal models`
   Reuse QKV, GELU/LayerNorm, loss, and attention capabilities.
+  Explicit GPT-2 and OPT adapters now require exact model/config classes,
+  inspected MHA, learned-position, LayerNorm, GELU, residual, projection, and
+  LM-head semantics, plus the tested Transformers version. The catalog maps
+  both families to shared attention, QKV-layout, GELU-MLP, and chunked-loss
+  operations without importing Transformers or mutating models. Output,
+  gradient, update, graph, export, and target-TPU evidence remain required.
   **Acceptance:** Both pass output/gradient/update, graph, and export.
 
-- [ ] **M13-F2 — GPT-NeoX/BLOOM mapping**
+- [~] **M13-F2 — GPT-NeoX/BLOOM mapping**
   `feat(adapters): optimize parallel residual and ALiBi models`
   Preserve parallel residual, RoPE/ALiBi, and projection semantics.
+  Version-guarded mappings now keep GPT-NeoX's RoPE and parallel residual
+  operations distinct from BLOOM's ALiBi and serial residual operations while
+  requiring explicit MHA, LayerNorm, GELU, fused-QKV, and linear-head evidence.
+  Shared TPU output/gradient/update, graph, export, and performance evidence
+  remains required.
   **Acceptance:** Shared TPU certification passes.
 
-- [ ] **M13-F3 — Falcon/Phi mapping**
+- [~] **M13-F3 — Falcon/Phi mapping**
   `feat(adapters): optimize MQA GQA and nonstandard dense blocks`
   Preserve head geometry, parallel blocks, projections, and activations.
+  Explicit mappings now separate Falcon MQA and GQA eligibility and preserve
+  its fused-QKV parallel block, while Phi requires MHA, partial RoPE,
+  separate QKV, LayerNorm/GELU, and parallel residual semantics. Correctness,
+  HBM, graph, export, and target-TPU evidence remain required.
   **Acceptance:** Correctness, HBM, graph, and export pass.
 
-- [ ] **M13-F4 — Llama/Mistral/Qwen/Gemma mapping**
+- [~] **M13-F4 — Llama/Mistral/Qwen/Gemma mapping**
   `feat(adapters): certify RoPE gated dense model families`
   Share structure while preserving windows, activations, scaling, soft-cap,
   QK norm, and family differences.
+  Version-guarded mappings now keep plain Llama RoPE, Mistral sliding windows,
+  Qwen2 biased QKV, Gemma GeGLU/scaled embeddings, and Gemma2 alternating
+  windows/attention soft-capping explicit. Common certification and additional
+  QK-normalized family variants remain outstanding.
   **Acceptance:** Difference fixtures and common certification pass.
 
-- [ ] **M13-F5 — 135M cross-family matrix**
+- [~] **M13-F5 — 135M cross-family matrix**
   `perf(certification): benchmark dense AR capability families`
   Report matched raw throughput and architecture-adjusted MFU; dense full
   attention targets 45% MFU absent a reviewed roofline.
+  A pure evidence evaluator now requires one unique support/performance record
+  per advertised family, matched workload/device/update geometry, correctness,
+  graph and export gates, and computes MFU from family-specific FLOPs/token.
+  A strict versioned matrix loader now reconstructs every record and requires
+  each family evidence path to be relative, confined beneath the manifest, and
+  present before applying the advertised-family and MFU gates.
+  Real synchronized 135M measurements remain outstanding.
   **Acceptance:** Every advertised family has a support/performance record.
 
-- [ ] **M13-F6 — SPMD FSDP**
+- [~] **M13-F6 — SPMD FSDP**
   `feat(runtime): add backend-neutral FSDP mesh policy`
   Begin data=4/FSDP=2 with correct wrapping, remat, state sharding, checkpoint.
+  A backend-neutral policy now describes explicit wrap classes, adapter-owned
+  parameter partition rules, optimizer-state sharding, a data/FSDP logical
+  mesh, rematerialization-before-wrap ordering, and topology-matched rank-shard
+  checkpoints. The complete nested mesh, wrapping, parameter, optimizer-state,
+  and checkpoint policy now round-trips through a strict versioned manifest so
+  worker/runtime boundaries cannot silently drop or invent sharding settings.
+  Runtime application and the 1.3B target smoke remain outstanding.
+  `XlaRuntime.apply_fsdp_policy()` now validates topology, rematerialization
+  order, explicit wrap-class evidence, parameter-rule coverage, tensor ranks,
+  and optimizer-state geometry before emitting any SPMD annotations. It marks
+  model parameters and matching optimizer tensors on the data/FSDP mesh while
+  leaving the Hugging Face module tree intact. A real 1.3B target smoke,
+  distributed checkpoint proof, and canonical export remain outstanding.
+  Rank-sharded TPU checkpoint schema v2 now records the logical mesh
+  axes in both the committed manifest and every rank payload. Resume requires
+  exact axis-name/size equality, rather than accepting a different data/FSDP
+  topology merely because its total world size happens to match.
+  The loader remains backward-compatible with schema-v1 checkpoints: it
+  derives their topology from the rank runtime state and still requires an
+  exact match before restoring model or optimizer tensors.
   **Acceptance:** Correct 1.3B train/resume/export smoke on v5e-8.
 
-- [ ] **M13-F7 — 1.3B benchmark**
+- [~] **M13-F7 — 1.3B benchmark**
   `perf(benchmark): certify 1.3B FSDP scaling path`
   Compare matched LaughLM approximately `41.9K tok/s`, `42.6%` MFU with
   collective/HBM analysis.
+  A pure evidence gate now requires a review-locked target, exact workload,
+  parameter-count, v5e-8 and data/FSDP geometry matching, throughput/MFU gates,
+  stable compilation, zero CPU fallback, lifecycle parity, and named
+  collective/HBM artifacts. The matched target and real run remain outstanding.
+  A strict versioned bundle loader now reconstructs the review-locked target and
+  measured evidence together, rejecting schema drift and requiring collective
+  and HBM profiles to be relative, confined, and present before evaluation.
+  Its mismatch regression fixture now remains internally valid (16 devices,
+  data=4/FSDP=4), leaving target mismatch rejection to the evidence evaluator.
   **Acceptance:** A matched target is locked before certification.
 
 ### Exit gate
@@ -983,34 +1347,69 @@ loaded HF models safely without family logic in core.
 
 ## M14 — Dense-AR V1 release
 
-**Status:** [ ] Not started
+**Status:** [~] In progress — versioned code/YAML construction exists; release certification remains
 
 **Goal:** Deliver a safe, documented, reproducible user release.
 
-- [ ] **M14-F1 — Stable public API**
+- [x] **M14-F1 — Stable public API**
   `feat(api): finalize TrainLM dense AR pretraining interface`
   Code/YAML from-config and from-pretrained workflows with deprecation policy.
+  The public trainer now has explicit `from_pretrained()` and versioned
+  mapping/YAML `from_config()` constructors, rejects worker/internal config
+  keys, and warns for one-version key aliases. The example imports only the
+  package root, and the dependency contract includes the directly imported
+  PyYAML runtime. A machine-readable v1 compatibility contract now freezes the
+  root exports, accepted configuration keys, and deprecated aliases, with an
+  evaluator that detects unversioned breaking changes. The CI test suite now
+  builds the wheel, installs it into an isolated environment, changes outside
+  the checkout, and smoke-tests only the documented package-root surface.
   **Acceptance:** Examples use no internal packages/custom model class.
 
-- [ ] **M14-F2 — Secure `.bin` TPU guide**
+- [~] **M14-F2 — Secure `.bin` TPU guide**
   `docs(tutorial): add HF model and binary shard TPU pretraining guide`
   Document token secret, revisions, splits, explain, resume, and export.
+  A public-surface-only guide now covers secret-manager token handling,
+  immutable model/data revisions, disjoint train/eval shard lists, preflight
+  explanation, committed-checkpoint resume, and explicitly documents that TPU
+  canonical export remains unavailable. The facade now rejects unpinned remote
+  model revisions before coordinator launch. Target clean-environment smoke
+  remains.
   **Acceptance:** Secret scan and clean-environment smoke pass.
 
-- [ ] **M14-F3 — CI/hardware tiers**
+- [~] **M14-F3 — CI/hardware tiers**
   `ci(test): add dense AR release certification tiers`
   Tier 0 CPU, Tier 1 CUDA, Tier 2 scheduled v5e correctness, Tier 3 release
   performance/stability.
+  A commit-specific freshness gate now requires unique passing Tier 0-3
+  artifacts, including mandatory current Tier 3
+  evidence. CUDA/v5e runners, schedules, and real evidence remain outstanding.
+  A strict versioned release manifest now binds all tier artifacts to the
+  release commit, evaluation timestamp, and freshness window while requiring
+  each referenced artifact to be relative, confined, and present.
   **Acceptance:** Release requires current Tier 3 evidence.
 
-- [ ] **M14-F4 — Preemption recovery**
+- [~] **M14-F4 — Preemption recovery**
   `test(checkpoint): validate preemption and incomplete save recovery`
   Kill during compute, staging, and persistence; accept only durable state.
+  Rank shards are now generation-named, committed destinations are immutable,
+  shard progress must match the atomic manifest, and latest-checkpoint discovery
+  ignores temporary, incomplete, malformed, unsafe, and missing-shard attempts.
+  Spawned-process tests now terminate during compute and after shard staging,
+  shard publish, manifest staging, and manifest publish. Discovery retains the
+  prior generation before the atomic manifest commit and accepts the new one
+  after it. Target-TPU recovery and cursor-continuity tests remain outstanding.
   **Acceptance:** No partial checkpoint or silently skipped data.
 
-- [ ] **M14-F5 — Support manifest/release notes**
+- [~] **M14-F5 — Support manifest/release notes**
   `docs(release): publish dense AR support and certification matrix`
   Publish versions, hardware, providers, caveats, fallbacks, TorchTPU status.
+  A versioned machine manifest and development status page now publish these
+  fields without certification overclaims, and a validator checks that public
+  explanation backend/path/certification values do not exceed the manifest.
+  Manifest loading now rejects top-level and nested schema drift, malformed
+  JSON, incorrect container types, and boolean schema versions instead of
+  silently accepting unsupported release-claim fields.
+  Populate final release evidence and revalidate all claims before closure.
   **Acceptance:** Machine manifest agrees with `trainer.explain()`.
 
 ### Exit gate

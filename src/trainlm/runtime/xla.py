@@ -24,6 +24,7 @@ from .base import BackendDiagnostics, LogicalMesh, Precision
 from .runtime import _move_to_device
 from .shape_guard import StaticShapeGuard
 from .diagnostics import XlaDiagnostics
+from .fsdp import FSDPApplication, FSDPMeshPolicy
 
 
 _Step = TypeVar("_Step", bound=Callable[..., Any])
@@ -246,6 +247,132 @@ class XlaRuntime:
         self._require_mesh(mesh)
         return optimizer
 
+    def apply_fsdp_policy(
+        self,
+        model: nn.Module,
+        optimizer: Optimizer,
+        policy: FSDPMeshPolicy,
+        *,
+        rematerialization_applied: bool,
+    ) -> FSDPApplication:
+        """Apply an adapter-proven data/FSDP sharding policy atomically.
+
+        All module, parameter, topology, and optimizer-state geometry is
+        validated before the first XLA sharding annotation is emitted.  This
+        method deliberately annotates the existing Hugging Face model rather
+        than replacing it with a family-specific wrapper.
+        """
+
+        if not isinstance(policy, FSDPMeshPolicy):
+            raise TypeError("policy must be an FSDPMeshPolicy.")
+        already_applied = bool(getattr(model, "_trainlm_fsdp_policy_applied", False))
+        policy.validate_application_order(
+            world_size=self.world_size,
+            rematerialization_applied=rematerialization_applied,
+            model_already_wrapped=already_applied,
+        )
+
+        module_classes = {module.__class__.__name__ for module in model.modules()}
+        missing_classes = sorted(set(policy.wrap_module_classes) - module_classes)
+        if missing_classes:
+            raise ValueError(
+                "FSDP wrap classes were not found in the model: "
+                + ", ".join(missing_classes)
+            )
+
+        parameters = tuple(model.named_parameters(remove_duplicate=False))
+        parameter_specs: dict[int, tuple[str | None, ...]] = {}
+        parameter_names: dict[int, str] = {}
+        sharded_names: list[str] = []
+        replicated_names: list[str] = []
+        matched_suffixes: set[str] = set()
+        for name, parameter in parameters:
+            matches = [
+                rule for rule in policy.parameter_rules
+                if name.endswith(rule.parameter_suffix)
+            ]
+            if len(matches) > 1:
+                raise ValueError(f"Parameter {name!r} matches multiple FSDP rules.")
+            spec = matches[0].partition_spec if matches else (None,) * parameter.ndim
+            if len(spec) != parameter.ndim:
+                raise ValueError(
+                    f"FSDP partition rank for {name!r} is {len(spec)}; "
+                    f"parameter rank is {parameter.ndim}."
+                )
+            parameter_specs[id(parameter)] = spec
+            parameter_names[id(parameter)] = name
+            if matches:
+                matched_suffixes.add(matches[0].parameter_suffix)
+                sharded_names.append(name)
+            else:
+                replicated_names.append(name)
+        unmatched = sorted(
+            rule.parameter_suffix
+            for rule in policy.parameter_rules
+            if rule.parameter_suffix not in matched_suffixes
+        )
+        if unmatched:
+            raise ValueError(
+                "FSDP parameter rules matched no model parameters: "
+                + ", ".join(unmatched)
+            )
+
+        optimizer_annotations: list[tuple[torch.Tensor, tuple[str | None, ...]]] = []
+        sharded_optimizer_tensors = 0
+        replicated_optimizer_tensors = 0
+        for parameter, state in optimizer.state.items():
+            if id(parameter) not in parameter_specs:
+                raise ValueError(
+                    "Optimizer state contains a parameter outside the model."
+                )
+            for value in state.values():
+                if not isinstance(value, torch.Tensor):
+                    continue
+                if value.ndim == 0:
+                    state_spec: tuple[str | None, ...] = ()
+                    replicated_optimizer_tensors += 1
+                elif value.shape == parameter.shape:
+                    state_spec = parameter_specs[id(parameter)]
+                    if "fsdp" in state_spec:
+                        sharded_optimizer_tensors += 1
+                    else:
+                        replicated_optimizer_tensors += 1
+                else:
+                    raise ValueError(
+                        "Optimizer tensor for parameter "
+                        f"{parameter_names[id(parameter)]!r} has unsupported shape "
+                        f"{tuple(value.shape)}."
+                    )
+                optimizer_annotations.append((value, state_spec))
+
+        mesh = self.create_mesh(policy.logical_mesh())
+        for _, parameter in parameters:
+            self._spmd.mark_sharding(
+                parameter,
+                mesh.native,
+                self._spmd.PartitionSpec(*parameter_specs[id(parameter)]),
+            )
+        if policy.shard_optimizer_state:
+            for tensor, spec in optimizer_annotations:
+                self._spmd.mark_sharding(
+                    tensor, mesh.native, self._spmd.PartitionSpec(*spec)
+                )
+        elif optimizer_annotations:
+            replicate = self._spmd.PartitionSpec()
+            for tensor, _ in optimizer_annotations:
+                self._spmd.mark_sharding(tensor, mesh.native, replicate)
+            replicated_optimizer_tensors += sharded_optimizer_tensors
+            sharded_optimizer_tensors = 0
+
+        setattr(model, "_trainlm_fsdp_policy_applied", True)
+        return FSDPApplication(
+            mesh_axes=dict(mesh.logical.axis_sizes),
+            sharded_parameters=tuple(sharded_names),
+            replicated_parameters=tuple(replicated_names),
+            sharded_optimizer_tensors=sharded_optimizer_tensors,
+            replicated_optimizer_tensors=replicated_optimizer_tensors,
+        )
+
     def backward(self, loss: torch.Tensor) -> None:
         loss.backward()
 
@@ -266,6 +393,16 @@ class XlaRuntime:
         for parameter in parameters:
             if parameter.grad is not None:
                 parameter.grad.mul_(scale)
+
+    def reduce_sum(self, value: torch.Tensor) -> torch.Tensor:
+        """Sum a tensor across XLA replicas without host scalar extraction."""
+
+        if not isinstance(value, torch.Tensor):
+            raise TypeError("value must be a torch.Tensor.")
+        if not self.is_distributed:
+            return value
+        reduced = self._xm.all_reduce(self._xm.REDUCE_SUM, value)
+        return value if reduced is None else reduced
 
     def optimizer_step(self, optimizer: Optimizer) -> None:
         self._xm.optimizer_step(optimizer, barrier=False)
@@ -307,6 +444,12 @@ class XlaRuntime:
             state["compilation_cache_dir"] = str(self._cache_dir)
         if self._diagnostics is not None:
             state["xla_diagnostics"] = self._diagnostics.snapshot()
+        get_rng_state = getattr(self._xm, "get_rng_state", None)
+        if not callable(get_rng_state):
+            raise RuntimeError(
+                "This torch_xla version cannot expose device RNG state for exact resume."
+            )
+        state["device_rng_state"] = int(get_rng_state(self.device))
         return state
 
     def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
@@ -314,6 +457,14 @@ class XlaRuntime:
             raise ValueError(
                 f"Cannot load runtime state for {state_dict.get('backend')!r}."
             )
+        if "device_rng_state" not in state_dict:
+            return
+        set_rng_state = getattr(self._xm, "set_rng_state", None)
+        if not callable(set_rng_state):
+            raise RuntimeError(
+                "This torch_xla version cannot restore device RNG state exactly."
+            )
+        set_rng_state(state_dict["device_rng_state"], self.device)
 
     def diagnostics(self) -> BackendDiagnostics:
         version = getattr(self._torch_xla, "__version__", None)
