@@ -146,3 +146,74 @@ def test_train_dry_run_rejects_ignored_resume_argument(tmp_path, capsys):
 
     assert error.value.code == 2
     assert "cannot be combined" in capsys.readouterr().err
+
+
+def test_train_command_builds_hub_bin_ranges(monkeypatch, tmp_path, capsys):
+    config = tmp_path / "train.yaml"
+    config.write_text(
+        "api_version: '1'\n"
+        "model: local-model\n"
+        "training_args:\n"
+        "  sequence_length: 128\n"
+        "  eval_steps: 2\n",
+        encoding="utf-8",
+    )
+    calls = []
+
+    def dataset_from_hub(repo_id, **kwargs):
+        calls.append((repo_id, kwargs))
+        return SimpleNamespace(
+            split=kwargs["split"], hub_revision="b" * 40
+        )
+
+    class Trainer:
+        def train(self, *, resume_from_checkpoint=None):
+            assert resume_from_checkpoint is None
+            return {"step": 2}
+
+    monkeypatch.setattr(cli.PackedBinDataset, "from_hub", dataset_from_hub)
+    monkeypatch.setattr(
+        cli.TrainLMTrainer,
+        "from_config",
+        lambda config, *, train_dataset, eval_dataset: Trainer(),
+    )
+
+    result = cli.main((
+        "train",
+        "--config",
+        str(config),
+        "--dataset-repo",
+        "LaughTaleAI/LaughLM-Tokenized-Fine",
+        "--dataset-revision",
+        "main",
+        "--train-shard-stop",
+        "4",
+        "--eval-shard-start",
+        "4",
+        "--eval-shard-stop",
+        "5",
+    ))
+
+    assert result == 0
+    assert calls == [
+        (
+            "LaughTaleAI/LaughLM-Tokenized-Fine",
+            {
+                "revision": "main",
+                "shard_range": (0, 4),
+                "sequence_length": 128,
+                "split": "train",
+                "seed": 42,
+            },
+        ),
+        (
+            "LaughTaleAI/LaughLM-Tokenized-Fine",
+            {
+                "revision": "b" * 40,
+                "shard_range": (4, 5),
+                "sequence_length": 128,
+                "split": "validation",
+            },
+        ),
+    ]
+    assert capsys.readouterr().out == '{"step": 2}\n'

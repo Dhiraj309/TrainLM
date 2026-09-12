@@ -173,20 +173,34 @@ configuration, coordinator stage logs, and raw manifests remain private.
 Packed readers use the YAML `sequence_length` and training seed; validation
 always uses its deterministic validation partition semantics.
 
+Numbered Hub `.bin` shards can be selected directly without downloading or
+authoring manifests by hand:
+
+```bash
+trainlm train --config examples/dense_ar_pretraining.yaml \
+  --dataset-repo LaughTaleAI/LaughLM-Tokenized-Fine \
+  --dataset-revision main \
+  --train-shard-start 0 --train-shard-stop 8 \
+  --eval-shard-start 8 --eval-shard-stop 9
+```
+
 On CPU and CUDA, `save_steps` and `eval_steps` are handled by the same
 backend-neutral lifecycle used for training. A local run can continue from a
 TrainLM training checkpoint with
 `trainer.train(resume_from_checkpoint="runs/example/checkpoint-100")`.
 
-Packed token shards can be supplied through the validated public adapter. Local
-manifests and revision-pinned Hugging Face sources are checked before iteration,
-and rank ownership is deterministic:
+Packed token shards can be downloaded by end-exclusive numeric range. TrainLM
+resolves the requested Hub revision to an immutable commit, uses the standard
+Hugging Face cache, validates every downloaded token payload, and partitions
+examples deterministically:
 
 ```python
 from trainlm import PackedBinDataset
 
-train_dataset = PackedBinDataset.from_directory(
-    "data/packed/train",
+train_dataset = PackedBinDataset.from_hub(
+    "LaughTaleAI/LaughLM-Tokenized-Fine",
+    revision="main",
+    shard_range=(0, 4),  # downloads 00000 through 00003
     sequence_length=2048,
 )
 ```
