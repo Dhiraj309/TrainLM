@@ -577,6 +577,10 @@ this file in every turn:
     transform only when a selected or fallback decision names the same component
     and provider. Tampered checkpoint plans cannot attach unrelated transforms
     to an otherwise legitimate provider decision.
+91. **M8-F4 invariant error precedence:** blocked and no-op transformation
+    violations are classified before ready-plan provider authorization. This
+    preserves actionable lifecycle errors while retaining the authorization
+    guard for executable plans.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
