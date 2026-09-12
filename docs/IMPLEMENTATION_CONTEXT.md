@@ -641,6 +641,12 @@ this file in every turn:
      TensorFlow is no longer importable before importing TrainLM. TPU worker
      launch remains private; this is environment preparation, not user-managed
      PJRT or topology configuration.
+103. **M8-F0 interrupt-safe TPU ownership:** the private coordinator launches
+     each stage in a new OS process group and streams output directly to its
+     stage log. On worker failure, notebook interruption, or another wait error,
+     it terminates the launcher and all spawned ranks, escalating to `SIGKILL`
+     after a bounded grace period. Control returns to the public caller without
+     orphaned ranks retaining TPU resources, so a corrected cell can run again.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
