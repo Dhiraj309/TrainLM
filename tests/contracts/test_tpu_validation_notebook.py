@@ -25,6 +25,8 @@ def test_tpu_notebook_demonstrates_the_public_hf_like_workflow():
         "PackedBinDataset.from_hub",
         "shard_range=(0, TRAIN_SHARD_STOP)",
         "shard_range=(TRAIN_SHARD_STOP, TRAIN_SHARD_STOP + 1)",
+        "cache_dir=DATA_CACHE_DIR",
+        "It does not download during training",
         "result = trainer.train()",
         'trainer.explain(format="text")',
         "eval_steps=2",

@@ -627,6 +627,12 @@ this file in every turn:
      batch. Token-bound scanning now uses vectorized Torch chunks instead of a
      Python loop. The TPU prefetch geometry also consumes the canonical worker
      `micro_batch_per_device` argument, fixing the end-to-end ranged-data path.
+101. **M8-F0 executable ranged-data notebook:** the public TPU notebook now
+     names an explicit local Hugging Face cache directory, imports every symbol
+     it uses, passes that cache to both train and evaluation range downloads,
+     and explains the lifecycle accurately: download and validation occur
+     before launch, while `trainer.train()` consumes lazy memory-mapped local
+     files without network access in the training loop.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
