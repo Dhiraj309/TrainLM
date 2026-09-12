@@ -148,7 +148,9 @@ def test_tpu_facade_stages_evaluation_dataset_and_cadence(tmp_path):
     assert request.eval_every_steps == 2
 
 
-def test_tpu_facade_rejects_mutable_hugging_face_model_revision(tmp_path):
+def test_tpu_facade_resolves_mutable_hugging_face_model_revision(
+    tmp_path, monkeypatch
+):
     trainer = TrainLMTrainer(
         model=ModelSourceConfig(
             provider="huggingface",
@@ -159,10 +161,16 @@ def test_tpu_facade_rejects_mutable_hugging_face_model_revision(tmp_path):
         train_dataset=tmp_path / "train",
         args=TrainLMTrainingArguments(accelerator="tpu", max_steps=1),
     )
-    trainer._tpu_coordinator = RecordingCoordinator()
+    coordinator = RecordingCoordinator()
+    trainer._tpu_coordinator = coordinator
+    monkeypatch.setattr(
+        "trainlm.api._resolve_hugging_face_model_revision",
+        lambda repo_id, revision: "b" * 40,
+    )
 
-    with pytest.raises(ValueError, match="40-character commit SHA"):
-        trainer.train()
+    trainer.train()
+
+    assert coordinator.requests[0].model.revision == "b" * 40
 
 
 def _request(tmp_path):

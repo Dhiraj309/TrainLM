@@ -23,6 +23,7 @@ def test_tpu_notebook_demonstrates_the_public_hf_like_workflow():
         "%pip uninstall -y tensorflow torchvision torchaudio",
         "Restart Session",
         "TensorFlow is still importable",
+        'MODEL_REVISION = "main"',
         "TrainLMTrainer.from_pretrained",
         "TrainLMTrainingArguments",
         "PackedBinDataset.from_hub",

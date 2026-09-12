@@ -10,7 +10,7 @@ def test_guide_covers_secure_public_workflow_and_current_export_boundary():
     text = GUIDE.read_text(encoding="utf-8")
     for required in (
         "HF_TOKEN",
-        "40-character commit SHA",
+        "immutable commit",
         "shard_range=(0, 8)",
         'split="train"',
         'split="validation"',

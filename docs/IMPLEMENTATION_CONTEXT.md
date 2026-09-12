@@ -647,6 +647,13 @@ this file in every turn:
      it terminates the launcher and all spawned ranks, escalating to `SIGKILL`
      after a bounded grace period. Control returns to the public caller without
      orphaned ranks retaining TPU resources, so a corrected cell can run again.
+104. **M8-F0 model revision resolution:** the validation notebook previously
+     displayed a syntactically valid but nonexistent example commit, which
+     reached worker preflight and produced a misleading missing-`model_type`
+     error. The public TPU facade now accepts `main` or another user-friendly
+     model selector, resolves it on the host to the actual immutable Hub commit,
+     and sends only that commit to workers. The notebook uses `main` rather than
+     encouraging users to paste a fake SHA.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
