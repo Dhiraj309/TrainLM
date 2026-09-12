@@ -173,6 +173,33 @@ def test_tpu_facade_resolves_mutable_hugging_face_model_revision(
     assert coordinator.requests[0].model.revision == "b" * 40
 
 
+def test_tpu_facade_verifies_supplied_hugging_face_commit(tmp_path, monkeypatch):
+    trainer = TrainLMTrainer(
+        model=ModelSourceConfig(
+            provider="huggingface",
+            initialization="pretrained",
+            name_or_path="org/model",
+            revision="a" * 40,
+        ),
+        train_dataset=tmp_path / "train",
+        args=TrainLMTrainingArguments(accelerator="tpu", max_steps=1),
+    )
+    coordinator = RecordingCoordinator()
+    trainer._tpu_coordinator = coordinator
+    calls = []
+
+    def resolve(repo_id, revision):
+        calls.append((repo_id, revision))
+        return revision
+
+    monkeypatch.setattr("trainlm.api._resolve_hugging_face_model_revision", resolve)
+
+    trainer.train()
+
+    assert calls == [("org/model", "a" * 40)]
+    assert coordinator.requests[0].model.revision == "a" * 40
+
+
 def _request(tmp_path):
     return _TPURunRequest(
         model=ModelSourceConfig(
