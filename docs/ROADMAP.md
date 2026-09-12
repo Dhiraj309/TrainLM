@@ -847,6 +847,8 @@ loaded HF models safely without family logic in core.
   selected or fallback decision, preventing unauthorised restored mutations.
   Status-specific validation runs before transform authorization so malformed
   blocked/no-op plans retain their actionable lifecycle error classification.
+  Distinct transforms cannot claim the same target path in one plan, avoiding
+  order-dependent capture, apply, and rollback behavior.
 
 - [x] **M8-F5 — State-dict conversion**
   `feat(optimization): add reversible parameter layout mappings`

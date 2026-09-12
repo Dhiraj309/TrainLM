@@ -228,3 +228,14 @@ def test_transformations_require_matching_selected_provider(component, provider)
 
     with pytest.raises(ValueError, match="matching selected provider decision"):
         ExecutionPlan.from_dict(values)
+
+
+def test_execution_plan_rejects_overlapping_transform_targets():
+    values = plan().to_dict()
+    duplicate = dict(values["transformations"][0])
+    duplicate["transform_id"] = "pack-qkv-again"
+    duplicate["inverse_transform_id"] = "unpack-qkv-again"
+    values["transformations"].append(duplicate)
+
+    with pytest.raises(ValueError, match="must not share target paths"):
+        ExecutionPlan.from_dict(values)
