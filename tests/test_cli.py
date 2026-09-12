@@ -2,6 +2,8 @@
 
 from types import SimpleNamespace
 
+import pytest
+
 from trainlm import cli
 
 
@@ -125,3 +127,22 @@ def test_train_dry_run_validates_and_explains_without_training(
     assert capsys.readouterr().out == (
         '{"backend": "xla", "selected_path": "tpu_coordinator"}\n'
     )
+
+
+def test_train_dry_run_rejects_ignored_resume_argument(tmp_path, capsys):
+    with pytest.raises(SystemExit) as error:
+        cli.main(
+            (
+                "train",
+                "--config",
+                str(tmp_path / "train.yaml"),
+                "--train-manifest-dir",
+                str(tmp_path / "train"),
+                "--resume-from-checkpoint",
+                str(tmp_path / "checkpoint-1"),
+                "--dry-run",
+            )
+        )
+
+    assert error.value.code == 2
+    assert "cannot be combined" in capsys.readouterr().err

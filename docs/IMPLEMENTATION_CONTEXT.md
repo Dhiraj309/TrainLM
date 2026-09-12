@@ -591,6 +591,10 @@ this file in every turn:
     versioned configuration, validates local packed datasets, and prints the
     trainer's dictionary explanation without calling `train()`. This is the
     final allocation-free command to run before the owner starts a TPU smoke.
+95. **M8-F0 unambiguous dry-run resume boundary:** dry-run and
+    `--resume-from-checkpoint` are mutually exclusive. The CLI never ignores a
+    resume request or claims to validate checkpoint contents without executing
+    the lifecycle path that owns full resume validation.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
