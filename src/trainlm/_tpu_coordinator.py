@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import json
+import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 from typing import Any
@@ -168,22 +170,52 @@ class _TPUCoordinator:
         command = self._command(request)
         if mode is not None:
             command.append(mode)
-        result = subprocess.run(
-            command,
-            cwd=self.worker_script.parent,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            check=False,
-        )
         log_path = request.output_dir / f"{stage}.log"
-        log_path.write_text(result.stdout or "", encoding="utf-8")
-        if result.returncode:
-            tail = "\n".join((result.stdout or "").splitlines()[-20:])
+        with log_path.open("w", encoding="utf-8") as log:
+            process = subprocess.Popen(
+                command,
+                cwd=self.worker_script.parent,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                text=True,
+                start_new_session=True,
+            )
+            try:
+                returncode = process.wait()
+            except BaseException:
+                self._terminate_process_group(process)
+                raise
+        if returncode:
+            # A failed launcher can leave spawned XLA ranks alive. Reclaim the
+            # whole private process group before returning control to a notebook.
+            self._terminate_process_group(process)
+            tail = "\n".join(
+                log_path.read_text(encoding="utf-8").splitlines()[-20:]
+            )
             raise TPUCoordinatorError(
-                f"TPU {stage} stage failed with exit code {result.returncode}. "
+                f"TPU {stage} stage failed with exit code {returncode}. "
                 f"See {log_path}. Last output:\n{tail}"
             )
+
+    @staticmethod
+    def _terminate_process_group(process: subprocess.Popen[Any]) -> None:
+        """Best-effort cleanup for a launcher and every spawned TPU rank."""
+
+        try:
+            if os.name == "posix":
+                os.killpg(process.pid, signal.SIGTERM)
+            elif process.poll() is None:  # pragma: no cover - TPU workers are POSIX
+                process.terminate()
+            else:  # pragma: no cover - TPU notebook workers are POSIX
+                return
+            process.wait(timeout=10)
+        except (ProcessLookupError, subprocess.TimeoutExpired):
+            if process.poll() is None:
+                if os.name == "posix":
+                    os.killpg(process.pid, signal.SIGKILL)
+                else:  # pragma: no cover - TPU notebook workers are POSIX
+                    process.kill()
+                process.wait()
 
     def _command(self, request: _TPURunRequest) -> list[str]:
         model = request.model

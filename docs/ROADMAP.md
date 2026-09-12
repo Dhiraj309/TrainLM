@@ -810,6 +810,11 @@ loaded HF models safely without family logic in core.
   installs the pinned TPU profile, and requires one explicit session restart.
   A pre-import assertion prevents users from continuing in the contaminated
   parent process and receiving the same opaque kernel death.
+  Coordinator stages now have explicit process-group ownership. Failure or
+  notebook interruption terminates every spawned rank, with bounded TERM/KILL
+  escalation, before control returns to `trainer.train()`. Stage output is
+  written directly to disk so cleanup does not depend on draining a blocked
+  output pipe and rerunning a corrected cell does not inherit orphaned workers.
 
 - [x] **M8-F1 — Structural inspector**
   `feat(optimization): inspect dense causal LM capabilities`
