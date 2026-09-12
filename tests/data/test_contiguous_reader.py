@@ -57,7 +57,10 @@ def _local_shard(
         token_count=len(tokens),
         token_id_min=min(tokens),
         token_id_max=max(tokens),
-        vocab_size=256,
+        # Partition fixtures intentionally use disjoint token ranges per shard.
+        # Keep the synthetic vocabulary large enough for every generated token
+        # instead of making unrelated high-index shard tests fail validation.
+        vocab_size=max(256, max(tokens) + 1),
         file_size_bytes=len(payload),
         sha256=hashlib.sha256(payload).hexdigest(),
     )
