@@ -775,6 +775,9 @@ loaded HF models safely without family logic in core.
   The 28/2 shard lifecycle fixture now derives a valid synthetic vocabulary for
   its disjoint per-shard token ranges, and callback synchronization tests isolate
   trainer loss extraction from DataLoader's private iterator-seeding scalar read.
+  `trainlm train --dry-run` performs the same YAML and packed-manifest validation
+  and emits the public optimization explanation without launching training,
+  providing a safe final host-side check before TPU allocation.
 
 - [x] **M8-F1 — Structural inspector**
   `feat(optimization): inspect dense causal LM capabilities`
