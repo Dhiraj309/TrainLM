@@ -96,7 +96,11 @@ Packed reads can overlap training through the bounded, backend-aware
 [asynchronous prefetch contract](docs/data/ASYNC_PREFETCH.md).
 Exact next-batch restart state follows the
 [resumable cursor contract](docs/data/RESUMABLE_CURSOR.md).
-The [secure packed-bin TPU guide](docs/tutorials/TPU_PACKED_BIN_PRETRAINING.md)
+The [public TPU validation notebook](notebooks/TrainLM_TPU_Validation.ipynb)
+walks through an allocation-free dry run, TPU smoke, scheduled evaluation and
+checkpointing, exact resume, and evidence review without exposing worker
+orchestration. The
+[secure packed-bin TPU guide](docs/tutorials/TPU_PACKED_BIN_PRETRAINING.md)
 covers secret handling, immutable revisions, train/eval splits, explanation,
 resume, and the current canonical-export boundary.
 
