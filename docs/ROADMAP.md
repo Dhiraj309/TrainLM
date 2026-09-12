@@ -786,6 +786,10 @@ loaded HF models safely without family logic in core.
   covers smoke, scheduled evaluation/checkpoint cadence, resume from a committed
   rank-local checkpoint, and public throughput/evidence fields without exposing
   any coordinator implementation detail.
+  TPU topology is runtime-discovered inside launched workers. Neither the public
+  arguments, coordinator request, CLI, nor notebook asks users to predict a
+  world size; collective validation derives its expected rank sum from the
+  actual topology selected by Torch/XLA.
 
 - [x] **M8-F1 — Structural inspector**
   `feat(optimization): inspect dense causal LM capabilities`
