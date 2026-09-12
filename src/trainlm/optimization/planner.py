@@ -66,6 +66,9 @@ class ProviderSpec:
             raise ValueError("Provider transformations must name their owning provider.")
         if any(transform.component != self.component for transform in self.transformations):
             raise ValueError("Provider transformations must target their owning component.")
+        transform_ids = [transform.transform_id for transform in self.transformations]
+        if len(transform_ids) != len(set(transform_ids)):
+            raise ValueError("Provider transformation IDs must be unique.")
         if not isinstance(self.fallback, bool):
             raise ValueError("Provider fallback must be a boolean.")
         if isinstance(self.priority, bool) or not isinstance(self.priority, int):
@@ -106,6 +109,20 @@ class OptimizationPlanner:
             raise TypeError("provider must be a ProviderSpec.")
         if provider.provider_id in self._providers:
             raise ValueError(f"Provider already registered: {provider.provider_id}")
+        registered_transform_ids = {
+            transform.transform_id
+            for registered in self._providers.values()
+            for transform in registered.transformations
+        }
+        duplicate_transform_ids = sorted(
+            registered_transform_ids
+            & {transform.transform_id for transform in provider.transformations}
+        )
+        if duplicate_transform_ids:
+            raise ValueError(
+                "Provider transformation IDs already registered: "
+                f"{duplicate_transform_ids!r}"
+            )
         self._providers[provider.provider_id] = provider
 
     def plan(

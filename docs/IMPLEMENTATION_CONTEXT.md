@@ -548,6 +548,10 @@ this file in every turn:
     must name the provider's component as well as its provider ID. A provider
     selected for one inspected capability therefore cannot smuggle a mutation
     for an unrelated model component into an otherwise valid execution plan.
+84. **M8-F3 catalog-wide transform identity:** provider construction rejects
+    repeated transformation IDs, and planner registration rejects IDs already
+    owned by another provider. Multi-operation selection therefore cannot fail
+    late while constructing an execution plan with ambiguous transformations.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

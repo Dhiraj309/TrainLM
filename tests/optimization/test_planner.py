@@ -227,3 +227,41 @@ def test_provider_rejects_transformations_for_another_component():
             precisions=("bf16",),
             transformations=(transformation,),
         )
+
+
+def test_provider_rejects_duplicate_transformation_ids():
+    transformation = _providers()[0].transformations[0]
+
+    with pytest.raises(ValueError, match="transformation IDs must be unique"):
+        ProviderSpec(
+            provider_id="xla-qkv",
+            component="projections",
+            operation="forward_backward",
+            backends=("pytorch-xla",),
+            precisions=("bf16",),
+            transformations=(transformation, transformation),
+        )
+
+
+def test_planner_rejects_transformation_ids_reused_by_another_provider():
+    original = _providers()[0]
+    conflicting_transform = ModelTransformation(
+        transform_id=original.transformations[0].transform_id,
+        component="projections",
+        provider="alternate-qkv",
+        target_paths=("model.layers.*.self_attn",),
+        inverse_transform_id="restore-alternate-qkv",
+        reason="Conflicts with a registered transformation ID.",
+    )
+    conflicting_provider = ProviderSpec(
+        provider_id="alternate-qkv",
+        component="projections",
+        operation="inference",
+        backends=("pytorch-xla",),
+        precisions=("bf16",),
+        transformations=(conflicting_transform,),
+    )
+    planner = OptimizationPlanner((original,))
+
+    with pytest.raises(ValueError, match="IDs already registered.*pack-qkv"):
+        planner.register(conflicting_provider)
