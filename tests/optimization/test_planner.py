@@ -192,3 +192,17 @@ def test_provider_rejects_non_boolean_fallback_flags(fallback):
             precisions=("fp32",),
             fallback=fallback,
         )
+
+
+def test_provider_rejects_mutable_transformation_collections():
+    transformation = _providers()[0].transformations[0]
+
+    with pytest.raises(ValueError, match="transformations must be a tuple"):
+        ProviderSpec(
+            provider_id="mutable-provider",
+            component="projections",
+            operation="forward_backward",
+            backends=("pytorch-xla",),
+            precisions=("bf16",),
+            transformations=[transformation],
+        )

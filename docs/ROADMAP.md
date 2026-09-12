@@ -814,7 +814,9 @@ loaded HF models safely without family logic in core.
   Provider declarations require a real boolean fallback flag, preventing
   truthy strings or integers from changing required-policy semantics. Plan IDs
   include the complete sorted provider catalog, so distinct eligible providers
-  or transform declarations cannot produce the same audit identity.
+  or transform declarations cannot produce the same audit identity. Transform
+  declarations must use immutable tuples, preventing catalog mutation after a
+  provider has been registered or a plan ID has been recorded.
 
 - [x] **M8-F4 — Transactional transforms**
   `feat(optimization): apply validated reversible model transforms`

@@ -55,6 +55,8 @@ class ProviderSpec:
             object.__setattr__(self, name, _strings(name, getattr(self, name)))
         if not self.backends or not self.precisions:
             raise ValueError("Providers require at least one backend and precision.")
+        if not isinstance(self.transformations, tuple):
+            raise ValueError("Provider transformations must be a tuple.")
         if any(
             not isinstance(transform, ModelTransformation)
             for transform in self.transformations
