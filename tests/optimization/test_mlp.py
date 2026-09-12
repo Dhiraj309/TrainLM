@@ -119,6 +119,7 @@ from trainlm.optimization import (
     ModelTransformation,
     ModelTransformRegistry,
     PackedGatedMLPProjection,
+    ProviderDecision,
     gated_mlp_pack_transform_handler,
 )
 from .test_capabilities import capabilities
@@ -161,6 +162,14 @@ def _mlp_plan():
         capabilities().fingerprint,
         "pytorch",
         "fp32",
+        decisions=(ProviderDecision(
+            decision_id="mlp.pack",
+            component="mlp",
+            operation="transform",
+            status="selected",
+            reason="Fixture provider selected.",
+            selected_provider="fixture",
+        ),),
         transformations=(transformation,),
     )
 

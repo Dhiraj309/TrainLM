@@ -6,6 +6,7 @@ from trainlm.optimization import (
     ExecutionPlan,
     ModelTransformation,
     ModelTransformRegistry,
+    ProviderDecision,
     RematerializationMeasurement,
     RematerializationPolicy,
     module_rematerialization_transform_handler,
@@ -108,6 +109,14 @@ def _rematerialization_plan(*, component="block", layout_change=False):
         capabilities().fingerprint,
         "pytorch",
         "fp32",
+        decisions=(ProviderDecision(
+            decision_id=f"{component}.rematerialization",
+            component=component,
+            operation="rematerialization",
+            status="selected",
+            reason="Fixture checkpoint provider selected.",
+            selected_provider="torch-checkpoint",
+        ),),
         transformations=(transformation,),
     )
 

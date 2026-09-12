@@ -80,6 +80,7 @@ from trainlm.optimization import (
     ModelTransformation,
     ModelTransformRegistry,
     PackedQKVProjection,
+    ProviderDecision,
     qkv_pack_transform_handler,
 )
 from .test_capabilities import capabilities
@@ -123,6 +124,14 @@ def _qkv_plan():
         capabilities().fingerprint,
         "pytorch",
         "fp32",
+        decisions=(ProviderDecision(
+            decision_id="attention.pack-qkv",
+            component="attention",
+            operation="transform",
+            status="selected",
+            reason="Fixture provider selected.",
+            selected_provider="fixture",
+        ),),
         transformations=(transform,),
     )
 
@@ -384,6 +393,14 @@ def _partial_qkv_plan():
         capabilities().fingerprint,
         "pytorch",
         "fp32",
+        decisions=(ProviderDecision(
+            decision_id="attention.pack-partial-qkv",
+            component="attention",
+            operation="transform",
+            status="selected",
+            reason="Fixture provider selected.",
+            selected_provider="fixture",
+        ),),
         transformations=(transform,),
     )
 

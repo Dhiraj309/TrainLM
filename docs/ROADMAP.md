@@ -841,6 +841,8 @@ loaded HF models safely without family logic in core.
   schemas, including a real boolean parameter-layout flag. Ready plans must
   select a provider, blocked plans cannot retain transforms, and an explicit
   selected decision must name the provider that was actually requested.
+  Transform, QKV, MLP, and rematerialization fixtures construct valid ready
+  plans with explicit provider decisions rather than bypassing that invariant.
 
 - [x] **M8-F5 — State-dict conversion**
   `feat(optimization): add reversible parameter layout mappings`

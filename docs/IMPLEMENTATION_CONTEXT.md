@@ -569,6 +569,10 @@ this file in every turn:
     selected or fallback provider, while blocked plans cannot carry transforms.
     A selected decision with an explicit request must select that exact provider,
     preventing contradictory restored evidence from reaching execution.
+89. **M8-F4 valid transform fixtures:** transactional transform, QKV, gated-MLP,
+    and rematerialization tests now declare the selected fixture provider in
+    every ready execution plan. The tests exercise the production invariant
+    instead of relying on structurally invalid decision-free ready plans.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
