@@ -6,6 +6,7 @@ from trainlm.optimization import (
     ExecutionPlan,
     ModelTransformation,
     ModelTransformRegistry,
+    ProviderDecision,
     TransformApplicationError,
     TransformHandler,
 )
@@ -26,9 +27,19 @@ def _transform(name, target, *, parameter_layout_change=True):
 
 
 def _plan(*transforms, status="ready"):
+    decisions = (
+        ProviderDecision(
+            decision_id="fixture.projections",
+            component="projections",
+            operation="transform",
+            status="selected",
+            reason="Fixture provider selected.",
+            selected_provider="fixture",
+        ),
+    ) if status == "ready" else ()
     return ExecutionPlan(
         1, "fixture-plan", status, "auto", capabilities().fingerprint,
-        "pytorch", "fp32", transformations=transforms,
+        "pytorch", "fp32", decisions=decisions, transformations=transforms,
         errors=(("blocked",) if status == "blocked" else ()),
     )
 

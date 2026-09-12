@@ -1,4 +1,12 @@
-from trainlm.benchmark import BenchmarkResult, evaluate_repeated_parity
+import json
+
+import pytest
+
+from trainlm.benchmark import (
+    BenchmarkResult,
+    evaluate_repeated_parity,
+    load_repeated_parity_evaluation,
+)
 
 
 def result(tokens, *, fingerprint="sha256:same", **overrides):
@@ -82,3 +90,64 @@ def test_exactly_three_runs_are_required():
         assert "exactly three" in str(error)
     else:
         raise AssertionError("single run was accepted")
+
+
+def _write_manifest(tmp_path, paths):
+    manifest = tmp_path / "repeated.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "result_paths": paths,
+                "thresholds": {
+                    "hard_throughput": 912_600.0,
+                    "hard_mfu": 0.478,
+                    "preferred_throughput": 963_300.0,
+                    "preferred_mfu": 0.504,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    return manifest
+
+
+def test_manifest_loads_three_distinct_results(tmp_path):
+    paths = []
+    for index, tokens in enumerate((980_000, 1_000_000, 1_020_000), start=1):
+        name = f"run-{index}.json"
+        (tmp_path / name).write_text(result(tokens).to_json(), encoding="utf-8")
+        paths.append(name)
+
+    evaluation = load_repeated_parity_evaluation(
+        _write_manifest(tmp_path, paths)
+    )
+
+    assert evaluation.passed
+    assert evaluation.preferred_passed
+    assert evaluation.median_global_tokens_per_second == 1_000_000
+
+
+def test_manifest_rejects_duplicate_and_escaping_result_paths(tmp_path):
+    (tmp_path / "run.json").write_text(result(1_000_000).to_json(), encoding="utf-8")
+    with pytest.raises(ValueError, match="distinct"):
+        load_repeated_parity_evaluation(
+            _write_manifest(tmp_path, ["run.json", "run.json", "run.json"])
+        )
+
+    outside = tmp_path.parent / "outside-result.json"
+    outside.write_text(result(1_000_000).to_json(), encoding="utf-8")
+    with pytest.raises(ValueError, match="escapes"):
+        load_repeated_parity_evaluation(
+            _write_manifest(tmp_path, ["run.json", "../outside-result.json", "third.json"])
+        )
+
+
+def test_manifest_rejects_unknown_threshold_fields(tmp_path):
+    manifest = _write_manifest(tmp_path, ["one.json", "two.json", "three.json"])
+    values = json.loads(manifest.read_text(encoding="utf-8"))
+    values["thresholds"]["unversioned"] = 1
+    manifest.write_text(json.dumps(values), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="versioned parity gate"):
+        load_repeated_parity_evaluation(manifest)

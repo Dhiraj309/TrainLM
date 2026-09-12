@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
-from typing import Literal
+from typing import Any, Callable, Literal
+
+from torch import nn
+from torch.utils.checkpoint import checkpoint
+
+from .plan import ModelTransformation
+from .transforms import TransformHandler
 
 RematerializationScope = Literal["none", "block", "attention", "mlp", "loss_chunk"]
 
@@ -116,10 +122,97 @@ def select_rematerialization_policy(
     )
 
 
+def module_rematerialization_transform_handler(
+    policy: RematerializationPolicy,
+    *,
+    transform_id: str = "rematerialize-module",
+    inverse_transform_id: str = "restore-module-forward",
+) -> TransformHandler:
+    """Create a reversible non-reentrant checkpoint transform for module paths.
+
+    Adapters supply the exact block, attention, or MLP paths. Patching ``forward``
+    leaves module structure, parameter aliases, and canonical state keys intact.
+    """
+
+    active_scopes = tuple(scope for scope in policy.scopes if scope != "none")
+    if not active_scopes:
+        raise ValueError("The no-rematerialization policy does not need a handler.")
+    if "loss_chunk" in active_scopes:
+        raise ValueError("Loss-chunk rematerialization is owned by the loss provider.")
+
+    def capture(
+        model: nn.Module, transformation: ModelTransformation
+    ) -> tuple[tuple[nn.Module, Callable[..., Any]], ...]:
+        _validate_transformation_scope(transformation, active_scopes)
+        return tuple(
+            (module, module.forward)
+            for module in _resolve_unique_modules(model, transformation.target_paths)
+        )
+
+    def apply(model: nn.Module, transformation: ModelTransformation) -> None:
+        _validate_transformation_scope(transformation, active_scopes)
+        for module in _resolve_unique_modules(model, transformation.target_paths):
+            original_forward = module.forward
+
+            def checkpointed_forward(
+                *args: Any,
+                _forward: Callable[..., Any] = original_forward,
+                **kwargs: Any,
+            ) -> Any:
+                return checkpoint(_forward, *args, use_reentrant=False, **kwargs)
+
+            module.forward = checkpointed_forward
+
+    def rollback(
+        model: nn.Module,
+        transformation: ModelTransformation,
+        snapshot: tuple[tuple[nn.Module, Callable[..., Any]], ...],
+    ) -> None:
+        del model, transformation
+        for module, original_forward in snapshot:
+            module.forward = original_forward
+
+    return TransformHandler(transform_id, inverse_transform_id, capture, apply, rollback)
+
+
+def _validate_transformation_scope(
+    transformation: ModelTransformation,
+    active_scopes: tuple[RematerializationScope, ...],
+) -> None:
+    if transformation.component not in active_scopes:
+        raise ValueError(
+            f"Transformation component {transformation.component!r} is not enabled "
+            "by the rematerialization policy."
+        )
+    if transformation.parameter_layout_change:
+        raise ValueError("Rematerialization cannot declare a parameter layout change.")
+
+
+def _resolve_unique_modules(
+    model: nn.Module, paths: tuple[str, ...]
+) -> tuple[nn.Module, ...]:
+    modules: list[nn.Module] = []
+    identities: set[int] = set()
+    for path in paths:
+        target: Any = model
+        for component in path.split("."):
+            if not component or not hasattr(target, component):
+                raise ValueError(f"Model has no module at path {path!r}.")
+            target = getattr(target, component)
+        if not isinstance(target, nn.Module):
+            raise TypeError(f"Target path {path!r} does not resolve to a module.")
+        if id(target) in identities:
+            raise ValueError("Rematerialization target paths must resolve uniquely.")
+        identities.add(id(target))
+        modules.append(target)
+    return tuple(modules)
+
+
 __all__ = [
     "RematerializationMeasurement",
     "RematerializationPolicy",
     "RematerializationScope",
     "RematerializationSelection",
+    "module_rematerialization_transform_handler",
     "select_rematerialization_policy",
 ]

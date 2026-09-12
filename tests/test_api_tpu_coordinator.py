@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import signal
 import subprocess
 
 import pytest
@@ -147,7 +148,9 @@ def test_tpu_facade_stages_evaluation_dataset_and_cadence(tmp_path):
     assert request.eval_every_steps == 2
 
 
-def test_tpu_facade_rejects_mutable_hugging_face_model_revision(tmp_path):
+def test_tpu_facade_resolves_mutable_hugging_face_model_revision(
+    tmp_path, monkeypatch
+):
     trainer = TrainLMTrainer(
         model=ModelSourceConfig(
             provider="huggingface",
@@ -158,10 +161,16 @@ def test_tpu_facade_rejects_mutable_hugging_face_model_revision(tmp_path):
         train_dataset=tmp_path / "train",
         args=TrainLMTrainingArguments(accelerator="tpu", max_steps=1),
     )
-    trainer._tpu_coordinator = RecordingCoordinator()
+    coordinator = RecordingCoordinator()
+    trainer._tpu_coordinator = coordinator
+    monkeypatch.setattr(
+        "trainlm.api._resolve_hugging_face_model_revision",
+        lambda repo_id, revision: "b" * 40,
+    )
 
-    with pytest.raises(ValueError, match="40-character commit SHA"):
-        trainer.train()
+    trainer.train()
+
+    assert coordinator.requests[0].model.revision == "b" * 40
 
 
 def _request(tmp_path):
@@ -211,6 +220,45 @@ def test_tpu_checkpoint_request_is_serialized_and_forwarded(tmp_path):
         checkpoint.resolve()
     )
     assert request.to_dict()["resume_from_checkpoint"] == str(checkpoint)
+
+
+def test_tpu_request_does_not_expose_or_assume_world_size(tmp_path):
+    request = _request(tmp_path)
+
+    assert "expected_world_size" not in request.to_dict()
+    assert "--expected-world-size" not in _TPUCoordinator(
+        tmp_path / "worker.py"
+    )._command(request)
+
+
+def test_tpu_config_model_is_serialized_for_worker_reconstruction(tmp_path):
+    base = _request(tmp_path)
+    model = ModelSourceConfig(
+        provider="huggingface",
+        initialization="config",
+        model_type="llama",
+        dtype="float32",
+        config_overrides={"hidden_size": 1024, "num_hidden_layers": 8},
+    )
+    request = _TPURunRequest(
+        **{
+            **base.to_dict(),
+            "model": model,
+            "manifest_dir": tmp_path / "manifests",
+            "output_dir": tmp_path / "run",
+        }
+    )
+
+    command = _TPUCoordinator(tmp_path / "worker.py")._command(request)
+    payload = json.loads(command[command.index("--model-source-json") + 1])
+
+    assert payload["initialization"] == "config"
+    assert payload["model_type"] == "llama"
+    assert payload["config_overrides"] == {
+        "hidden_size": 1024,
+        "num_hidden_layers": 8,
+    }
+    assert "--model-id" not in command
 
 
 def test_tpu_checkpoint_request_rejects_missing_resume_directory(tmp_path):
@@ -276,8 +324,23 @@ def test_coordinator_owns_stages_logs_and_structured_summary(tmp_path, monkeypat
     request = _request(tmp_path)
     calls = []
 
-    def run(command, **kwargs):
+    class Process:
+        pid = 123
+
+        def __init__(self, returncode=0):
+            self.returncode = returncode
+
+        def wait(self, timeout=None):
+            del timeout
+            return self.returncode
+
+        def poll(self):
+            return self.returncode
+
+    def popen(command, **kwargs):
         calls.append((command, kwargs))
+        kwargs["stdout"].write("stage passed\n")
+        kwargs["stdout"].flush()
         if "--probe-only" not in command and "--model-preflight" not in command:
             request.output_dir.mkdir(parents=True, exist_ok=True)
             (request.output_dir / "summary.json").write_text(
@@ -287,9 +350,9 @@ def test_coordinator_owns_stages_logs_and_structured_summary(tmp_path, monkeypat
             (request.output_dir / "metrics.jsonl").write_text(
                 '{"loss": 2.5, "step": 2}\n', encoding="utf-8"
             )
-        return subprocess.CompletedProcess(command, 0, stdout="stage passed\n")
+        return Process()
 
-    monkeypatch.setattr(subprocess, "run", run)
+    monkeypatch.setattr(subprocess, "Popen", popen)
 
     summary = _TPUCoordinator(worker).run(request)
 
@@ -301,7 +364,7 @@ def test_coordinator_owns_stages_logs_and_structured_summary(tmp_path, monkeypat
     assert "--probe-only" in calls[0][0]
     assert "--model-preflight" in calls[1][0]
     assert "--learning-rate" in calls[2][0]
-    assert all(call[1]["check"] is False for call in calls)
+    assert all(call[1]["start_new_session"] is True for call in calls)
     assert (request.output_dir / "request.json").is_file()
     assert (request.output_dir / "coordinator_summary.json").is_file()
     assert (request.output_dir / "train.log").read_text() == "stage passed\n"
@@ -312,11 +375,24 @@ def test_coordinator_reports_actionable_stage_failure(tmp_path, monkeypatch):
     worker.write_text("# test worker\n", encoding="utf-8")
     request = _request(tmp_path)
 
-    def run(command, **kwargs):
-        del kwargs
-        return subprocess.CompletedProcess(command, 9, stdout="PJRT launch failed\n")
+    class FailedProcess:
+        pid = 123
 
-    monkeypatch.setattr(subprocess, "run", run)
+        def wait(self, timeout=None):
+            del timeout
+            return 9
+
+        def poll(self):
+            return 9
+
+    def popen(command, **kwargs):
+        del command
+        kwargs["stdout"].write("PJRT launch failed\n")
+        kwargs["stdout"].flush()
+        return FailedProcess()
+
+    monkeypatch.setattr(subprocess, "Popen", popen)
+    monkeypatch.setattr("os.killpg", lambda pid, sig: None)
 
     with pytest.raises(TPUCoordinatorError, match="probe stage failed.*probe.log"):
         _TPUCoordinator(worker).run(request)
@@ -327,6 +403,37 @@ def test_coordinator_reports_actionable_stage_failure(tmp_path, monkeypatch):
     assert summary["status"] == "failed"
     assert summary["completed_stages"] == []
     assert "PJRT launch failed" in summary["error"]
+
+
+def test_coordinator_releases_worker_group_when_notebook_is_interrupted(
+    tmp_path, monkeypatch
+):
+    worker = tmp_path / "worker.py"
+    worker.write_text("# test worker\n", encoding="utf-8")
+    process = type("InterruptProcess", (), {})()
+    process.pid = 456
+    process.running = True
+    waits = 0
+
+    def wait(timeout=None):
+        nonlocal waits
+        waits += 1
+        if timeout is None and waits == 1:
+            raise KeyboardInterrupt
+        process.running = False
+        return -15
+
+    process.wait = wait
+    process.poll = lambda: None if process.running else -15
+    monkeypatch.setattr(subprocess, "Popen", lambda *args, **kwargs: process)
+    signals = []
+    monkeypatch.setattr("os.killpg", lambda pid, sig: signals.append((pid, sig)))
+
+    with pytest.raises(KeyboardInterrupt):
+        _TPUCoordinator(worker).run(_request(tmp_path))
+
+    assert signals == [(456, signal.SIGTERM)]
+    assert process.running is False
 
 
 def test_coordinator_rejects_malformed_metrics_artifact(tmp_path):

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import json
+import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 from typing import Any
@@ -38,7 +40,6 @@ class _TPURunRequest:
     resume_from_checkpoint: Path | None = None
     eval_manifest_dir: Path | None = None
     eval_every_steps: int | None = None
-    expected_world_size: int = 8
 
     def __post_init__(self) -> None:
         if self.save_every_steps is not None and (
@@ -169,49 +170,63 @@ class _TPUCoordinator:
         command = self._command(request)
         if mode is not None:
             command.append(mode)
-        result = subprocess.run(
-            command,
-            cwd=self.worker_script.parent,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            check=False,
-        )
         log_path = request.output_dir / f"{stage}.log"
-        log_path.write_text(result.stdout or "", encoding="utf-8")
-        if result.returncode:
-            tail = "\n".join((result.stdout or "").splitlines()[-20:])
+        with log_path.open("w", encoding="utf-8") as log:
+            process = subprocess.Popen(
+                command,
+                cwd=self.worker_script.parent,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                text=True,
+                start_new_session=True,
+            )
+            try:
+                returncode = process.wait()
+            except BaseException:
+                self._terminate_process_group(process)
+                raise
+        if returncode:
+            # A failed launcher can leave spawned XLA ranks alive. Reclaim the
+            # whole private process group before returning control to a notebook.
+            self._terminate_process_group(process)
+            tail = "\n".join(
+                log_path.read_text(encoding="utf-8").splitlines()[-20:]
+            )
             raise TPUCoordinatorError(
-                f"TPU {stage} stage failed with exit code {result.returncode}. "
+                f"TPU {stage} stage failed with exit code {returncode}. "
                 f"See {log_path}. Last output:\n{tail}"
             )
 
+    @staticmethod
+    def _terminate_process_group(process: subprocess.Popen[Any]) -> None:
+        """Best-effort cleanup for a launcher and every spawned TPU rank."""
+
+        try:
+            if os.name == "posix":
+                os.killpg(process.pid, signal.SIGTERM)
+            elif process.poll() is None:  # pragma: no cover - TPU workers are POSIX
+                process.terminate()
+            else:  # pragma: no cover - TPU notebook workers are POSIX
+                return
+            process.wait(timeout=10)
+        except (ProcessLookupError, subprocess.TimeoutExpired):
+            if process.poll() is None:
+                if os.name == "posix":
+                    os.killpg(process.pid, signal.SIGKILL)
+                else:  # pragma: no cover - TPU notebook workers are POSIX
+                    process.kill()
+                process.wait()
+
     def _command(self, request: _TPURunRequest) -> list[str]:
         model = request.model
-        if model.initialization != "pretrained" or model.name_or_path is None:
+        if model.provider != "huggingface":
             raise TPUCoordinatorError(
-                "The current TPU coordinator requires a reconstructible pretrained "
-                "Hugging Face model ID or path."
-            )
-        unsupported = {
-            "cache_dir": model.cache_dir is not None,
-            "config_overrides": bool(model.config_overrides),
-            "dtype": model.dtype is not None,
-            "local_files_only": model.local_files_only,
-            "subfolder": model.subfolder is not None,
-            "use_safetensors": model.use_safetensors is not None,
-        }
-        enabled = sorted(name for name, present in unsupported.items() if present)
-        if enabled:
-            raise TPUCoordinatorError(
-                "The current TPU worker cannot preserve these model-source options: "
-                + ", ".join(enabled)
-                + "."
+                "The current TPU coordinator requires a reconstructible Hugging "
+                "Face model source."
             )
         command = [
             sys.executable,
             str(self.worker_script),
-            "--expected-world-size", str(request.expected_world_size),
             "--max-steps", str(request.max_steps),
             "--gradient-accumulation-steps", str(request.gradient_accumulation_steps),
             "--micro-batch-per-device", str(request.micro_batch_per_device),
@@ -222,7 +237,7 @@ class _TPUCoordinator:
             "--cache-dir", str((request.output_dir / "xla_cache").resolve()),
             "--data-mode", "local",
             "--manifest-dir", str(request.manifest_dir.resolve()),
-            "--model-id", model.name_or_path,
+            "--model-source-json", json.dumps(asdict(model), sort_keys=True),
             "--learning-rate", str(request.learning_rate),
             "--beta1", str(request.betas[0]),
             "--beta2", str(request.betas[1]),
@@ -233,10 +248,6 @@ class _TPUCoordinator:
             "--warmup-steps", str(request.warmup_steps),
             "--precision", request.precision,
         ]
-        if model.revision is not None:
-            command.extend(("--model-revision", model.revision))
-        if model.trust_remote_code:
-            command.append("--trust-remote-code")
         if request.save_every_steps is not None:
             command.extend(("--save-every-steps", str(request.save_every_steps)))
         if request.resume_from_checkpoint is not None:

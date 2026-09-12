@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+import hashlib
 import json
+import re
 from typing import Literal
 
 FusionComponent = Literal["normalization", "rope", "residual", "mlp"]
@@ -38,6 +40,51 @@ class HLOFusionObservation:
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or value < 0:
                 raise ValueError(f"{name} must be a non-negative integer.")
+
+    @classmethod
+    def from_hlo_text(
+        cls,
+        *,
+        component: FusionComponent,
+        hlo_text: str,
+        native_fused: bool | None,
+        materialization_patterns: tuple[str, ...] = (),
+        fallback_count: int = 0,
+    ) -> "HLOFusionObservation":
+        """Build reproducible evidence from captured textual HLO.
+
+        Fusion itself remains explicit evidence: textual opcode counting cannot
+        prove semantic fusion. Materializations are similarly caller-declared
+        patterns because their HLO form depends on the inspected operation.
+        """
+
+        if not isinstance(hlo_text, str) or not hlo_text.strip():
+            raise ValueError("hlo_text cannot be empty.")
+        if isinstance(materialization_patterns, (str, bytes)) or not isinstance(
+            materialization_patterns, (tuple, list)
+        ):
+            raise TypeError("materialization_patterns must be a tuple or list.")
+        patterns = tuple(materialization_patterns)
+        if any(not isinstance(pattern, str) or not pattern for pattern in patterns):
+            raise ValueError("materialization patterns cannot be empty.")
+        try:
+            materialization_count = sum(
+                len(re.findall(pattern, hlo_text, flags=re.MULTILINE))
+                for pattern in patterns
+            )
+        except re.error as exc:
+            raise ValueError(f"Invalid materialization pattern: {exc}") from exc
+        normalized = hlo_text.replace("\r\n", "\n").strip() + "\n"
+        return cls(
+            component=component,
+            hlo_fingerprint="sha256:" + hashlib.sha256(normalized.encode()).hexdigest(),
+            native_fused=native_fused,
+            copy_count=_count_hlo_opcode(normalized, "copy"),
+            transpose_count=_count_hlo_opcode(normalized, "transpose"),
+            materialization_count=materialization_count,
+            custom_call_count=_count_hlo_opcode(normalized, "custom-call"),
+            fallback_count=fallback_count,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,6 +156,10 @@ def audit_hlo_fusions(
             )
         )
     return HLOFusionAudit(schema_version=1, decisions=tuple(decisions))
+
+
+def _count_hlo_opcode(hlo_text: str, opcode: str) -> int:
+    return len(re.findall(rf"(?:^|[=, (]){re.escape(opcode)}\(", hlo_text))
 
 
 __all__ = [

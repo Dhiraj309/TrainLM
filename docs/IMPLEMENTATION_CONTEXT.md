@@ -4,6 +4,10 @@ This document is the handoff for continuing TrainLM work in another Codex
 session or in Codex Cloud. It records the agreed product direction and the
 current implementation boundary; update it whenever a milestone changes.
 
+For the status-focused checklist of implemented work, target-hardware evidence,
+immediate priorities, architecture research, and telemetry work, see
+[`HANDOFF.md`](HANDOFF.md).
+
 ## Product intent
 
 TrainLM is a Hugging Face-like trainer for decoder-only autoregressive models.
@@ -320,6 +324,359 @@ this file in every turn:
     now require lowercase 40-character commit revisions before the coordinator
     stages data or launches workers. Existing local model directories remain a
     supported offline snapshot path. Target tutorial smoke remains outstanding.
+38. **M11-F1 live QKV transform:** an explicit adapter-selected wrapper path can
+    now be replaced before optimizer construction by one packed linear QKV
+    projection. The transform validates MHA/GQA/MQA geometry, bias layout,
+    dtype/device agreement, returns compact query/key/value views, and restores
+    the original wrapper on rollback. Partial source layouts and target-XLA
+    update evidence remain outstanding.
+39. **M11-F2 live gated-MLP transform:** an adapter-selected gate/up wrapper can
+    now be replaced before optimizer construction by one packed linear call.
+    Activation semantics remain explicit through a supplied callable rather
+    than a family-name guess, GELU remains untransformed, and transactional
+    rollback restores the original wrapper. Partial layouts and target-XLA
+    update evidence remain outstanding.
+40. **M11-F1 partial QKV layouts:** canonical sources with separate query and
+    combined key/value parameters now have an explicit reversible state-dict
+    descriptor. It preserves the source key boundary, compact KV geometry,
+    optional paired biases, and canonical export instead of pretending the
+    model exposes three separate projections. Already-packed sources now use an
+    explicit validated no-transform descriptor with derived compact output
+    geometry, completing separate/partial/packed layout representation. Target-
+    XLA output, gradient, and update evidence remains outstanding.
+41. **M11-F3 HLO text capture:** fusion observations can now be constructed
+    reproducibly from normalized textual HLO with a SHA-256 fingerprint and
+    exact copy, transpose, and custom-call opcode counts. Component-specific
+    materializations require explicit regex patterns, and native fusion remains
+    caller-supplied evidence because opcode text cannot prove semantics. Real
+    target-XLA captures and matched provider benchmarks remain outstanding.
+42. **M11-F4 live rematerialization:** an explicit policy can now install
+    non-reentrant activation checkpointing on adapter-selected block, attention,
+    or MLP paths through the transactional transform registry. Forward methods
+    are patched in place so module structure, parameter aliases, and canonical
+    state keys remain stable, and rollback restores the original callables.
+    Loss chunks remain under the loss provider; target-XLA HBM and step-time
+    measurements remain outstanding.
+43. **M11-F5 worker policy integration:** the TPU worker now derives AdamW
+    moment dtypes, non-fused execution, decoupled decay, and trainer clipping
+    from one validated `XLAAdamWPolicy`. Materialization preserves the user's
+    learning rate, betas, epsilon, and decay while preventing worker defaults
+    from drifting away from the evidence contract. Target-XLA update/resume,
+    graph, HBM, and step-time measurements remain outstanding.
+44. **M11-F6 input-policy integration:** `BatchPrefetchGeometry` now validates
+    both host and device prefetch depths, host-to-device transfer threads, and
+    batches per execution, and materializes the exact `ParallelLoader` keyword
+    arguments. The TPU worker builds the current production candidate through
+    that contract so future measured selections have one application boundary.
+    Real-data target-TPU geometry measurements remain outstanding.
+45. **M11-F7 closure artifacts:** the final parity gate can now load a versioned
+    benchmark result, graph diagnostics, and textual HLO from separate files,
+    verify strict counter types, normalize and hash the HLO, and reject evidence
+    whose declared fingerprint does not match the captured graph. Genuine v5e
+    evidence satisfying every performance and graph gate remains outstanding.
+46. **M12-F1 numerical artifacts:** reference and candidate semantic manifests
+    can now be evaluated together with a strict versioned update-evidence file.
+    The loader rejects unknown schema fields, malformed error sequences, and
+    invalid justifications before applying the locked semantic and early-update
+    tolerances. Exact deterministic target-run artifacts remain outstanding.
+47. **M12-F2 repeated-run manifest:** repeated parity evidence can now be loaded
+    from a strict versioned manifest containing exactly three distinct result
+    artifacts and the complete hard/preferred threshold set. Result paths must
+    remain relative to and confined beneath the manifest directory, preventing
+    accidental evidence substitution. Three real synchronized v5e runs remain
+    outstanding.
+48. **M11-F1 portable numerical parity:** the live packed-QKV regression uses
+    explicit float32 relative and absolute tolerances for output and gradient
+    comparisons. This accounts for valid accumulation-order differences between
+    three separate matrix multiplications and one packed matrix multiplication
+    while retaining strict semantic parity coverage across CI CPU backends.
+49. **M12-F3 stability artifacts:** real-shard lifecycle evidence now has a
+    strict versioned JSON loader that requires the complete 200-update gate
+    payload and explicit update/shard thresholds. Unknown, missing, malformed,
+    and incorrectly typed evidence is rejected before evaluation. A real
+    revision-pinned target run remains outstanding.
+50. **M12-F4 plain-HF artifacts:** clean-process interoperability evidence now
+    has a strict versioned JSON loader. It requires every environment, canonical
+    layout, alias, reload-key, and numerical field; converts JSON key arrays to
+    the immutable evaluation contract; and applies the recorded tolerance. A
+    clean Transformers-only target execution remains outstanding.
+51. **M12-F5 parity report bundle:** versioned report JSON can now be loaded back
+    into the immutable report contract while rejecting unknown fields and
+    malformed array shapes. Every configuration, metric, profile, and HLO path
+    must be relative, confined beneath the report directory, and present, so a
+    reviewer cannot unknowingly consume an incomplete evidence bundle.
+52. **M13-F5 cross-family bundle:** the 135M family matrix now has a strict
+    versioned manifest loader. It reconstructs complete typed family records,
+    rejects schema drift, and confines every per-family evidence reference
+    beneath the manifest directory before applying geometry, correctness,
+    export, graph, and architecture-adjusted MFU gates.
+53. **M13-F7 FSDP scaling bundle:** the review-locked 1.3B target and measured
+    scaling evidence can now be loaded from one strict versioned manifest.
+    Target/evidence schema drift is rejected, and collective plus HBM profile
+    paths must be relative, confined beneath the manifest, and present before
+    the performance, graph, correctness, resume, and export gates run.
+54. **M14-F3 certification bundle:** Tier 0-3 evidence can now be loaded from a
+    strict versioned release manifest that records the exact release commit,
+    evaluation timestamp, and freshness window. Tier artifacts must be relative,
+    confined beneath the manifest, and present before current-evidence
+    certification is evaluated.
+55. **M14-F5 strict support schema:** support-manifest loading now enforces the
+    exact top-level, hardware, execution-path, provider, and TorchTPU field sets.
+    Malformed JSON, incorrect arrays/objects, unknown claim fields, and boolean
+    schema versions fail closed before public explanations are compared with
+    published support levels.
+56. **M13-F6 FSDP policy manifest:** the complete data/FSDP mesh, wrap classes,
+    parameter partition rules, optimizer-state setting, and checkpoint contract
+    now serialize and reconstruct through a strict versioned manifest. Unknown,
+    missing, malformed, and incorrectly shaped nested settings fail before a
+    runtime can consume the policy.
+57. **M13-F6 XLA policy application:** `XlaRuntime` now consumes the validated
+    policy directly, checks topology/rematerialization/module and parameter
+    evidence before mutation, and annotates model parameters plus initialized
+    optimizer tensors with the declared FSDP partitions. The Hugging Face model
+    tree is not replaced. A real 1.3B v5e-8 train/resume/export smoke remains
+    the acceptance gate.
+58. **M13-F6 topology-safe checkpoint resume:** TPU checkpoint schema v2 binds
+    each committed generation and rank payload to its logical mesh axes.
+    Restore rejects same-world-size data/FSDP topology changes and discovery
+    ignores manifests whose mesh product disagrees with their world size.
+    Existing schema-v1 checkpoints remain readable; their mesh is recovered
+    from rank runtime state and validated before any training state is mutated.
+59. **M8-F0 distributed TPU evaluation:** validation data is now partitioned by
+    worker rank instead of replicated. The causal task accumulates local loss
+    numerators and token/sequence denominators on device, performs one backend
+    sum reduction, and only then materializes global loss and perplexity.
+60. **M3 resumable reference split:** the 28-train/2-validation shard fixture
+    now proves disjoint exhaustive rank ownership and exact cursor restoration
+    at every rank-local interruption point, including terminal token counts.
+    M3 is complete; target TPU lifecycle checks remain tracked under M7/M8.
+61. **M4-F4 WSD validation:** exact transition fixtures cover warmup, stable,
+    linear decay, minimum learning rate, and post-horizon clamping. Restoring
+    optimizer and scheduler snapshots mid-run reproduces every subsequent
+    learning rate and scheduler state, closing M4-F4.
+62. **M4-F5 streaming evaluation validation:** variable-mask causal batches
+    match the token-weighted reference without retaining predictions or
+    changing trainer progress, model parameters, training mode, or gradients.
+    This closes M4-F5; callback synchronization and family overfit remain.
+63. **M4-F6 synchronization-safe callbacks:** tensor scalar extraction is now
+    instrumented across sparse logging. Non-logging steps produce no `.item()`
+    calls or live callback tensors; exactly one loss is materialized at the
+    requested boundary and callbacks receive host-only metric snapshots.
+64. **M4-F7 family resume/export matrix:** every tiny dense-AR Transformers
+    fixture now overfits for 30 updates, resumes model/optimizer/scheduler and
+    trainer progress from update 15 to identical final parameters, and reloads
+    the canonical export through `AutoModelForCausalLM` without family branches.
+65. **M8-F1 explicit opaque-semantic evidence:** structural inspection now
+    accepts narrowly scoped adapter evidence for residual and custom
+    normalization semantics that module traversal cannot prove. Claims must be
+    known, inferred, or unsupported and cite evidence; unknown or uncited
+    overrides fail closed. Evidence also names the exact model class, config
+    class, and source provider, and mismatched boundaries are rejected before
+    inspection. This closes M8-F1 without family-name guessing.
+66. **M8-F0 public CLI parity:** the optional `trainlm train` entry point accepts
+    the versioned public YAML plus validated local train/evaluation manifest
+    directories and an optional resume checkpoint. It constructs only public
+    dataset/trainer objects, delegates to `TrainLMTrainer.train()`, and prints a
+    structured result without exposing TPU worker or PJRT arguments. Dataset
+    readers derive sequence geometry and seed from the same validated YAML
+    training arguments passed to the trainer.
+67. **M11-F1 live partial-QKV transform:** adapter-selected wrappers exposing a
+    separate query linear and a combined key/value linear can now be replaced
+    transactionally by one packed projection before optimizer construction.
+    Geometry, bias, dtype, and device are validated; compact query/key/value
+    views preserve output and gradient semantics, and rollback restores the
+    original wrapper. Target-XLA update evidence remains outstanding.
+68. **M11-F1 QKV trainability preservation:** live separate and partial QKV
+    transforms preserve uniformly frozen weights and biases. Mixed
+    `requires_grad` states fail before replacement because one packed parameter
+    cannot represent independent source trainability without changing user
+    fine-tuning semantics.
+69. **M11-F1 QKV alias safety:** live QKV transforms inspect the complete model
+    alias graph before replacement and reject internal or external aliases that
+    concatenating source projections into one parameter cannot preserve. The
+    failure occurs before mutation, leaving tied source parameters intact.
+70. **M11-F2 gated-MLP semantic guards:** live gate/up packing now preserves
+    uniformly frozen weights and biases and rejects mixed trainability. It also
+    checks the full model alias graph before replacement, so tied gate/up or
+    externally aliased parameters fail without mutating the source wrapper.
+71. **M11-F2 already-packed gated MLP:** canonical SwiGLU/GeGLU sources that
+    already expose one gate/up parameter now use an explicit validated
+    no-transform descriptor with derived weight and optional-bias geometry.
+    This preserves their source layout without inventing separate model keys.
+72. **M11-F2 portable update parity:** biased and bias-free live gate/up
+    transforms now compare one post-transform SGD update against the separate
+    reference, including split weight/bias state and subsequent forward output.
+    Target-XLA update parity remains the hardware acceptance gate.
+73. **M11-F1 portable update parity:** separate and partial live QKV transforms
+    now compare one SGD update against their source layouts for biased and
+    bias-free projections. Split packed parameters and subsequent compact Q/K/V
+    outputs match the untransformed reference within explicit float32 bounds;
+    target-XLA parity remains outstanding.
+74. **M8-F5 unambiguous alias manifests:** state-dict layout converters reject
+    overlapping alias groups and aliases involving canonical or transformed
+    mapping keys. This prevents order-dependent restoration and makes every
+    declared tie either preserved unchanged or rejected before conversion.
+75. **M8-F5 strict layout manifests:** layout and mapping loaders now reject
+    unknown fields, non-mapping entries, and malformed key, shape, mapping, or
+    alias-group containers. String values are never silently expanded into
+    character tuples, and schema errors fail before tensor conversion.
+76. **M8-F5 complete schema declarations:** state-dict layout manifests must
+    explicitly provide the schema version, mappings, and alias groups, including
+    empty collections. Boolean schema versions are rejected rather than being
+    accepted through Python's integer equality rules.
+77. **M8-F3 planner boundary validation:** the pure planner now rejects invalid
+    capability objects, empty backend or precision names, unknown policies,
+    malformed operation requests, and invalid adapter resolutions before
+    hashing or provider selection.
+78. **M8-F3 explicit fallback selection:** explicitly requesting an eligible
+    provider marked for automatic fallback now produces a normal selected
+    decision. Fallback status is reserved for automatic choice or substitution
+    after an unavailable explicit request, so decision invariants remain valid.
+79. **M8-F3 required-policy fallback guard:** an unqualified required operation
+    now considers only non-fallback providers. If only portable fallbacks are
+    eligible, planning blocks with explicit fallback-only evidence; explicitly
+    requesting that same provider remains a valid, intentional selection.
+80. **M8-F3 typed fallback declarations:** provider specifications reject
+    integer, string, null, and other non-boolean fallback flags. Planner policy
+    behavior can therefore depend on the flag without Python truthiness
+    silently reclassifying a provider.
+81. **M8-F3 provider-bound plan identity:** plan fingerprints now include the
+    complete provider catalog in stable provider-ID order, including eligibility
+    fields and declared transforms. Identical requests evaluated against
+    different catalogs therefore cannot share an audit ID.
+82. **M8-F3 immutable provider transforms:** provider specifications accept
+    transformation declarations only as tuples. Mutable lists cannot be retained
+    inside a frozen provider and changed after registration, preserving stable
+    selection behavior and provider-bound plan fingerprints.
+83. **M8-F3 component-bound provider transforms:** every provider transformation
+    must name the provider's component as well as its provider ID. A provider
+    selected for one inspected capability therefore cannot smuggle a mutation
+    for an unrelated model component into an otherwise valid execution plan.
+84. **M8-F3 catalog-wide transform identity:** provider construction rejects
+    repeated transformation IDs, and planner registration rejects IDs already
+    owned by another provider. Multi-operation selection therefore cannot fail
+    late while constructing an execution plan with ambiguous transformations.
+85. **M8-F4 strict execution-plan loading:** serialized plans require the full
+    versioned schema and reject unknown keys, malformed collection containers,
+    non-mapping decision/transform entries, and boolean schema versions. A
+    checkpoint cannot silently default omitted plan evidence or accept typos.
+86. **M8-F4 strict nested plan evidence:** serialized provider decisions and
+    transformations require their complete exact field sets. Transformation
+    layout-change flags must be booleans, preventing truthy strings or integers
+    from altering checkpoint/export behavior after plan restoration.
+87. **M8-F0 full-suite fixture isolation:** packed-reader fixtures size their
+    synthetic vocabulary from the generated disjoint shard ranges. Sparse
+    callback synchronization coverage uses a materialized batch iterable so
+    PyTorch DataLoader's internal seed `.item()` is not misattributed to the
+    trainer's loss-materialization boundary.
+88. **M8-F4 execution-plan status invariants:** ready plans require at least one
+    selected or fallback provider, while blocked plans cannot carry transforms.
+    A selected decision with an explicit request must select that exact provider,
+    preventing contradictory restored evidence from reaching execution.
+89. **M8-F4 valid transform fixtures:** transactional transform, QKV, gated-MLP,
+    and rematerialization tests now declare the selected fixture provider in
+    every ready execution plan. The tests exercise the production invariant
+    instead of relying on structurally invalid decision-free ready plans.
+90. **M8-F4 decision-authorized transforms:** an execution plan accepts a
+    transform only when a selected or fallback decision names the same component
+    and provider. Tampered checkpoint plans cannot attach unrelated transforms
+    to an otherwise legitimate provider decision.
+91. **M8-F4 invariant error precedence:** blocked and no-op transformation
+    violations are classified before ready-plan provider authorization. This
+    preserves actionable lifecycle errors while retaining the authorization
+    guard for executable plans.
+92. **M8-F4 disjoint transform targets:** execution plans reject target paths
+    claimed by more than one transform. Transaction capture and rollback cannot
+    become order-dependent through overlapping mutations of the same module.
+93. **M8-F4 serialized overlap fixture:** the tampered-plan regression extends
+    the serialized transformation tuple immutably. It no longer fails in test
+    setup by assuming `dataclasses.asdict()` changes tuples into lists.
+94. **M8-F0 public dry run:** `trainlm train --dry-run` constructs the same
+    versioned configuration, validates local packed datasets, and prints the
+    trainer's dictionary explanation without calling `train()`. This is the
+    final allocation-free command to run before the owner starts a TPU smoke.
+95. **M8-F0 unambiguous dry-run resume boundary:** dry-run and
+    `--resume-from-checkpoint` are mutually exclusive. The CLI never ignores a
+    resume request or claims to validate checkpoint contents without executing
+    the lifecycle path that owns full resume validation.
+96. **M8-F0 public TPU validation notebook:** the target-hardware notebook now
+    uses only `TrainLMTrainer`, `TrainLMTrainingArguments`, `PackedBinDataset`,
+    and the installed public CLI. Its false-by-default execution gate separates
+    host validation from paid TPU allocation, then covers the two-update smoke,
+    scheduled evaluation and committed checkpoints, exact resume, and public
+    evidence fields. Worker scripts, PJRT/rank setup, private coordinator types,
+    and stage-log parsing are absent from the user workflow.
+97. **M8-F0 runtime-owned TPU topology:** world size is discovered after
+    Torch/XLA launches the worker group and is never a public input or a hidden
+    fixed v5e-8 assumption. The collective probe derives its expected result
+    from the discovered topology, while summaries may report the observed world
+    size as evidence. The HF-like call remains `trainer.train()`.
+98. **M8-F0 end-user notebook simplification:** the TPU notebook is no longer a
+    multi-phase orchestration checklist. Its primary path contains only public
+    packed datasets, familiar training arguments, trainer construction, and
+    `trainer.train()`. Evaluation and checkpoint cadence happen within that
+    call; explanation and resume are concise optional examples. Operational
+    artifacts are mentioned only as outputs to archive for maintainers.
+99. **M8-F0 ranged raw-bin Hub intake:** `PackedBinDataset.from_hub()` accepts a
+    dataset repo plus an end-exclusive `(start, stop)` shard range, resolves a
+    mutable selector once to its immutable Hub commit, downloads numbered
+    LaughLM legacy `.bin` files through the standard cache, and streams each
+    payload to derive checksum, token count, and bounds. Generated descriptors
+    feed the existing deterministic reader, train/eval partitions, and private
+    coordinator staging path; users do not create or publish sidecar manifests.
+100. **M8-F0 Hub intake performance boundary:** Hub resolution and full token/
+     checksum validation happen once during dataset construction, before TPU
+     launch. Training reads the resulting local Hugging Face cache files through
+     lazy memory maps, so it performs no network I/O or full-file rescans per
+     batch. Token-bound scanning now uses vectorized Torch chunks instead of a
+     Python loop. The TPU prefetch geometry also consumes the canonical worker
+     `micro_batch_per_device` argument, fixing the end-to-end ranged-data path.
+101. **M8-F0 executable ranged-data notebook:** the public TPU notebook now
+     names an explicit local Hugging Face cache directory, imports every symbol
+     it uses, passes that cache to both train and evaluation range downloads,
+     and explains the lifecycle accurately: download and validation occur
+     before launch, while `trainer.train()` consumes lazy memory-mapped local
+     files without network access in the training loop.
+102. **M8-F0 Kaggle parent-process isolation:** constructing the public trainer
+     exposed Kaggle's preinstalled TensorFlow conflict through Torch/XLA and the
+     notebook kernel terminated before `train()`. The installation section now
+     removes TensorFlow and incompatible vision/audio wheels before installing
+     the pinned TPU profile, requires exactly one session restart, and verifies
+     TensorFlow is no longer importable before importing TrainLM. TPU worker
+     launch remains private; this is environment preparation, not user-managed
+     PJRT or topology configuration.
+103. **M8-F0 interrupt-safe TPU ownership:** the private coordinator launches
+     each stage in a new OS process group and streams output directly to its
+     stage log. On worker failure, notebook interruption, or another wait error,
+     it terminates the launcher and all spawned ranks, escalating to `SIGKILL`
+     after a bounded grace period. Control returns to the public caller without
+     orphaned ranks retaining TPU resources, so a corrected cell can run again.
+104. **M8-F0 model revision resolution:** the validation notebook previously
+     displayed a syntactically valid but nonexistent example commit, which
+     reached worker preflight and produced a misleading missing-`model_type`
+     error. The public TPU facade now accepts `main` or another user-friendly
+     model selector, resolves it on the host to the actual immutable Hub commit,
+     and sends only that commit to workers. The notebook uses `main` rather than
+     encouraging users to paste a fake SHA.
+105. **M8-F0 offline immutable model intake:** explicit commit SHAs pass through
+     without a Hub metadata request, preserving offline/cache-only launches and
+     deterministic coordinator tests. Mutable selectors such as `main` are
+     resolved once before launch; users must supply a real commit when choosing
+     the explicit immutable form.
+106. **M8-F0 HBM-safe validation model:** the public TPU notebook now starts
+     from the locked 135M Llama-shaped configuration (1024 hidden, 8 layers,
+     8 heads, 2816 intermediate) instead of preflighting the 3.8B Phi-3.5
+     checkpoint independently on every data-parallel replica. This validates
+     the lifecycle within v5e-8 HBM before users attempt larger-model sharding.
+107. **M8-F0 config-model worker reconstruction:** the coordinator now
+     serializes the complete validated `ModelSourceConfig` for private workers
+     instead of restricting launch to pretrained IDs. Config-initialized HF
+     models therefore follow the same probe, preflight, train, evaluation, and
+     checkpoint lifecycle without exposing worker arguments to notebook users.
+108. **Consolidated continuation handoff:** `docs/HANDOFF.md` now records the
+     public/data/runtime/optimization implementation state, uses distinct done,
+     partial/evidence-pending, and planned marks, and carries the proposed
+     parallelism, architecture-lab, telemetry, and closed-loop tuning backlog.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

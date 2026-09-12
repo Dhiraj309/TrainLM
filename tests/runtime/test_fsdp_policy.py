@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from trainlm.runtime import FSDPMeshPolicy, ParameterShardingRule
@@ -66,3 +68,34 @@ def test_policy_rejects_topology_and_ambiguous_parameter_rules():
                 ParameterShardingRule(".weight", (None, "fsdp")),
             ),
         )
+
+
+def test_policy_manifest_round_trip_preserves_nested_contracts():
+    selected = policy()
+
+    restored = FSDPMeshPolicy.from_manifest(selected.to_manifest())
+
+    assert restored == selected
+    assert restored.logical_mesh().axis_sizes == {"data": 4, "fsdp": 2}
+
+
+def test_policy_manifest_rejects_schema_drift_and_invalid_arrays():
+    manifest = json.loads(policy().to_manifest())
+    manifest["policy"]["unexpected"] = True
+    with pytest.raises(ValueError, match="policy keys"):
+        FSDPMeshPolicy.from_manifest(manifest)
+
+    manifest = json.loads(policy().to_manifest())
+    manifest["policy"]["parameter_rules"][0]["partition_spec"] = "fsdp"
+    with pytest.raises(ValueError, match="partition_spec must be an array"):
+        FSDPMeshPolicy.from_manifest(manifest)
+
+
+def test_policy_manifest_rejects_malformed_json_and_boolean_version():
+    with pytest.raises(ValueError, match="Invalid FSDP policy manifest"):
+        FSDPMeshPolicy.from_manifest("not-json")
+
+    manifest = json.loads(policy().to_manifest())
+    manifest["schema_version"] = True
+    with pytest.raises(ValueError, match="schema_version=1"):
+        FSDPMeshPolicy.from_manifest(manifest)

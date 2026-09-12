@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
+import json
 import math
+from pathlib import Path
+from typing import Mapping
 
 
 def _positive(name: str, value: int | float) -> None:
@@ -168,9 +171,61 @@ def evaluate_fsdp_scaling(
     )
 
 
+def load_fsdp_scaling_evaluation(
+    manifest_path: str | Path,
+) -> FSDPScalingEvaluation:
+    """Load a locked target and measured FSDP evidence from one bundle."""
+
+    if not isinstance(manifest_path, (str, Path)):
+        raise TypeError("manifest_path must be a path.")
+    path = Path(manifest_path)
+    if not path.is_file():
+        raise ValueError("manifest_path must reference an existing file.")
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Invalid FSDP scaling manifest: {exc}") from exc
+    if not isinstance(manifest, Mapping):
+        raise ValueError("FSDP scaling manifest must contain a JSON object.")
+    if set(manifest) != {"schema_version", "target", "evidence"}:
+        raise ValueError("FSDP scaling manifest keys must match schema version 1.")
+    version = manifest["schema_version"]
+    if isinstance(version, bool) or version != 1:
+        raise ValueError("FSDP scaling manifest supports schema_version=1 only.")
+
+    target_payload = manifest["target"]
+    evidence_payload = manifest["evidence"]
+    if not isinstance(target_payload, Mapping) or set(target_payload) != {
+        field.name for field in fields(FSDPScalingTarget)
+    }:
+        raise ValueError("FSDP scaling target keys must match the schema.")
+    if not isinstance(evidence_payload, Mapping) or set(evidence_payload) != {
+        field.name for field in fields(FSDPScalingEvidence)
+    }:
+        raise ValueError("FSDP scaling evidence keys must match the schema.")
+    try:
+        target = FSDPScalingTarget(**dict(target_payload))
+        evidence = FSDPScalingEvidence(**dict(evidence_payload))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid FSDP scaling evidence: {exc}") from exc
+
+    root = path.resolve().parent
+    for reference in (evidence.collective_artifact, evidence.hbm_artifact):
+        candidate = Path(reference)
+        if candidate.is_absolute():
+            raise ValueError("FSDP scaling artifact paths must be relative.")
+        resolved = (root / candidate).resolve()
+        if not resolved.is_relative_to(root) or not resolved.is_file():
+            raise ValueError(
+                "FSDP scaling artifact path escapes the manifest or is missing."
+            )
+    return evaluate_fsdp_scaling(evidence, target)
+
+
 __all__ = [
     "FSDPScalingEvaluation",
     "FSDPScalingEvidence",
     "FSDPScalingTarget",
     "evaluate_fsdp_scaling",
+    "load_fsdp_scaling_evaluation",
 ]

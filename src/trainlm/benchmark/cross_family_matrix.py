@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
+import json
 import math
-from typing import Literal
+from pathlib import Path
+from typing import Any, Literal, Mapping
 
 
 SupportLevel = Literal["certified", "experimental", "unsupported"]
@@ -30,7 +32,12 @@ class CrossFamilyRecord:
     evidence_artifact: str
 
     def __post_init__(self) -> None:
-        for name in ("family_id", "workload_id", "accelerator_type", "evidence_artifact"):
+        for name in (
+            "family_id",
+            "workload_id",
+            "accelerator_type",
+            "evidence_artifact",
+        ):
             value = getattr(self, name)
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"{name} cannot be empty.")
@@ -50,7 +57,12 @@ class CrossFamilyRecord:
                 raise TypeError(f"{name} must be numeric.")
             if not math.isfinite(value) or value <= 0:
                 raise ValueError(f"{name} must be finite and positive.")
-        for name in ("full_attention", "correctness_passed", "graph_passed", "export_passed"):
+        for name in (
+            "full_attention",
+            "correctness_passed",
+            "graph_passed",
+            "export_passed",
+        ):
             if not isinstance(getattr(self, name), bool):
                 raise TypeError(f"{name} must be boolean.")
 
@@ -84,7 +96,12 @@ def evaluate_cross_family_matrix(
         raise ValueError("advertised_families must contain non-empty IDs.")
     if len(advertised_families) != len(set(advertised_families)):
         raise ValueError("advertised_families must be unique.")
-    if not 0 < minimum_full_attention_mfu <= 1:
+    if (
+        isinstance(minimum_full_attention_mfu, bool)
+        or not isinstance(minimum_full_attention_mfu, (int, float))
+        or not math.isfinite(minimum_full_attention_mfu)
+        or not 0 < minimum_full_attention_mfu <= 1
+    ):
         raise ValueError("minimum_full_attention_mfu must be in (0, 1].")
     if any(not isinstance(record, CrossFamilyRecord) for record in records):
         raise TypeError("records must contain CrossFamilyRecord values.")
@@ -113,10 +130,14 @@ def evaluate_cross_family_matrix(
         for record in records[1:]:
             for field in geometry:
                 if getattr(record, field) != getattr(reference, field):
-                    reasons.append(f"{record.family_id}: {field} does not match the matrix")
+                    reasons.append(
+                        f"{record.family_id}: {field} does not match the matrix"
+                    )
     for record in records:
         if record.support_level != "certified":
-            reasons.append(f"{record.family_id}: support level is {record.support_level!r}")
+            reasons.append(
+                f"{record.family_id}: support level is {record.support_level!r}"
+            )
         for field in ("correctness_passed", "graph_passed", "export_passed"):
             if not getattr(record, field):
                 evidence = field.removesuffix("_passed")
@@ -139,9 +160,76 @@ def evaluate_cross_family_matrix(
     )
 
 
+def load_cross_family_matrix_evaluation(
+    manifest_path: str | Path,
+) -> CrossFamilyMatrixEvaluation:
+    """Load a strict matrix manifest and verify each evidence artifact."""
+
+    if not isinstance(manifest_path, (str, Path)):
+        raise TypeError("manifest_path must be a path.")
+    path = Path(manifest_path)
+    if not path.is_file():
+        raise ValueError("manifest_path must reference an existing file.")
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Invalid cross-family matrix manifest: {exc}") from exc
+    if not isinstance(manifest, Mapping):
+        raise ValueError("Cross-family matrix manifest must contain a JSON object.")
+    if set(manifest) != {
+        "schema_version",
+        "advertised_families",
+        "minimum_full_attention_mfu",
+        "records",
+    }:
+        raise ValueError(
+            "Cross-family matrix manifest keys must match schema version 1."
+        )
+    version = manifest["schema_version"]
+    if isinstance(version, bool) or version != 1:
+        raise ValueError("Cross-family matrix manifest supports schema_version=1 only.")
+    advertised = manifest["advertised_families"]
+    records_payload = manifest["records"]
+    if isinstance(advertised, (str, bytes)) or not isinstance(advertised, list):
+        raise ValueError("advertised_families must be a JSON array.")
+    if isinstance(records_payload, (str, bytes)) or not isinstance(
+        records_payload, list
+    ):
+        raise ValueError("records must be a JSON array.")
+
+    expected_record = {field.name for field in fields(CrossFamilyRecord)}
+    records = []
+    root = path.resolve().parent
+    for index, payload in enumerate(records_payload):
+        if not isinstance(payload, Mapping) or set(payload) != expected_record:
+            raise ValueError(f"record {index} keys must match the versioned schema.")
+        try:
+            record = CrossFamilyRecord(**dict(payload))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid cross-family record {index}: {exc}") from exc
+        evidence_path = Path(record.evidence_artifact)
+        if evidence_path.is_absolute():
+            raise ValueError("Cross-family evidence paths must be relative.")
+        resolved = (root / evidence_path).resolve()
+        if not resolved.is_relative_to(root) or not resolved.is_file():
+            raise ValueError(
+                "Cross-family evidence path escapes the manifest or is missing."
+            )
+        records.append(record)
+    try:
+        return evaluate_cross_family_matrix(
+            tuple(records),
+            advertised_families=tuple(advertised),
+            minimum_full_attention_mfu=manifest["minimum_full_attention_mfu"],
+        )
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid cross-family matrix gate: {exc}") from exc
+
+
 __all__ = [
     "CrossFamilyMatrixEvaluation",
     "CrossFamilyRecord",
     "SupportLevel",
     "evaluate_cross_family_matrix",
+    "load_cross_family_matrix_evaluation",
 ]

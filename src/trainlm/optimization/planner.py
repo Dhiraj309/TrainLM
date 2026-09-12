@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 import hashlib
 import json
 from typing import Iterable
@@ -55,6 +55,8 @@ class ProviderSpec:
             object.__setattr__(self, name, _strings(name, getattr(self, name)))
         if not self.backends or not self.precisions:
             raise ValueError("Providers require at least one backend and precision.")
+        if not isinstance(self.transformations, tuple):
+            raise ValueError("Provider transformations must be a tuple.")
         if any(
             not isinstance(transform, ModelTransformation)
             for transform in self.transformations
@@ -62,6 +64,13 @@ class ProviderSpec:
             raise ValueError("Provider transformations must be ModelTransformation values.")
         if any(transform.provider != self.provider_id for transform in self.transformations):
             raise ValueError("Provider transformations must name their owning provider.")
+        if any(transform.component != self.component for transform in self.transformations):
+            raise ValueError("Provider transformations must target their owning component.")
+        transform_ids = [transform.transform_id for transform in self.transformations]
+        if len(transform_ids) != len(set(transform_ids)):
+            raise ValueError("Provider transformation IDs must be unique.")
+        if not isinstance(self.fallback, bool):
+            raise ValueError("Provider fallback must be a boolean.")
         if isinstance(self.priority, bool) or not isinstance(self.priority, int):
             raise ValueError("Provider priority must be an integer.")
 
@@ -100,6 +109,20 @@ class OptimizationPlanner:
             raise TypeError("provider must be a ProviderSpec.")
         if provider.provider_id in self._providers:
             raise ValueError(f"Provider already registered: {provider.provider_id}")
+        registered_transform_ids = {
+            transform.transform_id
+            for registered in self._providers.values()
+            for transform in registered.transformations
+        }
+        duplicate_transform_ids = sorted(
+            registered_transform_ids
+            & {transform.transform_id for transform in provider.transformations}
+        )
+        if duplicate_transform_ids:
+            raise ValueError(
+                "Provider transformation IDs already registered: "
+                f"{duplicate_transform_ids!r}"
+            )
         self._providers[provider.provider_id] = provider
 
     def plan(
@@ -113,7 +136,25 @@ class OptimizationPlanner:
         adapter_resolution: AdapterResolution | None = None,
         runtime_features: tuple[str, ...] = (),
     ) -> ExecutionPlan:
+        if not isinstance(capabilities, ModelCapabilities):
+            raise TypeError("capabilities must be ModelCapabilities.")
+        for name, value in (("backend", backend), ("precision", precision)):
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{name} must be a non-empty string.")
+        if not isinstance(policy, str) or policy not in {
+            "disabled",
+            "auto",
+            "required",
+        }:
+            raise ValueError(f"Unsupported optimization policy: {policy}")
+        if adapter_resolution is not None and not isinstance(
+            adapter_resolution,
+            AdapterResolution,
+        ):
+            raise TypeError("adapter_resolution must be AdapterResolution or None.")
         requests = tuple(requests)
+        if any(not isinstance(item, OperationRequest) for item in requests):
+            raise TypeError("requests must contain OperationRequest values.")
         runtime_features = _strings("runtime_features", runtime_features)
         if len({(item.component, item.operation) for item in requests}) != len(requests):
             raise ValueError("Operation requests must be unique by component and operation.")
@@ -129,6 +170,13 @@ class OptimizationPlanner:
             "policy": policy,
             "adapter": adapter_id,
             "runtime_features": runtime_features,
+            "providers": [
+                asdict(provider)
+                for provider in sorted(
+                    self._providers.values(),
+                    key=lambda item: item.provider_id,
+                )
+            ],
             "requests": [
                 [item.component, item.operation, item.requirements, item.requested_provider]
                 for item in requests
@@ -172,7 +220,14 @@ class OptimizationPlanner:
             requested = request.requested_provider
             chosen = next((item for item in eligible if item.provider_id == requested), None)
             if requested is None:
-                chosen = (preferred or fallbacks or [None])[0]
+                candidates = preferred if policy == "required" else preferred or fallbacks
+                chosen = (candidates or [None])[0]
+                if chosen is None and policy == "required" and fallbacks:
+                    rejected.extend(
+                        f"{item.provider_id}: fallback-only provider does not "
+                        "satisfy required policy"
+                        for item in fallbacks
+                    )
             if chosen is None and policy == "auto" and fallbacks:
                 chosen = fallbacks[0]
             if chosen is None:
@@ -193,7 +248,11 @@ class OptimizationPlanner:
                 else:
                     warnings.append(reason)
                 continue
-            is_fallback = chosen.fallback or (requested is not None and chosen.provider_id != requested)
+            is_fallback = (
+                requested is None and chosen.fallback
+            ) or (
+                requested is not None and chosen.provider_id != requested
+            )
             decisions.append(ProviderDecision(
                 decision_id=f"{request.component}.{request.operation}",
                 component=request.component,

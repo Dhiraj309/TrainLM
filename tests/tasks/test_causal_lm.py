@@ -157,6 +157,29 @@ def test_causal_task_streaming_evaluation_matches_batch_aggregation():
     )
 
 
+def test_causal_task_reduces_weighted_evaluation_totals_across_replicas():
+    class DistributedRuntime(Runtime):
+        @property
+        def world_size(self):
+            return 2
+
+        def reduce_sum(self, value):
+            # The remote rank contributes loss numerator 4 and token weight 2.
+            return value + value.new_tensor((4.0, 2.0))
+
+    result = TaskResult(
+        loss=torch.tensor(2.0),
+        tokens=TokenCounts(1, 4, 3, 3, 0),
+    )
+
+    metrics = CausalLMTask().aggregate_distributed_evaluation_stream(
+        iter((result,)), DistributedRuntime()
+    )
+
+    assert metrics["eval_loss"] == pytest.approx(10.0 / 5.0)
+    assert metrics["eval_perplexity"] == pytest.approx(torch.exp(torch.tensor(2.0)))
+
+
 @pytest.mark.parametrize(
     ("implementation", "expected_source"),
     (

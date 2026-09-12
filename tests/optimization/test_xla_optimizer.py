@@ -1,9 +1,12 @@
 import pytest
 
+from trainlm.config import OptimizerConfig
 from trainlm.optimization import (
+    MaterializedXLAAdamWPolicy,
     XLAAdamWPolicy,
     XLAOptimizerEvidence,
     evaluate_xla_optimizer_path,
+    materialize_xla_adamw_policy,
 )
 
 
@@ -58,3 +61,40 @@ def test_policy_json_is_stable():
     policy = XLAAdamWPolicy(gradient_clip_norm=1.0, gradient_reduction="mean")
     assert policy.to_json() == policy.to_json()
     assert '"first_moment_dtype": "bfloat16"' in policy.to_json()
+
+
+def test_policy_materializes_optimizer_state_and_trainer_values():
+    source = OptimizerConfig(
+        learning_rate=2e-4,
+        betas=(0.9, 0.95),
+        eps=1e-8,
+        weight_decay=0.1,
+        fused=True,
+        mu_dtype="float32",
+        nu_dtype="bfloat16",
+    )
+    policy = XLAAdamWPolicy(
+        first_moment_dtype="bfloat16",
+        gradient_clip_norm=1.0,
+        gradient_reduction="mean",
+    )
+
+    result = materialize_xla_adamw_policy(policy, source)
+
+    assert isinstance(result, MaterializedXLAAdamWPolicy)
+    assert result.optimizer.learning_rate == source.learning_rate
+    assert result.optimizer.betas == source.betas
+    assert result.optimizer.fused is False
+    assert result.optimizer.mu_dtype == "bfloat16"
+    assert result.optimizer.nu_dtype == "float32"
+    assert result.gradient_clip_norm == 1.0
+    assert result.gradient_reduction == "mean"
+    assert source.fused is True
+    assert source.nu_dtype == "bfloat16"
+
+
+def test_policy_materialization_validates_public_inputs():
+    with pytest.raises(TypeError, match="policy"):
+        materialize_xla_adamw_policy(object(), OptimizerConfig())
+    with pytest.raises(TypeError, match="optimizer"):
+        materialize_xla_adamw_policy(XLAAdamWPolicy(), object())

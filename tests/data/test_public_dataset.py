@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
+import struct
+
 import pytest
 import torch
 
@@ -77,6 +80,58 @@ def test_hub_dataset_uses_revision_pinned_validated_source(tmp_path, monkeypatch
     assert tuple(staged.glob("*.manifest.json"))
     assert (staged / shard.manifest.data_path).is_file()
     dataset.close()
+
+
+def test_hub_bin_range_downloads_and_validates_end_to_end(tmp_path, monkeypatch):
+    revision = "b" * 40
+    files = {}
+    for index, tokens in enumerate(((1, 2, 3, 4), (5, 6, 7, 8))):
+        path = tmp_path / f"laughlm-v1_shard_{index:05d}.bin"
+        path.write_bytes(bytes(1024) + struct.pack("<4H", *tokens))
+        files[f"laughlm-v1/laughlm-v1_shard_{index:05d}.bin"] = path
+    downloads = []
+
+    monkeypatch.setattr(
+        "trainlm.data.public._resolve_hub_revision",
+        lambda repo_id, requested, local_files_only: revision,
+    )
+
+    def download(**kwargs):
+        downloads.append(kwargs)
+        return files[kwargs["filename"]]
+
+    monkeypatch.setattr("trainlm.data.public._download_hub_file", download)
+
+    dataset = PackedBinDataset.from_hub(
+        "LaughTaleAI/LaughLM-Tokenized-Fine",
+        revision="main",
+        shard_range=(0, 2),
+        sequence_length=4,
+        vocab_size=32,
+    )
+
+    assert dataset.hub_revision == revision
+    assert [call["filename"] for call in downloads] == [
+        "laughlm-v1/laughlm-v1_shard_00000.bin",
+        "laughlm-v1/laughlm-v1_shard_00001.bin",
+    ]
+    assert [tuple(example["input_ids"].tolist()) for example in dataset] == [
+        (1, 2, 3, 4),
+        (5, 6, 7, 8),
+    ]
+    staged = dataset.coordinator_manifest_dir(tmp_path / "run")
+    manifests = sorted(staged.glob("*.manifest.json"))
+    assert len(manifests) == 2
+    assert hashlib.sha256(files[downloads[0]["filename"]].read_bytes()).hexdigest() in (
+        manifests[0].read_text(encoding="utf-8")
+    )
+    dataset.close()
+
+
+@pytest.mark.parametrize("shard_range", [(2, 2), (-1, 2), range(0, 3, 2)])
+def test_hub_bin_range_rejects_invalid_ranges(shard_range):
+    with pytest.raises((TypeError, ValueError), match="shard_range"):
+        PackedBinDataset._shard_indices(shard_range)
 
 
 def test_directory_dataset_rejects_missing_or_invalid_manifests(tmp_path):
