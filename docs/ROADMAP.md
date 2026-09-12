@@ -209,6 +209,10 @@ the entire payload for bounds and SHA-256 before creating validated in-memory
 manifest descriptors. No sidecar upload is required. Tokenizer identity
 (`microsoft/Phi-3.5-mini-instruct` in the supplied metadata) must also match
 the model vocabulary mapping before parity results are meaningful.
+The first public lifecycle smoke uses the locked from-scratch 135M
+Llama-shaped reference configuration rather than loading the full 3.8B Phi
+checkpoint on every replica; larger pretrained-model validation follows only
+after an explicit state-sharding plan is selected.
 
 Kaggle installation checkpoint (2026-09-05): the editable install completed
 with the pinned Torch 2.9.0, Torch/XLA 2.9.0, Transformers 5.15.0, and libtpu

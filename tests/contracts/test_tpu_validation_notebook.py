@@ -23,9 +23,11 @@ def test_tpu_notebook_demonstrates_the_public_hf_like_workflow():
         "%pip uninstall -y tensorflow torchvision torchaudio",
         "Restart Session",
         "TensorFlow is still importable",
-        'MODEL_REVISION = "main"',
-        "TrainLMTrainer.from_pretrained",
-        "TrainLMTrainingArguments",
+        '"initialization": "config"',
+        '"model_type": "llama"',
+        '"hidden_size": 1024',
+        '"num_hidden_layers": 8',
+        "TrainLMTrainer.from_config",
         "PackedBinDataset.from_hub",
         "shard_range=(0, TRAIN_SHARD_STOP)",
         "shard_range=(TRAIN_SHARD_STOP, TRAIN_SHARD_STOP + 1)",
@@ -34,8 +36,8 @@ def test_tpu_notebook_demonstrates_the_public_hf_like_workflow():
         "result = trainer.train()",
         "terminates the complete private worker process group",
         'trainer.explain(format="text")',
-        "eval_steps=2",
-        "save_steps=2",
+        '"eval_steps": 2',
+        '"save_steps": 2',
         "resume_from_checkpoint=OUTPUT_DIR",
     ):
         assert required in source
@@ -57,3 +59,5 @@ def test_tpu_notebook_hides_orchestration_and_topology_inputs():
         "--expected-world-size",
     ):
         assert private_detail not in source
+
+    assert "microsoft/Phi-3.5-mini-instruct" not in source

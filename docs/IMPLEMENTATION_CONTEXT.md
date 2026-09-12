@@ -659,6 +659,11 @@ this file in every turn:
      deterministic coordinator tests. Mutable selectors such as `main` are
      resolved once before launch; users must supply a real commit when choosing
      the explicit immutable form.
+106. **M8-F0 HBM-safe validation model:** the public TPU notebook now starts
+     from the locked 135M Llama-shaped configuration (1024 hidden, 8 layers,
+     8 heads, 2816 intermediate) instead of preflighting the 3.8B Phi-3.5
+     checkpoint independently on every data-parallel replica. This validates
+     the lifecycle within v5e-8 HBM before users attempt larger-model sharding.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
