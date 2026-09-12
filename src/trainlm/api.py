@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, replace
+from functools import lru_cache
 from pathlib import Path
 import re
 from typing import TYPE_CHECKING, Any, Literal
@@ -59,6 +60,7 @@ DEPRECATED_CONFIG_KEYS = {"args": "training_args"}
 _COMMIT_SHA = re.compile(r"[0-9a-f]{40}")
 
 
+@lru_cache(maxsize=128)
 def _resolve_hugging_face_model_revision(
     repo_id: str, revision: str | None
 ) -> str:
@@ -615,13 +617,13 @@ class TrainLMTrainer:
             and self._model_source.initialization == "pretrained"
             and not is_local_model
         ):
-            revision = self._model_source.revision
-            if revision is None or _COMMIT_SHA.fullmatch(revision) is None:
+            revision = _resolve_hugging_face_model_revision(
+                self._model_source.name_or_path, self._model_source.revision
+            )
+            if revision != self._model_source.revision:
                 self._model_source = replace(
                     self._model_source,
-                    revision=_resolve_hugging_face_model_revision(
-                        self._model_source.name_or_path, revision
-                    ),
+                    revision=revision,
                 )
         if isinstance(self.train_dataset, PackedBinDataset):
             manifest_dir = self.train_dataset.coordinator_manifest_dir(
