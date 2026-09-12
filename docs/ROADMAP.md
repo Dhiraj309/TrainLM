@@ -845,6 +845,8 @@ loaded HF models safely without family logic in core.
   plans with explicit provider decisions rather than bypassing that invariant.
   Every executable transform must match both the component and provider of a
   selected or fallback decision, preventing unauthorised restored mutations.
+  Status-specific validation runs before transform authorization so malformed
+  blocked/no-op plans retain their actionable lifecycle error classification.
 
 - [x] **M8-F5 — State-dict conversion**
   `feat(optimization): add reversible parameter layout mappings`
