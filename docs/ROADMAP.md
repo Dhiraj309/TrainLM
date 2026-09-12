@@ -186,12 +186,13 @@ baseline are complete; M6 cross-family and M7 reliability gates remain
 tracked validation work. Do not run the full 20B-token workload yet; use the
 evidence to decide whether each optimization is ready for TPU measurement.
 
-Validation artifact: `notebooks/TrainLM_TPU_Validation.ipynb` now provides the
-repeatable installation, environment check, HF model acquisition, packed `.bin`
-manifest validation, XLA trainer construction, smoke run, measured run, and
-optional plain-Transformers export. It must be run on TPU; no local execution
-is implied. The notebook deliberately leaves exact-resume checkpoint writing
-to the application-owned callback required by the M7 contract.
+Validation artifact: `notebooks/TrainLM_TPU_Validation.ipynb` now exercises the
+public facade from a fresh TPU session: immutable model input, eager train/eval
+packed-data validation, allocation-free API and CLI dry runs, a two-update
+smoke, scheduled evaluation and rank-local checkpointing, exact resume, and
+public evidence review. It must be run on TPU; no local execution is implied.
+The notebook never invokes worker scripts, configures PJRT/ranks, imports
+private coordinator types, or parses stage logs.
 
 The notebook includes a corrected Kaggle/Colab bootstrap and consolidated
 import order; the attached reference notebook's import cell was marked as
@@ -780,6 +781,11 @@ loaded HF models safely without family logic in core.
   providing a safe final host-side check before TPU allocation.
   Dry-run rejects a resume argument instead of silently implying that checkpoint
   contents were validated without entering the training lifecycle.
+  The TPU validation notebook now drives this public boundary end to end and
+  gates all hardware allocation behind an explicit false-by-default switch. It
+  covers smoke, scheduled evaluation/checkpoint cadence, resume from a committed
+  rank-local checkpoint, and public throughput/evidence fields without exposing
+  any coordinator implementation detail.
 
 - [x] **M8-F1 — Structural inspector**
   `feat(optimization): inspect dense causal LM capabilities`

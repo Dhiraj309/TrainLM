@@ -595,6 +595,13 @@ this file in every turn:
     `--resume-from-checkpoint` are mutually exclusive. The CLI never ignores a
     resume request or claims to validate checkpoint contents without executing
     the lifecycle path that owns full resume validation.
+96. **M8-F0 public TPU validation notebook:** the target-hardware notebook now
+    uses only `TrainLMTrainer`, `TrainLMTrainingArguments`, `PackedBinDataset`,
+    and the installed public CLI. Its false-by-default execution gate separates
+    host validation from paid TPU allocation, then covers the two-update smoke,
+    scheduled evaluation and committed checkpoints, exact resume, and public
+    evidence fields. Worker scripts, PJRT/rank setup, private coordinator types,
+    and stage-log parsing are absent from the user workflow.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
