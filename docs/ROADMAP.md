@@ -843,6 +843,8 @@ loaded HF models safely without family logic in core.
   selected decision must name the provider that was actually requested.
   Transform, QKV, MLP, and rematerialization fixtures construct valid ready
   plans with explicit provider decisions rather than bypassing that invariant.
+  Every executable transform must match both the component and provider of a
+  selected or fallback decision, preventing unauthorised restored mutations.
 
 - [x] **M8-F5 — State-dict conversion**
   `feat(optimization): add reversible parameter layout mappings`

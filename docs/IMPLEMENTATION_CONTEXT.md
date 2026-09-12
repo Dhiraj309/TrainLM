@@ -573,6 +573,10 @@ this file in every turn:
     and rematerialization tests now declare the selected fixture provider in
     every ready execution plan. The tests exercise the production invariant
     instead of relying on structurally invalid decision-free ready plans.
+90. **M8-F4 decision-authorized transforms:** an execution plan accepts a
+    transform only when a selected or fallback decision names the same component
+    and provider. Tampered checkpoint plans cannot attach unrelated transforms
+    to an otherwise legitimate provider decision.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

@@ -33,6 +33,15 @@ def plan():
                 requirements=("causal_mask", "backward"),
                 evidence=("capability.attention",),
             ),
+            ProviderDecision(
+                decision_id="projection-provider",
+                component="projections",
+                operation="transform",
+                status="selected",
+                selected_provider="trainlm.qkv_pack",
+                reason="Packed QKV provider is compatible.",
+                evidence=("capability.projections",),
+            ),
         ),
         transformations=(
             ModelTransformation(
@@ -206,3 +215,16 @@ def test_ready_plan_must_select_at_least_one_provider():
             backend="pytorch-xla",
             precision="bf16",
         )
+
+
+@pytest.mark.parametrize(
+    ("component", "provider"),
+    (("attention", "trainlm.qkv_pack"), ("projections", "unselected-provider")),
+)
+def test_transformations_require_matching_selected_provider(component, provider):
+    values = plan().to_dict()
+    values["transformations"][0]["component"] = component
+    values["transformations"][0]["provider"] = provider
+
+    with pytest.raises(ValueError, match="matching selected provider decision"):
+        ExecutionPlan.from_dict(values)
