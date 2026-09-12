@@ -819,6 +819,9 @@ loaded HF models safely without family logic in core.
   provider has been registered or a plan ID has been recorded. Every declared
   transform must also target the provider's own component, preventing a
   provider selected for one capability from mutating an unrelated component.
+  Transformation IDs are unique within each provider and across the registered
+  catalog, so independently selected operations cannot produce an invalid plan
+  with ambiguous transform identity.
 
 - [x] **M8-F4 — Transactional transforms**
   `feat(optimization): apply validated reversible model transforms`
