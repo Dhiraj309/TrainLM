@@ -607,6 +607,12 @@ this file in every turn:
     fixed v5e-8 assumption. The collective probe derives its expected result
     from the discovered topology, while summaries may report the observed world
     size as evidence. The HF-like call remains `trainer.train()`.
+98. **M8-F0 end-user notebook simplification:** the TPU notebook is no longer a
+    multi-phase orchestration checklist. Its primary path contains only public
+    packed datasets, familiar training arguments, trainer construction, and
+    `trainer.train()`. Evaluation and checkpoint cadence happen within that
+    call; explanation and resume are concise optional examples. Operational
+    artifacts are mentioned only as outputs to archive for maintainers.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

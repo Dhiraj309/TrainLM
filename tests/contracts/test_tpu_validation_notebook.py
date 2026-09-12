@@ -16,39 +16,33 @@ def _source() -> str:
     return "\n".join("".join(cell["source"]) for cell in payload["cells"])
 
 
-def test_tpu_validation_notebook_uses_only_the_public_training_boundary():
+def test_tpu_notebook_demonstrates_the_public_hf_like_workflow():
     source = _source()
 
     for required in (
-        "TrainLMTrainer",
+        "TrainLMTrainer.from_pretrained",
         "TrainLMTrainingArguments",
         "PackedBinDataset.from_directory",
-        "trainer.explain",
-        "python -m trainlm train",
-        "--dry-run",
-        "save_steps",
-        "eval_steps",
-        "resume_from_checkpoint",
-        "checkpoint-4",
+        "result = trainer.train()",
+        'trainer.explain(format="text")',
+        "eval_steps=2",
+        "save_steps=2",
+        "resume_from_checkpoint=OUTPUT_DIR",
     ):
         assert required in source
+
+
+def test_tpu_notebook_hides_orchestration_and_topology_inputs():
+    source = _source()
 
     for private_detail in (
         "trainlm_tpu_worker.py",
         "_TPUCoordinator",
         "_TPURunRequest",
+        "expected_world_size",
         "PJRT_",
         "torch_xla.launch",
         "subprocess",
+        "--expected-world-size",
     ):
         assert private_detail not in source
-
-
-def test_tpu_validation_notebook_has_explicit_cost_and_evidence_gates():
-    source = _source()
-
-    assert 'TRAINLM_RUN_TPU' in source
-    assert 'RUN_TPU = False' in source
-    assert "steady_global_supervised_tokens_per_second" in source
-    assert "performance_certified" in source
-    assert "Target-hardware acceptance checklist" in source

@@ -187,12 +187,13 @@ tracked validation work. Do not run the full 20B-token workload yet; use the
 evidence to decide whether each optimization is ready for TPU measurement.
 
 Validation artifact: `notebooks/TrainLM_TPU_Validation.ipynb` now exercises the
-public facade from a fresh TPU session: immutable model input, eager train/eval
-packed-data validation, allocation-free API and CLI dry runs, a two-update
-smoke, scheduled evaluation and rank-local checkpointing, exact resume, and
-public evidence review. It must be run on TPU; no local execution is implied.
-The notebook never invokes worker scripts, configures PJRT/ranks, imports
-private coordinator types, or parses stage logs.
+public facade from a fresh TPU session with the same concise workflow proposed
+to end users: provide immutable model and validated packed-data inputs, create
+familiar training arguments, and call `trainer.train()`. Evaluation and save
+cadence are demonstrated in the same run, with one optional public resume
+example. It must be run on TPU; no local execution is implied. The notebook
+never invokes worker scripts, selects a world size, configures PJRT/ranks,
+imports private coordinator types, or parses stage logs.
 
 The notebook includes a corrected Kaggle/Colab bootstrap and consolidated
 import order; the attached reference notebook's import cell was marked as
@@ -781,11 +782,10 @@ loaded HF models safely without family logic in core.
   providing a safe final host-side check before TPU allocation.
   Dry-run rejects a resume argument instead of silently implying that checkpoint
   contents were validated without entering the training lifecycle.
-  The TPU validation notebook now drives this public boundary end to end and
-  gates all hardware allocation behind an explicit false-by-default switch. It
-  covers smoke, scheduled evaluation/checkpoint cadence, resume from a committed
-  rank-local checkpoint, and public throughput/evidence fields without exposing
-  any coordinator implementation detail.
+  The TPU validation notebook now presents one uncluttered end-user run rather
+  than a coordinator test harness: construct datasets and familiar arguments,
+  then call `trainer.train()`. Scheduled evaluation/checkpoint cadence is part
+  of that run, and exact resume is a separate optional public call.
   TPU topology is runtime-discovered inside launched workers. Neither the public
   arguments, coordinator request, CLI, nor notebook asks users to predict a
   world size; collective validation derives its expected rank sum from the
