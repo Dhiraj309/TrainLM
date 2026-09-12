@@ -654,11 +654,11 @@ this file in every turn:
      model selector, resolves it on the host to the actual immutable Hub commit,
      and sends only that commit to workers. The notebook uses `main` rather than
      encouraging users to paste a fake SHA.
-105. **M8-F0 model revision verification:** the host now asks the Hub to resolve
-     every remote model revision, including strings that already look like a
-     commit SHA. This prevents a fabricated or deleted 40-character value from
-     reaching TPU preflight; successful lookups are cached in-process so reruns
-     do not add repeated Hub metadata requests.
+105. **M8-F0 offline immutable model intake:** explicit commit SHAs pass through
+     without a Hub metadata request, preserving offline/cache-only launches and
+     deterministic coordinator tests. Mutable selectors such as `main` are
+     resolved once before launch; users must supply a real commit when choosing
+     the explicit immutable form.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

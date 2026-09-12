@@ -1383,9 +1383,9 @@ early-update evidence gate are implemented; target-run alignment remains.
   immutable model/data revisions, disjoint train/eval shard lists, preflight
   explanation, committed-checkpoint resume, and explicitly documents that TPU
   canonical export remains unavailable. The facade resolves user-friendly
-  remote model revisions to immutable Hub commits before coordinator launch,
-  verifies even commit-shaped inputs against the Hub, and caches successful
-  resolution for notebook reruns.
+  remote model revisions to immutable Hub commits before coordinator launch.
+  Explicit commit SHAs remain usable without a metadata request for offline,
+  cache-only execution.
   Target clean-environment smoke remains.
   **Acceptance:** Secret scan and clean-environment smoke pass.
 
