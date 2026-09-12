@@ -83,6 +83,14 @@ class ProviderDecision:
         if self.status == "fallback" and not self.requested_provider:
             raise ValueError("Fallback decisions must record the requested provider.")
         if (
+            self.status == "selected"
+            and self.requested_provider is not None
+            and self.requested_provider != self.selected_provider
+        ):
+            raise ValueError(
+                "Selected decisions must match their explicitly requested provider."
+            )
+        if (
             self.status == "fallback"
             and self.requested_provider == self.selected_provider
         ):
@@ -236,8 +244,15 @@ class ExecutionPlan:
             raise ValueError("Execution plan transformation IDs must be unique.")
         if self.status == "blocked" and not self.errors:
             raise ValueError("Blocked execution plans must explain their errors.")
+        if self.status == "blocked" and self.transformations:
+            raise ValueError("Blocked execution plans cannot contain transformations.")
         if self.status != "blocked" and self.errors:
             raise ValueError("Only blocked execution plans may contain errors.")
+        if self.status == "ready" and not any(
+            decision.status in {"selected", "fallback"}
+            for decision in self.decisions
+        ):
+            raise ValueError("Ready execution plans must select a provider.")
         if self.status == "noop" and self.transformations:
             raise ValueError("No-op execution plans cannot contain transformations.")
         if self.status == "noop" and any(

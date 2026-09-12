@@ -565,6 +565,10 @@ this file in every turn:
     callback synchronization coverage uses a materialized batch iterable so
     PyTorch DataLoader's internal seed `.item()` is not misattributed to the
     trainer's loss-materialization boundary.
+88. **M8-F4 execution-plan status invariants:** ready plans require at least one
+    selected or fallback provider, while blocked plans cannot carry transforms.
+    A selected decision with an explicit request must select that exact provider,
+    preventing contradictory restored evidence from reaching execution.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

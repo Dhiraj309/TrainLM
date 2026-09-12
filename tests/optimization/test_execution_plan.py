@@ -165,3 +165,44 @@ def test_model_transformation_requires_boolean_layout_flag(value):
 
     with pytest.raises(ValueError, match="parameter_layout_change must be a boolean"):
         ModelTransformation.from_dict(values)
+
+
+def test_selected_decision_must_match_explicit_provider_request():
+    with pytest.raises(ValueError, match="match their explicitly requested provider"):
+        ProviderDecision(
+            decision_id="mismatched-selection",
+            component="attention",
+            operation="forward_backward",
+            status="selected",
+            reason="Invalid selected-provider evidence.",
+            selected_provider="torch-sdpa",
+            requested_provider="pallas",
+        )
+
+
+def test_blocked_plan_cannot_retain_transformations():
+    with pytest.raises(ValueError, match="Blocked execution plans cannot contain"):
+        ExecutionPlan(
+            schema_version=1,
+            plan_id="blocked-with-transform",
+            status="blocked",
+            policy="required",
+            capability_fingerprint=capabilities().fingerprint,
+            backend="pytorch-xla",
+            precision="bf16",
+            transformations=plan().transformations,
+            errors=("Required provider is unavailable.",),
+        )
+
+
+def test_ready_plan_must_select_at_least_one_provider():
+    with pytest.raises(ValueError, match="Ready execution plans must select"):
+        ExecutionPlan(
+            schema_version=1,
+            plan_id="empty-ready-plan",
+            status="ready",
+            policy="auto",
+            capability_fingerprint=capabilities().fingerprint,
+            backend="pytorch-xla",
+            precision="bf16",
+        )
