@@ -242,6 +242,21 @@ class ExecutionPlan:
             raise ValueError("Execution plan decision IDs must be unique.")
         if len(transform_ids) != len(set(transform_ids)):
             raise ValueError("Execution plan transformation IDs must be unique.")
+        selected_components = {
+            (decision.component, decision.selected_provider)
+            for decision in self.decisions
+            if decision.status in {"selected", "fallback"}
+        }
+        unauthorized = [
+            transform.transform_id
+            for transform in self.transformations
+            if (transform.component, transform.provider) not in selected_components
+        ]
+        if unauthorized:
+            raise ValueError(
+                "Execution plan transformations require a matching selected "
+                f"provider decision: {unauthorized!r}."
+            )
         if self.status == "blocked" and not self.errors:
             raise ValueError("Blocked execution plans must explain their errors.")
         if self.status == "blocked" and self.transformations:
