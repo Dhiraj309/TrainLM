@@ -21,7 +21,18 @@ def _chunk_terms(
     ignore_index: int,
     include_z_loss: bool,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    logits = F.linear(hidden.float(), weight, bias)
+    # Keep the TPU projection in bf16. Casting the tied vocabulary matrix to
+    # fp32 duplicates roughly 128 MiB for the 32k x 1024 reference head.
+    if hidden.device.type == "xla":
+        if hidden.dtype != weight.dtype:
+            hidden = hidden.to(dtype=weight.dtype)
+        if bias is not None and bias.dtype != weight.dtype:
+            bias = bias.to(dtype=weight.dtype)
+        logits = F.linear(hidden, weight, bias)
+    else:
+        logits = F.linear(
+            hidden.float(), weight.float(), None if bias is None else bias.float()
+        )
     loss_sum = F.cross_entropy(
         logits, labels, ignore_index=ignore_index, reduction="sum"
     )
@@ -48,9 +59,11 @@ def chunked_linear_causal_cross_entropy(
 ) -> tuple[torch.Tensor, torch.Tensor | None]:
     """Compute shifted causal CE without materializing full-sequence logits.
 
-    Projection and reductions are performed in FP32. Chunks partition flattened
-    target tokens, so peak logits storage is bounded by ``chunk_size * vocab``.
-    The returned z-loss is unscaled; ``z_loss`` is applied only to total loss.
+    CPU projections use FP32 for reference parity. XLA keeps the projection in
+    the model dtype to avoid a large duplicate vocabulary matrix. Chunks
+    partition flattened target tokens, so peak logits storage is bounded by
+    ``chunk_size * vocab``. The returned z-loss is unscaled; ``z_loss`` is
+    applied only to total loss.
     """
 
     if hidden_states.ndim < 3:
@@ -97,20 +110,20 @@ def chunked_linear_causal_cross_entropy(
 
     loss_sum = hidden_states.new_zeros((), dtype=torch.float32)
     z_sum = hidden_states.new_zeros((), dtype=torch.float32)
-    weight_fp32 = output_weight.float()
-    bias_fp32 = bias.float() if bias is not None else None
+    weight_compute = output_weight
+    bias_compute = bias
     for start in range(0, shifted_hidden.shape[0], chunk_size):
         stop = min(start + chunk_size, shifted_hidden.shape[0])
         chunk_labels = shifted_labels[start:stop]
         chunk_hidden = shifted_hidden[start:stop]
         if rematerialization == "per_chunk":
-            if bias_fp32 is None:
+            if bias_compute is None:
                 chunk_loss, chunk_z = checkpoint_utils.checkpoint(
                     lambda hidden, weight, targets: _chunk_terms(
                         hidden, weight, targets, None,
                         ignore_index=ignore_index, include_z_loss=bool(z_loss),
                     ),
-                    chunk_hidden, weight_fp32, chunk_labels,
+                    chunk_hidden, weight_compute, chunk_labels,
                     use_reentrant=False,
                 )
             else:
@@ -119,15 +132,15 @@ def chunked_linear_causal_cross_entropy(
                         hidden, weight, targets, current_bias,
                         ignore_index=ignore_index, include_z_loss=bool(z_loss),
                     ),
-                    chunk_hidden, weight_fp32, bias_fp32, chunk_labels,
+                    chunk_hidden, weight_compute, bias_compute, chunk_labels,
                     use_reentrant=False,
                 )
         else:
             chunk_loss, chunk_z = _chunk_terms(
                 chunk_hidden,
-                weight_fp32,
+                weight_compute,
                 chunk_labels,
-                bias_fp32,
+                bias_compute,
                 ignore_index=ignore_index,
                 include_z_loss=bool(z_loss),
             )
