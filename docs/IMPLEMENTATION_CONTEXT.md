@@ -925,13 +925,18 @@ metric event once, while raw per-stage logs remain available for debugging.
 
 The owner-run MB8/GA8 `chunked_linear` candidate exhausted v5e-8 HBM while
 requesting another 88 MB with only 84.42 MB free. The throughput validation
-notebook therefore defaults to MB4/GA16 with 2048-token chunks, the largest
+notebook therefore defaults to MB4/GA16 with 1024-token chunks, the largest
 known viable geometry on that TPU, while preserving 1,048,576 scheduled tokens
 per update. The packed all-supervised path omits a per-microstep denominator
 synchronization in the chunked loss.
 The trainer also avoids a duplicate XLA `mark_step` boundary after each
 optimizer update. These changes require a fresh v5e-8 run before any
 throughput claim; they are not a local TPU certification.
+
+The chunked output projection keeps the XLA tied vocabulary matrix in BF16;
+only CPU/CUDA reference execution promotes it to FP32. This avoids the
+additional head-sized HBM allocation that caused the MB4/GA16 launch to fail
+with 3.15 MB free while requesting another 16 MB.
 
 The TPU `ParallelLoader` now groups up to eight microbatches per execution,
 reducing per-batch `mark_step` overhead while keeping the graph bounded. The

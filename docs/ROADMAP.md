@@ -2028,8 +2028,11 @@ ordered next stories for this PR branch.
 
 ### MB4/GA16 chunked-loss fallback
 
-- In progress: use MB4/GA16 with a 2048-token chunk as the largest known viable
+- In progress: use MB4/GA16 with a 1024-token chunk as the largest known viable
   v5e-8 candidate while preserving 1,048,576 scheduled tokens/update.
+- Completed: keep the XLA output projection in BF16 instead of duplicating the
+  tied vocabulary matrix in FP32, removing the HBM allocation failure observed
+  during the first chunked-loss launch.
 
 ### Public TPU progress reporting and state metadata
 
