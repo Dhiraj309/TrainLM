@@ -191,7 +191,7 @@ class _TPUCoordinator:
                 # Diagnostic stages must not retain all ranks indefinitely if
                 # PJRT or the compiler hangs. Training itself remains bounded
                 # by the user's max_steps rather than these safety limits.
-                timeout = {"probe": 300, "model_preflight": 900}.get(stage)
+                timeout = {"probe": 900, "model_preflight": 1800}.get(stage)
                 returncode = self._wait_with_heartbeat(
                     process,
                     stage=stage,
@@ -201,8 +201,8 @@ class _TPUCoordinator:
             except subprocess.TimeoutExpired as exc:
                 self._terminate_process_group(process)
                 raise TPUCoordinatorError(
-                    f"TPU {stage} stage exceeded its {timeout}-second safety "
-                    f"limit. TrainLM terminated the worker process group; see "
+                    f"TPU {stage} stage produced no progress for {timeout} "
+                    "seconds. TrainLM terminated the worker process group; see "
                     f"{log_path}."
                 ) from exc
             except BaseException:
@@ -236,17 +236,20 @@ class _TPUCoordinator:
         """Wait while reporting bounded, low-volume notebook progress."""
 
         elapsed = 0
+        inactive = 0
+        previous_detail: str | None = None
         last_detail = "waiting for first worker event"
         while True:
             wait_seconds = heartbeat_seconds
             if timeout is not None:
-                wait_seconds = min(wait_seconds, timeout - elapsed)
+                wait_seconds = min(wait_seconds, timeout - inactive)
                 if wait_seconds <= 0:
                     raise subprocess.TimeoutExpired(str(log_path), timeout)
             try:
                 return process.wait(timeout=wait_seconds)
             except subprocess.TimeoutExpired:
                 elapsed += wait_seconds
+                inactive += wait_seconds
                 try:
                     lines = log_path.read_text(
                         encoding="utf-8", errors="replace"
@@ -255,9 +258,12 @@ class _TPUCoordinator:
                     lines = []
                 if lines:
                     last_detail = lines[-1][-240:]
+                if last_detail != previous_detail:
+                    inactive = 0
+                    previous_detail = last_detail
                 print(
                     f"[TrainLM] {stage}: still running ({elapsed}s); "
-                    f"latest: {last_detail}",
+                    f"latest: {last_detail}; inactive={inactive}s",
                     flush=True,
                 )
 

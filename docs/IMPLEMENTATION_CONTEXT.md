@@ -103,7 +103,8 @@ full-logit lifecycle compilation small. Model preflight separately caps its
 diagnostic forward at 16 tokens: compiling the full requested shape in each of
 eight ranks was redundant and could drive aggregate host compiler memory above
 250 GiB before training. Probe and preflight also have bounded coordinator
-timeouts that reclaim the complete process group on a PJRT/compiler hang.
+inactivity limits that reclaim the complete process group on a PJRT/compiler
+hang without killing a slow stage that continues to emit progress.
 The matching YAML starter is `examples/smollm2_135m_tpu_pretraining.yaml`.
 
 The notebook bootstrap now removes the common TensorFlow distribution
@@ -716,8 +717,8 @@ this file in every turn:
      parallelism, architecture-lab, telemetry, and closed-loop tuning backlog.
 109. **M8-F0 bounded-memory TPU diagnostics:** model preflight now compiles a
      maximum 16-token forward rather than duplicating the full training-shape
-     compile across all eight ranks. Probe/preflight have five/fifteen-minute
-     safety limits with process-group reclamation, and the notebook starts its
+     compile across all eight ranks. Probe/preflight have fifteen/thirty-minute
+     inactivity limits with process-group reclamation, and the notebook starts its
      actual lifecycle at sequence length 128 until the chunked-loss path removes
      the full-logit training graph.
 110. **M8-F0 notebook progress visibility:** setup/data/trainer/train/explain
@@ -727,6 +728,11 @@ this file in every turn:
      compile is visibly active without requiring users to open stage logs.
      Direct stage execution also creates its log directory before launch, and
      interrupt coverage exercises the heartbeat wait path.
+111. **M8-F0 progress-aware diagnostic deadlines:** the diagnostic deadline is
+     now based on time since the last new worker event rather than total stage
+     duration. Cold TPU startup and compilation can therefore exceed the old
+     five-minute probe wall-clock limit when making progress, while a silent
+     probe is still reclaimed after fifteen inactive minutes.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
