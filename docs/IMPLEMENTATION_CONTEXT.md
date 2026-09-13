@@ -866,3 +866,21 @@ compiled training step. The ~850K and 912.6K LaughLM gates therefore require
 wiring and validating the optimized attention/loss/update path; changing the
 notebook timeout, scheduler, or lifecycle orchestration cannot produce those
 gains.
+
+### 119. First throughput candidate reduces host-unrolled accumulation
+
+The next owner-run notebook experiment keeps the proven 1,048,576 scheduled
+input tokens per optimizer update but changes the rank-local geometry from
+microbatch 2 / accumulation 32 to microbatch 4 / accumulation 16. This halves
+the number of Python-driven forward/backward microsteps and XLA graph fragments
+per update without changing sequence length, replica count, or global batch.
+The output directory is distinct from the 315.5K baseline so evidence cannot be
+overwritten.
+
+This is a measured experiment, not a claimed 500K result. The current worker
+still materializes full logits, so MB4 raises peak per-replica logits storage and
+may fail the HBM guard or show no speedup. The notebook therefore validates the
+exact MB4/GA16 geometry immediately before launch and leaves evaluation and
+checkpointing disabled. If it succeeds, its summary and XLA metrics decide
+whether MB4/GA16 becomes the new base for chunked-loss and compiled-update work;
+if it fails for memory, the established MB2/GA32 result remains the fallback.

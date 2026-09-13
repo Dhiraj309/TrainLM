@@ -2001,3 +2001,14 @@ ordered next stories for this PR branch.
 - Follow-up: wire the real worker to the optimized attention, memory-bounded
   loss, and compiled update path before testing the ~850K and 912.6K LaughLM
   gates.
+
+### MB4/GA16 throughput candidate
+
+- In progress: benchmark microbatch 4 / accumulation 16 at sequence length 2048
+  and DP8, preserving exactly 1,048,576 scheduled input tokens per update.
+- Acceptance: complete 100 updates, preserve token/loss accounting, avoid graph
+  instability or HBM failure, and improve the matched post-warmup throughput
+  over the owner-run 315,512 supervised tokens/s baseline.
+- Constraint: treat the result as a geometry experiment only; 500-600K still
+  requires the memory-bounded loss and compiled/native update path if this
+  reduced-accumulation run does not independently reach that range.
