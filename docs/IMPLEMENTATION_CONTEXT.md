@@ -811,3 +811,14 @@ updates only. Evaluation and checkpointing are separate lifecycle validations,
 so their distinct compilations and synchronous I/O cannot be mistaken for a
 training stall. The public call remains only `trainer.train()`; topology and
 worker orchestration stay private.
+
+### 115. Use one PJRT launch for the public training lifecycle
+
+The public `trainer.train()` path no longer starts disposable probe and model
+preflight process groups before starting the real training group. The training
+worker already performs the collective probe before model construction, so the
+extra launches duplicated initialization and, on Kaggle, failed during PJRT
+shutdown after ranks had reported success. A training request now owns one PJRT
+launch, one collective probe, one model construction, and one worker teardown.
+Standalone probe and model-preflight modes remain private diagnostic tools, but
+they are not prerequisites for normal training.
