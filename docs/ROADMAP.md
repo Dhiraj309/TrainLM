@@ -1958,3 +1958,13 @@ ordered next stories for this PR branch.
   validate those lifecycles separately after baseline training succeeds.
 - Follow-up: collect target-v5e throughput, HBM, compilation, and fallback
   evidence before making any performance or certification claim.
+
+### Single-launch public TPU lifecycle
+
+- Completed: remove disposable probe and model-preflight launches from the
+  normal public training request; the training workers perform their existing
+  collective probe before model construction in the same PJRT lifetime.
+- Completed: retain standalone diagnostic modes for maintainers without making
+  users pay for repeated PJRT initialization and teardown.
+- Follow-up: verify the single-launch lifecycle on a fresh Kaggle v5e-8 session
+  and retain the resulting train log and structured summary.

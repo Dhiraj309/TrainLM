@@ -112,10 +112,11 @@ class _TPUCoordinator:
 
         completed_stages: list[str] = []
         try:
-            self._run_stage("probe", request, "--probe-only")
-            completed_stages.append("probe")
-            self._run_stage("model_preflight", request, "--model-preflight")
-            completed_stages.append("model_preflight")
+            # Launch PJRT only once for a training request.  The worker performs
+            # the collective probe before constructing the model and training,
+            # so separate probe/preflight launches only add two PJRT teardown
+            # cycles.  On Kaggle those diagnostic-only teardowns can core dump
+            # even after every rank reported success, poisoning the next launch.
             self._run_stage("train", request)
             completed_stages.append("train")
             worker_summary_path = request.output_dir / "summary.json"

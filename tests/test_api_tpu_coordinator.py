@@ -361,15 +361,14 @@ def test_coordinator_owns_stages_logs_and_structured_summary(tmp_path, monkeypat
         calls.append((command, kwargs))
         kwargs["stdout"].write("stage passed\n")
         kwargs["stdout"].flush()
-        if "--probe-only" not in command and "--model-preflight" not in command:
-            request.output_dir.mkdir(parents=True, exist_ok=True)
-            (request.output_dir / "summary.json").write_text(
-                json.dumps({"phase": "finalized", "steps": 2}),
-                encoding="utf-8",
-            )
-            (request.output_dir / "metrics.jsonl").write_text(
-                '{"loss": 2.5, "step": 2}\n', encoding="utf-8"
-            )
+        request.output_dir.mkdir(parents=True, exist_ok=True)
+        (request.output_dir / "summary.json").write_text(
+            json.dumps({"phase": "finalized", "steps": 2}),
+            encoding="utf-8",
+        )
+        (request.output_dir / "metrics.jsonl").write_text(
+            '{"loss": 2.5, "step": 2}\n', encoding="utf-8"
+        )
         return Process()
 
     monkeypatch.setattr(subprocess, "Popen", popen)
@@ -377,13 +376,13 @@ def test_coordinator_owns_stages_logs_and_structured_summary(tmp_path, monkeypat
     summary = _TPUCoordinator(worker).run(request)
 
     assert summary["status"] == "completed"
-    assert summary["completed_stages"] == ["probe", "model_preflight", "train"]
+    assert summary["completed_stages"] == ["train"]
     assert summary["worker_summary"]["steps"] == 2
     assert summary["metrics"] == [{"loss": 2.5, "step": 2.0}]
-    assert len(calls) == 3
-    assert "--probe-only" in calls[0][0]
-    assert "--model-preflight" in calls[1][0]
-    assert "--learning-rate" in calls[2][0]
+    assert len(calls) == 1
+    assert "--probe-only" not in calls[0][0]
+    assert "--model-preflight" not in calls[0][0]
+    assert "--learning-rate" in calls[0][0]
     assert all(call[1]["start_new_session"] is True for call in calls)
     assert (request.output_dir / "request.json").is_file()
     assert (request.output_dir / "coordinator_summary.json").is_file()
@@ -501,7 +500,7 @@ def test_coordinator_reports_actionable_stage_failure(tmp_path, monkeypatch):
     monkeypatch.setattr(subprocess, "Popen", popen)
     monkeypatch.setattr("os.killpg", lambda pid, sig: None)
 
-    with pytest.raises(TPUCoordinatorError, match="probe stage failed.*probe.log"):
+    with pytest.raises(TPUCoordinatorError, match="train stage failed.*train.log"):
         _TPUCoordinator(worker).run(request)
 
     summary = json.loads(
