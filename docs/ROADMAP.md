@@ -240,9 +240,12 @@ SmolLM2 quality when the input shards were produced by another tokenizer.
 The TPU model-preflight stage is a capability diagnostic, not a duplicate
 training-shape benchmark. It therefore caps its forward at 16 tokens while
 preserving batch, model, precision, attention, and device paths. The coordinator
-terminates probe after five minutes or preflight after fifteen minutes so a
-compiler/PJRT hang cannot indefinitely retain eight CPU-heavy ranks and grow
-host RAM. The actual training shape is still compiled in the train stage.
+terminates probe after fifteen inactive minutes or preflight after thirty
+inactive minutes so a compiler/PJRT hang cannot indefinitely retain eight
+CPU-heavy ranks and grow host RAM. New worker events reset the inactivity
+deadline, so cold startup or compilation is not rejected merely for exceeding
+a total wall-clock duration. The actual training shape is still compiled in
+the train stage.
 The notebook prints numbered cell markers, while the coordinator prints stage
 start/completion messages and a ten-second heartbeat with the latest bounded
 worker-log line. Long compilation is therefore distinguishable from a silent

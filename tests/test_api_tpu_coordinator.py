@@ -391,7 +391,7 @@ def test_coordinator_bounds_diagnostic_stage_and_reclaims_timeout(
         staticmethod(lambda process: terminated.append(process.pid)),
     )
 
-    with pytest.raises(TPUCoordinatorError, match="300-second safety limit"):
+    with pytest.raises(TPUCoordinatorError, match="no progress for 900 seconds"):
         _TPUCoordinator(worker)._run_stage("probe", request, "--probe-only")
 
     assert terminated == [123]
@@ -428,6 +428,7 @@ def test_coordinator_prints_stage_heartbeat(tmp_path, monkeypatch, capsys):
     assert "[TrainLM] probe: started" in output
     assert "[TrainLM] probe: still running (10s)" in output
     assert 'latest: {"stage":"worker_entered"}' in output
+    assert "inactive=0s" in output
     assert "[TrainLM] probe: completed" in output
 
 
