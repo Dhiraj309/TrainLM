@@ -479,7 +479,7 @@ def test_coordinator_releases_worker_group_when_notebook_is_interrupted(
     def wait(timeout=None):
         nonlocal waits
         waits += 1
-        if timeout is None and waits == 1:
+        if waits == 1:
             raise KeyboardInterrupt
         process.running = False
         return -15

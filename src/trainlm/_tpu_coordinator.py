@@ -172,6 +172,7 @@ class _TPUCoordinator:
         if mode is not None:
             command.append(mode)
         log_path = request.output_dir / f"{stage}.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
         started = time.monotonic()
         print(
             f"[TrainLM] {stage}: started (details: {log_path})",
