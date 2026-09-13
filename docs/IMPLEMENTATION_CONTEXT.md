@@ -822,3 +822,12 @@ shutdown after ranks had reported success. A training request now owns one PJRT
 launch, one collective probe, one model construction, and one worker teardown.
 Standalone probe and model-preflight modes remain private diagnostic tools, but
 they are not prerequisites for normal training.
+
+### 116. Fail closed on stale TPU notebook state
+
+Immediately before allocating TPU workers, the validation notebook now compares
+the constructed trainer against the exact 135M baseline geometry and rejects any
+stale 128-token/SmolLM2 trainer retained by the notebook kernel. It also rejects
+an evaluation dataset, evaluation cadence, or checkpoint cadence in the first
+two-update baseline. The verified configuration is printed before the single
+public `trainer.train()` call so the owner can confirm what will execute.

@@ -1968,3 +1968,12 @@ ordered next stories for this PR branch.
   users pay for repeated PJRT initialization and teardown.
 - Follow-up: verify the single-launch lifecycle on a fresh Kaggle v5e-8 session
   and retain the resulting train log and structured summary.
+
+### TPU notebook stale-state guard
+
+- Completed: verify and print the exact model-independent training geometry
+  immediately before the first TPU allocation.
+- Completed: fail before launch when a stale notebook kernel retains evaluation,
+  checkpoint, SmolLM2, or 128-token baseline state.
+- Follow-up: capture the first clean two-update result from the verified 135M
+  configuration on a fresh Kaggle v5e-8 session.

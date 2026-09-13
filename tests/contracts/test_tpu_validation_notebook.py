@@ -41,13 +41,15 @@ def test_tpu_notebook_demonstrates_the_public_hf_like_workflow():
         "cache_dir=DATA_CACHE_DIR",
         "It does not download during training",
         "result = trainer.train()",
+        "Stale notebook/trainer configuration detected",
+        "Baseline verified:",
         "terminates its private worker process group",
         'trainer.explain(format="text")',
         '"max_steps": 2',
         "Evaluation and checkpointing are intentionally disabled",
         "[Notebook 1/8]",
         "[Notebook 8/8]",
-        "heartbeat every 10 seconds",
+        "10-second heartbeats",
     ):
         assert required in source
 
