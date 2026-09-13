@@ -10,14 +10,18 @@ from typing import Literal
 class LossConfig:
     """Configure loss ownership and numerically relevant behavior."""
 
-    implementation: Literal["auto", "causal_lm", "model"] = "auto"
+    implementation: Literal[
+        "auto", "causal_lm", "model", "chunked_linear"
+    ] = "auto"
     ignore_index: int = -100
     normalization: Literal["supervised_tokens", "batch"] = "supervised_tokens"
     z_loss: float = 0.0
     logits_chunk_size: int | None = None
 
     def __post_init__(self) -> None:
-        if self.implementation not in {"auto", "causal_lm", "model"}:
+        if self.implementation not in {
+            "auto", "causal_lm", "model", "chunked_linear"
+        }:
             raise ValueError(
                 f"Unsupported loss implementation: {self.implementation}"
             )
