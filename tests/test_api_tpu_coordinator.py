@@ -397,6 +397,40 @@ def test_coordinator_bounds_diagnostic_stage_and_reclaims_timeout(
     assert terminated == [123]
 
 
+def test_coordinator_prints_stage_heartbeat(tmp_path, monkeypatch, capsys):
+    worker = tmp_path / "worker.py"
+    worker.write_text("# test worker\n", encoding="utf-8")
+    request = _request(tmp_path)
+
+    class HeartbeatProcess:
+        pid = 123
+
+        def __init__(self):
+            self.waits = 0
+
+        def wait(self, timeout=None):
+            self.waits += 1
+            if self.waits == 1:
+                raise subprocess.TimeoutExpired("worker", timeout)
+            return 0
+
+    def popen(command, **kwargs):
+        del command
+        kwargs["stdout"].write('{"stage":"worker_entered"}\n')
+        kwargs["stdout"].flush()
+        return HeartbeatProcess()
+
+    monkeypatch.setattr(subprocess, "Popen", popen)
+
+    _TPUCoordinator(worker)._run_stage("probe", request, "--probe-only")
+
+    output = capsys.readouterr().out
+    assert "[TrainLM] probe: started" in output
+    assert "[TrainLM] probe: still running (10s)" in output
+    assert 'latest: {"stage":"worker_entered"}' in output
+    assert "[TrainLM] probe: completed" in output
+
+
 def test_coordinator_reports_actionable_stage_failure(tmp_path, monkeypatch):
     worker = tmp_path / "worker.py"
     worker.write_text("# test worker\n", encoding="utf-8")

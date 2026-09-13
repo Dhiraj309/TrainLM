@@ -44,6 +44,9 @@ def test_tpu_notebook_demonstrates_the_public_hf_like_workflow():
         '"eval_steps": 2',
         '"save_steps": 2',
         "resume_from_checkpoint=OUTPUT_DIR",
+        "[Notebook 1/8]",
+        "[Notebook 8/8]",
+        "heartbeat every 10 seconds",
     ):
         assert required in source
 
