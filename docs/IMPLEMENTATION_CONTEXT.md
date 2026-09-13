@@ -778,3 +778,7 @@ The trainer reads this optional policy compatibly: lightweight and legacy
 configuration objects that do not define an `evaluation` section retain the
 previous full-dataloader behavior. This matters for embedders and existing unit
 fixtures as well as older serialized configurations.
+
+The owner-run full-validation recommendation is deliberately not represented as
+an unchecked M17 feature item: M17 is already complete, and roadmap status is
+derived mechanically from the checklist within each milestone section.
