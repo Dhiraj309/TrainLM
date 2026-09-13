@@ -841,3 +841,28 @@ arguments. The earlier two-update result included compilation because it had no
 excluded warmup window; its 29.9K tok/s value was a lifecycle measurement, not a
 regression against the historical steady-state result. Evaluation and checkpoint
 cadence remain absent from this matched performance run.
+
+### 118. Owner-run public baseline reproduces the generic TPU result
+
+The owner completed the guarded public-facade run on a Kaggle v5e-8 with
+PyTorch/XLA 2.9.0. The single `trainer.train()` lifecycle finalized all 100
+updates (3,200 rank-local microsteps), consumed 104,806,400 global supervised
+tokens, and reported 315,512 global supervised tokens/s over the post-warmup
+window. The corresponding scheduled-token rate was 315,667 tokens/s and the
+slowest-rank measured window was 315.57 seconds.
+
+This is a successful reproduction of the historical generic baseline, not a
+LaughLM optimization result: it is 1.19% below the previously recorded 319,302
+supervised tokens/s, a small run-to-run difference at otherwise matched
+geometry. The loss moved from 10.47 at update 10 to 7.03 at update 100, and the
+worker finalized normally with eight replicas. The WSD learning-rate values are
+also expected to differ from the older manual transcript because the public run
+uses a base learning rate of 3e-4 whereas that transcript used 2e-4.
+
+The summary correctly remains `performance_certified: false`. It identifies the
+remaining gap directly: training still uses `trainlm_xla_sdpa`,
+`full_logits_causal_ce_z_loss`, host-unrolled gradient accumulation, and no
+compiled training step. The ~850K and 912.6K LaughLM gates therefore require
+wiring and validating the optimized attention/loss/update path; changing the
+notebook timeout, scheduler, or lifecycle orchestration cannot produce those
+gains.

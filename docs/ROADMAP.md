@@ -1987,3 +1987,17 @@ ordered next stories for this PR branch.
   geometry.
 - Follow-up: compare the fresh target-v5e result with the recorded ~319K generic
   baseline before evaluating the 850K and 912.6K optimization gates.
+
+### Public 319K baseline evidence
+
+- Completed: owner-run Kaggle v5e-8 validation finalized 100 updates through the
+  public single-launch `trainer.train()` path with all eight replicas.
+- Completed: the post-warmup window measured 315,512 global supervised tokens/s
+  (315,667 scheduled tokens/s), within 1.19% of the historical 319,302 generic
+  baseline.
+- Completed: classify this result as lifecycle and generic-baseline evidence,
+  not performance certification; the summary correctly reports
+  `performance_certified: false`.
+- Follow-up: wire the real worker to the optimized attention, memory-bounded
+  loss, and compiled update path before testing the ~850K and 912.6K LaughLM
+  gates.
