@@ -938,6 +938,12 @@ only CPU/CUDA reference execution promotes it to FP32. This avoids the
 additional head-sized HBM allocation that caused the MB4/GA16 launch to fail
 with 3.15 MB free while requesting another 16 MB.
 
+The validation notebook now checks the constructed trainer for the HBM-safe
+MB4/GA16, BF16, 1024-token chunk, and verbose-console settings. It also checks
+that the imported chunked-loss implementation contains the XLA model-dtype
+projection before the single public `trainer.train()` call, so a stale Kaggle
+editable install fails before allocating TPU workers.
+
 The TPU `ParallelLoader` now groups up to eight microbatches per execution,
 reducing per-batch `mark_step` overhead while keeping the graph bounded. The
 selected value is recorded in the worker summary geometry for auditability.

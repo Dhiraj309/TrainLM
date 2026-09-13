@@ -2033,6 +2033,9 @@ ordered next stories for this PR branch.
 - Completed: keep the XLA output projection in BF16 instead of duplicating the
   tied vocabulary matrix in FP32, removing the HBM allocation failure observed
   during the first chunked-loss launch.
+- Completed: make the validation notebook assert `bf16=True`, verbose metrics,
+  and the BF16 XLA projection implementation before calling `trainer.train()`;
+  stale Kaggle package state now fails before TPU allocation.
 
 ### Public TPU progress reporting and state metadata
 

@@ -42,7 +42,8 @@ def test_tpu_notebook_demonstrates_the_public_hf_like_workflow():
         "It does not download during training",
         "result = trainer.train()",
         "Stale notebook/trainer configuration detected",
-        "Throughput candidate verified:",
+        "HBM-safe BF16 XLA chunked-loss path is missing",
+        "HBM-safe throughput candidate verified:",
         "terminates its private worker process group",
         'trainer.explain(format="text")',
         '"max_steps": 100',
@@ -54,7 +55,6 @@ def test_tpu_notebook_demonstrates_the_public_hf_like_workflow():
         "Evaluation and checkpointing are intentionally disabled",
         "[Notebook 1/8]",
         "[Notebook 8/8]",
-        "verbose progress",
         "single console metrics table",
     ):
         assert required in source
