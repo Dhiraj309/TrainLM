@@ -48,10 +48,11 @@ def test_tpu_notebook_demonstrates_the_public_hf_like_workflow():
         '"max_steps": 100',
         '"warmup_steps": 5',
         '"lr_scheduler_type": "wsd"',
+        '"logging_verbosity": "verbose"',
         "Evaluation and checkpointing are intentionally disabled",
         "[Notebook 1/8]",
         "[Notebook 8/8]",
-        "10-second heartbeats",
+        "verbose progress",
     ):
         assert required in source
 

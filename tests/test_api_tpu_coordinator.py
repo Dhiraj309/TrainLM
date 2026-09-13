@@ -11,6 +11,7 @@ from trainlm._tpu_coordinator import (
     TPUCoordinatorError,
     _TPUCoordinator,
     _TPURunRequest,
+    _format_worker_detail,
 )
 from trainlm.config import ModelSourceConfig
 from trainlm.training import TrainerCallback
@@ -83,6 +84,48 @@ def test_tpu_facade_defers_model_and_runtime_construction(tmp_path):
     assert request.sequence_length == 128
     assert request.precision == "bf16"
     assert trainer.explain()["selected_path"] == "tpu_coordinator"
+
+
+def test_tpu_facade_forwards_verbose_logging_and_global_batch_state(tmp_path):
+    coordinator = RecordingCoordinator()
+    trainer = TrainLMTrainer(
+        model=pinned_model(),
+        train_dataset=tmp_path / "manifests",
+        args=TrainLMTrainingArguments(
+            accelerator="tpu",
+            output_dir=tmp_path / "run",
+            max_steps=1,
+            per_device_train_batch_size=2,
+            gradient_accumulation_steps=4,
+            logging_verbosity="verbose",
+        ),
+    )
+    trainer._tpu_coordinator = coordinator
+    def run(request):
+        coordinator.requests.append(request)
+        return {
+            "status": "completed",
+            "worker_summary": {
+                "steps": 1,
+                "global_batch_size": 64,
+            },
+            "metrics": [],
+        }
+
+    coordinator.run = run
+
+    result = trainer.train()
+
+    assert coordinator.requests[0].logging_verbosity == "verbose"
+    assert result["trainer_state"]["global_batch_size"] == 64
+
+
+def test_verbose_worker_detail_is_compact_and_structured():
+    detail = _format_worker_detail(
+        '{"global_tokens_seen":12345,"learning_rate":0.001,'
+        '"loss":2.5,"step":10}'
+    )
+    assert detail == "step 10 | loss 2.5000 | lr 0.001 | tokens 12,345"
 
 
 def test_tpu_facade_rejects_parent_owned_objects_and_unsupported_data(tmp_path):

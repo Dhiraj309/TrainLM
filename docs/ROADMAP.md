@@ -2012,3 +2012,20 @@ ordered next stories for this PR branch.
 - Constraint: treat the result as a geometry experiment only; 500-600K still
   requires the memory-bounded loss and compiled/native update path if this
   reduced-accumulation run does not independently reach that range.
+
+### Public TPU progress reporting and state metadata
+
+- Completed: add `quiet`, `normal`, and `verbose` coordinator logging modes;
+  verbose mode renders worker JSON events as compact stage, step, loss, LR, and
+  token progress while preserving the full `train.log` and JSON artifacts.
+- Completed: stop the validation notebook from displaying the entire nested
+  Python result object; it now prints a compact throughput summary.
+- Completed: carry global batch size and global token counters into TPU metric
+  snapshots and public trainer state, and expose the rank-specific cache path
+  with its summary writer rank.
+- Completed: expose an explicit `chunked_linear` TPU loss option with configurable
+  vocabulary projection chunks and an inspected Hugging Face base-model adapter;
+  the generic full-logit path remains the default pending target validation.
+- Follow-up: verify rank-0-only artifact ownership and warm-cache behavior on
+  the next v5e-8 run, then benchmark chunk sizes 1024/2048/4096 for HBM and
+  throughput.

@@ -138,6 +138,11 @@ class TrainLMTrainingArguments:
     dataloader_pin_memory: bool = False
     seed: int = 42
     report_to: str | tuple[str, ...] = "none"
+    logging_verbosity: Literal["quiet", "normal", "verbose"] = "normal"
+    loss_implementation: Literal[
+        "auto", "causal_lm", "model", "chunked_linear"
+    ] = "auto"
+    logits_chunk_size: int | None = None
 
     def __post_init__(self) -> None:
         if self.max_steps is None and self.max_tokens is None:
@@ -182,6 +187,23 @@ class TrainLMTrainingArguments:
             raise ValueError("weight_decay must be non-negative.")
         if not isinstance(self.seed, int) or isinstance(self.seed, bool) or self.seed < 0:
             raise ValueError("seed must be non-negative.")
+        if (
+            not isinstance(self.logging_verbosity, str)
+            or self.logging_verbosity not in {"quiet", "normal", "verbose"}
+        ):
+            raise ValueError(
+                "logging_verbosity must be 'quiet', 'normal', or 'verbose'."
+            )
+        if self.loss_implementation not in {
+            "auto", "causal_lm", "model", "chunked_linear"
+        }:
+            raise ValueError("Unsupported loss_implementation.")
+        if self.logits_chunk_size is not None and (
+            isinstance(self.logits_chunk_size, bool)
+            or not isinstance(self.logits_chunk_size, int)
+            or self.logits_chunk_size < 1
+        ):
+            raise ValueError("logits_chunk_size must be positive when configured.")
 
 
 def _default_collator(features: Sequence[Any]) -> dict[str, torch.Tensor]:
@@ -321,6 +343,11 @@ class TrainLMTrainer:
             self.scheduler = None
             self.engine = None
             return
+        if self.args.loss_implementation == "chunked_linear":
+            raise NotImplementedError(
+                "chunked_linear loss is currently available through the TPU worker; "
+                "use the TPU accelerator or the lower-level training view on CPU/CUDA."
+            )
         self.model = self._resolve_model(model)
         self.runtime = runtime or self._make_runtime()
         self.optimizer = optimizer or self._make_optimizer()
@@ -532,6 +559,9 @@ class TrainLMTrainer:
             samples_seen=int(worker.get("samples_seen_rank0", 0)),
             learning_rate=float(worker.get("learning_rate", 0.0)),
             loss=worker.get("last_loss_rank0"),
+            global_batch_size=int(
+                worker.get("global_batch_size", worker.get("samples_per_update", 0))
+            ),
             phase=TrainerPhase.FINALIZED,
         )
         control = TrainerControl()
@@ -670,6 +700,9 @@ class TrainLMTrainer:
             scheduler=self.args.lr_scheduler_type,
             warmup_steps=self.args.warmup_steps,
             precision=precision,
+            logging_verbosity=self.args.logging_verbosity,
+            loss_implementation=self.args.loss_implementation,
+            logits_chunk_size=self.args.logits_chunk_size,
             save_every_steps=self.args.save_steps,
             resume_from_checkpoint=(
                 Path(resume_from_checkpoint)

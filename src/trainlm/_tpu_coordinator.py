@@ -15,6 +15,39 @@ from typing import Any
 from trainlm.config import ModelSourceConfig
 
 
+def _format_worker_detail(detail: str) -> str:
+    """Render worker JSON events as compact, useful notebook progress."""
+
+    try:
+        value = json.loads(detail)
+    except (TypeError, json.JSONDecodeError):
+        return f"latest: {detail}"
+    if not isinstance(value, dict):
+        return f"latest: {detail}"
+    stage = value.get("stage")
+    if stage == "worker_entered":
+        return f"workers online ({value.get('world_size', '?')} replicas)"
+    if stage == "probe_passed":
+        return f"collective probe passed ({value.get('world_size', '?')} replicas)"
+    if stage == "data_preflight":
+        return "validating packed data"
+    if stage == "launch_dp8":
+        return "launching TPU workers"
+    if "step" in value:
+        fields = [f"step {value['step']}"]
+        if value.get("loss") is not None:
+            fields.append(f"loss {float(value['loss']):.4f}")
+        if value.get("learning_rate") is not None:
+            fields.append(f"lr {float(value['learning_rate']):.3g}")
+        tokens = value.get("global_tokens_seen", value.get("tokens_seen"))
+        if tokens is not None:
+            fields.append(f"tokens {int(tokens):,}")
+        return " | ".join(fields)
+    if stage:
+        return str(stage)
+    return f"latest: {detail}"
+
+
 class TPUCoordinatorError(RuntimeError):
     """Raised when a TPU worker stage cannot produce a successful run."""
 
@@ -37,6 +70,9 @@ class _TPURunRequest:
     scheduler: str
     warmup_steps: int
     precision: str
+    logging_verbosity: str = "normal"
+    loss_implementation: str = "causal_lm"
+    logits_chunk_size: int | None = None
     save_every_steps: int | None = None
     resume_from_checkpoint: Path | None = None
     eval_manifest_dir: Path | None = None
@@ -44,6 +80,23 @@ class _TPURunRequest:
     max_eval_batches: int | None = None
 
     def __post_init__(self) -> None:
+        if (
+            not isinstance(self.logging_verbosity, str)
+            or self.logging_verbosity not in {"quiet", "normal", "verbose"}
+        ):
+            raise ValueError(
+                "logging_verbosity must be 'quiet', 'normal', or 'verbose'."
+            )
+        if self.loss_implementation not in {
+            "auto", "causal_lm", "model", "chunked_linear"
+        }:
+            raise ValueError("Unsupported loss_implementation.")
+        if self.logits_chunk_size is not None and (
+            isinstance(self.logits_chunk_size, bool)
+            or not isinstance(self.logits_chunk_size, int)
+            or self.logits_chunk_size < 1
+        ):
+            raise ValueError("logits_chunk_size must be positive when configured.")
         if self.save_every_steps is not None and (
             isinstance(self.save_every_steps, bool)
             or not isinstance(self.save_every_steps, int)
@@ -207,6 +260,7 @@ class _TPUCoordinator:
                     stage=stage,
                     log_path=log_path,
                     timeout=timeout,
+                    verbosity=request.logging_verbosity,
                 )
             except subprocess.TimeoutExpired as exc:
                 self._terminate_process_group(process)
@@ -258,9 +312,16 @@ class _TPUCoordinator:
         log_path: Path,
         timeout: int | None,
         heartbeat_seconds: int = 10,
+        verbosity: str = "normal",
     ) -> int:
         """Wait while reporting bounded, low-volume notebook progress."""
 
+        if verbosity not in {"quiet", "normal", "verbose"}:
+            raise ValueError("Unsupported coordinator logging verbosity.")
+        if verbosity == "quiet":
+            heartbeat_seconds = max(heartbeat_seconds, 60)
+        elif verbosity == "verbose":
+            heartbeat_seconds = min(heartbeat_seconds, 5)
         elapsed = 0
         inactive = 0
         previous_detail: str | None = None
@@ -287,11 +348,17 @@ class _TPUCoordinator:
                 if last_detail != previous_detail:
                     inactive = 0
                     previous_detail = last_detail
-                print(
-                    f"[TrainLM] {stage}: still running ({elapsed}s); "
-                    f"latest: {last_detail}; inactive={inactive}s",
-                    flush=True,
-                )
+                if verbosity != "quiet":
+                    rendered = (
+                        _format_worker_detail(last_detail)
+                        if verbosity == "verbose"
+                        else f"latest: {last_detail}"
+                    )
+                    print(
+                        f"[TrainLM] {stage}: still running ({elapsed}s); "
+                        f"{rendered}; inactive={inactive}s",
+                        flush=True,
+                    )
 
     @staticmethod
     def _terminate_process_group(process: subprocess.Popen[Any]) -> None:
@@ -343,7 +410,11 @@ class _TPUCoordinator:
             "--scheduler", request.scheduler,
             "--warmup-steps", str(request.warmup_steps),
             "--precision", request.precision,
+            "--logging-verbosity", request.logging_verbosity,
+            "--loss-implementation", request.loss_implementation,
         ]
+        if request.logits_chunk_size is not None:
+            command.extend(("--logits-chunk-size", str(request.logits_chunk_size)))
         if request.save_every_steps is not None:
             command.extend(("--save-every-steps", str(request.save_every_steps)))
         if request.resume_from_checkpoint is not None:

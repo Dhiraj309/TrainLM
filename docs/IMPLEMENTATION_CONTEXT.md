@@ -884,3 +884,29 @@ exact MB4/GA16 geometry immediately before launch and leaves evaluation and
 checkpointing disabled. If it succeeds, its summary and XLA metrics decide
 whether MB4/GA16 becomes the new base for chunked-loss and compiled-update work;
 if it fails for memory, the established MB2/GA32 result remains the fallback.
+
+### Public TPU logging and metadata repair
+
+The public TPU facade now accepts `logging_verbosity="quiet"`, `"normal"`, or
+`"verbose"`. Verbose coordinator heartbeats parse worker JSON events into compact
+human-readable progress lines while the raw per-stage logs and structured JSON
+artifacts remain available for debugging and benchmark analysis. The validation
+notebook no longer renders the entire nested Python result after training; it
+prints only the lifecycle and throughput fields needed at the notebook surface.
+
+TPU metric snapshots now include global token count, global batch size, and world
+size. The public `TrainerState` restores global batch size from the worker
+summary, and the worker summary records its rank-specific cache directory and
+writer rank. This metadata repair does not change device execution or throughput;
+the next target run must verify that only rank zero owns shared artifacts and that
+the persistent cache is reused as expected.
+
+The TPU request also exposes an explicit `chunked_linear` loss implementation and
+`logits_chunk_size`. When selected, the worker constructs a
+`LinearCausalLMTrainingView` from inspected Hugging Face capabilities and an
+explicit public `base_model` provider, then projects hidden states through the
+output embedding in bounded chunks with per-chunk rematerialization. The existing
+full-logit loss remains the default until numerical, gradient, HBM, and target-XLA
+graph evidence is collected. The public option is currently guarded to TPU
+execution; CPU/CUDA users retain the lower-level explicit training-view escape
+hatch rather than silently falling back when they request it.

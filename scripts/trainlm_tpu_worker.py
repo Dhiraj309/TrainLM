@@ -91,6 +91,17 @@ def parse_args():
         default="wsd",
     )
     parser.add_argument("--precision", choices=("fp32", "bf16"), default="bf16")
+    parser.add_argument(
+        "--logging-verbosity",
+        choices=("quiet", "normal", "verbose"),
+        default="normal",
+    )
+    parser.add_argument(
+        "--loss-implementation",
+        choices=("auto", "causal_lm", "model", "chunked_linear"),
+        default="causal_lm",
+    )
+    parser.add_argument("--logits-chunk-size", type=int)
     parser.add_argument("--cache-dir", default="/tmp/trainlm_xla_cache")
     parser.add_argument("--output-dir", default="runs/trainlm_v5e8")
     parser.add_argument("--manifest-dir", default="data/packed/train")
@@ -132,6 +143,8 @@ def parse_args():
         parser.error("--max-eval-batches must be positive")
     if args.max_eval_batches is not None and args.eval_manifest_dir is None:
         parser.error("--max-eval-batches requires --eval-manifest-dir")
+    if args.logits_chunk_size is not None and args.logits_chunk_size < 1:
+        parser.error("--logits-chunk-size must be positive")
     if args.sequence_length < 2 or args.warmup_steps < 0:
         parser.error("sequence length must be >=2 and warmup steps >=0")
     if (
