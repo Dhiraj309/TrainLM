@@ -725,6 +725,8 @@ this file in every turn:
      coordinator reports each private stage start/completion and a low-volume
      ten-second heartbeat containing the latest worker event, so a long XLA
      compile is visibly active without requiring users to open stage logs.
+     Direct stage execution also creates its log directory before launch, and
+     interrupt coverage exercises the heartbeat wait path.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 
