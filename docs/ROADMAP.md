@@ -1926,13 +1926,14 @@ ordered next stories for this PR branch.
 
 ### TPU lifecycle smoke follow-up (completed)
 
-- [x] Diagnose the apparent post-step-2 stall as an unbounded scheduled
+- Completed: diagnose the apparent post-step-2 stall as an unbounded scheduled
   evaluation over the full validation shard, rather than an optimizer hang.
-- [x] Add a public `max_eval_batches` argument and carry it through the private
+- Completed: add a public `max_eval_batches` argument and carry it through the private
   TPU coordinator into `EvaluationConfig.max_batches`.
-- [x] Preserve unbounded evaluation for legacy/lightweight trainer configs that
+- Completed: preserve unbounded evaluation for legacy/lightweight trainer configs that
   do not provide an `evaluation` section.
-- [x] Bound the SmolLM2 notebook/example smoke evaluation to one batch and emit
+- Completed: bound the SmolLM2 notebook/example smoke evaluation to one batch and emit
   explicit evaluation/checkpoint lifecycle messages.
-- [ ] Run an intentionally full validation pass only with a suitably sized
-  validation shard and record target-hardware timing evidence.
+- Follow-up: run an intentionally full validation pass only with a suitably
+  sized validation shard and record target-hardware timing evidence. This is
+  validation guidance rather than an M17 completion criterion.
