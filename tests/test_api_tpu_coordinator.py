@@ -448,6 +448,8 @@ def test_coordinator_prints_stage_heartbeat(tmp_path, monkeypatch, capsys):
     assert "[TrainLM] probe: started" in output
     assert "[TrainLM] probe: still running (10s)" in output
     assert 'latest: {"stage":"worker_entered"}' in output
+    assert "inactive=0s" in output
+    assert "[TrainLM] probe: completed" in output
 
 
 def test_coordinator_rejects_fatal_pjrt_log_with_success_exit(
@@ -473,8 +475,6 @@ def test_coordinator_rejects_fatal_pjrt_log_with_success_exit(
 
     with pytest.raises(TPUCoordinatorError, match="Restart the notebook session"):
         _TPUCoordinator(worker)._run_stage("probe", request, "--probe-only")
-    assert "inactive=0s" in output
-    assert "[TrainLM] probe: completed" in output
 
 
 def test_coordinator_reports_actionable_stage_failure(tmp_path, monkeypatch):

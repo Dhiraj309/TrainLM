@@ -1946,3 +1946,5 @@ ordered next stories for this PR branch.
 - Completed: reject fatal PJRT core-dump/shutdown markers even when the launcher
   incorrectly exits with a successful status, with explicit session-restart
   guidance.
+- Completed: keep heartbeat-output assertions scoped to the heartbeat contract
+  and fatal-marker assertions scoped to the false-success failure contract.
