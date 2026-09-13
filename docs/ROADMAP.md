@@ -1930,6 +1930,8 @@ ordered next stories for this PR branch.
   evaluation over the full validation shard, rather than an optimizer hang.
 - [x] Add a public `max_eval_batches` argument and carry it through the private
   TPU coordinator into `EvaluationConfig.max_batches`.
+- [x] Preserve unbounded evaluation for legacy/lightweight trainer configs that
+  do not provide an `evaluation` section.
 - [x] Bound the SmolLM2 notebook/example smoke evaluation to one batch and emit
   explicit evaluation/checkpoint lifecycle messages.
 - [ ] Run an intentionally full validation pass only with a suitably sized

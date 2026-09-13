@@ -773,3 +773,8 @@ and validation notebook set the limit to one batch, while the default remains
 `None` so production evaluation retains full-dataset semantics. Worker lifecycle
 messages now distinguish evaluation start/completion and checkpoint
 start/completion, making scheduled work after an optimizer step observable.
+
+The trainer reads this optional policy compatibly: lightweight and legacy
+configuration objects that do not define an `evaluation` section retain the
+previous full-dataloader behavior. This matters for embedders and existing unit
+fixtures as well as older serialized configurations.
