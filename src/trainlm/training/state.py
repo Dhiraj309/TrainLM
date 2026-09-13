@@ -48,6 +48,8 @@ class TrainerState:
 
     loss: float | None = None
 
+    grad_norm: float | None = None
+
     is_training: bool = False
 
     should_stop: bool = False

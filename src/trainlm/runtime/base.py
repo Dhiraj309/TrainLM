@@ -126,7 +126,7 @@ class ExecutionBackend(Protocol):
         self,
         parameters: Iterable[nn.Parameter],
         max_norm: float,
-    ) -> None: ...
+    ) -> torch.Tensor | None: ...
 
     def scale_gradients(
         self,
