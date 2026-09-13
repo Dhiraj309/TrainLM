@@ -50,7 +50,7 @@ def test_tpu_notebook_demonstrates_the_public_hf_like_workflow():
         '"lr_scheduler_type": "wsd"',
         '"logging_verbosity": "verbose"',
         '"loss_implementation": "chunked_linear"',
-        '"logits_chunk_size": 4096',
+        '"logits_chunk_size": 2048',
         "Evaluation and checkpointing are intentionally disabled",
         "[Notebook 1/8]",
         "[Notebook 8/8]",
