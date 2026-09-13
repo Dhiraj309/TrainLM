@@ -75,129 +75,128 @@ class BatchIterable(IterableDataset):
 
 
 class PrintMetrics(TrainerCallback):
-    def __init__(self, runtime: XlaRuntime, args) -> None:
+    """Rank-zero console table and asynchronous-style JSONL metric snapshots."""
+
+    def __init__(self, runtime: XlaRuntime, args, model: torch.nn.Module) -> None:
         self.runtime = runtime
         self.args = args
+        self.model = model
         self.start_time = None
         self.start_tokens = 0
         self.elapsed = None
         self.measured_tokens = 0
         self.metrics_path = Path(args.output_dir) / "metrics.jsonl"
-        self.progress_path = Path(args.output_dir) / "progress.md"
+        self._last_metric_time = None
+        self._last_metric_tokens = None
+        self._ema_tokens_per_second = None
+        self._best_loss = math.inf
+        self._printed_header = False
+        self._lines_since_header = 0
+        self._header_every = 50
+        self._total_tokens = (
+            args.max_steps
+            * args.sequence_length
+            * args.micro_batch_per_device
+            * args.gradient_accumulation_steps
+            * runtime.world_size
+        )
+        self._total_params = sum(parameter.numel() for parameter in model.parameters())
+        embeddings = model.get_input_embeddings()
+        self._embedding_params = int(embeddings.weight.numel())
+        self._non_embedding_params = self._total_params - self._embedding_params
+        config = model.config
+        self._n_layers = int(getattr(config, "num_hidden_layers", 0))
+        self._d_model = int(getattr(config, "hidden_size", 0))
+        self._vocab_size = int(getattr(config, "vocab_size", 0))
+        self._hardware_flops = 197e12 * runtime.world_size
 
     def _is_primary(self) -> bool:
-        # PJRT's master-ordinal helper has varied across runtime releases;
-        # global ordinal zero is the stable ownership contract for artifacts.
         return self.runtime.rank == 0
 
     @staticmethod
-    def _progress_bar(step: int, maximum: int, width: int = 30) -> str:
-        fraction = min(max(step / maximum, 0.0), 1.0) if maximum else 0.0
-        filled = int(round(fraction * width))
-        return f"[{'#' * filled}{'-' * (width - filled)}] {fraction * 100:.1f}%"
+    def _fmt_tokens(value: int) -> str:
+        if value >= 1_000_000_000:
+            return f"{value / 1_000_000_000:.2f}B"
+        if value >= 1_000_000:
+            return f"{value / 1_000_000:.1f}M"
+        if value >= 1_000:
+            return f"{value / 1_000:.1f}K"
+        return str(value)
 
-    def _write_progress(self, state, *, phase: str, summary: dict | None = None) -> None:
-        """Atomically replace one human-readable progress document.
+    @staticmethod
+    def _fmt_time(seconds: float) -> str:
+        seconds = max(0, int(seconds))
+        hours, remainder = divmod(seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        if hours:
+            return f"{hours}h{minutes:02d}m"
+        if minutes:
+            return f"{minutes}m{seconds:02d}s"
+        return f"{seconds}s"
 
-        The coordinator can safely display this file while a worker is writing
-        it because the temporary file is replaced only after the full document
-        has been flushed to disk.
-        """
+    @staticmethod
+    def _fmt_ppl(loss: float) -> str:
+        perplexity = math.exp(min(loss, math.log(9_999_999)))
+        if perplexity >= 10_000:
+            return f"{perplexity / 1000:.1f}K"
+        if perplexity >= 1_000:
+            return f"{perplexity:.0f}"
+        if perplexity >= 100:
+            return f"{perplexity:.1f}"
+        return f"{perplexity:.2f}"
 
-        if not self._is_primary():
-            return
-        now = time.time()
-        global_tokens = state.tokens_seen * self.runtime.world_size
-        throughput = None
-        scheduled_throughput = None
-        elapsed = self.elapsed
-        completed_steps = max(state.step - self.args.warmup_steps, 0)
-        if self.start_time is not None and completed_steps > 0:
-            elapsed = elapsed or max(time.perf_counter() - self.start_time, 0.0)
-            if elapsed > 0:
-                throughput = max(
-                    global_tokens - self.start_tokens * self.runtime.world_size, 0
-                ) / elapsed
-                scheduled_throughput = throughput * self.args.sequence_length / max(
-                    self.args.sequence_length - 1, 1
-                )
-        eta = None
-        if throughput and completed_steps > 0:
-            eta = max(self.args.max_steps - state.step, 0) * elapsed / completed_steps
-        loss = state.loss
-        if summary is not None:
-            loss = summary.get("last_loss_rank0", loss)
-            throughput = summary.get("steady_global_supervised_tokens_per_second", throughput)
-            scheduled_throughput = summary.get(
-                "steady_global_scheduled_tokens_per_second", scheduled_throughput
-            )
-            elapsed = summary.get("measured_seconds_slowest_rank", elapsed)
-            eta = 0.0 if state.step >= self.args.max_steps else eta
-            phase = summary.get("phase", phase)
-        perplexity = None
-        if loss is not None:
-            try:
-                perplexity = math.exp(loss)
-            except OverflowError:
-                perplexity = math.inf
+    def _estimate_mfu(self, tokens: int, seconds: float) -> tuple[float, float]:
+        param_flops = 6.0 * self._non_embedding_params * tokens
+        attention_flops = (
+            12.0 * self._n_layers * self._d_model * self.args.sequence_length * tokens
+        )
+        non_embedding = param_flops + attention_flops
+        logits = 6.0 * self._embedding_params * tokens
+        denominator = max(seconds, 1e-6) * self._hardware_flops
+        return non_embedding / denominator * 100.0, (non_embedding + logits) / denominator * 100.0
 
-        def value(item) -> str:
-            if item is None:
-                return "—"
-            if isinstance(item, float) and not math.isfinite(item):
-                return "∞" if item > 0 else "NaN"
-            if isinstance(item, float):
-                return f"{item:,.4f}"
-            return f"{item:,}" if isinstance(item, int) else str(item)
+    def _console_row(self, snapshot: dict[str, float]) -> str:
+        step = int(snapshot["step"])
+        progress = 100.0 * step / max(self.args.max_steps, 1)
+        loss = float(snapshot.get("loss", math.nan))
+        grad_norm = snapshot.get("grad_norm")
+        marker = "*" if loss < self._best_loss else " "
+        if loss < self._best_loss:
+            self._best_loss = loss
+        remaining = max(self._total_tokens - int(snapshot["global_tokens_seen"]), 0)
+        eta = remaining / max(self._ema_tokens_per_second or 1.0, 1.0)
+        elapsed = time.perf_counter() - self.start_time if self.start_time else 0.0
+        return (
+            f"{marker}{step:6d} {progress:7.1f}% | {loss:9.4f} "
+            f"{self._fmt_ppl(loss):>7} "
+            f"{('n/a' if grad_norm is None else f'{grad_norm:.3f}'):>7} | "
+            f"{snapshot['learning_rate']:.2e} | "
+            f"{int(snapshot.get('tokens_per_sec', 0)):>9,} "
+            f"{snapshot.get('mfu_non_embedding', 0.0):6.2f}% | "
+            f"{self._fmt_tokens(int(snapshot['global_tokens_seen'])):>8} "
+            f"{self._fmt_tokens(remaining):>9} {self._fmt_time(eta):>8} "
+            f"{self._fmt_time(elapsed):>8}"
+        )
 
-        updated = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime(now))
-        lines = [
-            "# TrainLM training progress",
-            "",
-            f"**Status:** `{phase}`  ",
-            f"**Last updated:** {updated}",
-            "",
-            "## Current step",
-            "",
-            f"**{self._progress_bar(state.step, self.args.max_steps)}**",
-            "",
-            "| Field | Value |",
-            "| --- | ---: |",
-            f"| Step | {state.step:,} / {self.args.max_steps:,} |",
-            f"| Loss | {value(loss)} |",
-            f"| Perplexity | {value(perplexity)} |",
-            f"| Gradient norm | {value(state.grad_norm)} |",
-            f"| Learning rate | {value(state.learning_rate)} |",
-            "",
-            "## Throughput and time",
-            "",
-            "| Field | Value |",
-            "| --- | ---: |",
-            f"| Supervised tokens/sec (global) | {value(throughput)} |",
-            f"| Scheduled tokens/sec (global) | {value(scheduled_throughput)} |",
-            f"| Tokens seen (global) | {global_tokens:,} |",
-            f"| Tokens/update (global) | {state.global_batch_size * self.runtime.world_size * self.args.sequence_length:,} |",
-            f"| Elapsed (seconds) | {value(elapsed)} |",
-            f"| Estimated time remaining (seconds) | {value(eta)} |",
-            "",
-            "## Run configuration",
-            "",
-            f"- Data parallel: `{self.runtime.world_size}`; model parallel: `1`",
-            f"- Sequence length: `{self.args.sequence_length:,}`",
-            f"- Micro batch/device: `{self.args.micro_batch_per_device}`",
-            f"- Gradient accumulation: `{self.args.gradient_accumulation_steps}`",
-            f"- Loss implementation: `{self.args.loss_implementation}`",
-            f"- Metrics artifact: `{self.metrics_path.name}`",
-        ]
-        temporary = self.progress_path.with_suffix(".md.tmp")
-        temporary.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        temporary.replace(self.progress_path)
+    def _print_console(self, snapshot: dict[str, float]) -> None:
+        header = (
+            "  STEP PROGRESS |      LOSS     PPL   GNORM |           LR |     TOK/S    MFU | "
+            "    SEEN REMAINING      ETA  ELAPSED"
+        )
+        if not self._printed_header or self._lines_since_header >= self._header_every:
+            if self._printed_header:
+                print()
+            print(header, flush=True)
+            print("─" * len(header), flush=True)
+            self._printed_header = True
+            self._lines_since_header = 0
+        print(self._console_row(snapshot), flush=True)
+        self._lines_since_header += 1
 
     def on_train_begin(self, state, control):
         if self._is_primary():
             self.metrics_path.parent.mkdir(parents=True, exist_ok=True)
             self.metrics_path.unlink(missing_ok=True)
-            self._write_progress(state, phase="starting")
         if self.args.warmup_steps == 0:
             torch_xla.sync(wait=True)
             self.start_time = time.perf_counter()
@@ -209,6 +208,8 @@ class PrintMetrics(TrainerCallback):
             torch_xla.sync(wait=True)
             self.start_time = time.perf_counter()
             self.start_tokens = state.tokens_seen
+            self._last_metric_time = self.start_time
+            self._last_metric_tokens = state.tokens_seen * self.runtime.world_size
         if state.step == self.args.max_steps and self.start_time is not None:
             torch_xla.sync(wait=True)
             self.elapsed = time.perf_counter() - self.start_time
@@ -226,9 +227,39 @@ class PrintMetrics(TrainerCallback):
                 ),
                 "world_size": float(self.runtime.world_size),
             }
+            now = time.perf_counter()
+            global_tokens = int(snapshot["global_tokens_seen"])
+            previous_time = self._last_metric_time or self.start_time or now
+            previous_tokens = self._last_metric_tokens
+            if previous_tokens is None:
+                previous_tokens = self.start_tokens * self.runtime.world_size
+            interval_seconds = max(now - previous_time, 1e-6)
+            interval_tokens = max(global_tokens - previous_tokens, 0)
+            tokens_per_second = interval_tokens / interval_seconds
+            self._ema_tokens_per_second = (
+                tokens_per_second
+                if self._ema_tokens_per_second is None
+                else 0.1 * tokens_per_second + 0.9 * self._ema_tokens_per_second
+            )
+            mfu, mfu_with_logits = self._estimate_mfu(interval_tokens, interval_seconds)
+            snapshot.update({
+                "tokens_per_sec": float(tokens_per_second),
+                "mfu_non_embedding": float(mfu),
+                "mfu_with_logits_estimate": float(mfu_with_logits),
+                "tokens_in_interval": float(interval_tokens),
+                "interval_seconds": float(interval_seconds),
+                "global_tokens_total": float(self._total_tokens),
+            })
+            self._last_metric_time = now
+            self._last_metric_tokens = global_tokens
+            if state.grad_norm is not None:
+                snapshot["grad_norm"] = float(state.grad_norm)
             with self.metrics_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(snapshot, sort_keys=True) + "\n")
-            self._write_progress(state, phase="training")
+            self._print_console(snapshot)
+            # The coordinator tails structured events and renders the same
+            # row once in the notebook; the human table above remains useful
+            # in the raw worker log.
             print(json.dumps(snapshot, sort_keys=True), flush=True)
             if "step" in snapshot and self.args.eval_every_steps is not None:
                 step = int(snapshot["step"])
@@ -271,9 +302,6 @@ class PrintMetrics(TrainerCallback):
                 ),
                 flush=True,
             )
-
-    def finalize(self, state, summary: dict) -> None:
-        self._write_progress(state, phase="finalized", summary=summary)
 
 
 def _source(args: argparse.Namespace) -> ModelSourceConfig:
@@ -638,7 +666,7 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
     if {id(p) for g in optimizer.param_groups for p in g["params"]} != model_parameter_ids:
         raise RuntimeError("Optimizer references do not match the XLA model.")
     scheduler = create_scheduler(optimizer, config.scheduler)
-    metrics = PrintMetrics(runtime, args)
+    metrics = PrintMetrics(runtime, args, model)
     # Start prefetch after setup succeeds, and close it before closing mappings.
     # Keep one device-loader execution aligned with several microsteps. A
     # value of one flushes the lazy XLA graph for every batch; capping at eight
@@ -739,7 +767,6 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
         "learning_rate": state.learning_rate,
         "global_supervised_tokens": state.tokens_seen * world_size,
         "last_loss_rank0": state.loss,
-        "last_grad_norm_rank0": state.grad_norm,
         "world_size": world_size,
         "parallelism": {"data_parallel": world_size, "model_parallel": 1},
         "scheduled_tokens_per_update": args.sequence_length * args.micro_batch_per_device
@@ -774,11 +801,9 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
             if (path / "manifest.json").is_file()
         ),
     }
-    summary["progress_document"] = str(Path(args.output_dir) / "progress.md")
     if rank == 0:
         output = Path(args.output_dir)
         output.mkdir(parents=True, exist_ok=True)
-        metrics.finalize(state, summary)
         (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
         import torch_xla.debug.metrics as xla_metrics
         (output / "xla_metrics.txt").write_text(xla_metrics.metrics_report(), encoding="utf-8")

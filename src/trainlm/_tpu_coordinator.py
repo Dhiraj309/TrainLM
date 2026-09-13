@@ -40,11 +40,19 @@ def _format_worker_detail(detail: str) -> str:
             f"MP{topology.get('model_parallel', '?')})"
         )
     if "step" in value:
-        fields = [f"step {value['step']}"]
+        fields = [f"step {int(value['step'])}"]
         if value.get("loss") is not None:
             fields.append(f"loss {float(value['loss']):.4f}")
+        if value.get("ppl") is not None:
+            fields.append(f"ppl {float(value['ppl']):.2f}")
+        if value.get("grad_norm") is not None:
+            fields.append(f"gnorm {float(value['grad_norm']):.3f}")
         if value.get("learning_rate") is not None:
             fields.append(f"lr {float(value['learning_rate']):.3g}")
+        if value.get("tokens_per_sec") is not None:
+            fields.append(f"tok/s {int(value['tokens_per_sec']):,}")
+        if value.get("mfu_non_embedding") is not None:
+            fields.append(f"mfu {float(value['mfu_non_embedding']):.2f}%")
         tokens = value.get("global_tokens_seen", value.get("tokens_seen"))
         if tokens is not None:
             fields.append(f"tokens {int(tokens):,}")
@@ -52,22 +60,6 @@ def _format_worker_detail(detail: str) -> str:
     if stage:
         return str(stage)
     return f"latest: {detail}"
-
-
-def _render_progress_document(path: Path) -> bool:
-    """Update one IPython display for the live progress document."""
-
-    if not path.is_file():
-        return False
-    try:
-        from IPython.display import Markdown, display
-    except ImportError:
-        return False
-    display(
-        Markdown(path.read_text(encoding="utf-8")),
-        display_id="trainlm-progress",
-    )
-    return True
 
 
 class TPUCoordinatorError(RuntimeError):
@@ -257,23 +249,12 @@ class _TPUCoordinator:
         if mode is not None:
             command.append(mode)
         log_path = request.output_dir / f"{stage}.log"
-        progress_path = request.output_dir / "progress.md"
         log_path.parent.mkdir(parents=True, exist_ok=True)
-        if stage == "train":
-            progress_path.unlink(missing_ok=True)
         started = time.monotonic()
-        if request.logging_verbosity == "verbose":
-            print(
-                f"[TrainLM] {stage}: started; live progress: "
-                f"{request.output_dir / 'progress.md'}",
-                flush=True,
-            )
-        else:
-            print(
-                f"[TrainLM] {stage}: started (details: {log_path}; "
-                f"progress: {request.output_dir / 'progress.md'})",
-                flush=True,
-            )
+        print(
+            f"[TrainLM] {stage}: started (details: {log_path})",
+            flush=True,
+        )
         with log_path.open("w", encoding="utf-8") as log:
             process = subprocess.Popen(
                 command,
@@ -292,7 +273,6 @@ class _TPUCoordinator:
                     process,
                     stage=stage,
                     log_path=log_path,
-                    progress_path=progress_path,
                     timeout=timeout,
                     verbosity=request.logging_verbosity,
                 )
@@ -333,13 +313,10 @@ class _TPUCoordinator:
                 "Restart the notebook session to reset the TPU runtime before "
                 f"retrying; see {log_path}."
             )
-        if request.logging_verbosity != "verbose":
-            print(
-                f"[TrainLM] {stage}: completed in {time.monotonic() - started:.1f}s",
-                flush=True,
-            )
-        else:
-            _render_progress_document(progress_path)
+        print(
+            f"[TrainLM] {stage}: completed in {time.monotonic() - started:.1f}s",
+            flush=True,
+        )
 
     @staticmethod
     def _wait_with_heartbeat(
@@ -347,7 +324,6 @@ class _TPUCoordinator:
         *,
         stage: str,
         log_path: Path,
-        progress_path: Path | None = None,
         timeout: int | None,
         heartbeat_seconds: int = 10,
         verbosity: str = "normal",
@@ -388,24 +364,30 @@ class _TPUCoordinator:
                     inactive = 0
                     previous_detail = last_detail
                 if verbosity != "quiet":
-                    if verbosity == "verbose" and progress_path is not None:
-                        if _render_progress_document(progress_path):
-                            continue
                     rendered = (
                         _format_worker_detail(last_detail)
                         if verbosity == "verbose"
                         else f"latest: {last_detail}"
                     )
-                    # Verbose mode keeps the notebook to one live artifact:
-                    # progress.md. Emit only sparse liveness if the worker has
-                    # not changed its event stream for a minute.
-                    if verbosity != "verbose":
+                    # Verbose mode forwards each changed metric event once;
+                    # startup and warning chatter remains in train.log.
+                    if verbosity == "verbose" and detail_changed:
+                        try:
+                            event = json.loads(last_detail)
+                        except json.JSONDecodeError:
+                            event = None
+                        if isinstance(event, dict) and "step" in event:
+                            print(
+                                f"[TrainLM] {stage}: {rendered}",
+                                flush=True,
+                            )
+                    elif verbosity != "verbose":
                         print(
                             f"[TrainLM] {stage}: still running ({elapsed}s); "
                             f"{rendered}; inactive={inactive}s",
                             flush=True,
                         )
-                    elif inactive and inactive % 60 == 0:
+                    elif verbosity == "verbose" and inactive and inactive % 60 == 0:
                         print(
                             f"[TrainLM] {stage}: no new worker event for "
                             f"{inactive}s; last={rendered}",
