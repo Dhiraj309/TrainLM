@@ -761,3 +761,15 @@ Use one feature/story per commit. Suggested next messages:
 - `feat(training): complete HF-like lifecycle and resume facade`
 - `feat(optimization): add model capability inspector and plan report`
 - `feat(optimization): add reversible kernel transform registry`
+
+### 112. Scheduled TPU smoke evaluation is explicitly bounded
+
+The Kaggle lifecycle smoke reached optimizer step 2 and then appeared idle because
+`eval_steps=2` synchronously evaluated an entire roughly 250-million-token shard
+before checkpointing. The public training arguments now expose
+`max_eval_batches`; it is carried through the private coordinator/worker boundary
+and enforced by the streaming trainer evaluation iterator. The SmolLM2 example
+and validation notebook set the limit to one batch, while the default remains
+`None` so production evaluation retains full-dataset semantics. Worker lifecycle
+messages now distinguish evaluation start/completion and checkpoint
+start/completion, making scheduled work after an optimizer step observable.

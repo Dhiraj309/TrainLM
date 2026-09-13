@@ -72,3 +72,8 @@ def test_public_config_rejects_unsupported_api_version():
             {"api_version": "2", "model": "org/model"},
             train_dataset=object(),
         )
+
+
+def test_training_arguments_reject_invalid_eval_batch_limit():
+    with pytest.raises(ValueError, match="max_eval_batches must be positive"):
+        TrainLMTrainingArguments(max_eval_batches=0)

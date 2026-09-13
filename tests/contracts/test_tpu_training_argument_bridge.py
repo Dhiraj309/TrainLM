@@ -16,6 +16,7 @@ def test_evaluation_uses_current_partition_plan_contract():
 
     assert "eval_partition.batch_indices" in source
     assert "eval_partition.assignments" not in source
+    assert "max_batches=args.max_eval_batches" in source
 
 
 def test_model_preflight_uses_a_bounded_diagnostic_shape():
