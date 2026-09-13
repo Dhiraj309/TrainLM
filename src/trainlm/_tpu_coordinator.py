@@ -9,6 +9,7 @@ from pathlib import Path
 import signal
 import subprocess
 import sys
+import time
 from typing import Any
 
 from trainlm.config import ModelSourceConfig
@@ -171,6 +172,11 @@ class _TPUCoordinator:
         if mode is not None:
             command.append(mode)
         log_path = request.output_dir / f"{stage}.log"
+        started = time.monotonic()
+        print(
+            f"[TrainLM] {stage}: started (details: {log_path})",
+            flush=True,
+        )
         with log_path.open("w", encoding="utf-8") as log:
             process = subprocess.Popen(
                 command,
@@ -185,7 +191,12 @@ class _TPUCoordinator:
                 # PJRT or the compiler hangs. Training itself remains bounded
                 # by the user's max_steps rather than these safety limits.
                 timeout = {"probe": 300, "model_preflight": 900}.get(stage)
-                returncode = process.wait(timeout=timeout)
+                returncode = self._wait_with_heartbeat(
+                    process,
+                    stage=stage,
+                    log_path=log_path,
+                    timeout=timeout,
+                )
             except subprocess.TimeoutExpired as exc:
                 self._terminate_process_group(process)
                 raise TPUCoordinatorError(
@@ -207,6 +218,47 @@ class _TPUCoordinator:
                 f"TPU {stage} stage failed with exit code {returncode}. "
                 f"See {log_path}. Last output:\n{tail}"
             )
+        print(
+            f"[TrainLM] {stage}: completed in {time.monotonic() - started:.1f}s",
+            flush=True,
+        )
+
+    @staticmethod
+    def _wait_with_heartbeat(
+        process: subprocess.Popen[Any],
+        *,
+        stage: str,
+        log_path: Path,
+        timeout: int | None,
+        heartbeat_seconds: int = 10,
+    ) -> int:
+        """Wait while reporting bounded, low-volume notebook progress."""
+
+        elapsed = 0
+        last_detail = "waiting for first worker event"
+        while True:
+            wait_seconds = heartbeat_seconds
+            if timeout is not None:
+                wait_seconds = min(wait_seconds, timeout - elapsed)
+                if wait_seconds <= 0:
+                    raise subprocess.TimeoutExpired(str(log_path), timeout)
+            try:
+                return process.wait(timeout=wait_seconds)
+            except subprocess.TimeoutExpired:
+                elapsed += wait_seconds
+                try:
+                    lines = log_path.read_text(
+                        encoding="utf-8", errors="replace"
+                    ).splitlines()
+                except OSError:
+                    lines = []
+                if lines:
+                    last_detail = lines[-1][-240:]
+                print(
+                    f"[TrainLM] {stage}: still running ({elapsed}s); "
+                    f"latest: {last_detail}",
+                    flush=True,
+                )
 
     @staticmethod
     def _terminate_process_group(process: subprocess.Popen[Any]) -> None:

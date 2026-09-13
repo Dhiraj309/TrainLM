@@ -36,6 +36,7 @@ manifest staging, process cleanup, and stage-log parsing remain private.
 | `[x]` | Train/eval data integration | Disjoint packed shard ranges can be staged for training and evaluation through the same reader and coordinator boundary. |
 | `[x]` | Private TPU coordinator | Probe, model preflight, training, structured result ingestion, logs, and private worker launch are hidden behind `trainer.train()`. |
 | `[x]` | Failure cleanup | Every stage owns a process group; error or interruption terminates the launcher and spawned ranks so notebook cells can be rerun. |
+| `[x]` | Visible lifecycle progress | Notebook cells print numbered start/completion markers; coordinator stages print start, ten-second heartbeat with the latest worker event, and completion messages. |
 | `[x]` | Model-source reconstruction | Both pretrained HF sources and config-initialized HF models are serialized and reconstructed independently inside workers. |
 | `[x]` | HBM-safe validation notebook | The notebook uses the pretrained `HuggingFaceTB/SmolLM2-135M-Instruct` checkpoint with a 128-token lifecycle geometry instead of replicating a 3.8B checkpoint on every TPU worker. Model preflight is independently capped at 16 tokens. |
 | `[x]` | Model revision handling | Mutable model selectors are resolved before TPU launch; explicit commit SHAs support offline/cache-only launches. |

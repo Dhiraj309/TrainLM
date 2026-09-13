@@ -720,6 +720,11 @@ this file in every turn:
      safety limits with process-group reclamation, and the notebook starts its
      actual lifecycle at sequence length 128 until the chunked-loss path removes
      the full-logit training graph.
+110. **M8-F0 notebook progress visibility:** setup/data/trainer/train/explain
+     cells now emit numbered progress markers. During `trainer.train()`, the
+     coordinator reports each private stage start/completion and a low-volume
+     ten-second heartbeat containing the latest worker event, so a long XLA
+     compile is visibly active without requiring users to open stage logs.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

@@ -243,6 +243,10 @@ preserving batch, model, precision, attention, and device paths. The coordinator
 terminates probe after five minutes or preflight after fifteen minutes so a
 compiler/PJRT hang cannot indefinitely retain eight CPU-heavy ranks and grow
 host RAM. The actual training shape is still compiled in the train stage.
+The notebook prints numbered cell markers, while the coordinator prints stage
+start/completion messages and a ten-second heartbeat with the latest bounded
+worker-log line. Long compilation is therefore distinguishable from a silent
+stall without exposing subprocess commands or requiring manual log parsing.
 
 Kaggle installation checkpoint (2026-09-05): the editable install completed
 with the pinned Torch 2.9.0, Torch/XLA 2.9.0, Transformers 5.15.0, and libtpu
