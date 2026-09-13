@@ -53,6 +53,8 @@ def test_tpu_notebook_demonstrates_the_public_hf_like_workflow():
         "[Notebook 1/8]",
         "[Notebook 8/8]",
         "verbose progress",
+        "progress.md",
+        "single live",
     ):
         assert required in source
 

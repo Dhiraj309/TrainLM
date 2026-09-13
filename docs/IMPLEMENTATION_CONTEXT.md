@@ -911,6 +911,20 @@ graph evidence is collected. The public option is currently guarded to TPU
 execution; CPU/CUDA users retain the lower-level explicit training-view escape
 hatch rather than silently falling back when they request it.
 
+Verbose TPU heartbeats are event-oriented: unchanged worker lines are no longer
+reprinted every poll, while a sparse liveness message remains available during
+long quiet stages. Training-start events and summaries identify the current
+topology explicitly as data parallel replicas and model-parallel degree one.
+
+The worker now maintains one rank-zero `progress.md` file in the run output
+directory. It is atomically replaced at training start and each materialized
+metric update, and finalized with the summary. The Markdown document contains
+the current phase and progress bar, step, loss, perplexity, gradient norm,
+learning rate, global supervised tokens, measured throughput, elapsed time,
+ETA, and the DP8/MP1 geometry. `scripts/show_trainlm_progress.py` can render
+that file once or watch it from a separate Kaggle/Jupyter cell; `%run` cannot
+execute concurrently with a training call in the same synchronous cell.
+
 The TPU launcher initializes each rank's persistent computation cache before its
 collective probe. The worker runtime now receives an explicit
 `cache_already_initialized` flag, reports the configured cache path without

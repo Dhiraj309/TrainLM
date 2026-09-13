@@ -235,6 +235,8 @@ class Trainer:
         }
         if self.state.loss is not None:
             metrics["loss"] = self.state.loss
+        if self.state.grad_norm is not None:
+            metrics["grad_norm"] = self.state.grad_norm
         self.callback_handler.on_metrics(self.state, self.control, metrics)
 
     def request_stop(self) -> None:
@@ -299,6 +301,7 @@ class Trainer:
         total_sequences: int,
         loss_numerator: torch.Tensor,
         exact_tokens: bool,
+        grad_norm: torch.Tensor | None,
     ) -> None:
         """Commit one optimizer update after all microbatches are reduced."""
 
@@ -311,8 +314,12 @@ class Trainer:
             self.state.loss = (
                 loss_value / total_tokens if exact_tokens else loss_value
             )
+            self.state.grad_norm = (
+                float(grad_norm.detach().item()) if grad_norm is not None else None
+            )
         else:
             self.state.loss = None
+            self.state.grad_norm = None
         self.state.learning_rate = self._current_learning_rate()
 
     def _train_step(self) -> None:
@@ -393,7 +400,7 @@ class Trainer:
                 1.0 / total_tokens,
             )
 
-        self.runtime.clip_gradients(
+        grad_norm = self.runtime.clip_gradients(
             self.model.parameters(),
             self.config.trainer.max_grad_norm,
         )
@@ -409,6 +416,7 @@ class Trainer:
             total_sequences=total_sequences,
             loss_numerator=loss_numerator,
             exact_tokens=exact_tokens,
+            grad_norm=grad_norm,
         )
         self._advance_scheduler(total_tokens=total_tokens)
         self.state.learning_rate = self._current_learning_rate()

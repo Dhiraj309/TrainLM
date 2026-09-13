@@ -33,6 +33,12 @@ def _format_worker_detail(detail: str) -> str:
         return "validating packed data"
     if stage == "launch_dp8":
         return "launching TPU workers"
+    if stage == "train_start" and isinstance(value.get("parallelism"), dict):
+        topology = value["parallelism"]
+        return (
+            f"training started (DP{topology.get('data_parallel', '?')} / "
+            f"MP{topology.get('model_parallel', '?')})"
+        )
     if "step" in value:
         fields = [f"step {value['step']}"]
         if value.get("loss") is not None:
@@ -238,7 +244,8 @@ class _TPUCoordinator:
         log_path.parent.mkdir(parents=True, exist_ok=True)
         started = time.monotonic()
         print(
-            f"[TrainLM] {stage}: started (details: {log_path})",
+            f"[TrainLM] {stage}: started (details: {log_path}; "
+            f"progress: {request.output_dir / 'progress.md'})",
             flush=True,
         )
         with log_path.open("w", encoding="utf-8") as log:
@@ -345,7 +352,8 @@ class _TPUCoordinator:
                     lines = []
                 if lines:
                     last_detail = lines[-1][-240:]
-                if last_detail != previous_detail:
+                detail_changed = last_detail != previous_detail
+                if detail_changed:
                     inactive = 0
                     previous_detail = last_detail
                 if verbosity != "quiet":
@@ -354,11 +362,21 @@ class _TPUCoordinator:
                         if verbosity == "verbose"
                         else f"latest: {last_detail}"
                     )
-                    print(
-                        f"[TrainLM] {stage}: still running ({elapsed}s); "
-                        f"{rendered}; inactive={inactive}s",
-                        flush=True,
-                    )
+                    # Verbose mode keeps the notebook to one live artifact:
+                    # progress.md. Emit only sparse liveness if the worker has
+                    # not changed its event stream for a minute.
+                    if verbosity != "verbose":
+                        print(
+                            f"[TrainLM] {stage}: still running ({elapsed}s); "
+                            f"{rendered}; inactive={inactive}s",
+                            flush=True,
+                        )
+                    elif inactive and inactive % 60 == 0:
+                        print(
+                            f"[TrainLM] {stage}: no new worker event for "
+                            f"{inactive}s; last={rendered}",
+                            flush=True,
+                        )
 
     @staticmethod
     def _terminate_process_group(process: subprocess.Popen[Any]) -> None:

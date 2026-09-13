@@ -2030,6 +2030,25 @@ ordered next stories for this PR branch.
   the next v5e-8 run, then benchmark chunk sizes 1024/2048/4096 for HBM and
   throughput.
 
+### Verbose TPU heartbeat de-duplication
+
+- Completed: suppress unchanged verbose worker events so a metric snapshot is
+  printed once instead of repeating on every five-second poll.
+- Completed: emit sparse liveness messages during long quiet stages and include
+  explicit `data_parallel`/`model_parallel` metadata in training events and the
+  worker summary.
+
+### Single live TPU progress document
+
+- Completed: make rank zero atomically refresh one `progress.md` document with
+  current step, loss, perplexity, gradient norm, learning rate, global token
+  count, throughput, ETA, progress bar, and DP/MP geometry.
+- Completed: keep verbose notebook output to stage boundaries and sparse
+  liveness messages; the raw `train.log` and `metrics.jsonl` remain available
+  for diagnostics and machine analysis.
+- Completed: add a `%run`-friendly watcher for rendering `progress.md` in a
+  Kaggle/Jupyter cell while a separate training process owns the TPU.
+
 ### TPU cache initialization repair
 
 - Completed: distinguish launcher-initialized XLA caches from runtime-owned

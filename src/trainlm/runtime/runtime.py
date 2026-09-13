@@ -141,8 +141,8 @@ class TorchRuntime:
         self,
         parameters: Iterable[nn.Parameter],
         max_norm: float,
-    ) -> None:
-        torch.nn.utils.clip_grad_norm_(parameters, max_norm)
+    ) -> torch.Tensor | None:
+        return torch.nn.utils.clip_grad_norm_(parameters, max_norm)
 
     def scale_gradients(
         self,

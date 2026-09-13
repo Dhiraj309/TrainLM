@@ -83,16 +83,121 @@ class PrintMetrics(TrainerCallback):
         self.elapsed = None
         self.measured_tokens = 0
         self.metrics_path = Path(args.output_dir) / "metrics.jsonl"
+        self.progress_path = Path(args.output_dir) / "progress.md"
 
     def _is_primary(self) -> bool:
         # PJRT's master-ordinal helper has varied across runtime releases;
         # global ordinal zero is the stable ownership contract for artifacts.
         return self.runtime.rank == 0
 
+    @staticmethod
+    def _progress_bar(step: int, maximum: int, width: int = 30) -> str:
+        fraction = min(max(step / maximum, 0.0), 1.0) if maximum else 0.0
+        filled = int(round(fraction * width))
+        return f"[{'#' * filled}{'-' * (width - filled)}] {fraction * 100:.1f}%"
+
+    def _write_progress(self, state, *, phase: str, summary: dict | None = None) -> None:
+        """Atomically replace one human-readable progress document.
+
+        The coordinator can safely display this file while a worker is writing
+        it because the temporary file is replaced only after the full document
+        has been flushed to disk.
+        """
+
+        if not self._is_primary():
+            return
+        now = time.time()
+        global_tokens = state.tokens_seen * self.runtime.world_size
+        throughput = None
+        scheduled_throughput = None
+        elapsed = self.elapsed
+        completed_steps = max(state.step - self.args.warmup_steps, 0)
+        if self.start_time is not None and completed_steps > 0:
+            elapsed = elapsed or max(time.perf_counter() - self.start_time, 0.0)
+            if elapsed > 0:
+                throughput = max(
+                    global_tokens - self.start_tokens * self.runtime.world_size, 0
+                ) / elapsed
+                scheduled_throughput = throughput * self.args.sequence_length / max(
+                    self.args.sequence_length - 1, 1
+                )
+        eta = None
+        if throughput and completed_steps > 0:
+            eta = max(self.args.max_steps - state.step, 0) * elapsed / completed_steps
+        loss = state.loss
+        if summary is not None:
+            loss = summary.get("last_loss_rank0", loss)
+            throughput = summary.get("steady_global_supervised_tokens_per_second", throughput)
+            scheduled_throughput = summary.get(
+                "steady_global_scheduled_tokens_per_second", scheduled_throughput
+            )
+            elapsed = summary.get("measured_seconds_slowest_rank", elapsed)
+            eta = 0.0 if state.step >= self.args.max_steps else eta
+            phase = summary.get("phase", phase)
+        perplexity = None
+        if loss is not None:
+            try:
+                perplexity = math.exp(loss)
+            except OverflowError:
+                perplexity = math.inf
+
+        def value(item) -> str:
+            if item is None:
+                return "—"
+            if isinstance(item, float) and not math.isfinite(item):
+                return "∞" if item > 0 else "NaN"
+            if isinstance(item, float):
+                return f"{item:,.4f}"
+            return f"{item:,}" if isinstance(item, int) else str(item)
+
+        updated = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime(now))
+        lines = [
+            "# TrainLM training progress",
+            "",
+            f"**Status:** `{phase}`  ",
+            f"**Last updated:** {updated}",
+            "",
+            "## Current step",
+            "",
+            f"**{self._progress_bar(state.step, self.args.max_steps)}**",
+            "",
+            "| Field | Value |",
+            "| --- | ---: |",
+            f"| Step | {state.step:,} / {self.args.max_steps:,} |",
+            f"| Loss | {value(loss)} |",
+            f"| Perplexity | {value(perplexity)} |",
+            f"| Gradient norm | {value(state.grad_norm)} |",
+            f"| Learning rate | {value(state.learning_rate)} |",
+            "",
+            "## Throughput and time",
+            "",
+            "| Field | Value |",
+            "| --- | ---: |",
+            f"| Supervised tokens/sec (global) | {value(throughput)} |",
+            f"| Scheduled tokens/sec (global) | {value(scheduled_throughput)} |",
+            f"| Tokens seen (global) | {global_tokens:,} |",
+            f"| Tokens/update (global) | {state.global_batch_size * self.runtime.world_size * self.args.sequence_length:,} |",
+            f"| Elapsed (seconds) | {value(elapsed)} |",
+            f"| Estimated time remaining (seconds) | {value(eta)} |",
+            "",
+            "## Run configuration",
+            "",
+            f"- Data parallel: `{self.runtime.world_size}`; model parallel: `1`",
+            f"- Sequence length: `{self.args.sequence_length:,}`",
+            f"- Micro batch/device: `{self.args.micro_batch_per_device}`",
+            f"- Gradient accumulation: `{self.args.gradient_accumulation_steps}`",
+            f"- Loss implementation: `{self.args.loss_implementation}`",
+            f"- Metrics artifact: `{self.metrics_path.name}`",
+        ]
+        temporary = self.progress_path.with_suffix(".md.tmp")
+        temporary.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        temporary.replace(self.progress_path)
+
     def on_train_begin(self, state, control):
         if self._is_primary():
             self.metrics_path.parent.mkdir(parents=True, exist_ok=True)
             self.metrics_path.unlink(missing_ok=True)
+            self._write_progress(state, phase="starting")
         if self.args.warmup_steps == 0:
             torch_xla.sync(wait=True)
             self.start_time = time.perf_counter()
@@ -123,6 +228,7 @@ class PrintMetrics(TrainerCallback):
             }
             with self.metrics_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(snapshot, sort_keys=True) + "\n")
+            self._write_progress(state, phase="training")
             print(json.dumps(snapshot, sort_keys=True), flush=True)
             if "step" in snapshot and self.args.eval_every_steps is not None:
                 step = int(snapshot["step"])
@@ -165,6 +271,9 @@ class PrintMetrics(TrainerCallback):
                 ),
                 flush=True,
             )
+
+    def finalize(self, state, summary: dict) -> None:
+        self._write_progress(state, phase="finalized", summary=summary)
 
 
 def _source(args: argparse.Namespace) -> ModelSourceConfig:
@@ -581,6 +690,10 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
             {"stage": "train_start", "rank": rank,
              "parameters": sum(p.numel() for p in model.parameters()),
              "attention": attention_backend or getattr(model.config, "_attn_implementation", None),
+             "parallelism": {
+                 "data_parallel": world_size,
+                 "model_parallel": 1,
+             },
              "loss": (
                  "chunked_linear_causal_ce_z_loss"
                  if args.loss_implementation == "chunked_linear"
@@ -618,7 +731,9 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
         "learning_rate": state.learning_rate,
         "global_supervised_tokens": state.tokens_seen * world_size,
         "last_loss_rank0": state.loss,
+        "last_grad_norm_rank0": state.grad_norm,
         "world_size": world_size,
+        "parallelism": {"data_parallel": world_size, "model_parallel": 1},
         "scheduled_tokens_per_update": args.sequence_length * args.micro_batch_per_device
             * args.gradient_accumulation_steps * world_size,
         "measured_global_supervised_tokens": metrics.measured_tokens,
@@ -650,9 +765,11 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
             if (path / "manifest.json").is_file()
         ),
     }
+    summary["progress_document"] = str(Path(args.output_dir) / "progress.md")
     if rank == 0:
         output = Path(args.output_dir)
         output.mkdir(parents=True, exist_ok=True)
+        metrics.finalize(state, summary)
         (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
         import torch_xla.debug.metrics as xla_metrics
         (output / "xla_metrics.txt").write_text(xla_metrics.metrics_report(), encoding="utf-8")
