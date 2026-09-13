@@ -228,6 +228,22 @@ class _TPUCoordinator:
                 f"TPU {stage} stage failed with exit code {returncode}. "
                 f"See {log_path}. Last output:\n{tail}"
             )
+        log_text = log_path.read_text(encoding="utf-8", errors="replace")
+        fatal_marker = next(
+            (
+                marker
+                for marker in ("RAW: Dumping core", "exit() hanging: exiting process")
+                if marker in log_text
+            ),
+            None,
+        )
+        if fatal_marker is not None:
+            raise TPUCoordinatorError(
+                f"TPU {stage} reported a fatal PJRT worker shutdown "
+                f"({fatal_marker!r}) even though its launcher returned success. "
+                "Restart the notebook session to reset the TPU runtime before "
+                f"retrying; see {log_path}."
+            )
         print(
             f"[TrainLM] {stage}: completed in {time.monotonic() - started:.1f}s",
             flush=True,

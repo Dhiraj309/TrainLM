@@ -782,3 +782,17 @@ fixtures as well as older serialized configurations.
 The owner-run full-validation recommendation is deliberately not represented as
 an unchecked M17 feature item: M17 is already complete, and roadmap status is
 derived mechanically from the checklist within each milestone section.
+
+### 113. Lifecycle smoke no longer compiles a second evaluation graph
+
+The bounded one-batch evaluation still spent several minutes after
+`evaluation_start`: on XLA the first eval-mode forward is a distinct compilation,
+so limiting data volume does not bound first-graph compilation latency. The
+public evaluation feature and `max_eval_batches` remain supported, but the
+compile-small SmolLM2 notebook now validates train/checkpoint/resume without an
+evaluation dataset. Evaluation is an explicit subsequent validation run.
+
+A separate probe log showed `RAW: Dumping core` and `exit() hanging` while the
+launcher nevertheless returned zero. The coordinator now treats those PJRT fatal
+shutdown markers as failure and tells the user to restart the notebook session;
+it no longer reports such a probe as completed or continues into model loading.

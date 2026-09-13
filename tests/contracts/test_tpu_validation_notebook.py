@@ -35,14 +35,12 @@ def test_tpu_notebook_demonstrates_the_public_hf_like_workflow():
         "TrainLMTrainer.from_config",
         "PackedBinDataset.from_hub",
         "shard_range=(0, TRAIN_SHARD_STOP)",
-        "shard_range=(TRAIN_SHARD_STOP, TRAIN_SHARD_STOP + 1)",
         "cache_dir=DATA_CACHE_DIR",
         "It does not download during training",
         "result = trainer.train()",
         "terminates the complete private worker process group",
         'trainer.explain(format="text")',
-        '"eval_steps": 2',
-        '"max_eval_batches": 1',
+        "Evaluation is intentionally omitted from this compile-small lifecycle smoke",
         '"save_steps": 2',
         "resume_from_checkpoint=OUTPUT_DIR",
         "[Notebook 1/8]",
@@ -55,6 +53,8 @@ def test_tpu_notebook_demonstrates_the_public_hf_like_workflow():
     # Kaggle session never installs a stale copy of the repository.
     assert source.index("!git clone --branch") < source.index("%pip uninstall")
     assert source.index('git checkout -B "$BRANCH"') < source.index("%pip uninstall")
+    assert '"eval_steps"' not in source
+    assert "eval_dataset=" not in source
 
 
 def test_tpu_notebook_hides_orchestration_and_topology_inputs():

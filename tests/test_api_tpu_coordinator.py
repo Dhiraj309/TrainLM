@@ -448,6 +448,31 @@ def test_coordinator_prints_stage_heartbeat(tmp_path, monkeypatch, capsys):
     assert "[TrainLM] probe: started" in output
     assert "[TrainLM] probe: still running (10s)" in output
     assert 'latest: {"stage":"worker_entered"}' in output
+
+
+def test_coordinator_rejects_fatal_pjrt_log_with_success_exit(
+    tmp_path, monkeypatch
+):
+    worker = tmp_path / "worker.py"
+    worker.write_text("# test worker\n", encoding="utf-8")
+    request = _request(tmp_path)
+
+    class Process:
+        pid = 123
+
+        def wait(self, timeout=None):
+            return 0
+
+    def popen(command, **kwargs):
+        del command
+        kwargs["stdout"].write("RAW: Dumping core locally.\n")
+        kwargs["stdout"].flush()
+        return Process()
+
+    monkeypatch.setattr(subprocess, "Popen", popen)
+
+    with pytest.raises(TPUCoordinatorError, match="Restart the notebook session"):
+        _TPUCoordinator(worker)._run_stage("probe", request, "--probe-only")
     assert "inactive=0s" in output
     assert "[TrainLM] probe: completed" in output
 

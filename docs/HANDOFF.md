@@ -157,3 +157,13 @@ the public API, coordinator, worker, and trainer. The notebook and SmolLM2 smoke
 example use `max_eval_batches: 1`; remove that limit only for deliberate full-set
 validation. Evaluation and checkpoint phase transitions are printed so future
 runs identify this work directly.
+
+## TPU smoke and first-evaluation compilation
+
+`max_eval_batches=1` bounds evaluation execution but cannot bound the first XLA
+eval-mode graph compilation. The validation notebook therefore omits evaluation
+from its initial train/checkpoint/resume smoke. Add an evaluation dataset and
+cadence only in a separate run after lifecycle success. If a probe log contains
+`RAW: Dumping core` or `exit() hanging`, the TPU runtime is unhealthy; the
+coordinator now rejects the false-success launcher result and requests a full
+notebook session restart.
