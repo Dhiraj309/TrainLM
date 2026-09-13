@@ -1736,6 +1736,17 @@ attention remain the performance phase before any parity claim.
 
 ## Next validation after sparse-loss fix (2026-09-06)
 
+### TPU smoke repair (2026-09-13)
+
+The first public-notebook run reached the training worker and failed during
+evaluation setup because `scripts/trainlm_tpu_training.py` still referenced
+the removed `BatchPartitionPlan.assignments` field. The current partition
+contract exposes rank-local work through `batch_indices`; the worker now uses
+that field and a contract test prevents the stale name from returning. This
+is a functional compatibility repair, not a performance result. Rerun the
+six-step notebook lifecycle on a fresh v5e-8 session before collecting any
+throughput evidence.
+
 Run the identical 135M Llama geometry on a fresh v5e-8 session with the
 current source and pinned editable install. First repeat the two-update smoke
 (`--log-every-steps 1`) to guard the optimizer/lifecycle path, then repeat the

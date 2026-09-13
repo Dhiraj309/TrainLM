@@ -323,7 +323,11 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
             cross_shard_remainder="drop",
             host_remainder="drop",
         )
-        if not eval_partition.assignments:
+        # ``BatchPartitionPlan`` exposes the rank-local schedule as
+        # ``batch_indices``. The former ``assignments`` name belonged to an
+        # older partition contract and only failed once the TPU worker reached
+        # evaluation setup.
+        if not eval_partition.batch_indices:
             raise ValueError(
                 "Evaluation data has no complete batch for the active TPU topology."
             )
