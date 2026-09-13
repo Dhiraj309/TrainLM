@@ -16,3 +16,10 @@ def test_evaluation_uses_current_partition_plan_contract():
 
     assert "eval_partition.batch_indices" in source
     assert "eval_partition.assignments" not in source
+
+
+def test_model_preflight_uses_a_bounded_diagnostic_shape():
+    source = TRAINING_SCRIPT.read_text(encoding="utf-8")
+
+    assert "preflight_sequence_length = min(args.sequence_length, 16)" in source
+    assert '"sequence_length": preflight_sequence_length' in source

@@ -222,7 +222,7 @@ The first public lifecycle smoke now uses the pretrained
 `HuggingFaceTB/SmolLM2-135M-Instruct` checkpoint rather than loading the full
 3.8B Phi checkpoint on every replica. SmolLM2 is a dense Llama-family decoder
 with 30 layers, hidden size 576, 9 query heads, 3 KV heads, and a 49,152-token
-vocabulary. The notebook uses a 1,024-token memory-safe smoke geometry. The
+vocabulary. The notebook uses a 128-token lifecycle-smoke geometry. The
 current LaughLM binary shards remain suitable for lifecycle/API testing only:
 their tokenizer vocabulary is different, so loss and quality are not valid
 SmolLM2 training evidence until SmolLM2-tokenized shards are supplied. The
@@ -231,11 +231,18 @@ reconstructs the same model for probe, preflight, training, evaluation, and
 resume.
 
 The matching starter configuration is
-`examples/smollm2_135m_tpu_pretraining.yaml`. It deliberately uses one shard,
-sequence length 1,024, BF16 checkpoint parameters, and six steps for a
+`examples/smollm2_135m_tpu_pretraining.yaml`. The notebook deliberately uses
+one shard, sequence length 128, BF16 checkpoint parameters, and six steps for a
 memory-safe lifecycle check. This
 configuration is not a throughput benchmark and must not be used to claim
 SmolLM2 quality when the input shards were produced by another tokenizer.
+
+The TPU model-preflight stage is a capability diagnostic, not a duplicate
+training-shape benchmark. It therefore caps its forward at 16 tokens while
+preserving batch, model, precision, attention, and device paths. The coordinator
+terminates probe after five minutes or preflight after fifteen minutes so a
+compiler/PJRT hang cannot indefinitely retain eight CPU-heavy ranks and grow
+host RAM. The actual training shape is still compiled in the train stage.
 
 Kaggle installation checkpoint (2026-09-05): the editable install completed
 with the pinned Torch 2.9.0, Torch/XLA 2.9.0, Transformers 5.15.0, and libtpu

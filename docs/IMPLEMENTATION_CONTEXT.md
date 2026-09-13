@@ -98,8 +98,12 @@ and 49,152 vocabulary exercise pretrained reconstruction and non-MHA head
 geometry. The existing LaughLM `.bin` shards are intentionally retained only
 for lifecycle testing because their tokenizer differs from SmolLM2; a valid
 loss/quality experiment requires shards produced by the SmolLM2 tokenizer.
-The first rerun uses one train shard and sequence length 1,024 to reduce the
-memory risk observed with the earlier full-logit smoke.
+The first rerun uses one train shard and sequence length 128 to keep the
+full-logit lifecycle compilation small. Model preflight separately caps its
+diagnostic forward at 16 tokens: compiling the full requested shape in each of
+eight ranks was redundant and could drive aggregate host compiler memory above
+250 GiB before training. Probe and preflight also have bounded coordinator
+timeouts that reclaim the complete process group on a PJRT/compiler hang.
 The matching YAML starter is `examples/smollm2_135m_tpu_pretraining.yaml`.
 
 The notebook bootstrap now removes the common TensorFlow distribution
@@ -710,6 +714,12 @@ this file in every turn:
      public/data/runtime/optimization implementation state, uses distinct done,
      partial/evidence-pending, and planned marks, and carries the proposed
      parallelism, architecture-lab, telemetry, and closed-loop tuning backlog.
+109. **M8-F0 bounded-memory TPU diagnostics:** model preflight now compiles a
+     maximum 16-token forward rather than duplicating the full training-shape
+     compile across all eight ranks. Probe/preflight have five/fifteen-minute
+     safety limits with process-group reclamation, and the notebook starts its
+     actual lifecycle at sequence length 128 until the chunked-loss path removes
+     the full-logit training graph.
    M9-F5 software conformance now covers representative hidden-output forms and
    tied/untied, biased/bias-free heads; M9-F3/F4 still require TPU measurements.
 

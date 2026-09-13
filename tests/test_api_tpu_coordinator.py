@@ -370,6 +370,33 @@ def test_coordinator_owns_stages_logs_and_structured_summary(tmp_path, monkeypat
     assert (request.output_dir / "train.log").read_text() == "stage passed\n"
 
 
+def test_coordinator_bounds_diagnostic_stage_and_reclaims_timeout(
+    tmp_path, monkeypatch
+):
+    worker = tmp_path / "worker.py"
+    worker.write_text("# test worker\n", encoding="utf-8")
+    request = _request(tmp_path)
+    terminated = []
+
+    class HungProcess:
+        pid = 123
+
+        def wait(self, timeout=None):
+            raise subprocess.TimeoutExpired("worker", timeout)
+
+    monkeypatch.setattr(subprocess, "Popen", lambda *args, **kwargs: HungProcess())
+    monkeypatch.setattr(
+        _TPUCoordinator,
+        "_terminate_process_group",
+        staticmethod(lambda process: terminated.append(process.pid)),
+    )
+
+    with pytest.raises(TPUCoordinatorError, match="300-second safety limit"):
+        _TPUCoordinator(worker)._run_stage("probe", request, "--probe-only")
+
+    assert terminated == [123]
+
+
 def test_coordinator_reports_actionable_stage_failure(tmp_path, monkeypatch):
     worker = tmp_path / "worker.py"
     worker.write_text("# test worker\n", encoding="utf-8")
