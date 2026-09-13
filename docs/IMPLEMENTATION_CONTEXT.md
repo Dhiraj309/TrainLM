@@ -102,6 +102,20 @@ The first rerun uses one train shard and sequence length 1,024 to reduce the
 memory risk observed with the earlier full-logit smoke.
 The matching YAML starter is `examples/smollm2_135m_tpu_pretraining.yaml`.
 
+The notebook bootstrap now removes the common TensorFlow distribution
+variants, Keras packages, and optional vision/audio wheels. It also removes an
+orphaned `tensorflow/` package directory when no distribution metadata remains
+and keeps the post-restart importability assertion as a hard setup gate.
+
+The public notebook now bootstraps its source revision explicitly. Before
+installation it clones the single
+`milestone/m10-m12-kernels-parity` branch, enters `/kaggle/working/TrainLM`,
+fetches `origin/<branch>`, and checks out a local branch at that remote ref.
+It prints the short subject and full SHA so the run is reproducible. On a
+rerun where the directory already exists, skip the clone cell and rerun the
+fetch/checkout cell; this keeps the user-facing workflow current without
+exposing private worker or topology commands.
+
 ## Implemented public API slice (M8-F0, in progress)
 
 `src/trainlm/api.py` currently provides:
