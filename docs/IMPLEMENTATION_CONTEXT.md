@@ -83,6 +83,15 @@ and incomplete TPU-side data/worker orchestration behind the public API.
 Optimization targets (850K gate and LaughLM-class parity) must be measured in
 matched runs; planning ranges are not guarantees.
 
+### Evaluation partition API repair (2026-09-13)
+
+The first public-notebook training attempt passed probe and model preflight
+but failed when the worker prepared evaluation data: it accessed the removed
+`BatchPartitionPlan.assignments` field. The worker now checks the current
+rank-local `batch_indices` schedule, with a contract regression test covering
+the boundary. This fixes evaluation setup only; the v5e-8 lifecycle and all
+performance claims remain pending a fresh target run.
+
 ## Implemented public API slice (M8-F0, in progress)
 
 `src/trainlm/api.py` currently provides:
