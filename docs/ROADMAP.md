@@ -1975,5 +1975,15 @@ ordered next stories for this PR branch.
   immediately before the first TPU allocation.
 - Completed: fail before launch when a stale notebook kernel retains evaluation,
   checkpoint, SmolLM2, or 128-token baseline state.
-- Follow-up: capture the first clean two-update result from the verified 135M
+- Follow-up: capture the first clean 100-update result from the verified 135M
   configuration on a fresh Kaggle v5e-8 session.
+
+### Public 319K baseline reproduction
+
+- Completed: expose the existing WSD scheduler through the HF-like training
+  arguments so the public path can reproduce the recorded baseline policy.
+- Completed: configure the validation notebook for 100 updates, five excluded
+  warmup updates, and ten-update metric materialization at the locked 135M
+  geometry.
+- Follow-up: compare the fresh target-v5e result with the recorded ~319K generic
+  baseline before evaluating the 850K and 912.6K optimization gates.
