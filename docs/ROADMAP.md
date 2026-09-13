@@ -2029,3 +2029,12 @@ ordered next stories for this PR branch.
 - Follow-up: verify rank-0-only artifact ownership and warm-cache behavior on
   the next v5e-8 run, then benchmark chunk sizes 1024/2048/4096 for HBM and
   throughput.
+
+### TPU cache initialization repair
+
+- Completed: distinguish launcher-initialized XLA caches from runtime-owned
+  caches so the worker does not initialize the same PJRT computation cache twice.
+- Completed: preserve cache path and initialized status in runtime diagnostics;
+  added a regression contract for the externally initialized case.
+- Follow-up: rerun the MB4/GA16 candidate on v5e-8 and confirm worker startup
+  reaches the collective probe and training stages.

@@ -336,6 +336,7 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
         device=device,
         precision=args.precision,
         cache_dir=cache_dir,
+        cache_already_initialized=True,
         compile_training=False,
         collect_diagnostics=True,
     )
