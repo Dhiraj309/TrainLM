@@ -207,11 +207,19 @@ class CausalLMTask:
         }
         if self.loss_implementation == "chunked_linear":
             assert self.training_view is not None
+            # Packed TPU batches are explicitly all-supervised. Avoid sending
+            # a denominator reduction to the host once per microstep in this
+            # hot path; the chunked loss can use the static target geometry.
+            chunk_loss_mask = (
+                None
+                if self.assume_all_supervised and counts.ignored_tokens == 0
+                else loss_mask
+            )
             with backend.autocast():
                 loss, z_loss_value = self.training_view.loss(
                     model_inputs,
                     model_labels,
-                    loss_mask=loss_mask,
+                    loss_mask=chunk_loss_mask,
                     chunk_size=self.logits_chunk_size,
                     ignore_index=self.ignore_index,
                     z_loss=self.z_loss,

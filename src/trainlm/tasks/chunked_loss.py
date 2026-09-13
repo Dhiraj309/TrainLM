@@ -84,10 +84,16 @@ def chunked_linear_causal_cross_entropy(
             shifted_labels,
             torch.full_like(shifted_labels, ignore_index),
         )
-    supervised = shifted_labels.ne(ignore_index)
-    denominator = supervised.sum()
-    if not bool(denominator.item()):
-        raise ValueError("Causal loss contains no supervised target tokens.")
+    if loss_mask is None:
+        # A caller that omits the mask promises a dense packed target stream.
+        # Keep this denominator a Python integer so XLA does not synchronize a
+        # scalar to the host for every microstep.
+        denominator: int | torch.Tensor = shifted_labels.numel()
+    else:
+        supervised = shifted_labels.ne(ignore_index)
+        denominator = supervised.sum()
+        if not bool(denominator.item()):
+            raise ValueError("Causal loss contains no supervised target tokens.")
 
     loss_sum = hidden_states.new_zeros((), dtype=torch.float32)
     z_sum = hidden_states.new_zeros((), dtype=torch.float32)
