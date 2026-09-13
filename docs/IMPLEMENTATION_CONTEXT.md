@@ -829,5 +829,15 @@ Immediately before allocating TPU workers, the validation notebook now compares
 the constructed trainer against the exact 135M baseline geometry and rejects any
 stale 128-token/SmolLM2 trainer retained by the notebook kernel. It also rejects
 an evaluation dataset, evaluation cadence, or checkpoint cadence in the first
-two-update baseline. The verified configuration is printed before the single
+100-update baseline. The verified configuration is printed before the single
 public `trainer.train()` call so the owner can confirm what will execute.
+
+### 117. Measure the public baseline with the historical window
+
+The notebook now runs the same 100-update reference geometry as the recorded
+319K baseline, excludes the first five updates from timing, logs every ten
+updates, and exposes the existing WSD scheduler through the public training
+arguments. The earlier two-update result included compilation because it had no
+excluded warmup window; its 29.9K tok/s value was a lifecycle measurement, not a
+regression against the historical steady-state result. Evaluation and checkpoint
+cadence remain absent from this matched performance run.

@@ -125,7 +125,7 @@ class TrainLMTrainingArguments:
     betas: tuple[float, float] = (0.9, 0.95)
     eps: float = 1e-8
     weight_decay: float = 0.1
-    lr_scheduler_type: Literal["constant", "linear", "cosine"] = "cosine"
+    lr_scheduler_type: Literal["constant", "linear", "cosine", "wsd"] = "cosine"
     warmup_steps: int = 0
     bf16: bool = False
     fp16: bool = False
@@ -172,7 +172,7 @@ class TrainLMTrainingArguments:
             raise ValueError("bf16 and fp16 cannot both be enabled.")
         if self.accelerator not in {"auto", "cpu", "cuda", "tpu"}:
             raise ValueError(f"Unsupported accelerator: {self.accelerator}")
-        if self.lr_scheduler_type not in {"constant", "linear", "cosine"}:
+        if self.lr_scheduler_type not in {"constant", "linear", "cosine", "wsd"}:
             raise ValueError(f"Unsupported scheduler: {self.lr_scheduler_type}")
         if isinstance(self.warmup_steps, bool) or not isinstance(self.warmup_steps, int) or self.warmup_steps < 0:
             raise ValueError("warmup_steps must be non-negative.")
