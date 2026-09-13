@@ -910,3 +910,10 @@ full-logit loss remains the default until numerical, gradient, HBM, and target-X
 graph evidence is collected. The public option is currently guarded to TPU
 execution; CPU/CUDA users retain the lower-level explicit training-view escape
 hatch rather than silently falling back when they request it.
+
+The TPU launcher initializes each rank's persistent computation cache before its
+collective probe. The worker runtime now receives an explicit
+`cache_already_initialized` flag, reports the configured cache path without
+calling `initialize_cache` a second time, and retains the normal runtime-owned
+cache behavior for other callers. This fixes the v5e startup failure
+`Computation cache has already been initialized` without changing cache policy.

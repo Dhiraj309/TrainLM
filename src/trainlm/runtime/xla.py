@@ -52,6 +52,7 @@ class XlaRuntime:
         torch_xla_runtime_module: Any | None = None,
         cache_dir: str | Path | None = None,
         cache_readonly: bool = False,
+        cache_already_initialized: bool = False,
         compile_training: bool = False,
         diagnostics: XlaDiagnostics | None = None,
         collect_diagnostics: bool = False,
@@ -75,7 +76,9 @@ class XlaRuntime:
         self._shape_guard = StaticShapeGuard()
         self._cache_dir = Path(cache_dir) if cache_dir is not None else None
         self._cache_readonly = cache_readonly
-        self._cache_initialized = False
+        if not isinstance(cache_already_initialized, bool):
+            raise TypeError("cache_already_initialized must be boolean.")
+        self._cache_initialized = cache_already_initialized
         self._compile_training = compile_training
         self._compiled_step_ids: set[int] = set()
         if diagnostics is not None and collect_diagnostics:
@@ -89,7 +92,7 @@ class XlaRuntime:
                 else None
             )
         )
-        if self._cache_dir is not None:
+        if self._cache_dir is not None and not self._cache_initialized:
             self._initialize_cache()
         self._device = (
             torch.device(device)

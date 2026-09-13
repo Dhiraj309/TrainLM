@@ -232,6 +232,22 @@ def test_xla_runtime_initializes_persistent_cache_before_device_use(tmp_path):
     assert backend.diagnostics().values["compilation_cache_initialized"] is True
 
 
+def test_xla_runtime_can_report_an_externally_initialized_cache(tmp_path):
+    xm = FakeXlaModel()
+    cache_runtime = FakeXlaRuntimeModule()
+    backend = XlaRuntime(
+        device="cpu",
+        xm_module=xm,
+        torch_xla_module=SimpleNamespace(__version__="2.9.0"),
+        torch_xla_runtime_module=cache_runtime,
+        cache_dir=tmp_path / "xla-cache",
+        cache_already_initialized=True,
+    )
+
+    assert cache_runtime.cache_calls == []
+    assert backend.diagnostics().values["compilation_cache_initialized"] is True
+
+
 def test_xla_runtime_rejects_dynamic_batch_shapes_and_accumulation():
     backend, _, _ = runtime()
     backend.configure_static_shapes(accumulation_steps=2)
