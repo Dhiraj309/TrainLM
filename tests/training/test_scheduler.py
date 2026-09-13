@@ -93,3 +93,72 @@ def test_scheduler_factory_builds_wsd_and_rejects_missing_horizon():
         create_scheduler(optimizer, SchedulerConfig(name="constant")),
         torch.optim.lr_scheduler.LRScheduler,
     )
+
+
+@pytest.mark.parametrize(
+    ("tokens", "expected_multiplier"),
+    (
+        (0, 0.0),
+        (1, 0.1),
+        (9, 0.9),
+        (10, 1.0),
+        (59, 1.0),
+        (60, 1.0),
+        (61, 0.98),
+        (80, 0.6),
+        (99, 0.22),
+        (100, 0.2),
+        (101, 0.2),
+    ),
+)
+def test_wsd_boundaries_and_resume_are_exact(tokens, expected_multiplier):
+    optimizer, scheduler = _scheduler(
+        horizon_tokens=100,
+        warmup_fraction=0.1,
+        stable_fraction=0.5,
+        min_lr_ratio=0.2,
+    )
+    scheduler.step_tokens(tokens)
+    saved_optimizer = optimizer.state_dict()
+    saved_scheduler = scheduler.state_dict()
+
+    resumed_optimizer, resumed = _scheduler(
+        horizon_tokens=100,
+        warmup_fraction=0.1,
+        stable_fraction=0.5,
+        min_lr_ratio=0.2,
+    )
+    resumed_optimizer.load_state_dict(saved_optimizer)
+    resumed.load_state_dict(saved_scheduler)
+
+    expected_lr = 0.1 * expected_multiplier
+    assert optimizer.param_groups[0]["lr"] == pytest.approx(expected_lr)
+    assert resumed_optimizer.param_groups[0]["lr"] == pytest.approx(expected_lr)
+    assert resumed.last_tokens == tokens
+    assert resumed.state_dict() == saved_scheduler
+
+
+def test_wsd_resume_produces_identical_future_schedule():
+    optimizer, uninterrupted = _scheduler(
+        horizon_tokens=1_000,
+        warmup_fraction=0.05,
+        stable_fraction=0.8,
+        min_lr_ratio=0.1,
+    )
+    for tokens in (17, 50, 411):
+        uninterrupted.step_tokens(tokens)
+
+    resumed_optimizer, resumed = _scheduler(
+        horizon_tokens=1_000,
+        warmup_fraction=0.05,
+        stable_fraction=0.8,
+        min_lr_ratio=0.1,
+    )
+    resumed_optimizer.load_state_dict(optimizer.state_dict())
+    resumed.load_state_dict(uninterrupted.state_dict())
+
+    for tokens in (849, 850, 925, 1_000, 1_250):
+        uninterrupted.step_tokens(tokens)
+        resumed.step_tokens(tokens)
+        assert resumed.get_last_lr() == pytest.approx(uninterrupted.get_last_lr())
+        assert resumed.state_dict() == uninterrupted.state_dict()

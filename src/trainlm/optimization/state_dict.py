@@ -70,7 +70,35 @@ class ParameterLayoutMapping:
 
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> "ParameterLayoutMapping":
+        if not isinstance(value, Mapping):
+            raise TypeError("Layout mapping manifest entry must be a mapping.")
         data = dict(value)
+        required = {
+            "mapping_id",
+            "canonical_keys",
+            "transformed_key",
+            "canonical_shapes",
+        }
+        allowed = required | {"axis", "dtype"}
+        missing = sorted(required - data.keys())
+        unknown = sorted(
+            repr(key) for key in data if not isinstance(key, str) or key not in allowed
+        )
+        if missing:
+            raise ValueError(
+                "Layout mapping manifest is missing keys: " + ", ".join(missing)
+            )
+        if unknown:
+            raise ValueError(
+                "Layout mapping manifest has unknown keys: " + ", ".join(unknown)
+            )
+        if not isinstance(data["canonical_keys"], (list, tuple)):
+            raise TypeError("canonical_keys must be a list or tuple.")
+        if not isinstance(data["canonical_shapes"], (list, tuple)) or any(
+            not isinstance(shape, (list, tuple))
+            for shape in data["canonical_shapes"]
+        ):
+            raise TypeError("canonical_shapes must be a sequence of shapes.")
         data["canonical_keys"] = tuple(data["canonical_keys"])
         data["canonical_shapes"] = tuple(tuple(shape) for shape in data["canonical_shapes"])
         return cls(**data)
@@ -98,11 +126,22 @@ class StateDictLayoutConverter:
             raise ValueError("Transformed keys must be unique.")
         if set(canonical_keys) & set(transformed_keys):
             raise ValueError("Canonical and transformed key sets cannot overlap.")
+        alias_keys: list[str] = []
         for group in alias_groups:
             if len(group) < 2 or len(group) != len(set(group)) or any(
                 not isinstance(key, str) or not key.strip() for key in group
             ):
                 raise ValueError("Alias groups require at least two unique keys.")
+            alias_keys.extend(group)
+        if len(alias_keys) != len(set(alias_keys)):
+            raise ValueError("State-dict keys cannot participate in multiple alias groups.")
+        mapped_keys = set(canonical_keys) | set(transformed_keys)
+        conflicting_aliases = sorted(mapped_keys & set(alias_keys))
+        if conflicting_aliases:
+            raise ValueError(
+                "Mapped layout keys cannot also belong to alias groups: "
+                + ", ".join(conflicting_aliases)
+            )
         self.mappings = mappings
         self.alias_groups = alias_groups
 
@@ -145,11 +184,35 @@ class StateDictLayoutConverter:
 
     @classmethod
     def from_manifest(cls, value: Mapping[str, Any]) -> "StateDictLayoutConverter":
-        if value.get("schema_version") != 1:
+        if not isinstance(value, Mapping):
+            raise TypeError("State-dict layout manifest must be a mapping.")
+        allowed = {"schema_version", "mappings", "alias_groups"}
+        unknown = sorted(
+            repr(key) for key in value if not isinstance(key, str) or key not in allowed
+        )
+        if unknown:
+            raise ValueError(
+                "State-dict layout manifest has unknown keys: " + ", ".join(unknown)
+            )
+        missing = sorted(allowed - value.keys())
+        if missing:
+            raise ValueError(
+                "State-dict layout manifest is missing keys: " + ", ".join(missing)
+            )
+        schema_version = value["schema_version"]
+        if isinstance(schema_version, bool) or schema_version != 1:
             raise ValueError("State-dict layout manifest supports schema_version=1 only.")
+        mappings = value["mappings"]
+        alias_groups = value["alias_groups"]
+        if not isinstance(mappings, (list, tuple)):
+            raise TypeError("State-dict layout mappings must be a list or tuple.")
+        if not isinstance(alias_groups, (list, tuple)) or any(
+            not isinstance(group, (list, tuple)) for group in alias_groups
+        ):
+            raise TypeError("State-dict alias_groups must be a sequence of groups.")
         return cls(
-            tuple(ParameterLayoutMapping.from_dict(item) for item in value.get("mappings", ())),
-            alias_groups=tuple(tuple(group) for group in value.get("alias_groups", ())),
+            tuple(ParameterLayoutMapping.from_dict(item) for item in mappings),
+            alias_groups=tuple(tuple(group) for group in alias_groups),
         )
 
     @staticmethod

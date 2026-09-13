@@ -141,8 +141,8 @@ class TorchRuntime:
         self,
         parameters: Iterable[nn.Parameter],
         max_norm: float,
-    ) -> None:
-        torch.nn.utils.clip_grad_norm_(parameters, max_norm)
+    ) -> torch.Tensor | None:
+        return torch.nn.utils.clip_grad_norm_(parameters, max_norm)
 
     def scale_gradients(
         self,
@@ -154,6 +154,13 @@ class TorchRuntime:
         for parameter in parameters:
             if parameter.grad is not None:
                 parameter.grad.mul_(scale)
+
+    def reduce_sum(self, value: torch.Tensor) -> torch.Tensor:
+        """Return a sum reduction; the portable runtime is single-process."""
+
+        if not isinstance(value, torch.Tensor):
+            raise TypeError("value must be a torch.Tensor.")
+        return value
 
     def optimizer_step(self, optimizer: Optimizer) -> None:
         optimizer.step()

@@ -96,7 +96,11 @@ Packed reads can overlap training through the bounded, backend-aware
 [asynchronous prefetch contract](docs/data/ASYNC_PREFETCH.md).
 Exact next-batch restart state follows the
 [resumable cursor contract](docs/data/RESUMABLE_CURSOR.md).
-The [secure packed-bin TPU guide](docs/tutorials/TPU_PACKED_BIN_PRETRAINING.md)
+The [public TPU validation notebook](notebooks/TrainLM_TPU_Validation.ipynb)
+shows the proposed end-user workflow: construct familiar arguments and call
+`trainer.train()`. TrainLM keeps topology discovery, worker orchestration,
+preflight, evaluation cadence, checkpointing, and resume behind that call. The
+[secure packed-bin TPU guide](docs/tutorials/TPU_PACKED_BIN_PRETRAINING.md)
 covers secret handling, immutable revisions, train/eval splits, explanation,
 resume, and the current canonical-export boundary.
 
@@ -153,20 +157,50 @@ equivalent code-first pretrained workflow. Public config files carry an
 `api_version`; renamed keys emit `DeprecationWarning` for one public API version
 before removal.
 
+The equivalent packed-data command-line path delegates to the same public
+trainer and dataset adapters:
+
+```bash
+trainlm train \
+  --config examples/dense_ar_pretraining.yaml \
+  --train-manifest-dir data/packed/train \
+  --eval-manifest-dir data/packed/validation \
+  --resume-from-checkpoint runs/dense-ar/checkpoint-500
+```
+
+The CLI prints one structured JSON training result. TPU worker commands, PJRT
+configuration, coordinator stage logs, and raw manifests remain private.
+Packed readers use the YAML `sequence_length` and training seed; validation
+always uses its deterministic validation partition semantics.
+
+Numbered Hub `.bin` shards can be selected directly without downloading or
+authoring manifests by hand:
+
+```bash
+trainlm train --config examples/dense_ar_pretraining.yaml \
+  --dataset-repo LaughTaleAI/LaughLM-Tokenized-Fine \
+  --dataset-revision main \
+  --train-shard-start 0 --train-shard-stop 8 \
+  --eval-shard-start 8 --eval-shard-stop 9
+```
+
 On CPU and CUDA, `save_steps` and `eval_steps` are handled by the same
 backend-neutral lifecycle used for training. A local run can continue from a
 TrainLM training checkpoint with
 `trainer.train(resume_from_checkpoint="runs/example/checkpoint-100")`.
 
-Packed token shards can be supplied through the validated public adapter. Local
-manifests and revision-pinned Hugging Face sources are checked before iteration,
-and rank ownership is deterministic:
+Packed token shards can be downloaded by end-exclusive numeric range. TrainLM
+resolves the requested Hub revision to an immutable commit, uses the standard
+Hugging Face cache, validates every downloaded token payload, and partitions
+examples deterministically:
 
 ```python
 from trainlm import PackedBinDataset
 
-train_dataset = PackedBinDataset.from_directory(
-    "data/packed/train",
+train_dataset = PackedBinDataset.from_hub(
+    "LaughTaleAI/LaughLM-Tokenized-Fine",
+    revision="main",
+    shard_range=(0, 4),  # downloads 00000 through 00003
     sequence_length=2048,
 )
 ```

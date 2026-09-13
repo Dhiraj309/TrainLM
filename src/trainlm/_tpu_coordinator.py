@@ -4,12 +4,62 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import json
+import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
+import time
 from typing import Any
 
 from trainlm.config import ModelSourceConfig
+
+
+def _format_worker_detail(detail: str) -> str:
+    """Render worker JSON events as compact, useful notebook progress."""
+
+    try:
+        value = json.loads(detail)
+    except (TypeError, json.JSONDecodeError):
+        return f"latest: {detail}"
+    if not isinstance(value, dict):
+        return f"latest: {detail}"
+    stage = value.get("stage")
+    if stage == "worker_entered":
+        return f"workers online ({value.get('world_size', '?')} replicas)"
+    if stage == "probe_passed":
+        return f"collective probe passed ({value.get('world_size', '?')} replicas)"
+    if stage == "data_preflight":
+        return "validating packed data"
+    if stage == "launch_dp8":
+        return "launching TPU workers"
+    if stage == "train_start" and isinstance(value.get("parallelism"), dict):
+        topology = value["parallelism"]
+        return (
+            f"training started (DP{topology.get('data_parallel', '?')} / "
+            f"MP{topology.get('model_parallel', '?')})"
+        )
+    if "step" in value:
+        fields = [f"step {int(value['step'])}"]
+        if value.get("loss") is not None:
+            fields.append(f"loss {float(value['loss']):.4f}")
+        if value.get("ppl") is not None:
+            fields.append(f"ppl {float(value['ppl']):.2f}")
+        if value.get("grad_norm") is not None:
+            fields.append(f"gnorm {float(value['grad_norm']):.3f}")
+        if value.get("learning_rate") is not None:
+            fields.append(f"lr {float(value['learning_rate']):.3g}")
+        if value.get("tokens_per_sec") is not None:
+            fields.append(f"tok/s {int(value['tokens_per_sec']):,}")
+        if value.get("mfu_non_embedding") is not None:
+            fields.append(f"mfu {float(value['mfu_non_embedding']):.2f}%")
+        tokens = value.get("global_tokens_seen", value.get("tokens_seen"))
+        if tokens is not None:
+            fields.append(f"tokens {int(tokens):,}")
+        return " | ".join(fields)
+    if stage:
+        return str(stage)
+    return f"latest: {detail}"
 
 
 class TPUCoordinatorError(RuntimeError):
@@ -34,13 +84,33 @@ class _TPURunRequest:
     scheduler: str
     warmup_steps: int
     precision: str
+    logging_verbosity: str = "normal"
+    loss_implementation: str = "causal_lm"
+    logits_chunk_size: int | None = None
     save_every_steps: int | None = None
     resume_from_checkpoint: Path | None = None
     eval_manifest_dir: Path | None = None
     eval_every_steps: int | None = None
-    expected_world_size: int = 8
+    max_eval_batches: int | None = None
 
     def __post_init__(self) -> None:
+        if (
+            not isinstance(self.logging_verbosity, str)
+            or self.logging_verbosity not in {"quiet", "normal", "verbose"}
+        ):
+            raise ValueError(
+                "logging_verbosity must be 'quiet', 'normal', or 'verbose'."
+            )
+        if self.loss_implementation not in {
+            "auto", "causal_lm", "model", "chunked_linear"
+        }:
+            raise ValueError("Unsupported loss_implementation.")
+        if self.logits_chunk_size is not None and (
+            isinstance(self.logits_chunk_size, bool)
+            or not isinstance(self.logits_chunk_size, int)
+            or self.logits_chunk_size < 1
+        ):
+            raise ValueError("logits_chunk_size must be positive when configured.")
         if self.save_every_steps is not None and (
             isinstance(self.save_every_steps, bool)
             or not isinstance(self.save_every_steps, int)
@@ -64,6 +134,14 @@ class _TPURunRequest:
             or self.eval_every_steps < 1
         ):
             raise ValueError("eval_every_steps must be positive when configured.")
+        if self.max_eval_batches is not None and (
+            isinstance(self.max_eval_batches, bool)
+            or not isinstance(self.max_eval_batches, int)
+            or self.max_eval_batches < 1
+        ):
+            raise ValueError("max_eval_batches must be positive when configured.")
+        if self.max_eval_batches is not None and self.eval_manifest_dir is None:
+            raise ValueError("max_eval_batches requires an evaluation dataset.")
 
     def to_dict(self) -> dict[str, Any]:
         values = asdict(self)
@@ -101,10 +179,11 @@ class _TPUCoordinator:
 
         completed_stages: list[str] = []
         try:
-            self._run_stage("probe", request, "--probe-only")
-            completed_stages.append("probe")
-            self._run_stage("model_preflight", request, "--model-preflight")
-            completed_stages.append("model_preflight")
+            # Launch PJRT only once for a training request.  The worker performs
+            # the collective probe before constructing the model and training,
+            # so separate probe/preflight launches only add two PJRT teardown
+            # cycles.  On Kaggle those diagnostic-only teardowns can core dump
+            # even after every rank reported success, poisoning the next launch.
             self._run_stage("train", request)
             completed_stages.append("train")
             worker_summary_path = request.output_dir / "summary.json"
@@ -169,49 +248,182 @@ class _TPUCoordinator:
         command = self._command(request)
         if mode is not None:
             command.append(mode)
-        result = subprocess.run(
-            command,
-            cwd=self.worker_script.parent,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            check=False,
-        )
         log_path = request.output_dir / f"{stage}.log"
-        log_path.write_text(result.stdout or "", encoding="utf-8")
-        if result.returncode:
-            tail = "\n".join((result.stdout or "").splitlines()[-20:])
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        started = time.monotonic()
+        print(
+            f"[TrainLM] {stage}: started (details: {log_path})",
+            flush=True,
+        )
+        with log_path.open("w", encoding="utf-8") as log:
+            process = subprocess.Popen(
+                command,
+                cwd=self.worker_script.parent,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                text=True,
+                start_new_session=True,
+            )
+            try:
+                # Diagnostic stages must not retain all ranks indefinitely if
+                # PJRT or the compiler hangs. Training itself remains bounded
+                # by the user's max_steps rather than these safety limits.
+                timeout = {"probe": 900, "model_preflight": 1800}.get(stage)
+                returncode = self._wait_with_heartbeat(
+                    process,
+                    stage=stage,
+                    log_path=log_path,
+                    timeout=timeout,
+                    verbosity=request.logging_verbosity,
+                )
+            except subprocess.TimeoutExpired as exc:
+                self._terminate_process_group(process)
+                raise TPUCoordinatorError(
+                    f"TPU {stage} stage produced no progress for {timeout} "
+                    "seconds. TrainLM terminated the worker process group; see "
+                    f"{log_path}."
+                ) from exc
+            except BaseException:
+                self._terminate_process_group(process)
+                raise
+        if returncode:
+            # A failed launcher can leave spawned XLA ranks alive. Reclaim the
+            # whole private process group before returning control to a notebook.
+            self._terminate_process_group(process)
+            tail = "\n".join(
+                log_path.read_text(encoding="utf-8").splitlines()[-20:]
+            )
             raise TPUCoordinatorError(
-                f"TPU {stage} stage failed with exit code {result.returncode}. "
+                f"TPU {stage} stage failed with exit code {returncode}. "
                 f"See {log_path}. Last output:\n{tail}"
             )
+        log_text = log_path.read_text(encoding="utf-8", errors="replace")
+        fatal_marker = next(
+            (
+                marker
+                for marker in ("RAW: Dumping core", "exit() hanging: exiting process")
+                if marker in log_text
+            ),
+            None,
+        )
+        if fatal_marker is not None:
+            raise TPUCoordinatorError(
+                f"TPU {stage} reported a fatal PJRT worker shutdown "
+                f"({fatal_marker!r}) even though its launcher returned success. "
+                "Restart the notebook session to reset the TPU runtime before "
+                f"retrying; see {log_path}."
+            )
+        print(
+            f"[TrainLM] {stage}: completed in {time.monotonic() - started:.1f}s",
+            flush=True,
+        )
+
+    @staticmethod
+    def _wait_with_heartbeat(
+        process: subprocess.Popen[Any],
+        *,
+        stage: str,
+        log_path: Path,
+        timeout: int | None,
+        heartbeat_seconds: int = 10,
+        verbosity: str = "normal",
+    ) -> int:
+        """Wait while reporting bounded, low-volume notebook progress."""
+
+        if verbosity not in {"quiet", "normal", "verbose"}:
+            raise ValueError("Unsupported coordinator logging verbosity.")
+        if verbosity == "quiet":
+            heartbeat_seconds = max(heartbeat_seconds, 60)
+        elif verbosity == "verbose":
+            heartbeat_seconds = min(heartbeat_seconds, 5)
+        elapsed = 0
+        inactive = 0
+        previous_detail: str | None = None
+        last_detail = "waiting for first worker event"
+        while True:
+            wait_seconds = heartbeat_seconds
+            if timeout is not None:
+                wait_seconds = min(wait_seconds, timeout - inactive)
+                if wait_seconds <= 0:
+                    raise subprocess.TimeoutExpired(str(log_path), timeout)
+            try:
+                return process.wait(timeout=wait_seconds)
+            except subprocess.TimeoutExpired:
+                elapsed += wait_seconds
+                inactive += wait_seconds
+                try:
+                    lines = log_path.read_text(
+                        encoding="utf-8", errors="replace"
+                    ).splitlines()
+                except OSError:
+                    lines = []
+                if lines:
+                    last_detail = lines[-1][-240:]
+                detail_changed = last_detail != previous_detail
+                if detail_changed:
+                    inactive = 0
+                    previous_detail = last_detail
+                if verbosity != "quiet":
+                    rendered = (
+                        _format_worker_detail(last_detail)
+                        if verbosity == "verbose"
+                        else f"latest: {last_detail}"
+                    )
+                    # Verbose mode forwards each changed metric event once;
+                    # startup and warning chatter remains in train.log.
+                    if verbosity == "verbose" and detail_changed:
+                        try:
+                            event = json.loads(last_detail)
+                        except json.JSONDecodeError:
+                            event = None
+                        if isinstance(event, dict) and "step" in event:
+                            print(
+                                f"[TrainLM] {stage}: {rendered}",
+                                flush=True,
+                            )
+                    elif verbosity != "verbose":
+                        print(
+                            f"[TrainLM] {stage}: still running ({elapsed}s); "
+                            f"{rendered}; inactive={inactive}s",
+                            flush=True,
+                        )
+                    elif verbosity == "verbose" and inactive and inactive % 60 == 0:
+                        print(
+                            f"[TrainLM] {stage}: no new worker event for "
+                            f"{inactive}s; last={rendered}",
+                            flush=True,
+                        )
+
+    @staticmethod
+    def _terminate_process_group(process: subprocess.Popen[Any]) -> None:
+        """Best-effort cleanup for a launcher and every spawned TPU rank."""
+
+        try:
+            if os.name == "posix":
+                os.killpg(process.pid, signal.SIGTERM)
+            elif process.poll() is None:  # pragma: no cover - TPU workers are POSIX
+                process.terminate()
+            else:  # pragma: no cover - TPU notebook workers are POSIX
+                return
+            process.wait(timeout=10)
+        except (ProcessLookupError, subprocess.TimeoutExpired):
+            if process.poll() is None:
+                if os.name == "posix":
+                    os.killpg(process.pid, signal.SIGKILL)
+                else:  # pragma: no cover - TPU notebook workers are POSIX
+                    process.kill()
+                process.wait()
 
     def _command(self, request: _TPURunRequest) -> list[str]:
         model = request.model
-        if model.initialization != "pretrained" or model.name_or_path is None:
+        if model.provider != "huggingface":
             raise TPUCoordinatorError(
-                "The current TPU coordinator requires a reconstructible pretrained "
-                "Hugging Face model ID or path."
-            )
-        unsupported = {
-            "cache_dir": model.cache_dir is not None,
-            "config_overrides": bool(model.config_overrides),
-            "dtype": model.dtype is not None,
-            "local_files_only": model.local_files_only,
-            "subfolder": model.subfolder is not None,
-            "use_safetensors": model.use_safetensors is not None,
-        }
-        enabled = sorted(name for name, present in unsupported.items() if present)
-        if enabled:
-            raise TPUCoordinatorError(
-                "The current TPU worker cannot preserve these model-source options: "
-                + ", ".join(enabled)
-                + "."
+                "The current TPU coordinator requires a reconstructible Hugging "
+                "Face model source."
             )
         command = [
             sys.executable,
             str(self.worker_script),
-            "--expected-world-size", str(request.expected_world_size),
             "--max-steps", str(request.max_steps),
             "--gradient-accumulation-steps", str(request.gradient_accumulation_steps),
             "--micro-batch-per-device", str(request.micro_batch_per_device),
@@ -222,7 +434,7 @@ class _TPUCoordinator:
             "--cache-dir", str((request.output_dir / "xla_cache").resolve()),
             "--data-mode", "local",
             "--manifest-dir", str(request.manifest_dir.resolve()),
-            "--model-id", model.name_or_path,
+            "--model-source-json", json.dumps(asdict(model), sort_keys=True),
             "--learning-rate", str(request.learning_rate),
             "--beta1", str(request.betas[0]),
             "--beta2", str(request.betas[1]),
@@ -232,11 +444,11 @@ class _TPUCoordinator:
             "--scheduler", request.scheduler,
             "--warmup-steps", str(request.warmup_steps),
             "--precision", request.precision,
+            "--logging-verbosity", request.logging_verbosity,
+            "--loss-implementation", request.loss_implementation,
         ]
-        if model.revision is not None:
-            command.extend(("--model-revision", model.revision))
-        if model.trust_remote_code:
-            command.append("--trust-remote-code")
+        if request.logits_chunk_size is not None:
+            command.extend(("--logits-chunk-size", str(request.logits_chunk_size)))
         if request.save_every_steps is not None:
             command.extend(("--save-every-steps", str(request.save_every_steps)))
         if request.resume_from_checkpoint is not None:
@@ -248,6 +460,8 @@ class _TPUCoordinator:
                 ("--eval-manifest-dir", str(request.eval_manifest_dir.resolve()))
             )
             command.extend(("--eval-every-steps", str(request.eval_every_steps)))
+        if request.max_eval_batches is not None:
+            command.extend(("--max-eval-batches", str(request.max_eval_batches)))
         return command
 
     @staticmethod

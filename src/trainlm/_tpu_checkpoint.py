@@ -12,11 +12,45 @@ import torch
 from trainlm.training import TrainerPhase
 
 
-SCHEMA_VERSION = 1
-_REQUIRED_KEYS = {
+SCHEMA_VERSION = 2
+SUPPORTED_SCHEMA_VERSIONS = frozenset({1, SCHEMA_VERSION})
+_REQUIRED_KEYS_V1 = {
     "schema_version", "world_size", "rank", "model", "optimizer",
     "scheduler", "runtime", "trainer", "cpu_rng_state",
 }
+_REQUIRED_KEYS_V2 = {
+    "schema_version", "world_size", "mesh_axes", "rank", "model", "optimizer",
+    "scheduler", "runtime", "trainer", "cpu_rng_state",
+}
+
+
+def _validated_mesh_axes(value: Any, *, world_size: int) -> dict[str, int] | None:
+    if value is None:
+        return None
+    if not isinstance(value, Mapping) or not value:
+        raise ValueError("TPU checkpoint mesh_axes must be a non-empty object.")
+    axes: dict[str, int] = {}
+    size = 1
+    for name, axis_size in value.items():
+        if not isinstance(name, str) or not name:
+            raise ValueError(
+                "TPU checkpoint mesh axis names must be non-empty strings."
+            )
+        if (
+            isinstance(axis_size, bool)
+            or not isinstance(axis_size, int)
+            or axis_size < 1
+        ):
+            raise ValueError(
+                "TPU checkpoint mesh axis sizes must be positive integers."
+            )
+        axes[name] = axis_size
+        size *= axis_size
+    if size != world_size:
+        raise ValueError(
+            f"TPU checkpoint mesh size {size} does not match world size {world_size}."
+        )
+    return axes
 
 
 def _cpu_tree(value: Any) -> Any:
@@ -53,14 +87,19 @@ def save_tpu_worker_checkpoint(
     rank = engine.runtime.rank
     world_size = engine.runtime.world_size
     generation = f"step-{engine.state.step:012d}-micro-{engine.state.micro_step:012d}"
+    runtime_state = dict(engine.runtime.state_dict())
+    mesh_axes = _validated_mesh_axes(
+        runtime_state.get("mesh_axes"), world_size=world_size
+    )
     payload = _cpu_tree({
         "schema_version": SCHEMA_VERSION,
         "world_size": world_size,
+        "mesh_axes": mesh_axes,
         "rank": rank,
         "model": engine.model.state_dict(),
         "optimizer": engine.optimizer.state_dict(),
         "scheduler": engine.scheduler.state_dict(),
-        "runtime": dict(engine.runtime.state_dict()),
+        "runtime": runtime_state,
         "trainer": {
             key: value for key, value in asdict(engine.state).items()
             if key not in {"phase", "is_training", "should_stop", "failure"}
@@ -86,6 +125,7 @@ def save_tpu_worker_checkpoint(
             "schema_version": SCHEMA_VERSION,
             "status": "committed",
             "world_size": world_size,
+            "mesh_axes": mesh_axes,
             "step": engine.state.step,
             "micro_step": engine.state.micro_step,
             "generation": generation,
@@ -109,10 +149,30 @@ def load_tpu_worker_checkpoint(engine, source: str | Path) -> Path:
     if not manifest_path.is_file():
         raise FileNotFoundError(f"Committed TPU checkpoint manifest is missing: {manifest_path}")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    if manifest.get("schema_version") != SCHEMA_VERSION or manifest.get("status") != "committed":
-        raise ValueError("TPU checkpoint is not a committed schema-version-1 checkpoint.")
+    manifest_version = manifest.get("schema_version")
+    if (
+        isinstance(manifest_version, bool)
+        or manifest_version not in SUPPORTED_SCHEMA_VERSIONS
+        or manifest.get("status") != "committed"
+    ):
+        raise ValueError(
+            "TPU checkpoint is not a committed supported-schema checkpoint."
+        )
     if manifest.get("world_size") != engine.runtime.world_size:
         raise ValueError("TPU checkpoint world size does not match the active topology.")
+    checkpoint_mesh = (
+        _validated_mesh_axes(
+            manifest.get("mesh_axes"), world_size=engine.runtime.world_size
+        )
+        if manifest_version >= 2
+        else None
+    )
+    active_runtime_state = dict(engine.runtime.state_dict())
+    active_mesh = _validated_mesh_axes(
+        active_runtime_state.get("mesh_axes"), world_size=engine.runtime.world_size
+    )
+    if manifest_version >= 2 and checkpoint_mesh != active_mesh:
+        raise ValueError("TPU checkpoint mesh axes do not match the active topology.")
     shards = manifest.get("shards")
     if (
         not isinstance(shards, list)
@@ -130,12 +190,30 @@ def load_tpu_worker_checkpoint(engine, source: str | Path) -> Path:
     if not shard.is_file():
         raise FileNotFoundError(f"TPU checkpoint rank shard is missing: {shard}")
     payload = torch.load(shard, map_location="cpu", weights_only=False)
-    if not isinstance(payload, dict) or set(payload) != _REQUIRED_KEYS:
+    required_keys = (
+        _REQUIRED_KEYS_V2 if manifest_version >= 2 else _REQUIRED_KEYS_V1
+    )
+    if not isinstance(payload, dict) or set(payload) != required_keys:
         raise ValueError("TPU checkpoint rank shard has an invalid state layout.")
-    if payload["schema_version"] != SCHEMA_VERSION:
+    if payload["schema_version"] != manifest_version:
         raise ValueError("Unsupported TPU checkpoint rank-shard schema.")
     if payload["world_size"] != engine.runtime.world_size or payload["rank"] != engine.runtime.rank:
         raise ValueError("TPU checkpoint rank shard does not match the active topology.")
+    runtime_payload = payload["runtime"]
+    if not isinstance(runtime_payload, Mapping):
+        raise ValueError("TPU checkpoint runtime state must be a mapping.")
+    payload_mesh = _validated_mesh_axes(
+        (
+            payload["mesh_axes"]
+            if manifest_version >= 2
+            else runtime_payload.get("mesh_axes")
+        ),
+        world_size=engine.runtime.world_size,
+    )
+    if manifest_version >= 2 and payload_mesh != checkpoint_mesh:
+        raise ValueError("TPU checkpoint rank shard mesh does not match its manifest.")
+    if payload_mesh != active_mesh:
+        raise ValueError("TPU checkpoint mesh axes do not match the active topology.")
     if (
         payload["trainer"].get("step") != manifest.get("step")
         or payload["trainer"].get("micro_step") != manifest.get("micro_step")
@@ -178,9 +256,11 @@ def find_latest_committed_tpu_checkpoint(directory: str | Path) -> Path | None:
         step = manifest.get("step")
         micro_step = manifest.get("micro_step")
         world_size = manifest.get("world_size")
+        mesh_axes = manifest.get("mesh_axes")
         shards = manifest.get("shards")
         if (
-            manifest.get("schema_version") != SCHEMA_VERSION
+            isinstance(manifest.get("schema_version"), bool)
+            or manifest.get("schema_version") not in SUPPORTED_SCHEMA_VERSIONS
             or manifest.get("status") != "committed"
             or isinstance(step, bool)
             or not isinstance(step, int)
@@ -191,6 +271,10 @@ def find_latest_committed_tpu_checkpoint(directory: str | Path) -> Path | None:
             or isinstance(world_size, bool)
             or not isinstance(world_size, int)
             or world_size < 1
+            or (
+                manifest.get("schema_version") >= 2
+                and not _is_valid_mesh_axes(mesh_axes, world_size=world_size)
+            )
             or not isinstance(shards, list)
             or len(shards) != world_size
             or len(shards) != len(set(shards))
@@ -209,7 +293,16 @@ def find_latest_committed_tpu_checkpoint(directory: str | Path) -> Path | None:
     return max(committed)[-1]
 
 
+def _is_valid_mesh_axes(value: Any, *, world_size: int) -> bool:
+    try:
+        _validated_mesh_axes(value, world_size=world_size)
+    except ValueError:
+        return False
+    return True
+
+
 __all__ = [
+    "SUPPORTED_SCHEMA_VERSIONS",
     "find_latest_committed_tpu_checkpoint",
     "load_tpu_worker_checkpoint",
     "save_tpu_worker_checkpoint",

@@ -45,6 +45,80 @@ def test_manifest_round_trip_is_checkpoint_safe():
     assert restored.alias_groups == converter.alias_groups
 
 
+@pytest.mark.parametrize(
+    ("manifest", "error", "message"),
+    [
+        ([], TypeError, "must be a mapping"),
+        (
+            {"schema_version": 1, "mappings": [], "unexpected": True},
+            ValueError,
+            "unknown keys",
+        ),
+        (
+            {
+                "schema_version": 1,
+                "mappings": "not-a-list",
+                "alias_groups": [],
+            },
+            TypeError,
+            "mappings must be a list or tuple",
+        ),
+        (
+            {"schema_version": 1, "mappings": [], "alias_groups": ["not-a-group"]},
+            TypeError,
+            "sequence of groups",
+        ),
+    ],
+)
+def test_manifest_rejects_malformed_top_level_values(manifest, error, message):
+    with pytest.raises(error, match=message):
+        StateDictLayoutConverter.from_manifest(manifest)
+
+
+@pytest.mark.parametrize("missing_key", ("schema_version", "mappings", "alias_groups"))
+def test_manifest_requires_every_schema_field(missing_key):
+    manifest = {
+        "schema_version": 1,
+        "mappings": [],
+        "alias_groups": [],
+    }
+    del manifest[missing_key]
+
+    with pytest.raises(ValueError, match=f"missing keys: {missing_key}"):
+        StateDictLayoutConverter.from_manifest(manifest)
+
+
+def test_manifest_rejects_boolean_schema_version():
+    with pytest.raises(ValueError, match="schema_version=1 only"):
+        StateDictLayoutConverter.from_manifest(
+            {"schema_version": True, "mappings": [], "alias_groups": []}
+        )
+
+
+def test_manifest_rejects_unknown_and_missing_mapping_fields():
+    mapping = _mapping().to_dict()
+    mapping["unexpected"] = True
+    with pytest.raises(ValueError, match="unknown keys"):
+        ParameterLayoutMapping.from_dict(mapping)
+
+    mapping = _mapping().to_dict()
+    del mapping["canonical_shapes"]
+    with pytest.raises(ValueError, match="missing keys"):
+        ParameterLayoutMapping.from_dict(mapping)
+
+
+def test_manifest_rejects_string_sequences_for_mapping_geometry():
+    mapping = _mapping().to_dict()
+    mapping["canonical_keys"] = "q.weight,k.weight,v.weight"
+    with pytest.raises(TypeError, match="canonical_keys"):
+        ParameterLayoutMapping.from_dict(mapping)
+
+    mapping = _mapping().to_dict()
+    mapping["canonical_shapes"] = ["4x3", "2x3", "2x3"]
+    with pytest.raises(TypeError, match="canonical_shapes"):
+        ParameterLayoutMapping.from_dict(mapping)
+
+
 def test_alias_groups_are_validated_and_restored_as_shared_objects():
     tied = torch.arange(6, dtype=torch.float32).reshape(2, 3)
     converter = StateDictLayoutConverter(
@@ -59,6 +133,26 @@ def test_alias_groups_are_validated_and_restored_as_shared_objects():
     with pytest.raises(ValueError, match="disagree"):
         converter.to_transformed(
             {"embed.weight": tied, "lm_head.weight": tied + 1}
+        )
+
+
+def test_converter_rejects_overlapping_alias_groups():
+    with pytest.raises(ValueError, match="multiple alias groups"):
+        StateDictLayoutConverter(
+            (),
+            alias_groups=(
+                ("embed.weight", "lm_head.weight"),
+                ("lm_head.weight", "output.weight"),
+            ),
+        )
+
+
+@pytest.mark.parametrize("alias_key", ("q.weight", "qkv.weight"))
+def test_converter_rejects_aliases_for_mapped_layout_keys(alias_key):
+    with pytest.raises(ValueError, match="cannot also belong to alias groups"):
+        StateDictLayoutConverter(
+            (_mapping(),),
+            alias_groups=((alias_key, "shared.weight"),),
         )
 
 

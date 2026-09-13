@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 import math
+from pathlib import Path
 import statistics
+from typing import Mapping
 
 from .result import BenchmarkResult
 
@@ -103,4 +106,63 @@ def evaluate_repeated_parity(
     )
 
 
-__all__ = ["RepeatedParityEvaluation", "evaluate_repeated_parity"]
+def load_repeated_parity_evaluation(
+    manifest_path: str | Path,
+) -> RepeatedParityEvaluation:
+    """Load exactly three benchmark artifacts from a confined manifest."""
+
+    if not isinstance(manifest_path, (str, Path)):
+        raise TypeError("manifest_path must be a path.")
+    path = Path(manifest_path)
+    if not path.is_file():
+        raise ValueError("manifest_path must reference an existing file.")
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Invalid repeated-parity manifest: {exc}") from exc
+    if not isinstance(manifest, Mapping):
+        raise ValueError("Repeated-parity manifest must contain a JSON object.")
+    if set(manifest) != {"schema_version", "result_paths", "thresholds"}:
+        raise ValueError("Repeated-parity manifest keys must match schema version 1.")
+    if manifest["schema_version"] != 1:
+        raise ValueError("Repeated-parity manifest supports schema_version=1 only.")
+    result_paths = manifest["result_paths"]
+    if (
+        isinstance(result_paths, (str, bytes))
+        or not isinstance(result_paths, (list, tuple))
+        or len(result_paths) != 3
+        or any(not isinstance(value, str) or not value for value in result_paths)
+    ):
+        raise ValueError("result_paths must contain exactly three non-empty paths.")
+    if len(set(result_paths)) != 3:
+        raise ValueError("result_paths must identify three distinct artifacts.")
+    thresholds = manifest["thresholds"]
+    expected_thresholds = {
+        "hard_throughput",
+        "hard_mfu",
+        "preferred_throughput",
+        "preferred_mfu",
+    }
+    if not isinstance(thresholds, Mapping) or set(thresholds) != expected_thresholds:
+        raise ValueError("thresholds must match the versioned parity gate.")
+    root = path.resolve().parent
+    results = []
+    for relative in result_paths:
+        candidate = Path(relative)
+        if candidate.is_absolute():
+            raise ValueError("Benchmark result paths must be relative to the manifest.")
+        resolved = (root / candidate).resolve()
+        if not resolved.is_relative_to(root) or not resolved.is_file():
+            raise ValueError("Benchmark result path escapes the manifest or is missing.")
+        try:
+            results.append(BenchmarkResult.from_json(resolved.read_text(encoding="utf-8")))
+        except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+            raise ValueError(f"Invalid benchmark result {relative!r}: {exc}") from exc
+    return evaluate_repeated_parity(tuple(results), **dict(thresholds))
+
+
+__all__ = [
+    "RepeatedParityEvaluation",
+    "evaluate_repeated_parity",
+    "load_repeated_parity_evaluation",
+]

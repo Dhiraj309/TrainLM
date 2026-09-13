@@ -15,17 +15,16 @@ suspected.
 
 ## 2. Pin immutable revisions and splits
 
-Use lowercase 40-character commit SHAs for both the model and packed dataset.
-Keep training and evaluation manifests in separate, explicit shard lists.
-TrainLM rejects mutable Hub model revisions before starting the TPU coordinator;
-local model directories remain available for offline, immutable snapshots.
+TrainLM accepts a model or dataset branch such as `main` for convenience and
+resolves each one to an immutable commit before downloading or launching TPU
+workers. Keep training and evaluation shard ranges disjoint. A literal example
+SHA such as `012345...` is not a valid revision; use `main`, a real tag, or a
+real commit. Local model directories remain available for offline snapshots.
 
 ```python
 import os
 
 from trainlm import (
-    HuggingFaceShardSourceConfig,
-    HuggingFaceShardSpec,
     PackedBinDataset,
     TrainLMTrainer,
     TrainLMTrainingArguments,
@@ -34,26 +33,20 @@ from trainlm import (
 if "HF_TOKEN" not in os.environ:
     raise RuntimeError("Configure HF_TOKEN in the platform secret manager.")
 
-model_revision = os.environ["MODEL_REVISION"]
-data_revision = os.environ["DATA_REVISION"]
-
+model_revision = os.environ.get("MODEL_REVISION", "main")
 train_data = PackedBinDataset.from_hub(
-    HuggingFaceShardSourceConfig(
-        repo_id="org/packed-corpus",
-        revision=data_revision,
-        shards=(HuggingFaceShardSpec("train-000", "train/000.manifest.json"),),
-    ),
+    "LaughTaleAI/LaughLM-Tokenized-Fine",
+    revision="main",
+    shard_range=(0, 8),
     sequence_length=2048,
     split="train",
 )
 eval_data = PackedBinDataset.from_hub(
-    HuggingFaceShardSourceConfig(
-        repo_id="org/packed-corpus",
-        revision=data_revision,
-        shards=(HuggingFaceShardSpec("eval-000", "eval/000.manifest.json"),),
-    ),
+    "LaughTaleAI/LaughLM-Tokenized-Fine",
+    revision="main",
+    shard_range=(8, 9),
     sequence_length=2048,
-    split="eval",
+    split="validation",
 )
 
 trainer = TrainLMTrainer.from_pretrained(
@@ -73,6 +66,13 @@ trainer = TrainLMTrainer.from_pretrained(
 print(trainer.explain(format="text"))
 trainer.train()
 ```
+
+Ranges are end-exclusive: `(0, 8)` downloads shards `00000` through `00007`.
+For this dataset, TrainLM supplies its published legacy layout defaults: a
+1024-byte header, little-endian `uint16` tokens, and vocabulary size 32011. It
+streams each downloaded file to calculate its checksum and token bounds before
+constructing a dataloader or starting TPU workers. Advanced datasets with
+published TrainLM manifests can continue to use `HuggingFaceShardSourceConfig`.
 
 `PackedBinDataset.from_directory(...)` is the offline alternative. Copy the
 manifest, payload, and optional document index together; validation rejects

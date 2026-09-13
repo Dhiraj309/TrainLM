@@ -2,9 +2,14 @@
 
 from types import SimpleNamespace
 
+import pytest
 import torch
 
-from trainlm.optimization import inspect_dense_causal_lm
+from trainlm.optimization import (
+    ComponentCapability,
+    StructuralInspectionEvidence,
+    inspect_dense_causal_lm,
+)
 
 
 class Attention(torch.nn.Module):
@@ -75,3 +80,66 @@ def test_inspector_requires_torch_module():
         assert "torch.nn.Module" in str(exc)
     else:
         raise AssertionError("Expected non-module inspection to fail.")
+
+
+def test_inspector_accepts_explicit_adapter_evidence_for_opaque_semantics():
+    evidence = StructuralInspectionEvidence(
+        model_class="Linear",
+        config_class="unknown",
+        source_provider="external",
+        normalization=ComponentCapability(
+            status="known",
+            kind="rms_norm",
+            evidence=("adapter:opaque.config.rms_norm_eps",),
+        ),
+        residual=ComponentCapability(
+            status="known",
+            kind="parallel",
+            evidence=("adapter:decoder.forward graph",),
+        ),
+    )
+
+    report = inspect_dense_causal_lm(
+        torch.nn.Linear(4, 4), structural_evidence=evidence
+    )
+
+    assert report.normalization.kind == "rms_norm"
+    assert report.residual.kind == "parallel"
+    assert report.normalization.evidence == (
+        "adapter:opaque.config.rms_norm_eps",
+    )
+
+
+def test_inspector_rejects_unproven_structural_overrides():
+    with pytest.raises(ValueError, match="explicit semantic claim"):
+        StructuralInspectionEvidence(
+            model_class="Linear",
+            config_class="unknown",
+            source_provider="external",
+            residual=ComponentCapability.unknown("adapter did not prove topology")
+        )
+    with pytest.raises(ValueError, match="cite its evidence source"):
+        StructuralInspectionEvidence(
+            model_class="Linear",
+            config_class="unknown",
+            source_provider="external",
+            normalization=ComponentCapability(status="known", kind="rms_norm")
+        )
+
+
+def test_inspector_rejects_evidence_for_a_different_model_boundary():
+    evidence = StructuralInspectionEvidence(
+        model_class="OtherModel",
+        config_class="unknown",
+        source_provider="external",
+        residual=ComponentCapability(
+            status="known",
+            kind="serial",
+            evidence=("adapter:other.forward graph",),
+        ),
+    )
+
+    with pytest.raises(ValueError, match="boundary does not match"):
+        inspect_dense_causal_lm(
+            torch.nn.Linear(4, 4), structural_evidence=evidence
+        )

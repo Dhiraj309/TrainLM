@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 import json
 from pathlib import Path
 from typing import Any, Mapping
@@ -30,7 +30,7 @@ class SupportManifest:
     torchtpu: Mapping[str, str]
 
     def __post_init__(self) -> None:
-        if self.schema_version != 1:
+        if isinstance(self.schema_version, bool) or self.schema_version != 1:
             raise ValueError("SupportManifest supports schema_version=1 only.")
         if not isinstance(self.release, str) or not self.release:
             raise ValueError("release cannot be empty.")
@@ -104,19 +104,70 @@ class SupportExplanationEvaluation:
 
 
 def load_support_manifest(path: str | Path) -> SupportManifest:
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
-    if not isinstance(data, dict):
+    """Load a strict support manifest without accepting silent schema drift."""
+
+    if not isinstance(path, (str, Path)):
+        raise TypeError("path must be a path.")
+    manifest_path = Path(path)
+    if not manifest_path.is_file():
+        raise ValueError("path must reference an existing support manifest.")
+    try:
+        data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Invalid support manifest: {exc}") from exc
+    if not isinstance(data, Mapping):
         raise ValueError("Support manifest root must be an object.")
+    expected = {field.name for field in fields(SupportManifest)}
+    if set(data) != expected:
+        raise ValueError("Support manifest keys must match schema version 1.")
     values: dict[str, Any] = dict(data)
-    for name in (
+    _validate_json_object("package_versions", values["package_versions"])
+    _validate_record_array(
         "hardware",
+        values["hardware"],
+        {"backend", "hardware", "support_level"},
+    )
+    _validate_record_array(
         "execution_paths",
+        values["execution_paths"],
+        {"path", "maximum_certification"},
+    )
+    _validate_record_array(
         "providers",
-        "fallbacks",
-        "caveats",
-    ):
-        values[name] = tuple(values.get(name, ()))
-    return SupportManifest(**values)
+        values["providers"],
+        {"provider", "support_level"},
+    )
+    for name in ("hardware", "execution_paths", "providers"):
+        values[name] = tuple(values[name])
+    for name in ("fallbacks", "caveats"):
+        items = values[name]
+        if isinstance(items, (str, bytes)) or not isinstance(items, list):
+            raise ValueError(f"{name} must be a JSON array.")
+        values[name] = tuple(items)
+    _validate_json_object("torchtpu", values["torchtpu"])
+    if set(values["torchtpu"]) != {"status", "milestone"}:
+        raise ValueError("torchtpu keys must match the schema.")
+    try:
+        return SupportManifest(**values)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid support manifest values: {exc}") from exc
+
+
+def _validate_json_object(name: str, value: object) -> None:
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{name} must be a JSON object.")
+
+
+def _validate_record_array(
+    name: str,
+    value: object,
+    expected_keys: set[str],
+) -> None:
+    if isinstance(value, (str, bytes)) or not isinstance(value, list):
+        raise ValueError(f"{name} must be a JSON array.")
+    for index, record in enumerate(value):
+        if not isinstance(record, Mapping) or set(record) != expected_keys:
+            raise ValueError(f"{name}[{index}] keys must match the schema.")
 
 
 def evaluate_explanation_support(

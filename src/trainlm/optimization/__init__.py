@@ -18,7 +18,7 @@ from .optimizers import (
     OptimizerStatePolicy,
     create_optimizer,
 )
-from .inspection import inspect_dense_causal_lm
+from .inspection import StructuralInspectionEvidence, inspect_dense_causal_lm
 from .adapters import (
     AdapterCandidate,
     AdapterResolution,
@@ -66,8 +66,22 @@ from .attention_tuning import (
     AttentionTuningKey,
     AttentionTuningResult,
 )
-from .qkv import QKVProjectionSpec
-from .mlp import GatedMLPProjectionSpec, MLPActivation
+from .qkv import (
+    PackedPartialQKVProjection,
+    PackedQKVProjection,
+    PackedQKVProjectionSpec,
+    PartialQKVProjectionSpec,
+    QKVProjectionSpec,
+    partial_qkv_pack_transform_handler,
+    qkv_pack_transform_handler,
+)
+from .mlp import (
+    GatedMLPProjectionSpec,
+    MLPActivation,
+    PackedGatedMLPProjection,
+    PackedGatedMLPProjectionSpec,
+    gated_mlp_pack_transform_handler,
+)
 from .hlo_audit import (
     FusionComponent,
     FusionDecision,
@@ -81,14 +95,17 @@ from .rematerialization import (
     RematerializationPolicy,
     RematerializationScope,
     RematerializationSelection,
+    module_rematerialization_transform_handler,
     select_rematerialization_policy,
 )
 from .xla_optimizer import (
     GradientReduction,
+    MaterializedXLAAdamWPolicy,
     XLAAdamWPolicy,
     XLAOptimizerEvaluation,
     XLAOptimizerEvidence,
     evaluate_xla_optimizer_path,
+    materialize_xla_adamw_policy,
 )
 from .batch_tuning import (
     BatchPrefetchGeometry,
@@ -159,9 +176,12 @@ __all__ = [
     "HLOFusionDecision",
     "HLOFusionObservation",
     "GatedMLPProjectionSpec",
+    "PackedGatedMLPProjection",
+    "PackedGatedMLPProjectionSpec",
     "GEMMA2_MAPPING",
     "GEMMA_MAPPING",
     "GradientReduction",
+    "MaterializedXLAAdamWPolicy",
     "GPT2_MAPPING",
     "GPT_NEOX_MAPPING",
     "LINEAR_CAUSAL_LOSS_REQUIREMENTS",
@@ -187,12 +207,18 @@ __all__ = [
     "PlanStatus",
     "ProviderDecision",
     "ProviderSpec",
+    "PackedQKVProjection",
+    "PackedPartialQKVProjection",
+    "PackedQKVProjectionSpec",
+    "PartialQKVProjectionSpec",
     "QKVProjectionSpec",
+    "partial_qkv_pack_transform_handler",
     "QWEN2_MAPPING",
     "RematerializationMeasurement",
     "RematerializationPolicy",
     "RematerializationScope",
     "RematerializationSelection",
+    "module_rematerialization_transform_handler",
     "ROPE_ALIBI_DENSE_MAPPINGS",
     "ROPE_GATED_DENSE_MAPPINGS",
     "PositionEncoding",
@@ -201,6 +227,7 @@ __all__ = [
     "ParameterLayoutMapping",
     "PHI_MAPPING",
     "StateDictLayoutConverter",
+    "StructuralInspectionEvidence",
     "TransformApplicationError",
     "TransformHandler",
     "TransformTransaction",
@@ -211,10 +238,13 @@ __all__ = [
     "audit_hlo_fusions",
     "expected_causal_visibility",
     "evaluate_xla_optimizer_path",
+    "materialize_xla_adamw_policy",
     "inspect_dense_causal_lm",
     "install_hf_attention_provider",
     "pallas_mha_provider",
     "pallas_grouped_attention_provider",
+    "gated_mlp_pack_transform_handler",
+    "qkv_pack_transform_handler",
     "register_learned_position_dense_adapters",
     "register_nonstandard_dense_adapters",
     "register_rope_alibi_dense_adapters",

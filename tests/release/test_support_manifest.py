@@ -1,4 +1,7 @@
+import json
 from pathlib import Path
+
+import pytest
 
 from trainlm.release import (
     evaluate_explanation_support,
@@ -55,3 +58,31 @@ def test_manifest_rejects_overclaim_and_unknown_execution_path():
     assert not result.agrees
     assert any("absent" in reason for reason in result.reasons)
     assert any("exceeds hardware" in reason for reason in result.reasons)
+
+
+def test_loader_rejects_top_level_and_nested_schema_drift(tmp_path):
+    payload = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    payload["unexpected"] = True
+    path = tmp_path / "support.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="manifest keys"):
+        load_support_manifest(path)
+
+    payload.pop("unexpected")
+    payload["hardware"][0]["unexpected"] = True
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match=r"hardware\[0\] keys"):
+        load_support_manifest(path)
+
+
+def test_loader_rejects_malformed_json_and_wrong_container_types(tmp_path):
+    path = tmp_path / "support.json"
+    path.write_text("not-json", encoding="utf-8")
+    with pytest.raises(ValueError, match="Invalid support manifest"):
+        load_support_manifest(path)
+
+    payload = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    payload["providers"] = "portable_chunked_linear_ce"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="providers must be a JSON array"):
+        load_support_manifest(path)

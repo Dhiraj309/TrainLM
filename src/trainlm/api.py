@@ -8,7 +8,7 @@ be added behind the same API without changing user code.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 import re
 from typing import TYPE_CHECKING, Any, Literal
@@ -57,6 +57,23 @@ if TYPE_CHECKING:
 PUBLIC_API_VERSION = "1"
 DEPRECATED_CONFIG_KEYS = {"args": "training_args"}
 _COMMIT_SHA = re.compile(r"[0-9a-f]{40}")
+
+
+def _resolve_hugging_face_model_revision(
+    repo_id: str, revision: str | None
+) -> str:
+    """Resolve a user-friendly model revision before private TPU launch."""
+
+    from huggingface_hub import HfApi
+
+    info = HfApi().model_info(repo_id=repo_id, revision=revision or "main")
+    resolved = getattr(info, "sha", None)
+    if not isinstance(resolved, str) or _COMMIT_SHA.fullmatch(resolved) is None:
+        raise ValueError(
+            "Hugging Face did not resolve the model to a lowercase "
+            "40-character commit SHA."
+        )
+    return resolved
 
 
 def _load_public_config(source: Mapping[str, Any] | str | Path) -> dict[str, Any]:
@@ -108,7 +125,7 @@ class TrainLMTrainingArguments:
     betas: tuple[float, float] = (0.9, 0.95)
     eps: float = 1e-8
     weight_decay: float = 0.1
-    lr_scheduler_type: Literal["constant", "linear", "cosine"] = "cosine"
+    lr_scheduler_type: Literal["constant", "linear", "cosine", "wsd"] = "cosine"
     warmup_steps: int = 0
     bf16: bool = False
     fp16: bool = False
@@ -116,10 +133,16 @@ class TrainLMTrainingArguments:
     logging_steps: int = 10
     save_steps: int | None = None
     eval_steps: int | None = None
+    max_eval_batches: int | None = None
     dataloader_num_workers: int = 0
     dataloader_pin_memory: bool = False
     seed: int = 42
     report_to: str | tuple[str, ...] = "none"
+    logging_verbosity: Literal["quiet", "normal", "verbose"] = "normal"
+    loss_implementation: Literal[
+        "auto", "causal_lm", "model", "chunked_linear"
+    ] = "auto"
+    logits_chunk_size: int | None = None
 
     def __post_init__(self) -> None:
         if self.max_steps is None and self.max_tokens is None:
@@ -129,6 +152,7 @@ class TrainLMTrainingArguments:
             "max_tokens",
             "save_steps",
             "eval_steps",
+            "max_eval_batches",
         ):
             value = getattr(self, name)
             if value is not None and (
@@ -153,7 +177,7 @@ class TrainLMTrainingArguments:
             raise ValueError("bf16 and fp16 cannot both be enabled.")
         if self.accelerator not in {"auto", "cpu", "cuda", "tpu"}:
             raise ValueError(f"Unsupported accelerator: {self.accelerator}")
-        if self.lr_scheduler_type not in {"constant", "linear", "cosine"}:
+        if self.lr_scheduler_type not in {"constant", "linear", "cosine", "wsd"}:
             raise ValueError(f"Unsupported scheduler: {self.lr_scheduler_type}")
         if isinstance(self.warmup_steps, bool) or not isinstance(self.warmup_steps, int) or self.warmup_steps < 0:
             raise ValueError("warmup_steps must be non-negative.")
@@ -163,6 +187,23 @@ class TrainLMTrainingArguments:
             raise ValueError("weight_decay must be non-negative.")
         if not isinstance(self.seed, int) or isinstance(self.seed, bool) or self.seed < 0:
             raise ValueError("seed must be non-negative.")
+        if (
+            not isinstance(self.logging_verbosity, str)
+            or self.logging_verbosity not in {"quiet", "normal", "verbose"}
+        ):
+            raise ValueError(
+                "logging_verbosity must be 'quiet', 'normal', or 'verbose'."
+            )
+        if self.loss_implementation not in {
+            "auto", "causal_lm", "model", "chunked_linear"
+        }:
+            raise ValueError("Unsupported loss_implementation.")
+        if self.logits_chunk_size is not None and (
+            isinstance(self.logits_chunk_size, bool)
+            or not isinstance(self.logits_chunk_size, int)
+            or self.logits_chunk_size < 1
+        ):
+            raise ValueError("logits_chunk_size must be positive when configured.")
 
 
 def _default_collator(features: Sequence[Any]) -> dict[str, torch.Tensor]:
@@ -267,6 +308,8 @@ class TrainLMTrainer:
         self.callbacks = tuple(callbacks or ())
         if self.args.eval_steps is not None and eval_dataset is None:
             raise ValueError("eval_steps requires eval_dataset.")
+        if self.args.max_eval_batches is not None and eval_dataset is None:
+            raise ValueError("max_eval_batches requires eval_dataset.")
         self._model_source: ModelSourceConfig | None = None
         self.loaded: LoadedCausalLM | None = None
         self._last_metrics: dict[str, Any] = {}
@@ -300,6 +343,11 @@ class TrainLMTrainer:
             self.scheduler = None
             self.engine = None
             return
+        if self.args.loss_implementation == "chunked_linear":
+            raise NotImplementedError(
+                "chunked_linear loss is currently available through the TPU worker; "
+                "use the TPU accelerator or the lower-level training view on CPU/CUDA."
+            )
         self.model = self._resolve_model(model)
         self.runtime = runtime or self._make_runtime()
         self.optimizer = optimizer or self._make_optimizer()
@@ -481,6 +529,7 @@ class TrainLMTrainer:
             evaluation=EvaluationConfig(
                 enabled=self.eval_dataset is not None,
                 eval_every_steps=self.args.eval_steps,
+                max_batches=self.args.max_eval_batches,
             ),
         )
 
@@ -510,6 +559,9 @@ class TrainLMTrainer:
             samples_seen=int(worker.get("samples_seen_rank0", 0)),
             learning_rate=float(worker.get("learning_rate", 0.0)),
             loss=worker.get("last_loss_rank0"),
+            global_batch_size=int(
+                worker.get("global_batch_size", worker.get("samples_per_update", 0))
+            ),
             phase=TrainerPhase.FINALIZED,
         )
         control = TrainerControl()
@@ -597,15 +649,15 @@ class TrainLMTrainer:
             self._model_source.provider == "huggingface"
             and self._model_source.initialization == "pretrained"
             and not is_local_model
-            and (
-                self._model_source.revision is None
-                or _COMMIT_SHA.fullmatch(self._model_source.revision) is None
-            )
         ):
-            raise ValueError(
-                "TPU Hugging Face models require revision to be a lowercase "
-                "40-character commit SHA."
-            )
+            revision = self._model_source.revision
+            if revision is None or _COMMIT_SHA.fullmatch(revision) is None:
+                self._model_source = replace(
+                    self._model_source,
+                    revision=_resolve_hugging_face_model_revision(
+                        self._model_source.name_or_path, revision
+                    ),
+                )
         if isinstance(self.train_dataset, PackedBinDataset):
             manifest_dir = self.train_dataset.coordinator_manifest_dir(
                 self.args.output_dir
@@ -648,6 +700,9 @@ class TrainLMTrainer:
             scheduler=self.args.lr_scheduler_type,
             warmup_steps=self.args.warmup_steps,
             precision=precision,
+            logging_verbosity=self.args.logging_verbosity,
+            loss_implementation=self.args.loss_implementation,
+            logits_chunk_size=self.args.logits_chunk_size,
             save_every_steps=self.args.save_steps,
             resume_from_checkpoint=(
                 Path(resume_from_checkpoint)
@@ -656,6 +711,7 @@ class TrainLMTrainer:
             ),
             eval_manifest_dir=eval_manifest_dir,
             eval_every_steps=self.args.eval_steps,
+            max_eval_batches=self.args.max_eval_batches,
         )
 
     def evaluate(self) -> dict[str, float]:

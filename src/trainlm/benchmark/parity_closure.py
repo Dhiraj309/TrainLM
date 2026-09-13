@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
+import json
 import math
+from pathlib import Path
+from typing import Any, Mapping
 
 from .result import BenchmarkResult
 
@@ -102,8 +106,83 @@ def evaluate_parity_closure(
     )
 
 
+def load_parity_closure_evidence(
+    *,
+    benchmark_result_path: str | Path,
+    graph_evidence_path: str | Path,
+    hlo_path: str | Path,
+) -> ParityClosureEvidence:
+    """Load closure evidence while binding diagnostics to the captured HLO."""
+
+    benchmark_path = _existing_file("benchmark_result_path", benchmark_result_path)
+    graph_path = _existing_file("graph_evidence_path", graph_evidence_path)
+    hlo_file = _existing_file("hlo_path", hlo_path)
+    try:
+        result = BenchmarkResult.from_json(benchmark_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Invalid benchmark result artifact: {exc}") from exc
+    try:
+        graph = json.loads(graph_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Invalid graph evidence artifact: {exc}") from exc
+    if not isinstance(graph, Mapping):
+        raise ValueError("Graph evidence artifact must contain a JSON object.")
+    expected_graph_keys = {
+        "schema_version",
+        "hlo_fingerprint",
+        "transpose_count",
+        "layout_copy_count",
+        "host_sync_count",
+        "full_logits_materialized",
+    }
+    if set(graph) != expected_graph_keys:
+        raise ValueError(
+            "Graph evidence keys must match the versioned closure schema."
+        )
+    if graph.get("schema_version") != 1:
+        raise ValueError("Graph evidence supports schema_version=1 only.")
+    normalized_hlo = hlo_file.read_text(encoding="utf-8").replace("\r\n", "\n").strip() + "\n"
+    fingerprint = "sha256:" + hashlib.sha256(normalized_hlo.encode()).hexdigest()
+    if graph.get("hlo_fingerprint") != fingerprint:
+        raise ValueError("Graph evidence fingerprint does not match the HLO artifact.")
+    return ParityClosureEvidence(
+        result=result,
+        hlo_fingerprint=fingerprint,
+        transpose_count=_graph_integer(graph, "transpose_count"),
+        layout_copy_count=_graph_integer(graph, "layout_copy_count"),
+        host_sync_count=_graph_integer(graph, "host_sync_count"),
+        full_logits_materialized=_graph_boolean(
+            graph, "full_logits_materialized"
+        ),
+    )
+
+
+def _existing_file(name: str, value: str | Path) -> Path:
+    if not isinstance(value, (str, Path)):
+        raise TypeError(f"{name} must be a path.")
+    path = Path(value)
+    if not path.is_file():
+        raise ValueError(f"{name} must reference an existing file.")
+    return path
+
+
+def _graph_integer(values: Mapping[str, Any], name: str) -> int:
+    value = values.get(name)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(f"Graph evidence {name} must be a non-negative integer.")
+    return value
+
+
+def _graph_boolean(values: Mapping[str, Any], name: str) -> bool:
+    value = values.get(name)
+    if not isinstance(value, bool):
+        raise ValueError(f"Graph evidence {name} must be boolean.")
+    return value
+
+
 __all__ = [
     "ParityClosureEvaluation",
     "ParityClosureEvidence",
     "evaluate_parity_closure",
+    "load_parity_closure_evidence",
 ]

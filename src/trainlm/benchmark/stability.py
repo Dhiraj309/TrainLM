@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
+import json
 import math
+from pathlib import Path
+from typing import Mapping
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,8 +110,55 @@ def evaluate_real_shard_stability(
     return RealShardStabilityEvaluation(passed=not reasons, reasons=tuple(reasons))
 
 
+def load_real_shard_stability_evaluation(
+    artifact_path: str | Path,
+) -> RealShardStabilityEvaluation:
+    """Load and evaluate one strict, versioned real-shard run artifact."""
+
+    if not isinstance(artifact_path, (str, Path)):
+        raise TypeError("artifact_path must be a path.")
+    path = Path(artifact_path)
+    if not path.is_file():
+        raise ValueError("artifact_path must reference an existing file.")
+    try:
+        artifact = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Invalid real-shard stability artifact: {exc}") from exc
+    if not isinstance(artifact, Mapping):
+        raise ValueError("Real-shard stability artifact must contain a JSON object.")
+    if set(artifact) != {"schema_version", "evidence", "requirements"}:
+        raise ValueError(
+            "Real-shard stability artifact keys must match schema version 1."
+        )
+    if isinstance(artifact["schema_version"], bool) or artifact["schema_version"] != 1:
+        raise ValueError(
+            "Real-shard stability artifact supports schema_version=1 only."
+        )
+
+    evidence = artifact["evidence"]
+    expected_evidence = {field.name for field in fields(RealShardStabilityEvidence)}
+    if not isinstance(evidence, Mapping) or set(evidence) != expected_evidence:
+        raise ValueError("Real-shard stability evidence keys must match the schema.")
+    requirements = artifact["requirements"]
+    if not isinstance(requirements, Mapping) or set(requirements) != {
+        "required_updates",
+        "minimum_shards",
+    }:
+        raise ValueError("Real-shard stability requirements must match the schema.")
+    try:
+        loaded_evidence = RealShardStabilityEvidence(**dict(evidence))
+        return evaluate_real_shard_stability(
+            loaded_evidence,
+            required_updates=requirements["required_updates"],
+            minimum_shards=requirements["minimum_shards"],
+        )
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid real-shard stability evidence: {exc}") from exc
+
+
 __all__ = [
     "RealShardStabilityEvaluation",
     "RealShardStabilityEvidence",
     "evaluate_real_shard_stability",
+    "load_real_shard_stability_evaluation",
 ]

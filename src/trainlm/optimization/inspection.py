@@ -3,11 +3,44 @@
 from __future__ import annotations
 
 import inspect
+from dataclasses import dataclass
 from typing import Any
 
 from torch import nn
 
 from .capabilities import CapabilityFact, ComponentCapability, ModelCapabilities
+
+
+@dataclass(frozen=True, slots=True)
+class StructuralInspectionEvidence:
+    """Adapter-supplied evidence for semantics structure cannot prove alone."""
+
+    model_class: str
+    config_class: str
+    source_provider: str
+    normalization: ComponentCapability | None = None
+    residual: ComponentCapability | None = None
+
+    def __post_init__(self) -> None:
+        for name in ("model_class", "config_class", "source_provider"):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{name} evidence boundary cannot be empty.")
+        for name in ("normalization", "residual"):
+            capability = getattr(self, name)
+            if capability is None:
+                continue
+            if not isinstance(capability, ComponentCapability):
+                raise TypeError(f"{name} evidence must be a ComponentCapability.")
+            if (
+                capability.status not in {"known", "inferred", "unsupported"}
+                or capability.kind is None
+            ):
+                raise ValueError(
+                    f"{name} evidence must make an explicit semantic claim."
+                )
+            if not capability.evidence:
+                raise ValueError(f"{name} evidence must cite its evidence source.")
 
 
 def _fact(name: str, value: Any, source: str) -> CapabilityFact:
@@ -18,7 +51,12 @@ def _unknown(note: str) -> ComponentCapability:
     return ComponentCapability.unknown(note)
 
 
-def inspect_dense_causal_lm(model: nn.Module, *, source_provider: str = "external") -> ModelCapabilities:
+def inspect_dense_causal_lm(
+    model: nn.Module,
+    *,
+    source_provider: str = "external",
+    structural_evidence: StructuralInspectionEvidence | None = None,
+) -> ModelCapabilities:
     """Describe capabilities supported by direct config/module evidence.
 
     Model-family names are retained as metadata only and never drive semantic
@@ -27,8 +65,28 @@ def inspect_dense_causal_lm(model: nn.Module, *, source_provider: str = "externa
 
     if not isinstance(model, nn.Module):
         raise TypeError("model must be a torch.nn.Module.")
+    if structural_evidence is not None and not isinstance(
+        structural_evidence, StructuralInspectionEvidence
+    ):
+        raise TypeError("structural_evidence must be StructuralInspectionEvidence.")
     config = getattr(model, "config", None)
     config_class = type(config).__name__ if config is not None else "unknown"
+    if structural_evidence is not None:
+        observed_boundary = (
+            type(model).__name__,
+            config_class,
+            source_provider,
+        )
+        evidence_boundary = (
+            structural_evidence.model_class,
+            structural_evidence.config_class,
+            structural_evidence.source_provider,
+        )
+        if evidence_boundary != observed_boundary:
+            raise ValueError(
+                "Structural evidence boundary does not match the inspected model, "
+                "configuration, and source provider."
+            )
     model_type = str(getattr(config, "model_type", "unknown") or "unknown")
     architectures = tuple(getattr(config, "architectures", ()) or ())
     warnings: list[str] = []
@@ -81,6 +139,8 @@ def inspect_dense_causal_lm(model: nn.Module, *, source_provider: str = "externa
         if layer_norms
         else _unknown("No standard LayerNorm module; custom normalization is not guessed.")
     )
+    if structural_evidence is not None and structural_evidence.normalization:
+        normalization = structural_evidence.normalization
 
     activation = getattr(config, "hidden_act", None)
     intermediate = getattr(config, "intermediate_size", None)
@@ -152,6 +212,12 @@ def inspect_dense_causal_lm(model: nn.Module, *, source_provider: str = "externa
         evidence=("model attribute and forward signature",),
     )
 
+    residual = _unknown(
+        "Residual topology requires an explicit adapter or graph evidence."
+    )
+    if structural_evidence is not None and structural_evidence.residual:
+        residual = structural_evidence.residual
+
     return ModelCapabilities(
         schema_version=1,
         model_type=model_type,
@@ -163,7 +229,7 @@ def inspect_dense_causal_lm(model: nn.Module, *, source_provider: str = "externa
         position=position,
         normalization=normalization,
         mlp=mlp,
-        residual=_unknown("Residual topology requires an explicit adapter or graph evidence."),
+        residual=residual,
         projections=projections,
         embedding=embedding,
         lm_head=lm_head,
@@ -172,4 +238,4 @@ def inspect_dense_causal_lm(model: nn.Module, *, source_provider: str = "externa
     )
 
 
-__all__ = ["inspect_dense_causal_lm"]
+__all__ = ["StructuralInspectionEvidence", "inspect_dense_causal_lm"]

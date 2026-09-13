@@ -48,9 +48,15 @@ from trainlm.data import (
 )
 from trainlm.model import load_huggingface_causal_lm
 from trainlm.model.outputs import normalize_causal_lm_output
-from trainlm.optimization import create_optimizer
+from trainlm.optimization import (
+    BatchPrefetchGeometry,
+    XLAAdamWPolicy,
+    create_optimizer,
+    inspect_dense_causal_lm,
+    materialize_xla_adamw_policy,
+)
 from trainlm.runtime import XlaRuntime
-from trainlm.tasks import CausalLMTask
+from trainlm.tasks import CausalLMTask, LinearCausalLMTrainingView, extract_hidden_state
 from trainlm.training import Trainer, TrainerCallback, create_scheduler
 
 
@@ -69,17 +75,126 @@ class BatchIterable(IterableDataset):
 
 
 class PrintMetrics(TrainerCallback):
-    def __init__(self, runtime: XlaRuntime, args) -> None:
+    """Rank-zero console table and asynchronous-style JSONL metric snapshots."""
+
+    def __init__(self, runtime: XlaRuntime, args, model: torch.nn.Module) -> None:
         self.runtime = runtime
         self.args = args
+        self.model = model
         self.start_time = None
         self.start_tokens = 0
         self.elapsed = None
         self.measured_tokens = 0
         self.metrics_path = Path(args.output_dir) / "metrics.jsonl"
+        self._last_metric_time = None
+        self._last_metric_tokens = None
+        self._ema_tokens_per_second = None
+        self._best_loss = math.inf
+        self._printed_header = False
+        self._lines_since_header = 0
+        self._header_every = 50
+        self._total_tokens = (
+            args.max_steps
+            * args.sequence_length
+            * args.micro_batch_per_device
+            * args.gradient_accumulation_steps
+            * runtime.world_size
+        )
+        self._total_params = sum(parameter.numel() for parameter in model.parameters())
+        embeddings = model.get_input_embeddings()
+        self._embedding_params = int(embeddings.weight.numel())
+        self._non_embedding_params = self._total_params - self._embedding_params
+        config = model.config
+        self._n_layers = int(getattr(config, "num_hidden_layers", 0))
+        self._d_model = int(getattr(config, "hidden_size", 0))
+        self._vocab_size = int(getattr(config, "vocab_size", 0))
+        self._hardware_flops = 197e12 * runtime.world_size
+
+    def _is_primary(self) -> bool:
+        return self.runtime.rank == 0
+
+    @staticmethod
+    def _fmt_tokens(value: int) -> str:
+        if value >= 1_000_000_000:
+            return f"{value / 1_000_000_000:.2f}B"
+        if value >= 1_000_000:
+            return f"{value / 1_000_000:.1f}M"
+        if value >= 1_000:
+            return f"{value / 1_000:.1f}K"
+        return str(value)
+
+    @staticmethod
+    def _fmt_time(seconds: float) -> str:
+        seconds = max(0, int(seconds))
+        hours, remainder = divmod(seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        if hours:
+            return f"{hours}h{minutes:02d}m"
+        if minutes:
+            return f"{minutes}m{seconds:02d}s"
+        return f"{seconds}s"
+
+    @staticmethod
+    def _fmt_ppl(loss: float) -> str:
+        perplexity = math.exp(min(loss, math.log(9_999_999)))
+        if perplexity >= 10_000:
+            return f"{perplexity / 1000:.1f}K"
+        if perplexity >= 1_000:
+            return f"{perplexity:.0f}"
+        if perplexity >= 100:
+            return f"{perplexity:.1f}"
+        return f"{perplexity:.2f}"
+
+    def _estimate_mfu(self, tokens: int, seconds: float) -> tuple[float, float]:
+        param_flops = 6.0 * self._non_embedding_params * tokens
+        attention_flops = (
+            12.0 * self._n_layers * self._d_model * self.args.sequence_length * tokens
+        )
+        non_embedding = param_flops + attention_flops
+        logits = 6.0 * self._embedding_params * tokens
+        denominator = max(seconds, 1e-6) * self._hardware_flops
+        return non_embedding / denominator * 100.0, (non_embedding + logits) / denominator * 100.0
+
+    def _console_row(self, snapshot: dict[str, float]) -> str:
+        step = int(snapshot["step"])
+        progress = 100.0 * step / max(self.args.max_steps, 1)
+        loss = float(snapshot.get("loss", math.nan))
+        grad_norm = snapshot.get("grad_norm")
+        marker = "*" if loss < self._best_loss else " "
+        if loss < self._best_loss:
+            self._best_loss = loss
+        remaining = max(self._total_tokens - int(snapshot["global_tokens_seen"]), 0)
+        eta = remaining / max(self._ema_tokens_per_second or 1.0, 1.0)
+        elapsed = time.perf_counter() - self.start_time if self.start_time else 0.0
+        return (
+            f"{marker}{step:6d} {progress:7.1f}% | {loss:9.4f} "
+            f"{self._fmt_ppl(loss):>7} "
+            f"{('n/a' if grad_norm is None else f'{grad_norm:.3f}'):>7} | "
+            f"{snapshot['learning_rate']:.2e} | "
+            f"{int(snapshot.get('tokens_per_sec', 0)):>9,} "
+            f"{snapshot.get('mfu_non_embedding', 0.0):6.2f}% | "
+            f"{self._fmt_tokens(int(snapshot['global_tokens_seen'])):>8} "
+            f"{self._fmt_tokens(remaining):>9} {self._fmt_time(eta):>8} "
+            f"{self._fmt_time(elapsed):>8}"
+        )
+
+    def _print_console(self, snapshot: dict[str, float]) -> None:
+        header = (
+            "  STEP PROGRESS |      LOSS     PPL   GNORM |           LR |     TOK/S    MFU | "
+            "    SEEN REMAINING      ETA  ELAPSED"
+        )
+        if not self._printed_header or self._lines_since_header >= self._header_every:
+            if self._printed_header:
+                print()
+            print(header, flush=True)
+            print("─" * len(header), flush=True)
+            self._printed_header = True
+            self._lines_since_header = 0
+        print(self._console_row(snapshot), flush=True)
+        self._lines_since_header += 1
 
     def on_train_begin(self, state, control):
-        if self.runtime.is_primary_process:
+        if self._is_primary():
             self.metrics_path.parent.mkdir(parents=True, exist_ok=True)
             self.metrics_path.unlink(missing_ok=True)
         if self.args.warmup_steps == 0:
@@ -93,20 +208,111 @@ class PrintMetrics(TrainerCallback):
             torch_xla.sync(wait=True)
             self.start_time = time.perf_counter()
             self.start_tokens = state.tokens_seen
+            self._last_metric_time = self.start_time
+            self._last_metric_tokens = state.tokens_seen * self.runtime.world_size
         if state.step == self.args.max_steps and self.start_time is not None:
             torch_xla.sync(wait=True)
             self.elapsed = time.perf_counter() - self.start_time
             self.measured_tokens = (state.tokens_seen - self.start_tokens) * self.runtime.world_size
 
     def on_metrics(self, state, control, metrics) -> None:
-        if self.runtime.is_primary_process:
-            snapshot = dict(metrics)
+        if self._is_primary():
+            snapshot = {
+                **dict(metrics),
+                "global_tokens_seen": float(
+                    state.tokens_seen * self.runtime.world_size
+                ),
+                "global_batch_size": float(
+                    state.global_batch_size * self.runtime.world_size
+                ),
+                "world_size": float(self.runtime.world_size),
+            }
+            now = time.perf_counter()
+            global_tokens = int(snapshot["global_tokens_seen"])
+            previous_time = self._last_metric_time or self.start_time or now
+            previous_tokens = self._last_metric_tokens
+            if previous_tokens is None:
+                previous_tokens = self.start_tokens * self.runtime.world_size
+            interval_seconds = max(now - previous_time, 1e-6)
+            interval_tokens = max(global_tokens - previous_tokens, 0)
+            tokens_per_second = interval_tokens / interval_seconds
+            self._ema_tokens_per_second = (
+                tokens_per_second
+                if self._ema_tokens_per_second is None
+                else 0.1 * tokens_per_second + 0.9 * self._ema_tokens_per_second
+            )
+            mfu, mfu_with_logits = self._estimate_mfu(interval_tokens, interval_seconds)
+            snapshot.update({
+                "tokens_per_sec": float(tokens_per_second),
+                "mfu_non_embedding": float(mfu),
+                "mfu_with_logits_estimate": float(mfu_with_logits),
+                "tokens_in_interval": float(interval_tokens),
+                "interval_seconds": float(interval_seconds),
+                "global_tokens_total": float(self._total_tokens),
+            })
+            self._last_metric_time = now
+            self._last_metric_tokens = global_tokens
+            if state.grad_norm is not None:
+                snapshot["grad_norm"] = float(state.grad_norm)
             with self.metrics_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(snapshot, sort_keys=True) + "\n")
-            print(snapshot, flush=True)
+            self._print_console(snapshot)
+            # The coordinator tails structured events and renders the same
+            # row once in the notebook; the human table above remains useful
+            # in the raw worker log.
+            print(json.dumps(snapshot, sort_keys=True), flush=True)
+            if "step" in snapshot and self.args.eval_every_steps is not None:
+                step = int(snapshot["step"])
+                if step % self.args.eval_every_steps == 0:
+                    print(
+                        json.dumps(
+                            {"stage": "evaluation_start", "step": step},
+                            sort_keys=True,
+                        ),
+                        flush=True,
+                    )
+
+    def on_evaluate(self, state, control) -> None:
+        if self._is_primary():
+            print(
+                json.dumps(
+                    {"stage": "evaluation_completed", "step": state.step},
+                    sort_keys=True,
+                ),
+                flush=True,
+            )
+            if (
+                self.args.save_every_steps is not None
+                and state.step % self.args.save_every_steps == 0
+            ):
+                print(
+                    json.dumps(
+                        {"stage": "checkpoint_start", "step": state.step},
+                        sort_keys=True,
+                    ),
+                    flush=True,
+                )
+
+    def on_save_checkpoint(self, state, control) -> None:
+        if self._is_primary():
+            print(
+                json.dumps(
+                    {"stage": "checkpoint_completed", "step": state.step},
+                    sort_keys=True,
+                ),
+                flush=True,
+            )
 
 
 def _source(args: argparse.Namespace) -> ModelSourceConfig:
+    if getattr(args, "model_source_json", ""):
+        values = json.loads(args.model_source_json)
+        if not isinstance(values, dict):
+            raise ValueError("--model-source-json must contain a JSON object.")
+        try:
+            return ModelSourceConfig(**values)
+        except TypeError as exc:
+            raise ValueError("--model-source-json has unknown model fields.") from exc
     if args.model_id:
         return ModelSourceConfig(
             provider="huggingface",
@@ -168,8 +374,10 @@ def _install_xla_attention(model: torch.nn.Module) -> str | None:
         **kwargs,
     ):
         target_dtype = value.dtype
-        query = query.to(dtype=target_dtype)
-        key = key.to(dtype=target_dtype)
+        if query.dtype != target_dtype:
+            query = query.to(dtype=target_dtype)
+        if key.dtype != target_dtype:
+            key = key.to(dtype=target_dtype)
         if (
             attention_mask is not None
             and attention_mask.dtype != torch.bool
@@ -219,8 +427,13 @@ def model_preflight(args: argparse.Namespace) -> None:
     if hasattr(model, "tie_weights"):
         model.tie_weights()
     _install_xla_attention(model)
+    # Preflight proves that the HF model can execute on XLA; it is not the
+    # training-shape compilation benchmark. Compiling the complete training
+    # sequence here duplicates the largest compiler workload across every rank
+    # and can consume hundreds of GiB of host RAM before training even starts.
+    preflight_sequence_length = min(args.sequence_length, 16)
     input_ids = torch.zeros(
-        (args.micro_batch_per_device, args.sequence_length),
+        (args.micro_batch_per_device, preflight_sequence_length),
         dtype=torch.long,
         device=device,
     )
@@ -229,7 +442,7 @@ def model_preflight(args: argparse.Namespace) -> None:
         normalized = normalize_causal_lm_output(outputs)
     if normalized.logits is None:
         raise RuntimeError("HF model preflight returned no logits.")
-    expected = (args.micro_batch_per_device, args.sequence_length)
+    expected = (args.micro_batch_per_device, preflight_sequence_length)
     if tuple(normalized.logits.shape[:-1]) != expected:
         raise RuntimeError(
             f"HF model preflight logits shape {tuple(normalized.logits.shape)} "
@@ -240,6 +453,7 @@ def model_preflight(args: argparse.Namespace) -> None:
         "stage": "model_preflight_passed",
         "rank": rank,
         "model_class": type(model).__name__,
+        "sequence_length": preflight_sequence_length,
         "logits_shape": tuple(normalized.logits.shape),
     }), flush=True)
     runtime.finalize()
@@ -251,27 +465,21 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
     del index
     rank = int(xr.global_ordinal())
     world_size = int(xr.world_size())
-    if world_size != args.expected_world_size:
-        raise RuntimeError(
-            f"Torch/XLA launched {world_size} process(es); "
-            f"expected {args.expected_world_size}."
-        )
 
     torch.manual_seed(args.seed)
     device = torch_xla.device()
     torch_xla.manual_seed(args.seed, device=device)
     # The entry point already initialized a distinct persistent cache per rank.
+    cache_dir = Path(args.cache_dir) / f"rank-{rank}"
     runtime = XlaRuntime(
         device=device,
         precision=args.precision,
+        cache_dir=cache_dir,
+        cache_already_initialized=True,
         compile_training=False,
         collect_diagnostics=True,
     )
-    task = CausalLMTask(
-        z_loss=args.z_loss, loss_implementation="causal_lm",
-        assume_all_supervised=True,
-    )
-    print({"stage": "build_reader", "rank": rank}, flush=True)
+    print(json.dumps({"stage": "build_reader", "rank": rank}), flush=True)
     reader = ContiguousPackedBatchReader(
         shards,
         batch_size=args.micro_batch_per_device,
@@ -310,16 +518,16 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
             split="validation",
             seed=0,
             epoch=0,
-            # Until evaluation reductions become part of the backend contract,
-            # each replica evaluates the same deterministic validation stream.
-            # This is more work than sharding, but produces globally correct
-            # metrics instead of reporting rank zero's shard as the full set.
-            world_size=1,
-            rank=0,
+            world_size=world_size,
+            rank=rank,
             cross_shard_remainder="drop",
             host_remainder="drop",
         )
-        if not eval_partition.assignments:
+        # ``BatchPartitionPlan`` exposes the rank-local schedule as
+        # ``batch_indices``. The former ``assignments`` name belonged to an
+        # older partition contract and only failed once the TPU worker reached
+        # evaluation setup.
+        if not eval_partition.batch_indices:
             raise ValueError(
                 "Evaluation data has no complete batch for the active TPU topology."
             )
@@ -330,7 +538,7 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
             pin_memory=False,
         )
     source = _source(args)
-    print({"stage": "load_model", "rank": rank}, flush=True)
+    print(json.dumps({"stage": "load_model", "rank": rank}), flush=True)
     loaded = load_huggingface_causal_lm(source)
     if hasattr(loaded.model.config, "use_cache"):
         loaded.model.config.use_cache = False
@@ -345,6 +553,53 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
     if getattr(model.config, "tie_word_embeddings", False):
         if model.get_input_embeddings().weight is not model.get_output_embeddings().weight:
             raise RuntimeError("HF tied embedding aliases were lost during device placement.")
+    training_view = None
+    if args.loss_implementation == "chunked_linear":
+        capabilities = inspect_dense_causal_lm(model, source_provider="huggingface")
+        base_model = getattr(model, "base_model", None)
+        if not isinstance(base_model, torch.nn.Module):
+            raise RuntimeError(
+                "chunked_linear loss requires a public Hugging Face base_model."
+            )
+
+        def hidden_state_provider(module, model_inputs):
+            body = getattr(module, "base_model", None)
+            if not isinstance(body, torch.nn.Module):
+                raise RuntimeError("Hugging Face base_model is unavailable.")
+            return extract_hidden_state(body(**model_inputs))
+
+        training_view = LinearCausalLMTrainingView(
+            model=model,
+            capabilities=capabilities,
+            hidden_state_provider=hidden_state_provider,
+            provider_id="huggingface.base_model",
+        )
+    task = CausalLMTask(
+        z_loss=args.z_loss,
+        loss_implementation=args.loss_implementation,
+        assume_all_supervised=True,
+        training_view=training_view,
+        logits_chunk_size=args.logits_chunk_size or 2048,
+        rematerialization=(
+            "per_chunk" if args.loss_implementation == "chunked_linear" else "disabled"
+        ),
+    )
+    xla_optimizer = materialize_xla_adamw_policy(
+        XLAAdamWPolicy(
+            first_moment_dtype=(
+                "bfloat16" if args.precision == "bf16" else "float32"
+            ),
+            gradient_clip_norm=1.0,
+            gradient_reduction="mean",
+        ),
+        OptimizerConfig(
+            learning_rate=args.learning_rate,
+            betas=(args.beta1, args.beta2),
+            eps=args.eps,
+            weight_decay=args.weight_decay,
+            fused=False,
+        ),
+    )
     config = TrainConfig(
         model=source,
         dataset=DatasetConfig(
@@ -355,10 +610,10 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
             packing=True,
         ),
         loss=LossConfig(
-            implementation="causal_lm",
+            implementation=args.loss_implementation,
             normalization="supervised_tokens",
             z_loss=args.z_loss,
-            logits_chunk_size=None,
+            logits_chunk_size=args.logits_chunk_size,
         ),
         runtime=RuntimeConfig(device="xla", precision=args.precision),
         parallelism=ParallelismConfig(data=world_size),
@@ -369,15 +624,7 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
             compilation_cache_dir=str(Path(args.cache_dir) / f"rank-{rank}"),
             accumulation_strategy="microstep",
         ),
-        optimizer=OptimizerConfig(
-            learning_rate=args.learning_rate,
-            betas=(args.beta1, args.beta2),
-            eps=args.eps,
-            weight_decay=args.weight_decay,
-            fused=False,
-            mu_dtype="bfloat16" if args.precision == "bf16" else "float32",
-            nu_dtype="float32",
-        ),
+        optimizer=xla_optimizer.optimizer,
         scheduler=SchedulerConfig(
             name=args.scheduler,
             horizon_steps=(
@@ -393,7 +640,7 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
             max_steps=args.max_steps,
             gradient_accumulation_steps=args.gradient_accumulation_steps,
             materialize_loss_every_steps=args.log_every_steps,
-            max_grad_norm=1.0,
+            max_grad_norm=xla_optimizer.gradient_clip_norm,
             seed=args.seed,
         ),
         checkpoint=CheckpointConfig(
@@ -410,6 +657,7 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
         evaluation=EvaluationConfig(
             enabled=eval_loader is not None,
             eval_every_steps=args.eval_every_steps,
+            max_batches=args.max_eval_batches,
         ),
     )
     config.validate()
@@ -418,11 +666,29 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
     if {id(p) for g in optimizer.param_groups for p in g["params"]} != model_parameter_ids:
         raise RuntimeError("Optimizer references do not match the XLA model.")
     scheduler = create_scheduler(optimizer, config.scheduler)
-    metrics = PrintMetrics(runtime, args)
+    metrics = PrintMetrics(runtime, args, model)
     # Start prefetch after setup succeeds, and close it before closing mappings.
+    # Keep one device-loader execution aligned with several microsteps. A
+    # value of one flushes the lazy XLA graph for every batch; capping at eight
+    # reduces host/mark_step overhead without allowing an unbounded graph.
+    batches_per_execution = min(args.gradient_accumulation_steps, 8)
+    input_geometry = BatchPrefetchGeometry(
+        geometry_id=(
+            f"s{args.sequence_length}-mb{args.micro_batch_per_device}-"
+            f"ga{args.gradient_accumulation_steps}-dp{world_size}-"
+            f"p16-bpe{batches_per_execution}"
+        ),
+        sequence_length=args.sequence_length,
+        micro_batch_per_device=args.micro_batch_per_device,
+        gradient_accumulation_steps=args.gradient_accumulation_steps,
+        data_parallel_replicas=world_size,
+        prefetch_depth=16,
+        device_prefetch_depth=8,
+        host_to_device_transfer_threads=1,
+        batches_per_execution=batches_per_execution,
+    )
     parallel_loader = pl.ParallelLoader(
-        loader, [device], loader_prefetch_size=16, device_prefetch_size=8,
-        host_to_device_transfer_threads=1, batches_per_execution=1,
+        loader, [device], **input_geometry.parallel_loader_kwargs()
     )
     device_loader = parallel_loader.per_device_loader(device)
     trainer = Trainer(
@@ -454,12 +720,27 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
                 raise ValueError(
                     "TPU checkpoint data position exceeds the available rank schedule."
                 ) from exc
-    print({"stage": "train_start", "rank": rank,
-           "parameters": sum(p.numel() for p in model.parameters()),
-           "attention": attention_backend or getattr(model.config, "_attn_implementation", None),
-           "loss": "full_logits_causal_ce_z_loss",
-           "materialize_loss_every_steps": args.log_every_steps,
-           "max_steps": args.max_steps}, flush=True)
+    print(
+        json.dumps(
+            {"stage": "train_start", "rank": rank,
+             "parameters": sum(p.numel() for p in model.parameters()),
+             "attention": attention_backend or getattr(model.config, "_attn_implementation", None),
+             "parallelism": {
+                 "data_parallel": world_size,
+                 "model_parallel": 1,
+             },
+             "loss": (
+                 "chunked_linear_causal_ce_z_loss"
+                 if args.loss_implementation == "chunked_linear"
+                 else "full_logits_causal_ce_z_loss"
+             ),
+             "materialize_loss_every_steps": args.log_every_steps,
+             "batches_per_execution": min(args.gradient_accumulation_steps, 8),
+             "max_steps": args.max_steps},
+            sort_keys=True,
+        ),
+        flush=True,
+    )
     try:
         state = trainer.train()
         torch_xla.sync(wait=True)
@@ -481,11 +762,13 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
         "micro_steps": state.micro_step,
         "tokens_seen_rank0": state.tokens_seen,
         "samples_seen_rank0": state.samples_seen,
+        "global_batch_size": state.global_batch_size * world_size,
+        "samples_per_update": state.global_batch_size * world_size,
         "learning_rate": state.learning_rate,
         "global_supervised_tokens": state.tokens_seen * world_size,
         "last_loss_rank0": state.loss,
         "world_size": world_size,
-        "expected_world_size": args.expected_world_size,
+        "parallelism": {"data_parallel": world_size, "model_parallel": 1},
         "scheduled_tokens_per_update": args.sequence_length * args.micro_batch_per_device
             * args.gradient_accumulation_steps * world_size,
         "measured_global_supervised_tokens": metrics.measured_tokens,
@@ -504,9 +787,11 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
         "geometry": {"sequence_length": args.sequence_length,
                      "micro_batch_per_device": args.micro_batch_per_device,
                      "gradient_accumulation_steps": args.gradient_accumulation_steps,
+                     "batches_per_execution": batches_per_execution,
                      "materialize_loss_every_steps": args.log_every_steps},
         "runtime": dict(runtime.diagnostics().values),
-        "launcher_cache": str(Path(args.cache_dir) / f"rank-{rank}"),
+        "launcher_cache": str(cache_dir),
+        "summary_writer_rank": rank,
         "versions": {"torch": torch.__version__, "torch_xla": torch_xla.__version__},
         "performance_certified": False,
         "resumed_from_checkpoint": args.resume_from_checkpoint,
@@ -516,13 +801,19 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
             if (path / "manifest.json").is_file()
         ),
     }
-    if runtime.is_primary_process:
+    if rank == 0:
         output = Path(args.output_dir)
         output.mkdir(parents=True, exist_ok=True)
         (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
         import torch_xla.debug.metrics as xla_metrics
         (output / "xla_metrics.txt").write_text(xla_metrics.metrics_report(), encoding="utf-8")
-        print({"stage": "train_finished", "summary": str(output / "summary.json")}, flush=True)
+        print(
+            json.dumps(
+                {"stage": "train_finished", "summary": str(output / "summary.json")},
+                sort_keys=True,
+            ),
+            flush=True,
+        )
     if args.export_hf:
         xm.rendezvous("trainlm-before-export")
         # All replicas participate in XLA-to-CPU transfer before only rank zero

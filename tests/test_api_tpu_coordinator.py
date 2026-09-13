@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import signal
 import subprocess
 
 import pytest
@@ -10,6 +11,7 @@ from trainlm._tpu_coordinator import (
     TPUCoordinatorError,
     _TPUCoordinator,
     _TPURunRequest,
+    _format_worker_detail,
 )
 from trainlm.config import ModelSourceConfig
 from trainlm.training import TrainerCallback
@@ -84,6 +86,48 @@ def test_tpu_facade_defers_model_and_runtime_construction(tmp_path):
     assert trainer.explain()["selected_path"] == "tpu_coordinator"
 
 
+def test_tpu_facade_forwards_verbose_logging_and_global_batch_state(tmp_path):
+    coordinator = RecordingCoordinator()
+    trainer = TrainLMTrainer(
+        model=pinned_model(),
+        train_dataset=tmp_path / "manifests",
+        args=TrainLMTrainingArguments(
+            accelerator="tpu",
+            output_dir=tmp_path / "run",
+            max_steps=1,
+            per_device_train_batch_size=2,
+            gradient_accumulation_steps=4,
+            logging_verbosity="verbose",
+        ),
+    )
+    trainer._tpu_coordinator = coordinator
+    def run(request):
+        coordinator.requests.append(request)
+        return {
+            "status": "completed",
+            "worker_summary": {
+                "steps": 1,
+                "global_batch_size": 64,
+            },
+            "metrics": [],
+        }
+
+    coordinator.run = run
+
+    result = trainer.train()
+
+    assert coordinator.requests[0].logging_verbosity == "verbose"
+    assert result["trainer_state"]["global_batch_size"] == 64
+
+
+def test_verbose_worker_detail_is_compact_and_structured():
+    detail = _format_worker_detail(
+        '{"global_tokens_seen":12345,"learning_rate":0.001,'
+        '"loss":2.5,"step":10}'
+    )
+    assert detail == "step 10 | loss 2.5000 | lr 0.001 | tokens 12,345"
+
+
 def test_tpu_facade_rejects_parent_owned_objects_and_unsupported_data(tmp_path):
     with pytest.raises(TypeError, match="each worker"):
         TrainLMTrainer(
@@ -136,6 +180,7 @@ def test_tpu_facade_stages_evaluation_dataset_and_cadence(tmp_path):
             output_dir=tmp_path / "run",
             max_steps=4,
             eval_steps=2,
+            max_eval_batches=1,
         ),
     )
     trainer._tpu_coordinator = coordinator
@@ -145,9 +190,12 @@ def test_tpu_facade_stages_evaluation_dataset_and_cadence(tmp_path):
     request = coordinator.requests[0]
     assert request.eval_manifest_dir == tmp_path / "eval"
     assert request.eval_every_steps == 2
+    assert request.max_eval_batches == 1
 
 
-def test_tpu_facade_rejects_mutable_hugging_face_model_revision(tmp_path):
+def test_tpu_facade_resolves_mutable_hugging_face_model_revision(
+    tmp_path, monkeypatch
+):
     trainer = TrainLMTrainer(
         model=ModelSourceConfig(
             provider="huggingface",
@@ -158,10 +206,16 @@ def test_tpu_facade_rejects_mutable_hugging_face_model_revision(tmp_path):
         train_dataset=tmp_path / "train",
         args=TrainLMTrainingArguments(accelerator="tpu", max_steps=1),
     )
-    trainer._tpu_coordinator = RecordingCoordinator()
+    coordinator = RecordingCoordinator()
+    trainer._tpu_coordinator = coordinator
+    monkeypatch.setattr(
+        "trainlm.api._resolve_hugging_face_model_revision",
+        lambda repo_id, revision: "b" * 40,
+    )
 
-    with pytest.raises(ValueError, match="40-character commit SHA"):
-        trainer.train()
+    trainer.train()
+
+    assert coordinator.requests[0].model.revision == "b" * 40
 
 
 def _request(tmp_path):
@@ -211,6 +265,63 @@ def test_tpu_checkpoint_request_is_serialized_and_forwarded(tmp_path):
         checkpoint.resolve()
     )
     assert request.to_dict()["resume_from_checkpoint"] == str(checkpoint)
+
+
+def test_tpu_evaluation_batch_limit_is_forwarded(tmp_path):
+    request = _TPURunRequest(
+        **{
+            **_request(tmp_path).to_dict(),
+            "model": _request(tmp_path).model,
+            "manifest_dir": tmp_path / "manifests",
+            "output_dir": tmp_path / "run",
+            "eval_manifest_dir": tmp_path / "eval",
+            "eval_every_steps": 2,
+            "max_eval_batches": 1,
+        }
+    )
+
+    command = _TPUCoordinator(tmp_path / "worker.py")._command(request)
+
+    assert command[command.index("--max-eval-batches") + 1] == "1"
+
+
+def test_tpu_request_does_not_expose_or_assume_world_size(tmp_path):
+    request = _request(tmp_path)
+
+    assert "expected_world_size" not in request.to_dict()
+    assert "--expected-world-size" not in _TPUCoordinator(
+        tmp_path / "worker.py"
+    )._command(request)
+
+
+def test_tpu_config_model_is_serialized_for_worker_reconstruction(tmp_path):
+    base = _request(tmp_path)
+    model = ModelSourceConfig(
+        provider="huggingface",
+        initialization="config",
+        model_type="llama",
+        dtype="float32",
+        config_overrides={"hidden_size": 1024, "num_hidden_layers": 8},
+    )
+    request = _TPURunRequest(
+        **{
+            **base.to_dict(),
+            "model": model,
+            "manifest_dir": tmp_path / "manifests",
+            "output_dir": tmp_path / "run",
+        }
+    )
+
+    command = _TPUCoordinator(tmp_path / "worker.py")._command(request)
+    payload = json.loads(command[command.index("--model-source-json") + 1])
+
+    assert payload["initialization"] == "config"
+    assert payload["model_type"] == "llama"
+    assert payload["config_overrides"] == {
+        "hidden_size": 1024,
+        "num_hidden_layers": 8,
+    }
+    assert "--model-id" not in command
 
 
 def test_tpu_checkpoint_request_rejects_missing_resume_directory(tmp_path):
@@ -276,35 +387,136 @@ def test_coordinator_owns_stages_logs_and_structured_summary(tmp_path, monkeypat
     request = _request(tmp_path)
     calls = []
 
-    def run(command, **kwargs):
-        calls.append((command, kwargs))
-        if "--probe-only" not in command and "--model-preflight" not in command:
-            request.output_dir.mkdir(parents=True, exist_ok=True)
-            (request.output_dir / "summary.json").write_text(
-                json.dumps({"phase": "finalized", "steps": 2}),
-                encoding="utf-8",
-            )
-            (request.output_dir / "metrics.jsonl").write_text(
-                '{"loss": 2.5, "step": 2}\n', encoding="utf-8"
-            )
-        return subprocess.CompletedProcess(command, 0, stdout="stage passed\n")
+    class Process:
+        pid = 123
 
-    monkeypatch.setattr(subprocess, "run", run)
+        def __init__(self, returncode=0):
+            self.returncode = returncode
+
+        def wait(self, timeout=None):
+            del timeout
+            return self.returncode
+
+        def poll(self):
+            return self.returncode
+
+    def popen(command, **kwargs):
+        calls.append((command, kwargs))
+        kwargs["stdout"].write("stage passed\n")
+        kwargs["stdout"].flush()
+        request.output_dir.mkdir(parents=True, exist_ok=True)
+        (request.output_dir / "summary.json").write_text(
+            json.dumps({"phase": "finalized", "steps": 2}),
+            encoding="utf-8",
+        )
+        (request.output_dir / "metrics.jsonl").write_text(
+            '{"loss": 2.5, "step": 2}\n', encoding="utf-8"
+        )
+        return Process()
+
+    monkeypatch.setattr(subprocess, "Popen", popen)
 
     summary = _TPUCoordinator(worker).run(request)
 
     assert summary["status"] == "completed"
-    assert summary["completed_stages"] == ["probe", "model_preflight", "train"]
+    assert summary["completed_stages"] == ["train"]
     assert summary["worker_summary"]["steps"] == 2
     assert summary["metrics"] == [{"loss": 2.5, "step": 2.0}]
-    assert len(calls) == 3
-    assert "--probe-only" in calls[0][0]
-    assert "--model-preflight" in calls[1][0]
-    assert "--learning-rate" in calls[2][0]
-    assert all(call[1]["check"] is False for call in calls)
+    assert len(calls) == 1
+    assert "--probe-only" not in calls[0][0]
+    assert "--model-preflight" not in calls[0][0]
+    assert "--learning-rate" in calls[0][0]
+    assert all(call[1]["start_new_session"] is True for call in calls)
     assert (request.output_dir / "request.json").is_file()
     assert (request.output_dir / "coordinator_summary.json").is_file()
     assert (request.output_dir / "train.log").read_text() == "stage passed\n"
+
+
+def test_coordinator_bounds_diagnostic_stage_and_reclaims_timeout(
+    tmp_path, monkeypatch
+):
+    worker = tmp_path / "worker.py"
+    worker.write_text("# test worker\n", encoding="utf-8")
+    request = _request(tmp_path)
+    terminated = []
+
+    class HungProcess:
+        pid = 123
+
+        def wait(self, timeout=None):
+            raise subprocess.TimeoutExpired("worker", timeout)
+
+    monkeypatch.setattr(subprocess, "Popen", lambda *args, **kwargs: HungProcess())
+    monkeypatch.setattr(
+        _TPUCoordinator,
+        "_terminate_process_group",
+        staticmethod(lambda process: terminated.append(process.pid)),
+    )
+
+    with pytest.raises(TPUCoordinatorError, match="no progress for 900 seconds"):
+        _TPUCoordinator(worker)._run_stage("probe", request, "--probe-only")
+
+    assert terminated == [123]
+
+
+def test_coordinator_prints_stage_heartbeat(tmp_path, monkeypatch, capsys):
+    worker = tmp_path / "worker.py"
+    worker.write_text("# test worker\n", encoding="utf-8")
+    request = _request(tmp_path)
+
+    class HeartbeatProcess:
+        pid = 123
+
+        def __init__(self):
+            self.waits = 0
+
+        def wait(self, timeout=None):
+            self.waits += 1
+            if self.waits == 1:
+                raise subprocess.TimeoutExpired("worker", timeout)
+            return 0
+
+    def popen(command, **kwargs):
+        del command
+        kwargs["stdout"].write('{"stage":"worker_entered"}\n')
+        kwargs["stdout"].flush()
+        return HeartbeatProcess()
+
+    monkeypatch.setattr(subprocess, "Popen", popen)
+
+    _TPUCoordinator(worker)._run_stage("probe", request, "--probe-only")
+
+    output = capsys.readouterr().out
+    assert "[TrainLM] probe: started" in output
+    assert "[TrainLM] probe: still running (10s)" in output
+    assert 'latest: {"stage":"worker_entered"}' in output
+    assert "inactive=0s" in output
+    assert "[TrainLM] probe: completed" in output
+
+
+def test_coordinator_rejects_fatal_pjrt_log_with_success_exit(
+    tmp_path, monkeypatch
+):
+    worker = tmp_path / "worker.py"
+    worker.write_text("# test worker\n", encoding="utf-8")
+    request = _request(tmp_path)
+
+    class Process:
+        pid = 123
+
+        def wait(self, timeout=None):
+            return 0
+
+    def popen(command, **kwargs):
+        del command
+        kwargs["stdout"].write("RAW: Dumping core locally.\n")
+        kwargs["stdout"].flush()
+        return Process()
+
+    monkeypatch.setattr(subprocess, "Popen", popen)
+
+    with pytest.raises(TPUCoordinatorError, match="Restart the notebook session"):
+        _TPUCoordinator(worker)._run_stage("probe", request, "--probe-only")
 
 
 def test_coordinator_reports_actionable_stage_failure(tmp_path, monkeypatch):
@@ -312,13 +524,26 @@ def test_coordinator_reports_actionable_stage_failure(tmp_path, monkeypatch):
     worker.write_text("# test worker\n", encoding="utf-8")
     request = _request(tmp_path)
 
-    def run(command, **kwargs):
-        del kwargs
-        return subprocess.CompletedProcess(command, 9, stdout="PJRT launch failed\n")
+    class FailedProcess:
+        pid = 123
 
-    monkeypatch.setattr(subprocess, "run", run)
+        def wait(self, timeout=None):
+            del timeout
+            return 9
 
-    with pytest.raises(TPUCoordinatorError, match="probe stage failed.*probe.log"):
+        def poll(self):
+            return 9
+
+    def popen(command, **kwargs):
+        del command
+        kwargs["stdout"].write("PJRT launch failed\n")
+        kwargs["stdout"].flush()
+        return FailedProcess()
+
+    monkeypatch.setattr(subprocess, "Popen", popen)
+    monkeypatch.setattr("os.killpg", lambda pid, sig: None)
+
+    with pytest.raises(TPUCoordinatorError, match="train stage failed.*train.log"):
         _TPUCoordinator(worker).run(request)
 
     summary = json.loads(
@@ -327,6 +552,37 @@ def test_coordinator_reports_actionable_stage_failure(tmp_path, monkeypatch):
     assert summary["status"] == "failed"
     assert summary["completed_stages"] == []
     assert "PJRT launch failed" in summary["error"]
+
+
+def test_coordinator_releases_worker_group_when_notebook_is_interrupted(
+    tmp_path, monkeypatch
+):
+    worker = tmp_path / "worker.py"
+    worker.write_text("# test worker\n", encoding="utf-8")
+    process = type("InterruptProcess", (), {})()
+    process.pid = 456
+    process.running = True
+    waits = 0
+
+    def wait(timeout=None):
+        nonlocal waits
+        waits += 1
+        if waits == 1:
+            raise KeyboardInterrupt
+        process.running = False
+        return -15
+
+    process.wait = wait
+    process.poll = lambda: None if process.running else -15
+    monkeypatch.setattr(subprocess, "Popen", lambda *args, **kwargs: process)
+    signals = []
+    monkeypatch.setattr("os.killpg", lambda pid, sig: signals.append((pid, sig)))
+
+    with pytest.raises(KeyboardInterrupt):
+        _TPUCoordinator(worker).run(_request(tmp_path))
+
+    assert signals == [(456, signal.SIGTERM)]
+    assert process.running is False
 
 
 def test_coordinator_rejects_malformed_metrics_artifact(tmp_path):

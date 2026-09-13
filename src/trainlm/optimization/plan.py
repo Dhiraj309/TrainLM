@@ -17,6 +17,23 @@ def _tuple_field(name: str, value: Any) -> tuple[Any, ...]:
     return tuple(value)
 
 
+def _strict_mapping(
+    name: str,
+    value: Mapping[str, Any],
+    required: set[str],
+) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{name} must be a mapping.")
+    fields = set(value)
+    if fields != required:
+        missing = sorted(required - fields)
+        unknown = sorted(fields - required)
+        raise ValueError(
+            f"{name} fields mismatch; missing={missing!r}, unknown={unknown!r}."
+        )
+    return dict(value)
+
+
 @dataclass(frozen=True, slots=True)
 class ProviderDecision:
     """Provider selection or explicit non-selection for one operation."""
@@ -66,10 +83,37 @@ class ProviderDecision:
         if self.status == "fallback" and not self.requested_provider:
             raise ValueError("Fallback decisions must record the requested provider.")
         if (
+            self.status == "selected"
+            and self.requested_provider is not None
+            and self.requested_provider != self.selected_provider
+        ):
+            raise ValueError(
+                "Selected decisions must match their explicitly requested provider."
+            )
+        if (
             self.status == "fallback"
             and self.requested_provider == self.selected_provider
         ):
             raise ValueError("Fallback decisions must select a different provider.")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "ProviderDecision":
+        values = _strict_mapping(
+            "Provider decision",
+            value,
+            {
+                "decision_id",
+                "component",
+                "operation",
+                "status",
+                "reason",
+                "selected_provider",
+                "requested_provider",
+                "requirements",
+                "evidence",
+            },
+        )
+        return cls(**values)
 
 
 @dataclass(frozen=True, slots=True)
@@ -109,6 +153,25 @@ class ModelTransformation:
             raise ValueError("Model transformation target paths must be unique.")
         if self.transform_id == self.inverse_transform_id:
             raise ValueError("A transformation and its inverse must have different IDs.")
+        if not isinstance(self.parameter_layout_change, bool):
+            raise ValueError("parameter_layout_change must be a boolean.")
+
+    @classmethod
+    def from_dict(cls, value: Mapping[str, Any]) -> "ModelTransformation":
+        values = _strict_mapping(
+            "Model transformation",
+            value,
+            {
+                "transform_id",
+                "component",
+                "provider",
+                "target_paths",
+                "inverse_transform_id",
+                "reason",
+                "parameter_layout_change",
+            },
+        )
+        return cls(**values)
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,7 +191,7 @@ class ExecutionPlan:
     errors: tuple[str, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
-        if self.schema_version != 1:
+        if isinstance(self.schema_version, bool) or self.schema_version != 1:
             raise ValueError("ExecutionPlan supports schema_version=1 only.")
         for name in ("plan_id", "capability_fingerprint", "backend", "precision"):
             value = getattr(self, name)
@@ -179,10 +242,29 @@ class ExecutionPlan:
             raise ValueError("Execution plan decision IDs must be unique.")
         if len(transform_ids) != len(set(transform_ids)):
             raise ValueError("Execution plan transformation IDs must be unique.")
+        target_owners: dict[str, str] = {}
+        conflicting_targets: set[str] = set()
+        for transform in self.transformations:
+            for target in transform.target_paths:
+                owner = target_owners.setdefault(target, transform.transform_id)
+                if owner != transform.transform_id:
+                    conflicting_targets.add(target)
+        if conflicting_targets:
+            raise ValueError(
+                "Execution plan transformations must not share target paths: "
+                f"{sorted(conflicting_targets)!r}."
+            )
         if self.status == "blocked" and not self.errors:
             raise ValueError("Blocked execution plans must explain their errors.")
+        if self.status == "blocked" and self.transformations:
+            raise ValueError("Blocked execution plans cannot contain transformations.")
         if self.status != "blocked" and self.errors:
             raise ValueError("Only blocked execution plans may contain errors.")
+        if self.status == "ready" and not any(
+            decision.status in {"selected", "fallback"}
+            for decision in self.decisions
+        ):
+            raise ValueError("Ready execution plans must select a provider.")
         if self.status == "noop" and self.transformations:
             raise ValueError("No-op execution plans cannot contain transformations.")
         if self.status == "noop" and any(
@@ -193,6 +275,21 @@ class ExecutionPlan:
         if any(decision.status == "blocked" for decision in self.decisions):
             if self.status != "blocked":
                 raise ValueError("A blocked decision requires a blocked plan.")
+        selected_components = {
+            (decision.component, decision.selected_provider)
+            for decision in self.decisions
+            if decision.status in {"selected", "fallback"}
+        }
+        unauthorized = [
+            transform.transform_id
+            for transform in self.transformations
+            if (transform.component, transform.provider) not in selected_components
+        ]
+        if unauthorized:
+            raise ValueError(
+                "Execution plan transformations require a matching selected "
+                f"provider decision: {unauthorized!r}."
+            )
 
     @property
     def is_executable(self) -> bool:
@@ -249,16 +346,43 @@ class ExecutionPlan:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ExecutionPlan":
-        values = dict(data)
+        values = _strict_mapping(
+            "Execution plan",
+            data,
+            {
+                "schema_version",
+                "plan_id",
+                "status",
+                "policy",
+                "capability_fingerprint",
+                "backend",
+                "precision",
+                "decisions",
+                "transformations",
+                "warnings",
+                "errors",
+            },
+        )
+        for name in ("decisions", "transformations", "warnings", "errors"):
+            value = values[name]
+            if isinstance(value, (str, bytes)) or not isinstance(value, (list, tuple)):
+                raise ValueError(f"Execution plan {name} must be a list or tuple.")
+        if any(not isinstance(decision, Mapping) for decision in values["decisions"]):
+            raise ValueError("Execution plan decisions must contain mappings.")
+        if any(
+            not isinstance(transform, Mapping)
+            for transform in values["transformations"]
+        ):
+            raise ValueError("Execution plan transformations must contain mappings.")
         values["decisions"] = tuple(
-            ProviderDecision(**decision) for decision in values.get("decisions", ())
+            ProviderDecision.from_dict(decision) for decision in values["decisions"]
         )
         values["transformations"] = tuple(
-            ModelTransformation(**transform)
-            for transform in values.get("transformations", ())
+            ModelTransformation.from_dict(transform)
+            for transform in values["transformations"]
         )
-        values["warnings"] = tuple(values.get("warnings", ()))
-        values["errors"] = tuple(values.get("errors", ()))
+        values["warnings"] = tuple(values["warnings"])
+        values["errors"] = tuple(values["errors"])
         return cls(**values)
 
     @classmethod

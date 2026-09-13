@@ -1,3 +1,5 @@
+import pytest
+
 from trainlm.optimization import (
     ModelTransformation,
     OperationRequest,
@@ -56,6 +58,26 @@ def test_auto_plan_selects_highest_priority_eligible_provider_deterministically(
     assert first.transformations[0].inverse_transform_id == "unpack-qkv"
 
 
+def test_plan_id_is_bound_to_provider_catalog():
+    complete = OptimizationPlanner(_providers()).plan(
+        capabilities(),
+        backend="pytorch-xla",
+        precision="bf16",
+        policy="auto",
+        requests=(_request(),),
+    )
+    fallback_only = OptimizationPlanner((_providers()[1],)).plan(
+        capabilities(),
+        backend="pytorch-xla",
+        precision="bf16",
+        policy="auto",
+        requests=(_request(),),
+    )
+
+    assert complete.decisions != fallback_only.decisions
+    assert complete.plan_id != fallback_only.plan_id
+
+
 def test_auto_plan_uses_explained_portable_fallback():
     plan = OptimizationPlanner(_providers()).plan(
         capabilities(), backend="pytorch", precision="fp32",
@@ -65,6 +87,39 @@ def test_auto_plan_uses_explained_portable_fallback():
     assert plan.decisions[0].status == "fallback"
     assert plan.decisions[0].selected_provider == "torch-reference"
     assert "fallback" in plan.warnings[0]
+
+
+def test_explicit_fallback_provider_is_a_successful_selection():
+    plan = OptimizationPlanner(_providers()).plan(
+        capabilities(),
+        backend="pytorch",
+        precision="fp32",
+        policy="auto",
+        requests=(_request("torch-reference"),),
+    )
+
+    assert plan.status == "ready"
+    assert plan.decisions[0].status == "selected"
+    assert plan.decisions[0].selected_provider == "torch-reference"
+    assert plan.decisions[0].requested_provider == "torch-reference"
+    assert plan.warnings == ()
+
+
+def test_required_policy_rejects_automatic_fallback_only_provider():
+    fallback = _providers()[1]
+    plan = OptimizationPlanner((fallback,)).plan(
+        capabilities(),
+        backend="pytorch",
+        precision="fp32",
+        policy="required",
+        requests=(_request(),),
+    )
+
+    assert plan.status == "blocked"
+    assert plan.decisions[0].status == "blocked"
+    assert plan.decisions[0].selected_provider is None
+    assert "fallback-only provider" in plan.decisions[0].reason
+    assert plan.transformations == ()
 
 
 def test_required_or_explicit_unsupported_provider_blocks_before_mutation():
@@ -89,3 +144,124 @@ def test_disabled_policy_is_a_noop_even_when_providers_match():
     assert plan.status == "noop"
     assert plan.decisions[0].status == "skipped"
     assert plan.transformations == ()
+
+
+@pytest.mark.parametrize(
+    ("argument", "value", "error", "message"),
+    [
+        ("capabilities", object(), TypeError, "must be ModelCapabilities"),
+        ("backend", "", ValueError, "backend must be a non-empty string"),
+        ("precision", " ", ValueError, "precision must be a non-empty string"),
+        ("policy", "sometimes", ValueError, "Unsupported optimization policy"),
+        ("requests", (object(),), TypeError, "must contain OperationRequest"),
+        (
+            "adapter_resolution",
+            object(),
+            TypeError,
+            "must be AdapterResolution or None",
+        ),
+    ],
+)
+def test_planner_rejects_malformed_boundary_inputs(
+    argument,
+    value,
+    error,
+    message,
+):
+    arguments = {
+        "capabilities": capabilities(),
+        "backend": "pytorch-xla",
+        "precision": "bf16",
+        "policy": "auto",
+        "requests": (_request(),),
+    }
+    arguments[argument] = value
+
+    with pytest.raises(error, match=message):
+        OptimizationPlanner(_providers()).plan(**arguments)
+
+
+@pytest.mark.parametrize("fallback", (0, 1, "false", None))
+def test_provider_rejects_non_boolean_fallback_flags(fallback):
+    with pytest.raises(ValueError, match="fallback must be a boolean"):
+        ProviderSpec(
+            provider_id="invalid-fallback",
+            component="projections",
+            operation="forward_backward",
+            backends=("pytorch",),
+            precisions=("fp32",),
+            fallback=fallback,
+        )
+
+
+def test_provider_rejects_mutable_transformation_collections():
+    transformation = _providers()[0].transformations[0]
+
+    with pytest.raises(ValueError, match="transformations must be a tuple"):
+        ProviderSpec(
+            provider_id="mutable-provider",
+            component="projections",
+            operation="forward_backward",
+            backends=("pytorch-xla",),
+            precisions=("bf16",),
+            transformations=[transformation],
+        )
+
+
+def test_provider_rejects_transformations_for_another_component():
+    transformation = ModelTransformation(
+        transform_id="wrong-component",
+        component="attention",
+        provider="xla-qkv",
+        target_paths=("model.layers.*.self_attn",),
+        inverse_transform_id="restore-wrong-component",
+        reason="Invalid cross-component declaration.",
+    )
+
+    with pytest.raises(ValueError, match="target their owning component"):
+        ProviderSpec(
+            provider_id="xla-qkv",
+            component="projections",
+            operation="forward_backward",
+            backends=("pytorch-xla",),
+            precisions=("bf16",),
+            transformations=(transformation,),
+        )
+
+
+def test_provider_rejects_duplicate_transformation_ids():
+    transformation = _providers()[0].transformations[0]
+
+    with pytest.raises(ValueError, match="transformation IDs must be unique"):
+        ProviderSpec(
+            provider_id="xla-qkv",
+            component="projections",
+            operation="forward_backward",
+            backends=("pytorch-xla",),
+            precisions=("bf16",),
+            transformations=(transformation, transformation),
+        )
+
+
+def test_planner_rejects_transformation_ids_reused_by_another_provider():
+    original = _providers()[0]
+    conflicting_transform = ModelTransformation(
+        transform_id=original.transformations[0].transform_id,
+        component="projections",
+        provider="alternate-qkv",
+        target_paths=("model.layers.*.self_attn",),
+        inverse_transform_id="restore-alternate-qkv",
+        reason="Conflicts with a registered transformation ID.",
+    )
+    conflicting_provider = ProviderSpec(
+        provider_id="alternate-qkv",
+        component="projections",
+        operation="inference",
+        backends=("pytorch-xla",),
+        precisions=("bf16",),
+        transformations=(conflicting_transform,),
+    )
+    planner = OptimizationPlanner((original,))
+
+    with pytest.raises(ValueError, match="IDs already registered.*pack-qkv"):
+        planner.register(conflicting_provider)

@@ -90,3 +90,63 @@ def test_cursor_rejects_stale_or_inconsistent_state(tmp_path):
             source_revision="refs/heads/main",
         )
     reader.close()
+
+
+def test_reference_28_2_split_partitions_and_resumes_exactly(tmp_path):
+    train_reader = _reader(tmp_path / "train", (16,) * 28)
+    validation_reader = _reader(tmp_path / "validation", (16,) * 2)
+
+    try:
+        train_plans = tuple(
+            plan_packed_batch_partition(
+                train_reader,
+                split="train",
+                seed=2026,
+                epoch=3,
+                world_size=8,
+                rank=rank,
+            )
+            for rank in range(8)
+        )
+        owned = [set(plan.batch_indices) for plan in train_plans]
+        assert set.union(*owned) == set(range(len(train_reader)))
+        assert sum(map(len, owned)) == len(set.union(*owned))
+
+        for plan in train_plans:
+            partitioned = PartitionedPackedBatchReader(train_reader, plan)
+            expected = [
+                batch["input_ids"].tolist()
+                for batch in PackedDataCursor(partitioned)
+            ]
+            for interruption in range(len(partitioned) + 1):
+                cursor = PackedDataCursor(
+                    partitioned,
+                    source_revision="a" * 40,
+                    rng_state={"epoch": 3, "draw": interruption},
+                )
+                prefix = [next(cursor)["input_ids"].tolist() for _ in range(interruption)]
+                state = PackedDataCursorState.from_json(cursor.state.to_json())
+                resumed = PackedDataCursor.from_state(partitioned, state)
+                suffix = [batch["input_ids"].tolist() for batch in resumed]
+                assert prefix + suffix == expected
+                assert resumed.state.tokens_consumed == (
+                    len(partitioned) * train_reader.layout.tokens_per_batch
+                )
+
+        validation_plans = tuple(
+            plan_packed_batch_partition(
+                validation_reader,
+                split="validation",
+                seed=0,
+                epoch=0,
+                world_size=2,
+                rank=rank,
+            )
+            for rank in range(2)
+        )
+        validation_owned = [set(plan.batch_indices) for plan in validation_plans]
+        assert set.union(*validation_owned) == set(range(len(validation_reader)))
+        assert sum(map(len, validation_owned)) == len(set.union(*validation_owned))
+    finally:
+        train_reader.close()
+        validation_reader.close()

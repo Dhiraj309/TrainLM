@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from trainlm.benchmark import ParityReport
+from trainlm.benchmark import ParityReport, load_parity_report
 
 
 def report(**values):
@@ -49,3 +49,67 @@ def test_report_requires_reproducibility_artifacts():
         report(commands=())
     with pytest.raises(ValueError, match="profile_artifact"):
         report(profile_artifact="")
+
+
+def _write_report_bundle(tmp_path, value=None):
+    value = value or report(
+        configuration_artifacts=("config.json",),
+        metric_artifacts=("metrics.json",),
+        profile_artifact="profile.json",
+        hlo_artifact="hlo.txt",
+    )
+    for artifact in (
+        *value.configuration_artifacts,
+        *value.metric_artifacts,
+        value.profile_artifact,
+        value.hlo_artifact,
+    ):
+        target = tmp_path / artifact
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("evidence", encoding="utf-8")
+    path = tmp_path / "report.json"
+    path.write_text(value.to_json(), encoding="utf-8")
+    return path
+
+
+def test_report_loader_round_trips_complete_confined_bundle(tmp_path):
+    path = _write_report_bundle(tmp_path)
+
+    loaded = load_parity_report(path)
+
+    assert loaded == report(
+        configuration_artifacts=("config.json",),
+        metric_artifacts=("metrics.json",),
+        profile_artifact="profile.json",
+        hlo_artifact="hlo.txt",
+    )
+    assert loaded.certified
+
+
+def test_report_loader_rejects_unknown_fields_and_missing_artifacts(tmp_path):
+    path = _write_report_bundle(tmp_path)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["unexpected"] = True
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="report keys"):
+        load_parity_report(path)
+
+    path = _write_report_bundle(tmp_path)
+    (tmp_path / "hlo.txt").unlink()
+    with pytest.raises(ValueError, match="escapes the report or is missing"):
+        load_parity_report(path)
+
+
+def test_report_loader_rejects_escaping_artifact_path(tmp_path):
+    outside = tmp_path.parent / "outside-profile.json"
+    outside.write_text("evidence", encoding="utf-8")
+    value = report(
+        configuration_artifacts=("config.json",),
+        metric_artifacts=("metrics.json",),
+        profile_artifact="../outside-profile.json",
+        hlo_artifact="hlo.txt",
+    )
+    path = _write_report_bundle(tmp_path, value)
+
+    with pytest.raises(ValueError, match="escapes the report or is missing"):
+        load_parity_report(path)

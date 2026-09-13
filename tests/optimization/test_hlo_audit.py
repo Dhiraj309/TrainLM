@@ -67,3 +67,58 @@ def test_decision_order_and_json_are_deterministic():
 def test_duplicate_component_evidence_is_rejected():
     with pytest.raises(ValueError, match="components must be unique"):
         audit_hlo_fusions((observation("mlp"), observation("mlp")))
+
+
+def test_hlo_text_capture_counts_structural_operations_and_fingerprints():
+    hlo = """
+HloModule fixture
+ENTRY main {
+  %copy.1 = f32[2,2] copy(%parameter.0)
+  %transpose.1 = f32[2,2] transpose(%copy.1), dimensions={1,0}
+  ROOT %call = f32[2,2] custom-call(%transpose.1), custom_call_target="x"
+}
+"""
+    captured = HLOFusionObservation.from_hlo_text(
+        component="mlp",
+        hlo_text=hlo,
+        native_fused=False,
+        materialization_patterns=(r"%copy\.1\s*=",),
+    )
+
+    assert captured.hlo_fingerprint.startswith("sha256:")
+    assert len(captured.hlo_fingerprint) == 71
+    assert captured.copy_count == 1
+    assert captured.transpose_count == 1
+    assert captured.custom_call_count == 1
+    assert captured.materialization_count == 1
+
+
+def test_hlo_text_fingerprint_normalizes_line_endings_and_outer_whitespace():
+    unix = HLOFusionObservation.from_hlo_text(
+        component="rope", hlo_text="HloModule x\n", native_fused=None
+    )
+    windows = HLOFusionObservation.from_hlo_text(
+        component="rope", hlo_text="  HloModule x\r\n\r\n", native_fused=None
+    )
+    assert unix.hlo_fingerprint == windows.hlo_fingerprint
+
+
+def test_hlo_text_capture_rejects_invalid_or_ambiguous_patterns():
+    with pytest.raises(ValueError, match="hlo_text cannot be empty"):
+        HLOFusionObservation.from_hlo_text(
+            component="mlp", hlo_text="", native_fused=None
+        )
+    with pytest.raises(TypeError, match="tuple or list"):
+        HLOFusionObservation.from_hlo_text(
+            component="mlp",
+            hlo_text="HloModule x",
+            native_fused=None,
+            materialization_patterns="copy",
+        )
+    with pytest.raises(ValueError, match="Invalid materialization pattern"):
+        HLOFusionObservation.from_hlo_text(
+            component="mlp",
+            hlo_text="HloModule x",
+            native_fused=None,
+            materialization_patterns=("[",),
+        )
