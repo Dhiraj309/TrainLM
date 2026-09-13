@@ -796,3 +796,7 @@ A separate probe log showed `RAW: Dumping core` and `exit() hanging` while the
 launcher nevertheless returned zero. The coordinator now treats those PJRT fatal
 shutdown markers as failure and tells the user to restart the notebook session;
 it no longer reports such a probe as completed or continues into model loading.
+
+The fatal-marker regression belongs alongside—but not inside—the heartbeat
+assertions; keeping those test scopes separate prevents the failure-path test
+from referencing the heartbeat test's captured output.
