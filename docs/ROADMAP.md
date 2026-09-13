@@ -1948,3 +1948,13 @@ ordered next stories for this PR branch.
   guidance.
 - Completed: keep heartbeat-output assertions scoped to the heartbeat contract
   and fatal-marker assertions scoped to the false-success failure contract.
+
+### Public TPU baseline geometry correction
+
+- Completed: restore the previously successful 135M eight-layer Llama reference
+  geometry for the first public-facade TPU smoke, including sequence 2048,
+  per-replica batch two, and accumulation 32.
+- Completed: keep evaluation and checkpointing out of the first two-update run;
+  validate those lifecycles separately after baseline training succeeds.
+- Follow-up: collect target-v5e throughput, HBM, compilation, and fallback
+  evidence before making any performance or certification claim.

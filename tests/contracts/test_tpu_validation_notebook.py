@@ -28,21 +28,23 @@ def test_tpu_notebook_demonstrates_the_public_hf_like_workflow():
         "%pip uninstall -y tensorflow tensorflow-cpu tensorflow-gpu tensorflow-intel tensorflow-rocm tf-keras keras torchvision torchaudio",
         "Restart Session",
         "TensorFlow is still importable",
-        '"initialization": "pretrained"',
-        '"name_or_path": "HuggingFaceTB/SmolLM2-135M-Instruct"',
-        '"revision": "main"',
-        "sequence_length = 128",
+        '"initialization": "config"',
+        '"model_type": "llama"',
+        '"vocab_size": 32064',
+        '"num_hidden_layers": 8',
+        "sequence_length = 2048",
+        '"per_device_train_batch_size": 2',
+        '"gradient_accumulation_steps": 32',
         "TrainLMTrainer.from_config",
         "PackedBinDataset.from_hub",
         "shard_range=(0, TRAIN_SHARD_STOP)",
         "cache_dir=DATA_CACHE_DIR",
         "It does not download during training",
         "result = trainer.train()",
-        "terminates the complete private worker process group",
+        "terminates its private worker process group",
         'trainer.explain(format="text")',
-        "Evaluation is intentionally omitted from this compile-small lifecycle smoke",
-        '"save_steps": 2',
-        "resume_from_checkpoint=OUTPUT_DIR",
+        '"max_steps": 2',
+        "Evaluation and checkpointing are intentionally disabled",
         "[Notebook 1/8]",
         "[Notebook 8/8]",
         "heartbeat every 10 seconds",
@@ -54,7 +56,9 @@ def test_tpu_notebook_demonstrates_the_public_hf_like_workflow():
     assert source.index("!git clone --branch") < source.index("%pip uninstall")
     assert source.index('git checkout -B "$BRANCH"') < source.index("%pip uninstall")
     assert '"eval_steps"' not in source
+    assert '"save_steps"' not in source
     assert "eval_dataset=" not in source
+    assert "HuggingFaceTB/SmolLM2-135M-Instruct" not in source
 
 
 def test_tpu_notebook_hides_orchestration_and_topology_inputs():

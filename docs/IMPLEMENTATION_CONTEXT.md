@@ -800,3 +800,14 @@ it no longer reports such a probe as completed or continues into model loading.
 The fatal-marker regression belongs alongside—but not inside—the heartbeat
 assertions; keeping those test scopes separate prevents the failure-path test
 from referencing the heartbeat test's captured output.
+
+### 114. Restore the proven 135M reference geometry for the first TPU run
+
+The initial public-facade notebook again uses the shallow eight-layer Llama
+reference that previously completed DP8 training: hidden size 1024, intermediate
+size 2816, eight attention heads, vocabulary 32064, sequence length 2048,
+per-replica batch two, and accumulation 32. The first run performs two training
+updates only. Evaluation and checkpointing are separate lifecycle validations,
+so their distinct compilations and synchronous I/O cannot be mistaken for a
+training stall. The public call remains only `trainer.train()`; topology and
+worker orchestration stay private.
