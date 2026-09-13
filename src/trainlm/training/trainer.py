@@ -409,7 +409,10 @@ class Trainer:
             self.optimizer,
         )
 
-        self.runtime.synchronize()
+        # XLA flushes the optimizer update in ``on_step_end`` below. Calling
+        # synchronize here as well creates two mark_step boundaries per update
+        # and fragments the lazy graph on TPU. Other runtimes keep their normal
+        # optimizer semantics through their own on_step_end hook.
 
         self._update_accumulated_state(
             total_tokens=total_tokens,

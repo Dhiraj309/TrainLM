@@ -346,8 +346,10 @@ def _install_xla_attention(model: torch.nn.Module) -> str | None:
         **kwargs,
     ):
         target_dtype = value.dtype
-        query = query.to(dtype=target_dtype)
-        key = key.to(dtype=target_dtype)
+        if query.dtype != target_dtype:
+            query = query.to(dtype=target_dtype)
+        if key.dtype != target_dtype:
+            key = key.to(dtype=target_dtype)
         if (
             attention_mask is not None
             and attention_mask.dtype != torch.bool
@@ -638,10 +640,15 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
     scheduler = create_scheduler(optimizer, config.scheduler)
     metrics = PrintMetrics(runtime, args)
     # Start prefetch after setup succeeds, and close it before closing mappings.
+    # Keep one device-loader execution aligned with several microsteps. A
+    # value of one flushes the lazy XLA graph for every batch; capping at eight
+    # reduces host/mark_step overhead without allowing an unbounded graph.
+    batches_per_execution = min(args.gradient_accumulation_steps, 8)
     input_geometry = BatchPrefetchGeometry(
         geometry_id=(
             f"s{args.sequence_length}-mb{args.micro_batch_per_device}-"
-            f"ga{args.gradient_accumulation_steps}-dp{world_size}-p16"
+            f"ga{args.gradient_accumulation_steps}-dp{world_size}-"
+            f"p16-bpe{batches_per_execution}"
         ),
         sequence_length=args.sequence_length,
         micro_batch_per_device=args.micro_batch_per_device,
@@ -650,7 +657,7 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
         prefetch_depth=16,
         device_prefetch_depth=8,
         host_to_device_transfer_threads=1,
-        batches_per_execution=1,
+        batches_per_execution=batches_per_execution,
     )
     parallel_loader = pl.ParallelLoader(
         loader, [device], **input_geometry.parallel_loader_kwargs()
@@ -700,6 +707,7 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
                  else "full_logits_causal_ce_z_loss"
              ),
              "materialize_loss_every_steps": args.log_every_steps,
+             "batches_per_execution": min(args.gradient_accumulation_steps, 8),
              "max_steps": args.max_steps},
             sort_keys=True,
         ),
@@ -752,6 +760,7 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
         "geometry": {"sequence_length": args.sequence_length,
                      "micro_batch_per_device": args.micro_batch_per_device,
                      "gradient_accumulation_steps": args.gradient_accumulation_steps,
+                     "batches_per_execution": batches_per_execution,
                      "materialize_loss_every_steps": args.log_every_steps},
         "runtime": dict(runtime.diagnostics().values),
         "launcher_cache": str(cache_dir),

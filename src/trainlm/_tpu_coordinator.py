@@ -54,6 +54,22 @@ def _format_worker_detail(detail: str) -> str:
     return f"latest: {detail}"
 
 
+def _render_progress_document(path: Path) -> bool:
+    """Update one IPython display for the live progress document."""
+
+    if not path.is_file():
+        return False
+    try:
+        from IPython.display import Markdown, display
+    except ImportError:
+        return False
+    display(
+        Markdown(path.read_text(encoding="utf-8")),
+        display_id="trainlm-progress",
+    )
+    return True
+
+
 class TPUCoordinatorError(RuntimeError):
     """Raised when a TPU worker stage cannot produce a successful run."""
 
@@ -241,13 +257,23 @@ class _TPUCoordinator:
         if mode is not None:
             command.append(mode)
         log_path = request.output_dir / f"{stage}.log"
+        progress_path = request.output_dir / "progress.md"
         log_path.parent.mkdir(parents=True, exist_ok=True)
+        if stage == "train":
+            progress_path.unlink(missing_ok=True)
         started = time.monotonic()
-        print(
-            f"[TrainLM] {stage}: started (details: {log_path}; "
-            f"progress: {request.output_dir / 'progress.md'})",
-            flush=True,
-        )
+        if request.logging_verbosity == "verbose":
+            print(
+                f"[TrainLM] {stage}: started; live progress: "
+                f"{request.output_dir / 'progress.md'}",
+                flush=True,
+            )
+        else:
+            print(
+                f"[TrainLM] {stage}: started (details: {log_path}; "
+                f"progress: {request.output_dir / 'progress.md'})",
+                flush=True,
+            )
         with log_path.open("w", encoding="utf-8") as log:
             process = subprocess.Popen(
                 command,
@@ -266,6 +292,7 @@ class _TPUCoordinator:
                     process,
                     stage=stage,
                     log_path=log_path,
+                    progress_path=progress_path,
                     timeout=timeout,
                     verbosity=request.logging_verbosity,
                 )
@@ -306,10 +333,13 @@ class _TPUCoordinator:
                 "Restart the notebook session to reset the TPU runtime before "
                 f"retrying; see {log_path}."
             )
-        print(
-            f"[TrainLM] {stage}: completed in {time.monotonic() - started:.1f}s",
-            flush=True,
-        )
+        if request.logging_verbosity != "verbose":
+            print(
+                f"[TrainLM] {stage}: completed in {time.monotonic() - started:.1f}s",
+                flush=True,
+            )
+        else:
+            _render_progress_document(progress_path)
 
     @staticmethod
     def _wait_with_heartbeat(
@@ -317,6 +347,7 @@ class _TPUCoordinator:
         *,
         stage: str,
         log_path: Path,
+        progress_path: Path | None = None,
         timeout: int | None,
         heartbeat_seconds: int = 10,
         verbosity: str = "normal",
@@ -357,6 +388,9 @@ class _TPUCoordinator:
                     inactive = 0
                     previous_detail = last_detail
                 if verbosity != "quiet":
+                    if verbosity == "verbose" and progress_path is not None:
+                        if _render_progress_document(progress_path):
+                            continue
                     rendered = (
                         _format_worker_detail(last_detail)
                         if verbosity == "verbose"

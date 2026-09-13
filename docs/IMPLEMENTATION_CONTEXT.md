@@ -922,8 +922,23 @@ metric update, and finalized with the summary. The Markdown document contains
 the current phase and progress bar, step, loss, perplexity, gradient norm,
 learning rate, global supervised tokens, measured throughput, elapsed time,
 ETA, and the DP8/MP1 geometry. `scripts/show_trainlm_progress.py` can render
-that file once or watch it from a separate Kaggle/Jupyter cell; `%run` cannot
-execute concurrently with a training call in the same synchronous cell.
+that file once or watch it from a separate process. In a normal Kaggle/Jupyter
+run, the coordinator updates a single IPython display handle from its existing
+wait loop, so the training cell itself shows the live document; `%run` is only
+needed for post-run inspection or a separately launched training process.
+
+The throughput validation notebook now uses the next optimized candidate:
+microbatch 8, gradient accumulation 8, and `chunked_linear` output projection
+with 4096-token chunks. It preserves the same global 1,048,576 scheduled
+tokens per update while halving host-driven microsteps. The packed all-supervised
+path omits a per-microstep denominator synchronization in the chunked loss.
+The trainer also avoids a duplicate XLA `mark_step` boundary after each
+optimizer update. These changes require a fresh v5e-8 run before any
+throughput claim; they are not a local TPU certification.
+
+The TPU `ParallelLoader` now groups up to eight microbatches per execution,
+reducing per-batch `mark_step` overhead while keeping the graph bounded. The
+selected value is recorded in the worker summary geometry for auditability.
 
 The TPU launcher initializes each rank's persistent computation cache before its
 collective probe. The worker runtime now receives an explicit

@@ -3,8 +3,9 @@
 Usage from Kaggle/Jupyter:
     %run scripts/show_trainlm_progress.py --output-dir /kaggle/working/run --watch
 
-Run the watcher in a second cell or notebook while the training process owns
-the TPU. Without ``--watch`` it renders one snapshot and exits.
+The normal ``trainer.train()`` path renders this document in the same notebook
+cell. Use this helper for a post-run snapshot or when training was launched in
+a separate process. Without ``--watch`` it renders one snapshot and exits.
 """
 
 from __future__ import annotations
