@@ -42,6 +42,7 @@ def test_tpu_notebook_demonstrates_the_public_hf_like_workflow():
         "terminates the complete private worker process group",
         'trainer.explain(format="text")',
         '"eval_steps": 2',
+        '"max_eval_batches": 1',
         '"save_steps": 2',
         "resume_from_checkpoint=OUTPUT_DIR",
         "[Notebook 1/8]",

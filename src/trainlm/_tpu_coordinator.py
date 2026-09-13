@@ -41,6 +41,7 @@ class _TPURunRequest:
     resume_from_checkpoint: Path | None = None
     eval_manifest_dir: Path | None = None
     eval_every_steps: int | None = None
+    max_eval_batches: int | None = None
 
     def __post_init__(self) -> None:
         if self.save_every_steps is not None and (
@@ -66,6 +67,14 @@ class _TPURunRequest:
             or self.eval_every_steps < 1
         ):
             raise ValueError("eval_every_steps must be positive when configured.")
+        if self.max_eval_batches is not None and (
+            isinstance(self.max_eval_batches, bool)
+            or not isinstance(self.max_eval_batches, int)
+            or self.max_eval_batches < 1
+        ):
+            raise ValueError("max_eval_batches must be positive when configured.")
+        if self.max_eval_batches is not None and self.eval_manifest_dir is None:
+            raise ValueError("max_eval_batches requires an evaluation dataset.")
 
     def to_dict(self) -> dict[str, Any]:
         values = asdict(self)
@@ -329,6 +338,8 @@ class _TPUCoordinator:
                 ("--eval-manifest-dir", str(request.eval_manifest_dir.resolve()))
             )
             command.extend(("--eval-every-steps", str(request.eval_every_steps)))
+        if request.max_eval_batches is not None:
+            command.extend(("--max-eval-batches", str(request.max_eval_batches)))
         return command
 
     @staticmethod

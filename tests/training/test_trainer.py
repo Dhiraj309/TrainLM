@@ -245,6 +245,16 @@ def test_evaluate_returns_metrics():
     assert isinstance(metrics["eval_loss"], float)
 
 
+def test_evaluate_honors_max_batches():
+    task = StreamingCountingTask()
+    trainer = create_trainer(task=task)
+    trainer.config.evaluation = type("Evaluation", (), {"max_batches": 1})()
+
+    trainer.evaluate()
+
+    assert task.result_count == 1
+
+
 def test_evaluate_restores_train_mode():
     trainer = create_trainer()
 

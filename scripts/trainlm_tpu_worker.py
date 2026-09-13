@@ -78,6 +78,7 @@ def parse_args():
     parser.add_argument("--resume-from-checkpoint")
     parser.add_argument("--eval-manifest-dir")
     parser.add_argument("--eval-every-steps", type=int)
+    parser.add_argument("--max-eval-batches", type=int)
     parser.add_argument("--learning-rate", type=float, default=2e-4)
     parser.add_argument("--beta1", type=float, default=0.9)
     parser.add_argument("--beta2", type=float, default=0.95)
@@ -127,6 +128,10 @@ def parse_args():
         parser.error("--eval-manifest-dir and --eval-every-steps must be used together")
     if args.eval_every_steps is not None and args.eval_every_steps < 1:
         parser.error("--eval-every-steps must be positive")
+    if args.max_eval_batches is not None and args.max_eval_batches < 1:
+        parser.error("--max-eval-batches must be positive")
+    if args.max_eval_batches is not None and args.eval_manifest_dir is None:
+        parser.error("--max-eval-batches requires --eval-manifest-dir")
     if args.sequence_length < 2 or args.warmup_steps < 0:
         parser.error("sequence length must be >=2 and warmup steps >=0")
     if (

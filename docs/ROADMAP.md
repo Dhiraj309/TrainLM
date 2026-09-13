@@ -1923,3 +1923,14 @@ For cross-session implementation continuity, see
 [`docs/IMPLEMENTATION_CONTEXT.md`](IMPLEMENTATION_CONTEXT.md). It records the
 current measured baseline, public-API boundary, explicit non-goals, and the
 ordered next stories for this PR branch.
+
+### TPU lifecycle smoke follow-up (completed)
+
+- [x] Diagnose the apparent post-step-2 stall as an unbounded scheduled
+  evaluation over the full validation shard, rather than an optimizer hang.
+- [x] Add a public `max_eval_batches` argument and carry it through the private
+  TPU coordinator into `EvaluationConfig.max_batches`.
+- [x] Bound the SmolLM2 notebook/example smoke evaluation to one batch and emit
+  explicit evaluation/checkpoint lifecycle messages.
+- [ ] Run an intentionally full validation pass only with a suitably sized
+  validation shard and record target-hardware timing evidence.

@@ -109,6 +109,23 @@ class PrintMetrics(TrainerCallback):
             with self.metrics_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(snapshot, sort_keys=True) + "\n")
             print(snapshot, flush=True)
+            if "step" in snapshot and self.args.eval_every_steps is not None:
+                step = int(snapshot["step"])
+                if step % self.args.eval_every_steps == 0:
+                    print({"stage": "evaluation_start", "step": step}, flush=True)
+
+    def on_evaluate(self, state, control) -> None:
+        if self.runtime.is_primary_process:
+            print({"stage": "evaluation_completed", "step": state.step}, flush=True)
+            if (
+                self.args.save_every_steps is not None
+                and state.step % self.args.save_every_steps == 0
+            ):
+                print({"stage": "checkpoint_start", "step": state.step}, flush=True)
+
+    def on_save_checkpoint(self, state, control) -> None:
+        if self.runtime.is_primary_process:
+            print({"stage": "checkpoint_completed", "step": state.step}, flush=True)
 
 
 def _source(args: argparse.Namespace) -> ModelSourceConfig:
@@ -432,6 +449,7 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
         evaluation=EvaluationConfig(
             enabled=eval_loader is not None,
             eval_every_steps=args.eval_every_steps,
+            max_batches=args.max_eval_batches,
         ),
     )
     config.validate()

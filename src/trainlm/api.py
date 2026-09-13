@@ -133,6 +133,7 @@ class TrainLMTrainingArguments:
     logging_steps: int = 10
     save_steps: int | None = None
     eval_steps: int | None = None
+    max_eval_batches: int | None = None
     dataloader_num_workers: int = 0
     dataloader_pin_memory: bool = False
     seed: int = 42
@@ -146,6 +147,7 @@ class TrainLMTrainingArguments:
             "max_tokens",
             "save_steps",
             "eval_steps",
+            "max_eval_batches",
         ):
             value = getattr(self, name)
             if value is not None and (
@@ -284,6 +286,8 @@ class TrainLMTrainer:
         self.callbacks = tuple(callbacks or ())
         if self.args.eval_steps is not None and eval_dataset is None:
             raise ValueError("eval_steps requires eval_dataset.")
+        if self.args.max_eval_batches is not None and eval_dataset is None:
+            raise ValueError("max_eval_batches requires eval_dataset.")
         self._model_source: ModelSourceConfig | None = None
         self.loaded: LoadedCausalLM | None = None
         self._last_metrics: dict[str, Any] = {}
@@ -498,6 +502,7 @@ class TrainLMTrainer:
             evaluation=EvaluationConfig(
                 enabled=self.eval_dataset is not None,
                 eval_every_steps=self.args.eval_steps,
+                max_batches=self.args.max_eval_batches,
             ),
         )
 
@@ -673,6 +678,7 @@ class TrainLMTrainer:
             ),
             eval_manifest_dir=eval_manifest_dir,
             eval_every_steps=self.args.eval_steps,
+            max_eval_batches=self.args.max_eval_batches,
         )
 
     def evaluate(self) -> dict[str, float]:

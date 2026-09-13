@@ -440,7 +440,10 @@ class Trainer:
     def _evaluation_results(self):
         """Yield evaluation results without retaining the evaluation set."""
 
-        for batch in self.eval_dataloader:
+        maximum = getattr(self.config.evaluation, "max_batches", None)
+        for batch_index, batch in enumerate(self.eval_dataloader):
+            if maximum is not None and batch_index >= maximum:
+                break
             yield self._evaluation_step(batch)
 
     def evaluate(self) -> dict[str, float]:

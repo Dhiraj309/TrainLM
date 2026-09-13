@@ -137,6 +137,7 @@ def test_tpu_facade_stages_evaluation_dataset_and_cadence(tmp_path):
             output_dir=tmp_path / "run",
             max_steps=4,
             eval_steps=2,
+            max_eval_batches=1,
         ),
     )
     trainer._tpu_coordinator = coordinator
@@ -146,6 +147,7 @@ def test_tpu_facade_stages_evaluation_dataset_and_cadence(tmp_path):
     request = coordinator.requests[0]
     assert request.eval_manifest_dir == tmp_path / "eval"
     assert request.eval_every_steps == 2
+    assert request.max_eval_batches == 1
 
 
 def test_tpu_facade_resolves_mutable_hugging_face_model_revision(
@@ -220,6 +222,24 @@ def test_tpu_checkpoint_request_is_serialized_and_forwarded(tmp_path):
         checkpoint.resolve()
     )
     assert request.to_dict()["resume_from_checkpoint"] == str(checkpoint)
+
+
+def test_tpu_evaluation_batch_limit_is_forwarded(tmp_path):
+    request = _TPURunRequest(
+        **{
+            **_request(tmp_path).to_dict(),
+            "model": _request(tmp_path).model,
+            "manifest_dir": tmp_path / "manifests",
+            "output_dir": tmp_path / "run",
+            "eval_manifest_dir": tmp_path / "eval",
+            "eval_every_steps": 2,
+            "max_eval_batches": 1,
+        }
+    )
+
+    command = _TPUCoordinator(tmp_path / "worker.py")._command(request)
+
+    assert command[command.index("--max-eval-batches") + 1] == "1"
 
 
 def test_tpu_request_does_not_expose_or_assume_world_size(tmp_path):

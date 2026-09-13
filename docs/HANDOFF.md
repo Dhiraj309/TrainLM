@@ -147,3 +147,13 @@ Close the dense execution gap before starting architecture research: integrate
 the guarded chunked-loss and attention providers into the actual worker plan,
 capture target HLO/HBM/compile/fallback evidence, then validate reversible QKV
 and MLP transforms through complete optimizer updates and canonical export.
+
+## Scheduled evaluation stall diagnosis
+
+The observed pause after step 2 was scheduled evaluation, not another training
+step: the smoke config used `eval_steps: 2` with a roughly 250-million-token
+validation shard and no evaluation limit. `max_eval_batches` is now wired across
+the public API, coordinator, worker, and trainer. The notebook and SmolLM2 smoke
+example use `max_eval_batches: 1`; remove that limit only for deliberate full-set
+validation. Evaluation and checkpoint phase transitions are printed so future
+runs identify this work directly.
