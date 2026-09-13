@@ -92,6 +92,16 @@ rank-local `batch_indices` schedule, with a contract regression test covering
 the boundary. This fixes evaluation setup only; the v5e-8 lifecycle and all
 performance claims remain pending a fresh target run.
 
+The validation notebook has since switched its model source to the pretrained
+`HuggingFaceTB/SmolLM2-135M-Instruct` checkpoint. Its Llama-family GQA shape
+and 49,152 vocabulary exercise pretrained reconstruction and non-MHA head
+geometry. The existing LaughLM `.bin` shards are intentionally retained only
+for lifecycle testing because their tokenizer differs from SmolLM2; a valid
+loss/quality experiment requires shards produced by the SmolLM2 tokenizer.
+The first rerun uses one train shard and sequence length 1,024 to reduce the
+memory risk observed with the earlier full-logit smoke.
+The matching YAML starter is `examples/smollm2_135m_tpu_pretraining.yaml`.
+
 ## Implemented public API slice (M8-F0, in progress)
 
 `src/trainlm/api.py` currently provides:

@@ -20,13 +20,13 @@ def test_tpu_notebook_demonstrates_the_public_hf_like_workflow():
     source = _source()
 
     for required in (
-        "%pip uninstall -y tensorflow torchvision torchaudio",
+        "%pip uninstall -y tensorflow tensorflow-cpu torchvision torchaudio",
         "Restart Session",
         "TensorFlow is still importable",
-        '"initialization": "config"',
-        '"model_type": "llama"',
-        '"hidden_size": 1024',
-        '"num_hidden_layers": 8',
+        '"initialization": "pretrained"',
+        '"name_or_path": "HuggingFaceTB/SmolLM2-135M-Instruct"',
+        '"revision": "main"',
+        "sequence_length = 1024",
         "TrainLMTrainer.from_config",
         "PackedBinDataset.from_hub",
         "shard_range=(0, TRAIN_SHARD_STOP)",
