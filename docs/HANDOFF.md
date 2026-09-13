@@ -37,7 +37,7 @@ manifest staging, process cleanup, and stage-log parsing remain private.
 | `[x]` | Private TPU coordinator | Probe, model preflight, training, structured result ingestion, logs, and private worker launch are hidden behind `trainer.train()`. |
 | `[x]` | Failure cleanup | Every stage owns a process group; error or interruption terminates the launcher and spawned ranks so notebook cells can be rerun. |
 | `[x]` | Model-source reconstruction | Both pretrained HF sources and config-initialized HF models are serialized and reconstructed independently inside workers. |
-| `[x]` | HBM-safe validation notebook | The notebook uses the from-scratch 135M Llama-shaped reference instead of replicating a 3.8B checkpoint on every TPU worker. |
+| `[x]` | HBM-safe validation notebook | The notebook uses the pretrained `HuggingFaceTB/SmolLM2-135M-Instruct` checkpoint with a 1,024-token smoke geometry instead of replicating a 3.8B checkpoint on every TPU worker. |
 | `[x]` | Model revision handling | Mutable model selectors are resolved before TPU launch; explicit commit SHAs support offline/cache-only launches. |
 | `[~]` | End-to-end TPU lifecycle | Software plumbing exists, but the latest 135M notebook path still needs an owner-run Kaggle v5e-8 completion after the config-source coordinator fix. |
 
@@ -131,7 +131,8 @@ manifest staging, process cleanup, and stage-log parsing remain private.
    Kaggle TPU session.
 2. Run the install cell, restart the session exactly once, then run the
    remaining notebook top-to-bottom.
-3. Confirm `probe`, `model_preflight`, and `train` complete for the 135M config.
+3. Confirm `probe`, `model_preflight`, and `train` complete for the pretrained
+   SmolLM2-135M-Instruct configuration.
 4. Confirm finite loss, evaluation at steps 2/4/6, committed checkpoints at
    steps 2/4/6, and successful resume from `checkpoint-4`.
 5. Archive `request.json`, `coordinator_summary.json`, `summary.json`,
