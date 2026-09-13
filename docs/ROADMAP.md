@@ -1937,3 +1937,12 @@ ordered next stories for this PR branch.
 - Follow-up: run an intentionally full validation pass only with a suitably
   sized validation shard and record target-hardware timing evidence. This is
   validation guidance rather than an M17 completion criterion.
+
+### TPU smoke reliability correction
+
+- Completed: separate train/checkpoint/resume smoke from the independently
+  compiled XLA evaluation graph; keep evaluation available as a subsequent
+  opt-in validation run.
+- Completed: reject fatal PJRT core-dump/shutdown markers even when the launcher
+  incorrectly exits with a successful status, with explicit session-restart
+  guidance.
