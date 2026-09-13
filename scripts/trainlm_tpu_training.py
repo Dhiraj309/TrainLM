@@ -232,8 +232,13 @@ def model_preflight(args: argparse.Namespace) -> None:
     if hasattr(model, "tie_weights"):
         model.tie_weights()
     _install_xla_attention(model)
+    # Preflight proves that the HF model can execute on XLA; it is not the
+    # training-shape compilation benchmark. Compiling the complete training
+    # sequence here duplicates the largest compiler workload across every rank
+    # and can consume hundreds of GiB of host RAM before training even starts.
+    preflight_sequence_length = min(args.sequence_length, 16)
     input_ids = torch.zeros(
-        (args.micro_batch_per_device, args.sequence_length),
+        (args.micro_batch_per_device, preflight_sequence_length),
         dtype=torch.long,
         device=device,
     )
@@ -242,7 +247,7 @@ def model_preflight(args: argparse.Namespace) -> None:
         normalized = normalize_causal_lm_output(outputs)
     if normalized.logits is None:
         raise RuntimeError("HF model preflight returned no logits.")
-    expected = (args.micro_batch_per_device, args.sequence_length)
+    expected = (args.micro_batch_per_device, preflight_sequence_length)
     if tuple(normalized.logits.shape[:-1]) != expected:
         raise RuntimeError(
             f"HF model preflight logits shape {tuple(normalized.logits.shape)} "
@@ -253,6 +258,7 @@ def model_preflight(args: argparse.Namespace) -> None:
         "stage": "model_preflight_passed",
         "rank": rank,
         "model_class": type(model).__name__,
+        "sequence_length": preflight_sequence_length,
         "logits_shape": tuple(normalized.logits.shape),
     }), flush=True)
     runtime.finalize()

@@ -31,7 +31,7 @@ def test_tpu_notebook_demonstrates_the_public_hf_like_workflow():
         '"initialization": "pretrained"',
         '"name_or_path": "HuggingFaceTB/SmolLM2-135M-Instruct"',
         '"revision": "main"',
-        "sequence_length = 1024",
+        "sequence_length = 128",
         "TrainLMTrainer.from_config",
         "PackedBinDataset.from_hub",
         "shard_range=(0, TRAIN_SHARD_STOP)",

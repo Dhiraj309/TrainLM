@@ -12,7 +12,8 @@ model:
 training_args:
   output_dir: runs/smollm2-135m-tpu
   max_steps: 6
-  sequence_length: 1024
+  # Lifecycle smoke only; increase after the memory-bounded loss path is active.
+  sequence_length: 128
   per_device_train_batch_size: 1
   gradient_accumulation_steps: 1
   eval_steps: 2

@@ -181,7 +181,18 @@ class _TPUCoordinator:
                 start_new_session=True,
             )
             try:
-                returncode = process.wait()
+                # Diagnostic stages must not retain all ranks indefinitely if
+                # PJRT or the compiler hangs. Training itself remains bounded
+                # by the user's max_steps rather than these safety limits.
+                timeout = {"probe": 300, "model_preflight": 900}.get(stage)
+                returncode = process.wait(timeout=timeout)
+            except subprocess.TimeoutExpired as exc:
+                self._terminate_process_group(process)
+                raise TPUCoordinatorError(
+                    f"TPU {stage} stage exceeded its {timeout}-second safety "
+                    f"limit. TrainLM terminated the worker process group; see "
+                    f"{log_path}."
+                ) from exc
             except BaseException:
                 self._terminate_process_group(process)
                 raise
