@@ -916,22 +916,19 @@ reprinted every poll, while a sparse liveness message remains available during
 long quiet stages. Training-start events and summaries identify the current
 topology explicitly as data parallel replicas and model-parallel degree one.
 
-The worker now maintains one rank-zero `progress.md` file in the run output
-directory. It is atomically replaced at training start and each materialized
-metric update, and finalized with the summary. The Markdown document contains
-the current phase and progress bar, step, loss, perplexity, gradient norm,
-learning rate, global supervised tokens, measured throughput, elapsed time,
-ETA, and the DP8/MP1 geometry. `scripts/show_trainlm_progress.py` can render
-that file once or watch it from a separate process. In a normal Kaggle/Jupyter
-run, the coordinator updates a single IPython display handle from its existing
-wait loop, so the training cell itself shows the live document; `%run` is only
-needed for post-run inspection or a separately launched training process.
+The worker now emits one rank-zero console metrics table modeled on the
+frontier-style logger used by LaughLM. Each row includes step, progress, loss,
+perplexity, gradient norm, learning rate, global tokens/sec, MFU estimates,
+tokens seen, remaining tokens, ETA, and elapsed time. The same derived numeric
+fields are written to `metrics.jsonl`; the coordinator forwards each changed
+metric event once, while raw per-stage logs remain available for debugging.
 
-The throughput validation notebook now uses the next optimized candidate:
-microbatch 8, gradient accumulation 8, and `chunked_linear` output projection
-with 4096-token chunks. It preserves the same global 1,048,576 scheduled
-tokens per update while halving host-driven microsteps. The packed all-supervised
-path omits a per-microstep denominator synchronization in the chunked loss.
+The owner-run MB8/GA8 `chunked_linear` candidate exhausted v5e-8 HBM while
+requesting another 88 MB with only 84.42 MB free. The throughput validation
+notebook therefore defaults to MB4/GA16 with 4096-token chunks, the largest
+known viable geometry on that TPU, while preserving 1,048,576 scheduled tokens
+per update. The packed all-supervised path omits a per-microstep denominator
+synchronization in the chunked loss.
 The trainer also avoids a duplicate XLA `mark_step` boundary after each
 optimizer update. These changes require a fresh v5e-8 run before any
 throughput claim; they are not a local TPU certification.

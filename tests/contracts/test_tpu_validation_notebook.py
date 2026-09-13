@@ -33,8 +33,8 @@ def test_tpu_notebook_demonstrates_the_public_hf_like_workflow():
         '"vocab_size": 32064',
         '"num_hidden_layers": 8',
         "sequence_length = 2048",
-        '"per_device_train_batch_size": 8',
-        '"gradient_accumulation_steps": 8',
+        '"per_device_train_batch_size": 4',
+        '"gradient_accumulation_steps": 16',
         "TrainLMTrainer.from_config",
         "PackedBinDataset.from_hub",
         "shard_range=(0, TRAIN_SHARD_STOP)",
@@ -55,8 +55,7 @@ def test_tpu_notebook_demonstrates_the_public_hf_like_workflow():
         "[Notebook 1/8]",
         "[Notebook 8/8]",
         "verbose progress",
-        "progress.md",
-        "single live",
+        "single console metrics table",
     ):
         assert required in source
 

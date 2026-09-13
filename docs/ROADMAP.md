@@ -2015,20 +2015,21 @@ ordered next stories for this PR branch.
 
 ### MB8/GA8 chunked-loss throughput candidate
 
-- In progress: move the locked 1,048,576 scheduled tokens/update geometry to
-  microbatch 8 / accumulation 8, halving host-driven microsteps per update.
-- In progress: select the explicit `chunked_linear` loss with a 4096-token
-  projection chunk so the larger microbatch does not materialize the complete
-  vocabulary logits tensor.
-- Guard: this is a TPU validation candidate, not a certified throughput claim;
-  accept it only after HBM, graph stability, numerical parity, and the matched
-  post-warmup tokens/sec window pass on v5e-8.
+- Rejected by owner-run v5e-8 validation: MB8/GA8 chunked loss exhausted HBM
+  (`88.00M` requested with only `84.42M` free).
+- Retain the candidate in the tuning matrix for larger-memory TPU versions,
+  but do not use it as the default v5e-8 geometry.
 - Completed: remove the duplicate XLA graph flush at the end of each optimizer
   update and avoid a host scalar synchronization for dense packed chunked-loss
   denominators.
 - Completed: align the device loader's `batches_per_execution` with the
   accumulation window (capped at eight) instead of flushing the lazy graph for
   every microbatch.
+
+### MB4/GA16 chunked-loss fallback
+
+- In progress: use MB4/GA16 with a 4096-token chunk as the largest known viable
+  v5e-8 candidate while preserving 1,048,576 scheduled tokens/update.
 
 ### Public TPU progress reporting and state metadata
 
@@ -2055,24 +2056,13 @@ ordered next stories for this PR branch.
   explicit `data_parallel`/`model_parallel` metadata in training events and the
   worker summary.
 
-### Single-cell live TPU progress
+### Frontier-style TPU console metrics
 
-- Completed: update one IPython display handle from the coordinator wait loop,
-  so the same synchronous Kaggle/Jupyter training cell renders `progress.md`
-  without requiring a second concurrently running cell.
-- Completed: retain a small `%run`-friendly watcher for post-run inspection or
-  workflows that launch training in a separate process.
-
-### Single live TPU progress document
-
-- Completed: make rank zero atomically refresh one `progress.md` document with
-  current step, loss, perplexity, gradient norm, learning rate, global token
-  count, throughput, ETA, progress bar, and DP/MP geometry.
-- Completed: keep verbose notebook output to stage boundaries and sparse
-  liveness messages; the raw `train.log` and `metrics.jsonl` remain available
-  for diagnostics and machine analysis.
-- Completed: add a `%run`-friendly watcher for rendering `progress.md` in a
-  Kaggle/Jupyter cell while a separate training process owns the TPU.
+- In progress: replace document rendering with one rank-zero console table
+  containing step, progress, loss, perplexity, gradient norm, LR, tokens/sec,
+  MFU estimates, tokens seen, remaining tokens, ETA, and elapsed time.
+- Completed: keep structured `metrics.jsonl` snapshots synchronized with the
+  console rows while suppressing duplicate polling output from the coordinator.
 
 ### TPU cache initialization repair
 
