@@ -201,10 +201,14 @@ never invokes worker scripts, selects a world size, configures PJRT/ranks,
 imports private coordinator types, or parses stage logs.
 
 The notebook includes a corrected Kaggle/Colab bootstrap and consolidated
-import order; the attached reference notebook's import cell was marked as
-Markdown and its clone branch was stale. The repository notebook now assumes a
-checkout at `TRAINLM_REPO_DIR` and does not silently clone or switch branches
-during a run.
+import order. Its first cells clone
+`milestone/m10-m12-kernels-parity`, enter `/kaggle/working/TrainLM`, and fetch
+the matching `origin/<branch>` ref before installation. This keeps a fresh
+session on the requested revision and prints both the subject and full commit
+SHA for evidence. Re-running in the same session should skip the clone cell
+when the directory already exists, then use the refresh cell to select the
+latest fetched commit; the notebook never asks users to resolve a detached or
+stale checkout manually.
 
 The notebook downloads the supplied `LaughTaleAI/LaughLM-Tokenized-Fine`
 shards at a resolved immutable Hub revision, or accepts mounted raw files and
@@ -1758,6 +1762,17 @@ that field and a contract test prevents the stale name from returning. This
 is a functional compatibility repair, not a performance result. Rerun the
 six-step notebook lifecycle on a fresh v5e-8 session before collecting any
 throughput evidence.
+
+The bootstrap also removes common TensorFlow distribution variants and
+optional Keras/vision/audio packages. Some Kaggle images leave an orphaned
+`tensorflow/` directory after metadata removal, so the install cell removes
+only that exact site-packages directory before the required kernel restart.
+The importability assertion remains an intentional post-restart gate.
+
+The branch bootstrap is part of the public notebook contract: clone the
+single branch first, then run `git fetch origin "$BRANCH"` and
+`git checkout -B "$BRANCH" "origin/$BRANCH"`. This avoids the stale local
+branch/reset pattern that previously caused notebook runs to miss fixes.
 
 Run the pretrained SmolLM2-135M-Instruct smoke on a fresh v5e-8 session with
 the current source and pinned editable install. First repeat the two-update smoke

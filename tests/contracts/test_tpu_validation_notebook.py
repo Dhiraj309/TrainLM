@@ -20,7 +20,12 @@ def test_tpu_notebook_demonstrates_the_public_hf_like_workflow():
     source = _source()
 
     for required in (
-        "%pip uninstall -y tensorflow tensorflow-cpu torchvision torchaudio",
+        "!git clone --branch milestone/m10-m12-kernels-parity --single-branch https://github.com/Dhiraj309/TrainLM.git",
+        "%cd TrainLM",
+        'git fetch origin "$BRANCH"',
+        'git checkout -B "$BRANCH" "origin/$BRANCH"',
+        "git rev-parse HEAD",
+        "%pip uninstall -y tensorflow tensorflow-cpu tensorflow-gpu tensorflow-intel tensorflow-rocm tf-keras keras torchvision torchaudio",
         "Restart Session",
         "TensorFlow is still importable",
         '"initialization": "pretrained"',
@@ -41,6 +46,11 @@ def test_tpu_notebook_demonstrates_the_public_hf_like_workflow():
         "resume_from_checkpoint=OUTPUT_DIR",
     ):
         assert required in source
+
+    # The checkout bootstrap must run before package installation so a fresh
+    # Kaggle session never installs a stale copy of the repository.
+    assert source.index("!git clone --branch") < source.index("%pip uninstall")
+    assert source.index('git checkout -B "$BRANCH"') < source.index("%pip uninstall")
 
 
 def test_tpu_notebook_hides_orchestration_and_topology_inputs():
