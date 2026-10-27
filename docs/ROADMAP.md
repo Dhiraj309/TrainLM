@@ -38,11 +38,12 @@ is not a successful framework.
 Status flags: `[ ]` not started, `[~]` in progress or awaiting validation,
 `[x]` complete, and `[d]` intentionally deferred.
 
-- Only one milestone should be active at a time.
+- Only one **new story PR** may be active at a time. The existing PR #18 is a grandfathered multi-story milestone PR; finish or close it before starting the next story branch.
 - Every progress change must update the milestone overview, PR overview, and
   detailed milestone status in the same commit.
-- Every feature/story below is one atomic commit with its tests and narrowly
-  required documentation.
+- Every **new** feature/story is one branch and one PR with narrowly scoped tests
+  and documentation. Prefer one atomic commit; additional review/fix commits on
+  that same PR are allowed. Preserve historical commit boundaries.
 - Do not squash implementation PRs; feature commits are review and rollback
   boundaries.
 - TPU-dependent validation is performed on the target TPU environment, not the
@@ -53,6 +54,25 @@ Status flags: `[ ]` not started, `[~]` in progress or awaiting validation,
 Every implementation change includes a focused diff, static review, relevant
 non-TPU tests, an exact TPU command when required, saved evidence, and a keep,
 revise, or revert decision.
+
+## Desired user experience and acceptance boundary
+
+The user-facing workflow must remain Hugging Face-like: load a model or HF ID,
+supply a tokenizer/processing class and train/eval datasets, set familiar
+training arguments, call `TrainLMTrainer.train()`, and receive understandable
+progress, evaluation, checkpoints, resume and portable `save_pretrained` export.
+An optional `trainlm train` CLI/config entry point must use the same execution
+contracts. No user should manually launch TPU workers, set PJRT ranks, parse
+stage logs, construct manifests for ordinary Hub-packed sources, or manage
+internal caches. `trainer.explain()` must expose active providers and honest
+fallbacks without leaking internal orchestration into the public API.
+
+**Constraints:** Preserve HF model semantics and backward compatibility,
+train on CPU in Codex only, keep TPU/CUDA certification tied to actual owner-run
+hardware evidence, never silently fall back when strict optimization was
+requested, keep transforms reversible, and never claim unmeasured speedups.
+For each story, write a user-visible behavior or justified internal benefit,
+a demonstrable acceptance test, explicit non-goals, and rollback criteria.
 
 ## Non-negotiable contracts
 
@@ -153,14 +173,122 @@ Release evidence uses steady-state medians from three matched runs plus one
 
 ## Branch and PR policy
 
-Branch names describe repository work, not the tool or contributor:
+### Sequential story delivery contract — effective 2026-10-27
 
-- `roadmap/<initiative>` for planning;
-- `milestone/<range>-<outcome>` for implementation PRs;
-- `feature/<milestone>-<feature>-<outcome>` for isolated experiments;
-- `benchmark/<milestone>-<feature>-<hardware>` for evidence-only work.
+**One approved story → one branch → one PR → review and validation → owner-approved
+merge into `main` → verify merged `main` → only then start the next story.**
+There is **no parallel story implementation, stacked PR, speculative next branch,
+or pre-created future branch** under the new policy. PR numbers are assigned by
+GitHub and must not be predicted in the roadmap.
 
-### Dense-AR V1 PR sequence
+1. **Grandfathered transition:** [PR #18](https://github.com/Dhiraj309/TrainLM/pull/18)
+   (`milestone/m8-m9-optimization-core`) is already open and contains earlier
+   milestone-grouped implementation. Finish reviewing/validating and explicitly
+   merge it (or close it with an owner-approved migration plan) **before**
+   activating the next story. Existing `milestone/m10-m12-kernels-parity`
+   and other legacy branches are historical snapshots, **not** permission to
+   continue them or use them as a base for a new story.
+2. **Reconcile before activation:** After PR #18 merges, inspect the exact
+   merged `main` SHA, `docs/HANDOFF.md`, and every story's implementation
+   and hardware evidence. Mark implemented contracts separately from
+   target-hardware certification. Never redo already merged code merely
+   because a story remains unverified. Amend the queue only in a documented,
+   owner-reviewed planning change.
+3. **Naming:** Use lowercase `<type>/m<Milestone>-f<Feature>-s<NN>-<kebab-slug>`,
+   e.g. `validation/m8-f0-s01-public-tpu-lifecycle` or
+   `feature/m9-f4-s01-tpu-loss-provider`. Types:
+   `feature`, `fix`, `perf`, `validation`, `docs`, `ci`, `release`.
+   Preserve existing `M8-F0` feature IDs and add `-S01` story IDs; do
+   not renumber the historical milestones.
+4. **Branch/base:** Only after the predecessor PR is *merged*, fetch and
+   verify the live `origin/main` tip and that the checkout is clean.
+   Create exactly one story branch from that SHA and target `main` in its PR.
+   Do not derive a new branch from an open PR, from a legacy milestone branch,
+   or from an outdated local `main`.
+5. **PR lifecycle:** Work only on the active story branch. Implement, run
+   appropriate tests, update `docs/ROADMAP.md` and
+   `docs/IMPLEMENTATION_CONTEXT.md`, review the diff, commit and push the
+   branch, create the PR, and respond to review/CI on the **same** branch.
+   Prefer one focused commit; multiple fix commits are acceptable when needed.
+   Do not squash if preserving intentional audit/rollback commits is required.
+6. **Merge gate:** Required CPU/CI tests pass; known failures are explicitly
+   distinguished from new regressions; all story acceptance criteria and
+   required owner-run TPU evidence are recorded; public UX, security,
+   checkpoint/export and performance regressions are reviewed; approvals and
+   branch protections pass. No `[x]` from CPU-only work when TPU proof is
+   required. Owner alone authorizes merges and exceptions; Codex must not
+   auto-merge, force-push, or push directly to `main`.
+7. **Post-merge gate:** Verify GitHub reports merged, inspect the new remote
+   `main` SHA, confirm the story's files/docs are present on `main`, then
+   mark the story merged in the ledger. Only then may the next named story
+   branch be created. Never use an open or merely closed-unmerged PR as a gate.
+8. **Failure/blocked state:** Keep the *same* story and PR open if CI,
+   review, hardware evidence, network or GitHub permissions block it. Record
+   exact sanitized errors and the owner action; **do not start the next story**
+   to work around a blocker. Hardware validation is performed in the owner's
+   Kaggle/Cloud TPU environment, not Codex Cloud.
+9. **GitHub networking:** Where supported and approved, request the Codex
+   execution tool's narrowly scoped per-command additional network permission
+   for GitHub operations. Never unset proxy variables, disable TLS, bypass
+   sandbox controls, or embed `GH_TOKEN` in a script. Verify pushed remote
+   commit SHA and PR head/base before reporting success.
+
+### Required story card and definition of ready/done
+
+Before activating a story, record: immutable story ID; parent feature and
+dependency; motivation; desired user experience or measurable internal gain;
+in-scope files/interfaces; non-goals; design constraints; acceptance criteria;
+CPU tests; owner-run TPU/HLO/HBM/performance commands and artifacts if needed;
+rollback/fallback; documentation updates; expected branch/PR base; review owner.
+A story is **ready** when dependencies are merged and acceptance is testable.
+It is **done** only when its PR is merged to `main` and the required evidence
+is linked; implemented-but-uncertified work stays `[~]`.
+
+### Candidate story execution ledger (strictly serial)
+
+These are **candidate future PRs, not active branches**. Existing work in PR
+#18 may already implement part of a row; after its merge, audit each row and
+retain only its remaining validation/integration gap. A change to ordering
+requires an explicit roadmap decision, not silent work on later branches.
+The first eligible candidate is `M8-F0-S01` after PR #18 has merged.
+
+| Order | Story ID | Future branch (create only when eligible) | Acceptance / outcome |
+|---:|---|---|---|
+| 1 | M8-F0-S01 | `validation/m8-f0-s01-public-tpu-lifecycle` | Owner-run v5e-8 public trainer lifecycle: preflight, finite steps, bounded eval, checkpoint and no orphan ranks |
+| 2 | M7-F1-S01 | `validation/m7-f1-s01-exact-distributed-resume` | Interrupted TPU run resumes exact model/optimizer/RNG/data position from committed topology-safe checkpoint |
+| 3 | M9-F3-S01 | `perf/m9-f3-s01-remat-chunked-loss` | Compare 2K/4K/8K rematerialized chunks; gradient parity, HLO, HBM and throughput evidence |
+| 4 | M9-F4-S01 | `feature/m9-f4-s01-tpu-loss-provider` | Integrate eligible TPU loss provider with explicit backward/version gates and portable fallback |
+| 5 | M10-F3-S01 | `feature/m10-f3-s01-pallas-attention` | Version-guarded Pallas MHA provider with target TPU forward, backward and HLO evidence |
+| 6 | M10-F4-S01 | `perf/m10-f4-s01-compact-gqa-mqa` | MHA/GQA/MQA head mapping without hidden KV repeat; parity and HBM evidence |
+| 7 | M10-F5-S01 | `perf/m10-f5-s01-window-alibi` | Causal/window/ALiBi kernel parity, edge cases and fallback correctness |
+| 8 | M10-F6-S01 | `perf/m10-f6-s01-attention-autotuning` | Deterministic provider tuning with measured TPU selections and repeatability |
+| 9 | M10-F7-S01 | `validation/m10-f7-s01-loss-attention-850k` | Matched 850K gate: throughput, loss/head correctness, graph stability, HBM, named providers |
+| 10 | M11-F1-S01 | `perf/m11-f1-s01-qkv-fusion-evidence` | Reversible QKV transform numerical/update/export parity and target HLO benefit |
+| 11 | M11-F2-S01 | `perf/m11-f2-s01-mlp-fusion-evidence` | Reversible SwiGLU/GeGLU transform numerical/update/export parity and target HLO benefit |
+| 12 | M11-F3-S01 | `validation/m11-f3-s01-native-fusion-audit` | Audit actual native fusions and prove no harmful copies or transposes |
+| 13 | M11-F4-S01 | `perf/m11-f4-s01-remat-hbm-policy` | Measure rematerialization/graph stability and select only evidence-backed policies |
+| 14 | M11-F5-S01 | `perf/m11-f5-s01-xla-optimizer-state` | Optimizer-update correctness, exact resume, HBM and throughput proof on TPU |
+| 15 | M11-F6-S01 | `perf/m11-f6-s01-input-prefetch` | Measure packed-data pipeline, cache and prefetch with honest GPU/TPU idle attribution |
+| 16 | M11-F7-S01 | `validation/m11-f7-s01-graph-host-closure` | Close host synchronization, compilation/HLO and matched parity prerequisites |
+| 17 | M12-F1-S01 | `validation/m12-f1-s01-numerical-alignment` | Locked reference-vs-candidate numerical semantics and precision comparison |
+| 18 | M12-F2-S01 | `validation/m12-f2-s01-three-run-parity` | Three matched 135M TPU runs with stable median throughput and MFU |
+| 19 | M12-F3-S01 | `validation/m12-f3-s01-real-shard-stability` | 200-update real-shard run with restart, memory, graph and data-integrity evidence |
+| 20 | M12-F4-S01 | `validation/m12-f4-s01-plain-hf-export` | Clean-process Transformers round trip and resume/export parity |
+| 21 | M12-F5-S01 | `docs/m12-f5-s01-parity-evidence-report` | Publish reproducible evidence bundle and honest pass/fail verdict |
+| 22 | M13-F1-S01 | `validation/m13-f1-s01-gpt2-opt-matrix` | GPT-2/OPT cross-family semantic and fallback evidence |
+| 23 | M13-F2-S01 | `validation/m13-f2-s01-neox-bloom-matrix` | NeoX/BLOOM cross-family semantic and fallback evidence |
+| 24 | M13-F3-S01 | `validation/m13-f3-s01-falcon-phi-matrix` | Falcon/Phi cross-family semantic and fallback evidence |
+| 25 | M13-F4-S01 | `validation/m13-f4-s01-llama-qwen-gemma-matrix` | Llama/Mistral/Qwen/Gemma cross-family semantic and fallback evidence |
+| 26 | M13-F5-S01 | `validation/m13-f5-s01-cross-family-certification` | Aggregate model matrix and declare support by evidence, not model-family labels |
+| 27 | M13-F6-S01 | `feature/m13-f6-s01-fsdp-topology-closure` | Validate data/FSDP policy, sharding ownership and distributed checkpoint integrity |
+| 28 | M13-F7-S01 | `perf/m13-f7-s01-1p3b-benchmark` | Measure 1.3B throughput, peak HBM and exact recovery at review-locked geometry |
+| 29 | M14-F1-S01 | `validation/m14-f1-s01-public-api-compatibility` | Stable HF-like API and CLI contract with backward-compatibility tests |
+| 30 | M14-F2-S01 | `docs/m14-f2-s01-secure-tpu-user-guide` | Simple end-user TPU guide with secure model/data intake and zero manual launch plumbing |
+| 31 | M14-F3-S01 | `ci/m14-f3-s01-evidence-tiers` | Enforce local CPU and owner-run TPU evidence tiers without pretending CI has TPU |
+| 32 | M14-F4-S01 | `validation/m14-f4-s01-preemption-recovery` | Abrupt termination/restart proof and committed recovery artifact verification |
+| 33 | M14-F5-S01 | `release/m14-f5-s01-support-manifest` | Support/limits manifest, release notes and V1 release gates |
+
+### Historical Dense-AR V1 milestone PR overview (legacy, not the future queue)
 
 | Status | PR | Branch | Milestones | Commits | Merge gate |
 |---|---|---|---|---:|---|
@@ -171,9 +299,9 @@ Branch names describe repository work, not the tool or contributor:
 | [~] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | Canonical attention contract started; 850K and hard LaughLM parity pending |
 | [~] | PR6 | `milestone/m13-m14-family-release` | M13-M14 | 12 | Cross-family certification and V1 release |
 
-Future tracks: `milestone/m15-torchtpu`, `milestone/m16-moe`, and
-`milestone/m17-dllm`, five commits each. Before activating a later PR branch,
-rebase that untouched branch onto the latest merged predecessor.
+Future tracks M15 TorchTPU, M16 MoE and M17 DLLM remain deferred; each must be
+split into story-sized PRs under the sequential policy if ever activated.
+Legacy milestone branches may exist but are not the base for new development.
 
 ### Current branch handoff
 

@@ -8,6 +8,26 @@ For the status-focused checklist of implemented work, target-hardware evidence,
 immediate priorities, architecture research, and telemetry work, see
 [`HANDOFF.md`](HANDOFF.md).
 
+## Sequential story PR handoff (adopted 2026-10-27)
+
+The canonical branch naming, one-story-per-PR policy, owner-approved merge
+gates, candidate story ledger, UX contracts and required evidence are in
+[`docs/ROADMAP.md`](ROADMAP.md#branch-and-pr-policy).
+**PR #18** (`milestone/m8-m9-optimization-core`) is the active grandfathered
+multi-story implementation PR. No new story branch or PR may be activated
+until it is merged into `main` (or the owner documents a replacement plan).
+Already existing milestone branches are historical, not authorized parallel
+work. After the merge, reconcile the detailed backlog against the **merged**
+`main` and begin `M8-F0-S01` only if its remaining target-hardware evidence
+is still needed.
+
+Use lowercase `type/m8-f0-s01-short-outcome` for new branches, one story
+per branch/PR, base and target `main`, no automatic merge. Keep the active
+story blocked until CPU/CI, owner-run TPU evidence when required, review, and
+merge-to-main verification succeed. Record the actual PR URL, SHA, artifacts
+and next approved step. Agent network requests may use supported
+per-command additional permission; never modify managed proxy/credentials.
+
 ## Product intent
 
 TrainLM is a Hugging Face-like trainer for decoder-only autoregressive models.
@@ -64,8 +84,9 @@ layout, and log parsing are internal implementation details. An equivalent
 - PR4 is the active implementation branch: `milestone/m8-m9-optimization-core`.
 - PR4 has been synchronized with the merged PR3 mainline; remote backup branches
   preserve the pre-synchronization PR3 and PR4 tips.
-- Do not run git commands in Codex sessions; the repository owner performs
-  fetch, rebase, commit, push, and merge manually.
+- Codex may inspect, commit, push story branches and open PRs in accordance
+  with AGENTS.md and the sequential roadmap policy. Only the owner approves
+  merges; do not create subsequent story branches before the current PR merges.
 - Do not claim TPU validation from a local run. TPU validation is performed by
   the owner on Kaggle/Cloud TPU.
 

@@ -1,5 +1,14 @@
 # TrainLM implementation handoff
 
+> **Delivery sequencing notice (2026-10-27):** This file contains a
+> historical snapshot and several legacy branch pointers. The current open
+> integration PR is [#18](https://github.com/Dhiraj309/TrainLM/pull/18),
+> `milestone/m8-m9-optimization-core`. For the active story, branch creation,
+> review/merge gates, canonical names and ordered next work, use
+> [the roadmap's sequential PR policy](ROADMAP.md#branch-and-pr-policy).
+> Do **not** activate an old M10-M12 milestone branch or start another
+> story until PR #18 is merged and the latest `main` is reconciled.
+
 This is the concise continuation guide for the current
 `milestone/m10-m12-kernels-parity` branch. It separates code that exists from
 code that has been proven on target hardware, and it keeps execution-preserving
@@ -128,8 +137,9 @@ manifest staging, process cleanup, and stage-log parsing remain private.
 
 ## Next owner-run TPU procedure
 
-1. Pull the latest `milestone/m10-m12-kernels-parity` branch into a fresh
-   Kaggle TPU session.
+1. Use the owner-approved current validation revision (ideally the latest
+   merged `main` after PR #18) in a fresh Kaggle TPU session; do not assume an
+   old milestone branch is the active work branch.
 2. Run the install cell, restart the session exactly once, then run the
    remaining notebook top-to-bottom.
 3. Confirm `probe`, `model_preflight`, and `train` complete for the pretrained

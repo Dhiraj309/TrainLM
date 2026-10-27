@@ -58,7 +58,7 @@ Safety rules:
 Branches and commits
 
 - Use one feature or story per commit whenever practical.
-- Create a descriptive branch such as "codex/m8-f0-tpu-trainer-integration".
+- Create the approved story branch only after its predecessor merges, using the roadmap naming convention (e.g. `validation/m8-f0-s01-public-tpu-lifecycle`).
 - Use concise, descriptive commit messages following the repository's existing conventions.
 - Run relevant tests before committing.
 - Review the staged diff and commit only files associated with the task.
@@ -79,6 +79,32 @@ In every implementation turn:
 - Provide a suggested commit message if a commit could not be created.
 
 Do not invent test results, accelerator validation results, commit SHAs, or successful GitHub operations.
+
+## Sequential story and pull-request protocol
+
+Follow the canonical policy and ordered story ledger in
+`docs/ROADMAP.md#branch-and-pr-policy`:
+**one ready story → one new branch from latest merged `main` → one PR → tests,
+required TPU evidence, review → owner-approved merge → verify the updated
+remote `main` → then and only then start the next story**.
+
+- PR #18 on `milestone/m8-m9-optimization-core` is the existing multi-story
+  transition PR. Do not open another story PR until PR #18 merges or the owner
+  explicitly approves a documented migration plan. Never build on parked
+  legacy milestone branches.
+- Name future branches `type/m8-f0-s01-kebab-outcome` (for example
+  `validation/m8-f0-s01-public-tpu-lifecycle`); keep story IDs stable.
+- The PR description must include user-facing goal, exact story acceptance,
+  in-scope/non-goal boundaries, tests, hardware evidence gaps, risks,
+  rollback plan, documentation links and the `main` base SHA.
+- Do not mark work complete from a local CPU pass where a target-TPU gate is
+  required. Track implemented-but-not-certified separately.
+- Do not automatically merge, create the next branch early, or start parallel
+  implementation tasks. If blocked, report the blocker and keep the current
+  story active.
+- For GitHub network commands, use supported/approved per-command additional
+  network permission; never tamper with runtime-managed proxy variables,
+  credentials or sandbox policy.
 
 Current continuation point
 
