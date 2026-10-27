@@ -11,10 +11,21 @@ multi-PR delivery roadmap and planned commits are in
 - **Product:** Hugging Face-native, TPU-optimized autoregressive pretraining
 - **Primary hardware:** Google TPU v5e-8, single VM
 - **Current TPU backend:** PyTorch/XLA
-- **Future TPU backend:** TorchTPU, after public training APIs are available
+- **Target TPU architecture:** Native TorchTPU-first (T0–T11 proposal; hardware verification pending)
 - **Dataset path:** Hugging Face-hosted packed `.bin` shards
 - **Roadmap branch:** `roadmap/hf-tpu-parity`
 - **Performance reference:** LaughLM at `0705d255faab`
+
+## Proposed native TorchTPU rebaseline (2026-10-27)
+
+The [T0–T11 native TorchTPU plan](TORCHTPU_REBASELINE.md) records the new
+**target architecture**, migration classification, HF data/export contracts,
+DP8 global valid-token gradient correctness, exact resume and T0.1 audit.
+Existing M0–M14 work is the **current/historical PyTorch/XLA baseline**,
+not evidence of native TorchTPU compatibility. The 18 XLA-oriented PR cards
+must be remapped during T0 with owner approval; retain their sequential
+multi-PR, multi-commit workflow. Do not create a new branch until the legacy
+PR #18 is reviewed and merged or the owner explicitly approves a transition.
 
 ## Product goal
 

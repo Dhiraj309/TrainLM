@@ -6,6 +6,16 @@ TrainLM separates portable model/trainer dependencies from accelerator-specific
 runtime and kernel packages. Core imports must work without CUDA, PyTorch/XLA,
 JAX, libtpu, or profiling packages installed.
 
+## Proposed native TorchTPU migration profile
+
+[The T0–T11 rebaseline](TORCHTPU_REBASELINE.md) targets native TorchTPU
+rather than PyTorch/XLA as the long-term TPU backend. The existing matrix
+below remains the documented CPU/CUDA/XLA profile, **not** a verified
+TorchTPU installation. T0/T1 must verify actual TorchTPU package versions,
+Python compatibility, device discovery, autograd, distributed operations
+and compilation on Kaggle v5e-8 before adding extras or claiming support.
+Do not guess package versions or assume Pallas/Helion/Tokamax compatibility.
+
 ## Support profiles
 
 | Profile | Python | PyTorch | Transformers | Accelerator packages | Status |

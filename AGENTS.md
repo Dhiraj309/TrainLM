@@ -114,6 +114,23 @@ whole roadmap and not one commit per PR.**
 - Request approved per-command network permission as needed for remote
   GitHub operations. Do not change managed proxy variables or tokens.
 
+## Native TorchTPU architecture and approval policy
+
+Read `docs/TORCHTPU_REBASELINE.md`. Native TorchTPU is the target backend;
+existing PyTorch/XLA implementation and M0–M14 evidence are historical
+salvage, not native certification. T0 inventories reusable, XLA-specific
+and uncertain code before remapping the XLA-oriented 18-PR candidate queue.
+T0.1 is read-only discovery until owner approval for file or Git changes.
+For future implementation, propose logical commit messages and tests and
+obtain explicit owner approval before commit, push, new PR or merge.
+Maintain multiple small commits per approved PR, with branch/title/body
+matching scope, and the next branch only after verified merge to `main`.
+Use the requested trailer where appropriate:
+`Co-authored-by: Dhiraj309 <patildhiraj309@outlook.com>`.
+Do not add Codex/OpenAI/bot co-author trailers; preserve truthful Git
+attribution. Never push to main, force-push, change managed proxy or
+credentials, or auto-merge.
+
 Current continuation point
 
 Legacy PR #18 (`milestone/m8-m9-optimization-core`) is the only active

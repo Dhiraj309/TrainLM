@@ -17,6 +17,15 @@ execution-preserving work separate from architecture-changing research.
 Historical milestone branch names below are archival context, not current
 execution instructions.
 
+## Proposed native TorchTPU architecture transition
+
+See [T0–T11 native TorchTPU rebaseline](TORCHTPU_REBASELINE.md).
+Native TorchTPU is the **target**, not a certified existing backend.
+Historical PyTorch/XLA code and TPU evidence require T0 salvage review.
+PR #16 was merged into PR #18's branch; PR #18 remains the integration
+PR. The next Codex discovery step is T0.1, read-only until owner approval.
+The existing sequential PR and incremental-commit policy remains binding.
+
 ## Status legend
 
 | Mark | Meaning |

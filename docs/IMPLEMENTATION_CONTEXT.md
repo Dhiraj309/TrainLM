@@ -43,6 +43,18 @@ only with measured evidence; these are not automatic new V1 requirements.
   export/checkpoints and truthful TPU certification; avoid changing
   managed proxy variables or credentials.
 
+## Native TorchTPU target rebaseline and current facts
+
+Read [the proposed T0–T11 plan](TORCHTPU_REBASELINE.md) before new TPU
+runtime work. Existing PyTorch/XLA code, performance results and M0–M14
+milestones are current/historical salvage material, not verified native
+TorchTPU support. The old 18 PR cards need T0 remapping before activation.
+PR #16 was **merged into the PR #18 branch**; PR #18 remains open against
+`main`. Prior GitHub collaborator `Dignity045` push verification succeeded,
+but do not assume current owner-account authentication. The historical CPU
+326/320/6 result and minimum/current dependency profiles require rerun.
+T0.1 is a read-only inventory and baseline task until owner approval.
+
 ## Product intent
 
 TrainLM is a Hugging Face-like trainer for decoder-only autoregressive models.

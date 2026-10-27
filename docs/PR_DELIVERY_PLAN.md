@@ -6,6 +6,17 @@
 > actual GitHub PR numbers, existing branches or commitments that a milestone
 > is incomplete. Resolve the post-merge audit before creating the first branch.
 
+## Native TorchTPU T0–T11 rebaseline: proposed PR remapping
+
+The [new target plan](TORCHTPU_REBASELINE.md) proposes native TorchTPU-first
+execution. **The 18 candidate cards below reflect an XLA-oriented roadmap,
+not an approved TorchTPU delivery queue.** T0 must inventory reusable and
+XLA-specific implementation and remap these cards with owner approval
+before starting plan 01. Keep the established multiple sequential PRs,
+multiple focused commits per PR, matching branch/title/body and strict
+merge-to-main-before-next-branch rules. T0–T11 are architectural gates,
+not a requirement to create one giant PR per milestone.
+
 ## Development outcome and user experience
 
 TrainLM should feel like Hugging Face to its users: supply an HF model/model
