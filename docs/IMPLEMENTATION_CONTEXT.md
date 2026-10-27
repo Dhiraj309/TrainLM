@@ -8,30 +8,37 @@ For the status-focused checklist of implemented work, target-hardware evidence,
 immediate priorities, architecture research, and telemetry work, see
 [`HANDOFF.md`](HANDOFF.md).
 
-## Sequential, traceable story delivery (effective after PR #18)
+## Sequential multi-PR delivery (effective after legacy PR #18)
 
-The canonical delivery contract and candidate queue are in
+See [`docs/PR_DELIVERY_PLAN.md`](PR_DELIVERY_PLAN.md) and
 [`docs/ROADMAP.md`](ROADMAP.md#branch-and-pr-policy).
 
-- First resolve, review, validate and **merge** the legacy
-  [PR #18](https://github.com/Dhiraj309/TrainLM/pull/18) to `main`.
-  No new story PR/branch may start before this happens.
-- Then reset **new story IDs** to `001` and use
-  `<type>/001-short-outcome`, `<type>/002-short-outcome`, etc. Older
-  M8/M9 feature IDs remain as technical traceability references, not
-  new branch-name prefixes.
-- **One story = one branch = one PR, with multiple small, meaningful
-  commits** for implementation, tests, bug fixes, regressions, review
-  feedback and documentation. Do not demand one giant commit per story;
-  do not squash by default.
-- Every story starts from the *latest merged* `origin/main` only
-  after the preceding story PR is merged and verified. No concurrent
-  implementation PRs or pre-created future branches.
-- Preserve separate commit history with merge/rebase merge when approved;
-  only the owner authorizes merging. Keep TPU-dependent stories blocked
-  until owner-run validation is recorded, distinct from CPU readiness.
-- Per-command approved GitHub network permission may be requested;
-  never alter managed proxy variables or credentials.
+The new roadmap is a series of **multiple outcome-scoped PRs** with
+**multiple small meaningful commits inside each PR**, not a single
+mega-PR, not a single commit per branch, and not many micro-PRs for
+each tiny fix. Every PR's branch, title and body accurately describe
+the coherent implementation/testing/fix/validation deliverable.
+
+- Current [legacy PR #18](https://github.com/Dhiraj309/TrainLM/pull/18)
+  on `milestone/m8-m9-optimization-core` has reported merge conflicts
+  with `main` and is **not yet merged**. Resolve, review, validate,
+  merge and verify it before creating the first new PR-series branch.
+- Audit its merged changes and owner-run TPU evidence. Reconcile the
+  candidate 01–18 cards; remove or mark proven work as satisfied and
+  reassign sequential IDs as necessary **before creating any** future
+  branches. Do not duplicate existing code simply to fulfill a plan.
+- New branch format `<type>/<NN>-<outcome>`, e.g.
+  `perf/03-chunked-loss-no-full-logits`, starting at 01 after transition.
+  Each PR starts only from latest **merged** `origin/main`, after the
+  previous PR has merged and its SHA/files are verified.
+- Within one branch, make as many focused implementation, tests,
+  regression-fix, review and docs commits as the deliverable requires.
+  Prefer owner-approved merge or rebase merge preserving separate
+  commits. No default squash, auto-merge, force-push or direct push to
+  protected `main`.
+- Preserve HF-like public UX, generic semantic correctness, portable
+  export/checkpoints and truthful TPU certification; avoid changing
+  managed proxy variables or credentials.
 
 ## Product intent
 

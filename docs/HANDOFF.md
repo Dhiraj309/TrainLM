@@ -1,16 +1,14 @@
 # TrainLM implementation handoff
 
-> **Delivery sequencing notice (2026-10-27):** This file contains a
-> historical snapshot and several legacy branch pointers. The current open
-> integration PR is [#18](https://github.com/Dhiraj309/TrainLM/pull/18),
-> `milestone/m8-m9-optimization-core`. For the active story, branch creation,
-> review/merge gates, canonical names and ordered next work, use
-> [the roadmap's sequential PR policy](ROADMAP.md#branch-and-pr-policy).
-> Do **not** activate an old milestone branch or start another story
-> until PR #18 is conflict-resolved, validated and merged to `main`.
-> Afterward reset new story numbering at `001`; each new story uses
-> one branch/PR with multiple meaningful commits (implementation, tests,
-> fixes, docs), preserving traceability rather than forcing a squash.
+> **Sequential multi-PR delivery notice (2026-10-27):** This file
+> contains historical branch pointers. Legacy [PR #18](https://github.com/Dhiraj309/TrainLM/pull/18)
+> is open and currently conflicts with `main`; resolve, validate and merge
+> it first. The new [PR delivery plan](PR_DELIVERY_PLAN.md) defines **many
+> separate outcome-focused PRs**, each with **multiple small, traceable
+> commits**, their aligned branch/title/description, and strict dependency
+> gates. Start only the first approved future PR from **merged** `main`;
+> after each new PR merges, verify remote `main` before branching for the
+> next. Do not create or use old milestone branches as future PR bases.
 
 This is the concise continuation guide for the current
 `milestone/m10-m12-kernels-parity` branch. It separates code that exists from

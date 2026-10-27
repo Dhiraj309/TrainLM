@@ -57,8 +57,8 @@ Safety rules:
 
 Branches and commits
 
-- Use one feature/story per branch and PR, with multiple small, logically coherent commits for implementation, tests, fixes, review changes, and documentation as appropriate. Do not squash by default; preserve traceable commits.
-- Create the approved story branch only after its predecessor merges, using the new roadmap naming convention (e.g. `validation/001-public-tpu-lifecycle`).
+- Use one cohesive outcome per PR in the sequential multi-PR roadmap; make multiple small, logical commits for implementation, tests, fixes, review changes and docs. Preserve traceable commits; do not squash by default.
+- Create the approved roadmap PR branch only after the preceding PR merges to `main`, following the descriptive convention (e.g. `perf/03-chunked-loss-no-full-logits`).
 - Use concise, descriptive commit messages following the repository's existing conventions.
 - Run relevant tests before committing.
 - Review the staged diff and commit only files associated with the task.
@@ -80,36 +80,39 @@ In every implementation turn:
 
 Do not invent test results, accelerator validation results, commit SHAs, or successful GitHub operations.
 
-## Sequential story and pull-request protocol
+## Sequential roadmap PR and commit policy
 
-Read `docs/ROADMAP.md#branch-and-pr-policy`. The delivery contract is:
-**one story → one branch → multiple small, reviewable commits → one PR →
-tests and owner review → merge to `main` → verify `main` → next story**.
+The normative sequence and specific PR/commit plan are
+`docs/ROADMAP.md#branch-and-pr-policy` and
+`docs/PR_DELIVERY_PLAN.md`. **The roadmap contains multiple separate,
+focused PRs, each with multiple logical commits, not a single PR for the
+whole roadmap and not one commit per PR.**
 
-- The active legacy PR #18 (`milestone/m8-m9-optimization-core`)
-  must be reviewed, validated, conflict-resolved and merged before starting
-  the new delivery convention. Never start another story branch while
-  #18 is unmerged.
-- After that transition, start new branch names at `001`, using
-  `<type>/<NNN>-<kebab-outcome>` (e.g.
-  `validation/001-public-tpu-lifecycle`). Do not reuse
-  obsolete `milestone/*` branches or carry M8-F0 names into new branch
-  IDs; preserve old feature numbers only as technical lineage in the roadmap.
-- Keep small, purposeful implementation, tests, fix, and docs commits
-  within the **same** story PR. Do not produce one giant commit or
-  squash meaningful audit history by default. Do not rewrite a branch
-  under active review without owner approval.
-- Every PR documents user-visible goal, scope, non-goals, tests,
-  known failures, hardware evidence/limitations, rollback and
-  documentation updates. CPU passes do not certify TPU kernels,
-  HLO/HBM, throughput, or distributed resume.
-- No automatic merging, protected-`main` pushes, force-pushes,
-  parallel story PRs or speculative future branch creation.
-  Only activate the next story once the previous PR is reported
-  **merged** and its changes are verified on current `main`.
-- For GitHub commands use the approved per-command network permission
-  mechanism when needed; do not change managed proxy variables,
-  credentials or sandbox policy.
+- **First:** Resolve, review, validate and merge legacy PR #18 from
+  `milestone/m8-m9-optimization-core` into `main`. GitHub currently
+  reports merge conflicts; do not claim this PR merged or try to start
+  new development branches before resolution and verified merge.
+- **Then:** Reconcile the post-merge tree and actual TPU evidence against
+  PR plan cards. Approve/reorder or skip redundant planned work in
+  docs before activation, without renaming prior milestone history.
+- **Per PR:** Create `<type>/<NN>-<deliverable>` from the new, fetched
+  `origin/main` only after the previous PR was merged and its remote
+  `main` SHA verified. Planned IDs start at 01 after the legacy merge.
+  A PR's branch name, PR title and body must match the full scope of
+  its proposed commits, tests, fixes and docs.
+- **During development:** Use small, coherent implementation/test/fix/
+  regression/docs commits. Do not squash meaningful change history by
+  default, invent a minimum commit count, or rewrite a reviewed branch.
+  Commit in response to new evidence and follow-up reviews on the same PR.
+- **Before merge:** Verify tests and docs, source/head SHAs, review/CI,
+  HF semantic safety, security, user UX and evidence required by the
+  PR's particular acceptance contract. TPU hardware verification is
+  owner-run; unmeasured optimization paths stay guarded/off by default.
+- **After merge:** Only an owner approves merge; Codex must not
+  auto-merge. Verify actual merged `main` and unlock the next
+  separately numbered PR. No speculative or stacked next branches.
+- Request approved per-command network permission as needed for remote
+  GitHub operations. Do not change managed proxy variables or tokens.
 
 Current continuation point
 

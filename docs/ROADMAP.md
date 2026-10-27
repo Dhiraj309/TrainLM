@@ -3,7 +3,9 @@
 The concise current-state checklist and continuation order live in
 [`HANDOFF.md`](HANDOFF.md). Its `[x]`, `[~]`, and `[ ]` marks distinguish tested
 implementation, partial or target-evidence-pending work, and future work; this
-roadmap remains the detailed milestone specification.
+roadmap remains the detailed milestone specification. The post-legacy
+multi-PR delivery roadmap and planned commits are in
+[`PR_DELIVERY_PLAN.md`](PR_DELIVERY_PLAN.md).
 
 - **Status:** Active implementation plan
 - **Product:** Hugging Face-native, TPU-optimized autoregressive pretraining
@@ -41,9 +43,10 @@ Status flags: `[ ]` not started, `[~]` in progress or awaiting validation,
 - Only one **new story PR** may be active at a time. The existing PR #18 is a grandfathered multi-story milestone PR; finish or close it before starting the next story branch.
 - Every progress change must update the milestone overview, PR overview, and
   detailed milestone status in the same commit.
-- Every **new** feature/story is one branch and one PR with as many small,
-  cohesive implementation, test, fix and documentation commits as needed.
-  Preserve individual commit boundaries through review and merge.
+- Every future **PR** is one cohesive deliverable containing multiple small,
+  traceable implementation, test, fix, regression and documentation commits.
+  Maintain multiple sequential PRs across the roadmap, each based on the
+  verified `main` produced by the immediately preceding merged PR.
 - Do not squash implementation PRs; feature commits are review and rollback
   boundaries.
 - TPU-dependent validation is performed on the target TPU environment, not the
@@ -173,164 +176,111 @@ Release evidence uses steady-state medians from three matched runs plus one
 
 ## Branch and PR policy
 
-### Transition: finish legacy PR before resetting story numbering
+### Transition from historic milestone PRs
 
-[PR #18](https://github.com/Dhiraj309/TrainLM/pull/18) on
-`milestone/m8-m9-optimization-core` is a **legacy, multi-story integration PR**.
-It must be conflict-resolved, tested, reviewed and merged into `main`
-before the new story workflow starts. **No new development story branch or PR
-may start while #18 is open or unmerged.** Do not reuse existing
-`milestone/*` branches as new development bases. Preserve historical commits,
-milestone IDs, documentation and accepted validation evidence; the new naming
-policy does not rewrite earlier project history.
+The existing [PR #18](https://github.com/Dhiraj309/TrainLM/pull/18),
+`milestone/m8-m9-optimization-core`, must be conflict-resolved, fully
+reviewed, validated and **merged to `main`** before the new sequential PR
+series starts. Its pre-existing `milestone/*` branches are historical; do
+not continue or derive new PRs from them. Preserve historical work and
+evidence, not old future PR scheduling conventions.
 
-Once PR #18 merges, verify the actual new `origin/main` SHA and audit
-`docs/ROADMAP.md`, `docs/HANDOFF.md`, and `docs/IMPLEMENTATION_CONTEXT.md`
-against the merged implementation and owner-run TPU evidence. Then activate
-**story 001**. Queue entries that were already completely implemented and
-validated may be marked satisfied with linked evidence during this audit;
-do not reopen redundant code work. Renumbering applies to new **branch/PR
-delivery IDs**, not the retained technical milestone references (M8-F0, etc.).
-Do not invent PR numbers: GitHub assigns them on PR creation.
+### Multiple meaningful PRs, each with multiple meaningful commits
 
-### Professional change-set model: one story, multiple small commits
+The canonical detailed plan is
+[`docs/PR_DELIVERY_PLAN.md`](PR_DELIVERY_PLAN.md). The plan has a **series
+of multiple separately reviewable PRs**, not one mega-PR for the roadmap
+and not one PR per tiny commit. Each PR includes **several logically
+coherent commits**: implementation, focused tests, discovered fixes,
+regression coverage, and docs. The branch, PR title, PR description, and
+commits must describe the same deliverable.
 
-**One approved story → one dedicated branch → multiple logically coherent
-commits → one reviewable PR → required tests/review/validation →
-owner-approved merge to `main` → verify `main` → next story.**
+**Finish PR N and merge it into `main` → verify remote `main` → only then
+create PR N+1 from the newly merged `main`.** No stacked PRs, parallel
+implementation PRs, unrelated commit mixtures or pre-created future branches.
+A blocked PR remains active until its blocker is resolved or the owner
+explicitly approves a documented change of plan. PR numbers are assigned
+by GitHub; the roadmap numbers below are *planning IDs only*.
 
-- Every commit is independently understandable and reviewable, with one
-  coherent intent. Prefer an implementation foundation, targeted tests,
-  follow-on implementation, bug fixes, regression tests and documentation
-  as separate commits when that improves traceability. **Never compress a
-  real sequence of fixes into an opaque single giant commit.**
-- Small commits can use Conventional Commit-like subjects:
-  `feat(api): route TPU training through coordinator`,
-  `test(api): cover launcher interruption`,
-  `fix(api): terminate orphan worker groups`,
-  `docs(roadmap): record lifecycle evidence`.
-  The sequence should remain testable where practical; don't knowingly
-  leave broken states without explaining why. No fixed commit count is
-  required: use the number the story genuinely needs.
-- Review/fixup commits stay on the **same story branch and PR**. Avoid
-  rewriting or force-pushing shared review history. Prefer **merge commit**
-  or **rebase merge** for completed PRs to preserve individual logical commits;
-  **do not squash** unless the owner explicitly approves an exception.
-  A rebase-merge may change commit SHAs while preserving separate changes.
-- A PR should explain behavior and UX, scope/non-goals, design, tests,
-  exact reviewable commits, evidence, benchmark impact, rollback, known
-  limitations, and whether hardware certification is still pending.
-- Default to one open story PR at a time. A blocked PR remains the active
-  story; no stacked PRs, parallel speculative branches or future branches.
+Future branch format is `<type>/<NN>-<deliverable>`, starting at `01`
+**after PR #18 merges**, e.g. `perf/03-chunked-loss-no-full-logits`.
+Use `fix`, `feature`, `perf`, `benchmark`, `validation`, `docs`,
+`ci`, `release` according to the predominant deliverable. Preserve
+M0–M17 milestone IDs as lineage in descriptions, not legacy branch names.
+The final planned queue must be audited against post-merge `main` before
+activation; already completed capabilities should be marked satisfied rather
+than reimplemented, and numbers reassigned to actual approved future work.
 
-### New branch names and reset numbering
+Prefer **merge commit or rebase merge** to preserve distinct commit
+boundaries. Squash only when explicitly approved by the owner. Keep each
+commit focused and understandable; no artificial limit, but avoid giant
+unreviewable branches. Follow the PR title and content format in
+`.github/pull_request_template.md`.
 
-Use lowercase `<type>/<NNN>-<kebab-case-story>`, beginning at **001**
-after the legacy PR #18 merges. Types: `feature`, `fix`, `perf`,
-`validation`, `docs`, `ci`, `release`. Examples:
+### Candidate sequential PR roadmap
 
-- `validation/001-public-tpu-lifecycle`
-- `feature/004-tpu-loss-provider`
-- `perf/010-qkv-fusion`
-- `docs/030-secure-tpu-guide`
-
-The three-digit ID represents the **post-transition story**, not a previous
-PR number, milestone, developer, or agent tool. Historical M8-F0 and later
-IDs are retained only as traceability references. Each newly activated
-story gets an immutable number; future candidates may be refined or
-reordered through an explicit planning commit before activation.
-
-### Strict execution and merge gates
-
-1. **Ready:** predecessor story PR is merged, its changes are verified
-   on remote `main`, latest `origin/main` is fetched, working tree is
-   clean, and the story card names its user-visible outcome, dependencies,
-   scope, non-goals, exact acceptance tests, risks and rollback.
-2. **Start:** create only the current story branch from the just-verified
-   `origin/main` commit. Target `main` in the PR. Never branch from an open
-   PR, a stale `main` or a parked `milestone/*` branch.
-3. **Develop:** make cohesive, traceable commits as work progresses.
-   Include tests and fixes in separate commits when useful; run relevant
-   CPU regression tests and review staged diffs. Update
-   `docs/ROADMAP.md` and `docs/IMPLEMENTATION_CONTEXT.md`.
-4. **Validate:** distinguish implemented software contracts from
-   hardware-certified behavior. TPU/CUDA performance, checkpoint, HLO,
-   HBM and throughput require **real owner-run hardware evidence**. The
-   PR may remain blocked for that evidence; a CPU pass never converts
-   a hardware-dependent `[~]` into `[x]`.
-5. **Review:** confirm CI, acceptance, security, HF model semantics,
-   stable public UX, serialization/resume, fallback behavior, rollback
-   and performance regressions. Resolve comments in the same PR.
-6. **Merge:** owner explicitly approves a GitHub merge after branch
-   protection/review/CI gates pass. Do not merge automatically, do not
-   push to protected `main`, and do not force-push. Prefer a method that
-   preserves meaningful individual commits, not squash.
-7. **Unlock:** verify GitHub reports **merged** (not merely closed),
-   fetch the resulting `main` commit and confirm expected files and
-   docs. Only then mark story completed and authorize the next branch.
-   If blocked, record sanitized error, outstanding owner action and
-   evidence; stay on the current story.
-8. **Network:** Codex may request narrowly scoped, approved
-   per-command additional network permission for GitHub operations.
-   Never override runtime-managed proxy or credential variables or
-   disable network security checks.
-
-### Required story specification
-
-Each story must record: story ID and title; legacy milestone link if
-applicable; motivating problem; **desired user experience** (or measurable
-internal benefit); dependency and base `main` SHA; implementation scope
-and public interfaces; explicit non-goals; HF-semantic/backward-compatibility
-constraints; test matrix and exact commands; TPU evidence/artifacts when
-required; performance/HBM/HLO gates; rollback and fallback; definition
-of done; and PR reviewer/owner. An implementation is ready for merging
-only if every applicable gate is met or an explicit reviewed exception
-is documented. Full story completion also requires a verified merge to
-`main`.
-
-### Candidate post-PR #18 story queue (not yet activated)
-
-These are **candidate IDs**, not existing branches, commits or PRs.
-After merging #18, reconcile candidates against merged `main` and
-existing TPU evidence; close already satisfied items in a planning audit
-instead of duplicating prior implementation. Start with the first
-genuinely incomplete story under the renewed 001-based process.
-
-| New ID | Candidate story/outcome | Technical lineage | Candidate branch |
+| Planned slot | Candidate branch | Proposed PR title | Related milestone |
 |---:|---|---|---|
-| 001 | Public TPU training lifecycle | M8-F0 | `validation/001-public-tpu-lifecycle` |
-| 002 | Exact distributed resume | M7-F1 | `validation/002-distributed-resume` |
-| 003 | Rematerialized chunked loss | M9-F3 | `perf/003-remat-chunked-loss` |
-| 004 | TPU-native loss provider | M9-F4 | `feature/004-tpu-loss-provider` |
-| 005 | Pallas attention provider | M10-F3 | `feature/005-pallas-attention` |
-| 006 | Compact GQA/MQA without KV repeats | M10-F4 | `perf/006-compact-gqa-mqa` |
-| 007 | Sliding window and ALiBi semantics | M10-F5 | `perf/007-window-alibi` |
-| 008 | Evidence-based attention autotuning | M10-F6 | `perf/008-attention-autotuning` |
-| 009 | 850K loss and attention gate | M10-F7 | `validation/009-loss-attention-850k` |
-| 010 | Reversible QKV fusion | M11-F1 | `perf/010-qkv-fusion` |
-| 011 | Reversible MLP fusion | M11-F2 | `perf/011-mlp-fusion` |
-| 012 | Native fusion audit | M11-F3 | `validation/012-native-fusion-audit` |
-| 013 | Rematerialization HBM policy | M11-F4 | `perf/013-remat-hbm` |
-| 014 | XLA optimizer-state path | M11-F5 | `perf/014-xla-optimizer-state` |
-| 015 | Packed-data input and prefetch | M11-F6 | `perf/015-input-prefetch` |
-| 016 | HLO and host-overhead closure | M11-F7 | `validation/016-graph-host-closure` |
-| 017 | Numerical parity | M12-F1 | `validation/017-numerical-parity` |
-| 018 | Three-run 135M benchmark | M12-F2 | `validation/018-three-run-benchmark` |
-| 019 | Real-shard stability | M12-F3 | `validation/019-real-shard-stability` |
-| 020 | Clean-process HF export | M12-F4 | `validation/020-plain-hf-export` |
-| 021 | Performance parity evidence report | M12-F5 | `docs/021-parity-evidence` |
-| 022 | GPT-2 and OPT matrix | M13-F1 | `validation/022-gpt2-opt` |
-| 023 | NeoX and BLOOM matrix | M13-F2 | `validation/023-neox-bloom` |
-| 024 | Falcon and Phi matrix | M13-F3 | `validation/024-falcon-phi` |
-| 025 | Llama, Mistral, Qwen and Gemma matrix | M13-F4 | `validation/025-llama-qwen-gemma` |
-| 026 | Cross-family support certification | M13-F5 | `validation/026-cross-family-certification` |
-| 027 | FSDP topology and checkpoint closure | M13-F6 | `feature/027-fsdp-topology` |
-| 028 | 1.3B target benchmark | M13-F7 | `perf/028-1p3b-benchmark` |
-| 029 | Public API compatibility | M14-F1 | `validation/029-public-api-compatibility` |
-| 030 | Secure TPU user guide | M14-F2 | `docs/030-secure-tpu-guide` |
-| 031 | Hardware evidence tiers | M14-F3 | `ci/031-evidence-tiers` |
-| 032 | Preemption recovery | M14-F4 | `validation/032-preemption-recovery` |
-| 033 | Support manifest and V1 release | M14-F5 | `release/033-v1-release` |
+| 01 | `fix/01-cpu-regressions-test-baseline` | fix(test): establish a clean, reproducible CPU regression baseline | M2-F5, M13-F3, M14-F3 |
+| 02 | `feature/02-tpu-trainer-lifecycle-resume` | feat(tpu): complete public trainer lifecycle, checkpoints and resume | M8-F0, M7-F1-F5 |
+| 03 | `perf/03-chunked-loss-no-full-logits` | perf(loss): integrate chunked causal loss without full logits | M9-F1-F5 |
+| 04 | `perf/04-compiled-gradient-accumulation` | perf(xla): reduce host-unrolled accumulation and recompilation | M5-F4-F5, M11-F7 |
+| 05 | `perf/05-pallas-mha-attention` | perf(attention): add guarded TPU-native Pallas MHA | M10-F1-F3 |
+| 06 | `perf/06-compact-gqa-window-alibi` | perf(attention): support compact GQA/MQA, windows and ALiBi | M10-F4-F6 |
+| 07 | `perf/07-reversible-qkv-mlp-fusion` | perf(model): activate reversible QKV and gated-MLP fusion | M8-F4-F5, M11-F1-F3 |
+| 08 | `perf/08-optimizer-remat-memory-policy` | perf(train): tune XLA optimizer state and rematerialization | M11-F4-F5 |
+| 09 | `perf/09-data-prefetch-cache-graph-stability` | perf(input): overlap packed data, prefetch and XLA compilation cache | M5-F3, M11-F6 |
+| 10 | `perf/10-async-telemetry-xla-profile` | perf(telemetry): add low-overhead TPU profiling and async reporting | M7-F4, M11-F7, telemetry backlog |
+| 11 | `benchmark/11-optimized-loss-attention-850k-gate` | perf(benchmark): certify the optimized loss and attention 850K gate | M10-F7, M11-F7 |
+| 12 | `validation/12-numerical-resume-hf-export-parity` | test(parity): validate numerical equivalence, resume and HF export | M12-F1, M12-F4, M7-F1-F5 |
+| 13 | `benchmark/13-laughlm-135m-three-run-certification` | perf(parity): run 135M LaughLM-class three-run certification | M12-F2-F3-F5 |
+| 14 | `validation/14-dense-family-conformance-matrix` | test(compat): certify dense HF family support and fallbacks | M6-F1-F4, M13-F1-F5 |
+| 15 | `feature/15-fsdp-sharding-1p3b-scale` | feat(scale): validate FSDP sharding and 1.3B training | M13-F6-F7 |
+| 16 | `feature/16-hf-like-cli-config-user-journey` | feat(ux): polish HF-like trainer, CLI and secure TPU workflows | M8-F0, M14-F1-F2 |
+| 17 | `ci/17-release-ci-preemption-evidence` | ci(release): enforce reproducibility, hardware gates and recovery | M14-F3-F4 |
+| 18 | `release/18-dense-ar-v1-support-certification` | release(v1): publish dense-AR support, limitations and evidence | M14-F5 |
+
+Each entry has its intended outcome, commit-by-commit development outline,
+scope/non-goals, acceptance/verification gates and fallback in
+[`docs/PR_DELIVERY_PLAN.md`](PR_DELIVERY_PLAN.md#detailed-pr-cards).
+**Do not open these candidate branches before legacy PR #18 merges.**
+
+### Lifecycle and enforcement
+
+1. **Before PR creation:** Confirm the predecessor is actually merged,
+   verify live `origin/main`, reconcile prior delivery/evidence,
+   select exactly the next approved PR card, and create the named branch
+   from `origin/main` (not another feature/milestone branch).
+2. **During PR development:** Create small, purpose-specific commits and
+   tests as features/fixes land. Keep user-facing HF semantics, API,
+   checkpoints, reversible transforms and fallbacks intact.
+3. **Before merge:** Require review, relevant passing CPU tests, correct
+   GitHub base/head, per-commit clarity, accurate status/doc updates,
+   evidence for any hardware-performance claim, and a bounded rollback.
+   An experimental TPU capability may merge guarded/off-by-default when
+   hardware certification is still pending *if its PR only claims an
+   implemented guarded path and the reviewer approves the explicitly
+   deferred hardware gate*.
+4. **After merge:** Confirm GitHub reports merged, verify actual new
+   `main` SHA and file/docs presence, then mark the PR delivered and
+   unlock exactly the next one. No automatic merges.
+5. **On failure:** Keep the current PR active; report checks, conflicts,
+   hardware evidence gaps and sanitized network/auth failures. Never
+   change the managed proxy or leak credentials; supported approved
+   per-command network permission may be requested for GitHub operations.
+
+### Product UX and hard technical boundaries
+
+The normative product requirement remains HF-like: users supply model,
+datasets, processing class/tokenizer and familiar training arguments;
+`TrainLMTrainer.train()` and optional `trainlm train` privately handle
+PJRT, worker launch, validation, caches and logs. Maintain canonical
+Transformers model semantics, generic dense-AR fallback, capability-selected
+reversible optimizations, plain HF export, checkpoint safety and accurate
+`trainer.explain()`. TPU validation is owner-run, not claimed from local
+CPU tests. An optimized default is earned by semantic, HLO/HBM and matched
+hardware throughput evidence—not model-family naming or a speculative
+speedup.
 
 ### Historical Dense-AR V1 milestone PR overview (legacy, not the future queue)
 
