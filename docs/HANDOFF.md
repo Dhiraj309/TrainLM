@@ -6,8 +6,11 @@
 > `milestone/m8-m9-optimization-core`. For the active story, branch creation,
 > review/merge gates, canonical names and ordered next work, use
 > [the roadmap's sequential PR policy](ROADMAP.md#branch-and-pr-policy).
-> Do **not** activate an old M10-M12 milestone branch or start another
-> story until PR #18 is merged and the latest `main` is reconciled.
+> Do **not** activate an old milestone branch or start another story
+> until PR #18 is conflict-resolved, validated and merged to `main`.
+> Afterward reset new story numbering at `001`; each new story uses
+> one branch/PR with multiple meaningful commits (implementation, tests,
+> fixes, docs), preserving traceability rather than forcing a squash.
 
 This is the concise continuation guide for the current
 `milestone/m10-m12-kernels-parity` branch. It separates code that exists from

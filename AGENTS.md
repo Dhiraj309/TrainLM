@@ -57,8 +57,8 @@ Safety rules:
 
 Branches and commits
 
-- Use one feature or story per commit whenever practical.
-- Create the approved story branch only after its predecessor merges, using the roadmap naming convention (e.g. `validation/m8-f0-s01-public-tpu-lifecycle`).
+- Use one feature/story per branch and PR, with multiple small, logically coherent commits for implementation, tests, fixes, review changes, and documentation as appropriate. Do not squash by default; preserve traceable commits.
+- Create the approved story branch only after its predecessor merges, using the new roadmap naming convention (e.g. `validation/001-public-tpu-lifecycle`).
 - Use concise, descriptive commit messages following the repository's existing conventions.
 - Run relevant tests before committing.
 - Review the staged diff and commit only files associated with the task.
@@ -82,28 +82,33 @@ Do not invent test results, accelerator validation results, commit SHAs, or succ
 
 ## Sequential story and pull-request protocol
 
-Follow the canonical policy and ordered story ledger in
-`docs/ROADMAP.md#branch-and-pr-policy`:
-**one ready story → one new branch from latest merged `main` → one PR → tests,
-required TPU evidence, review → owner-approved merge → verify the updated
-remote `main` → then and only then start the next story**.
+Read `docs/ROADMAP.md#branch-and-pr-policy`. The delivery contract is:
+**one story → one branch → multiple small, reviewable commits → one PR →
+tests and owner review → merge to `main` → verify `main` → next story**.
 
-- PR #18 on `milestone/m8-m9-optimization-core` is the existing multi-story
-  transition PR. Do not open another story PR until PR #18 merges or the owner
-  explicitly approves a documented migration plan. Never build on parked
-  legacy milestone branches.
-- Name future branches `type/m8-f0-s01-kebab-outcome` (for example
-  `validation/m8-f0-s01-public-tpu-lifecycle`); keep story IDs stable.
-- The PR description must include user-facing goal, exact story acceptance,
-  in-scope/non-goal boundaries, tests, hardware evidence gaps, risks,
-  rollback plan, documentation links and the `main` base SHA.
-- Do not mark work complete from a local CPU pass where a target-TPU gate is
-  required. Track implemented-but-not-certified separately.
-- Do not automatically merge, create the next branch early, or start parallel
-  implementation tasks. If blocked, report the blocker and keep the current
-  story active.
-- For GitHub network commands, use supported/approved per-command additional
-  network permission; never tamper with runtime-managed proxy variables,
+- The active legacy PR #18 (`milestone/m8-m9-optimization-core`)
+  must be reviewed, validated, conflict-resolved and merged before starting
+  the new delivery convention. Never start another story branch while
+  #18 is unmerged.
+- After that transition, start new branch names at `001`, using
+  `<type>/<NNN>-<kebab-outcome>` (e.g.
+  `validation/001-public-tpu-lifecycle`). Do not reuse
+  obsolete `milestone/*` branches or carry M8-F0 names into new branch
+  IDs; preserve old feature numbers only as technical lineage in the roadmap.
+- Keep small, purposeful implementation, tests, fix, and docs commits
+  within the **same** story PR. Do not produce one giant commit or
+  squash meaningful audit history by default. Do not rewrite a branch
+  under active review without owner approval.
+- Every PR documents user-visible goal, scope, non-goals, tests,
+  known failures, hardware evidence/limitations, rollback and
+  documentation updates. CPU passes do not certify TPU kernels,
+  HLO/HBM, throughput, or distributed resume.
+- No automatic merging, protected-`main` pushes, force-pushes,
+  parallel story PRs or speculative future branch creation.
+  Only activate the next story once the previous PR is reported
+  **merged** and its changes are verified on current `main`.
+- For GitHub commands use the approved per-command network permission
+  mechanism when needed; do not change managed proxy variables,
   credentials or sandbox policy.
 
 Current continuation point

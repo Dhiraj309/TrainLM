@@ -8,25 +8,30 @@ For the status-focused checklist of implemented work, target-hardware evidence,
 immediate priorities, architecture research, and telemetry work, see
 [`HANDOFF.md`](HANDOFF.md).
 
-## Sequential story PR handoff (adopted 2026-10-27)
+## Sequential, traceable story delivery (effective after PR #18)
 
-The canonical branch naming, one-story-per-PR policy, owner-approved merge
-gates, candidate story ledger, UX contracts and required evidence are in
+The canonical delivery contract and candidate queue are in
 [`docs/ROADMAP.md`](ROADMAP.md#branch-and-pr-policy).
-**PR #18** (`milestone/m8-m9-optimization-core`) is the active grandfathered
-multi-story implementation PR. No new story branch or PR may be activated
-until it is merged into `main` (or the owner documents a replacement plan).
-Already existing milestone branches are historical, not authorized parallel
-work. After the merge, reconcile the detailed backlog against the **merged**
-`main` and begin `M8-F0-S01` only if its remaining target-hardware evidence
-is still needed.
 
-Use lowercase `type/m8-f0-s01-short-outcome` for new branches, one story
-per branch/PR, base and target `main`, no automatic merge. Keep the active
-story blocked until CPU/CI, owner-run TPU evidence when required, review, and
-merge-to-main verification succeed. Record the actual PR URL, SHA, artifacts
-and next approved step. Agent network requests may use supported
-per-command additional permission; never modify managed proxy/credentials.
+- First resolve, review, validate and **merge** the legacy
+  [PR #18](https://github.com/Dhiraj309/TrainLM/pull/18) to `main`.
+  No new story PR/branch may start before this happens.
+- Then reset **new story IDs** to `001` and use
+  `<type>/001-short-outcome`, `<type>/002-short-outcome`, etc. Older
+  M8/M9 feature IDs remain as technical traceability references, not
+  new branch-name prefixes.
+- **One story = one branch = one PR, with multiple small, meaningful
+  commits** for implementation, tests, bug fixes, regressions, review
+  feedback and documentation. Do not demand one giant commit per story;
+  do not squash by default.
+- Every story starts from the *latest merged* `origin/main` only
+  after the preceding story PR is merged and verified. No concurrent
+  implementation PRs or pre-created future branches.
+- Preserve separate commit history with merge/rebase merge when approved;
+  only the owner authorizes merging. Keep TPU-dependent stories blocked
+  until owner-run validation is recorded, distinct from CPU readiness.
+- Per-command approved GitHub network permission may be requested;
+  never alter managed proxy variables or credentials.
 
 ## Product intent
 
