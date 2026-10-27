@@ -10,10 +10,12 @@
 > after each new PR merges, verify remote `main` before branching for the
 > next. Do not create or use old milestone branches as future PR bases.
 
-This is the concise continuation guide for the current
-`milestone/m10-m12-kernels-parity` branch. It separates code that exists from
-code that has been proven on target hardware, and it keeps execution-preserving
-work separate from architecture-changing research.
+This is the concise implementation and target-hardware handoff for the
+legacy integration PR #18 and subsequent approved work. It separates code
+that exists from code proven on target hardware, and keeps
+execution-preserving work separate from architecture-changing research.
+Historical milestone branch names below are archival context, not current
+execution instructions.
 
 ## Status legend
 

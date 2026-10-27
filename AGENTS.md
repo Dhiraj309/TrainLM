@@ -116,25 +116,22 @@ whole roadmap and not one commit per PR.**
 
 Current continuation point
 
-PR4 ("milestone/m8-m9-optimization-core") is active.
+Legacy PR #18 (`milestone/m8-m9-optimization-core`) is the only active
+integration PR. It contains implementation across the public TPU
+facade/coordinator, capability planner, optimization and release contracts,
+but requires conflict resolution against `main`, acceptance review and
+validation. **Do not claim it is merged or create a post-legacy branch
+until GitHub reports merged and remote `main` is verified.**
 
-M8-F0's first public facade slice exists in "src/trainlm/api.py" and delegates to the existing backend-neutral engine on CPU/CUDA.
+After merging, inspect the actual merged `main`, the handoff and owner-run
+TPU evidence. Reconcile the 18 candidate multi-commit PR cards in
+`docs/PR_DELIVERY_PLAN.md`. Activate only the first demonstrably needed
+PR, with a descriptive branch/title/body and multiple focused commits.
 
-The next story is to hide TPU coordinator and worker orchestration behind "TrainLMTrainer.train()" while keeping the same concise user code.
-
-Do not mark M8-F0 complete until the public training path reaches the TPU coordinator without requiring subprocess code or stage-log parsing in the user's workflow.
-
-Next implementation priorities
-
-1. Review the existing "TrainLMTrainer" API, TPU coordinator, and worker-launch architecture.
-2. Design the smallest compatible integration that routes TPU execution through "TrainLMTrainer.train()".
-3. Keep worker orchestration, distributed setup, manifests, caches, and log parsing internal.
-4. Preserve the existing CPU/CUDA behavior.
-5. Add focused CPU-side unit tests using mocks or controlled fixtures for the TPU orchestration boundary.
-6. Run applicable CPU regression tests.
-7. Update both required documentation files.
-8. Commit and publish the implementation on an isolated feature branch when permitted.
-9. Create a pull request for review without automatically merging it.
+Codex may read, test, commit and push to the existing approved PR branch,
+but must not create parallel PRs, push to `main`, or merge without
+explicit owner authorization. Retain the HF-like UX, reversible capability
+planning, CPU test gates and honest TPU certification boundary.
 
 Definition of done
 

@@ -83,6 +83,67 @@ deliverables with evidence, consolidate or resequence redundant candidates in
 a separately reviewed plan update, and number the *first newly activated
 real branch* `01`. Don't implement the same code again to satisfy a table.
 
+## Exact PR title, description and commit trace contract
+
+For **each planned PR** below, the **Branch** and **Proposed PR title** fields
+are the canonical, copyable planned values. The **PR description — why/outcome**,
+scope, planned commits, acceptance, tests and rollback together form the
+description; do not publish only the one-line outcome. At activation, produce
+the actual PR body from the corresponding card using this structure:
+
+```markdown
+## Summary / outcome
+[The exact card title, intended outcome, and problems it solves.]
+
+## Desired user experience and technical result
+[User-facing behavior; for an internal perf/validation PR, the measurable benefit.]
+
+## Included changes
+[In-scope interfaces and capabilities from the card; name the historical
+M/F references only for traceability.]
+
+## Excluded from this PR
+[Explicit non-goals and later PR dependencies; no unrelated scope creep.]
+
+## Planned commits and implementation trail
+- [ ] <small, coherent implementation or profiling commit>
+- [ ] <focused test/regression commit>
+- [ ] <fix or follow-up commit, if necessary>
+- [ ] <measurement/benchmark commit, if applicable>
+- [ ] <docs and decision record commit>
+[Replace plans with actual short SHAs and results before review.]
+
+## Tests and measured evidence
+- CPU command, pinned environment, result, and known failures:
+- TPU command, immutable model/data revisions, hardware, result:
+- HLO/compile-count, HBM, throughput/MFU, warmup and measurement window:
+- Artifact links and independent reproduction instructions:
+- Explicitly unmeasured capabilities / forbidden certification claims:
+
+## Risk, compatibility, fallback and rollback
+- HF semantic and public API compatibility:
+- Disabled/opt-in provider, strict-mode behavior, fallback and rollback:
+- Checkpoint, resume, export and process-cleanup implications:
+
+## Delivery gate
+- Intended base: main at <verified post-predecessor-merge SHA>
+- Branch: <the planned branch, created only now>
+- Previous delivery PR: <actual merged PR URL and verification>
+- Required review/CI/evidence: <links and statuses>
+- Merge method: preserve logical commits (merge commit or rebase merge)
+- Owner approval required; no automatic merge
+
+## Follow-ups
+[Only next *planned* PR; do not create its branch until this PR is merged.]
+```
+
+At PR creation, **title must match the card** and the description must be
+specific to the branch's actual commits—not a generic template left blank.
+Commit titles are examples, not a demand to manufacture work or to combine
+unrelated code into a PR. Mark actual committed changes and evidence accurately
+during review. GitHub numbers are assigned only on creation; the numbers
+01–18 are delivery-plan slots.
+
 ## Detailed PR cards
 
 ### Plan 01 — fix(test): establish a clean, reproducible CPU regression baseline
@@ -627,6 +688,31 @@ loss, tensor/sequence parallelism, overlapping collective and computation,
 layer scan, and optimizer research (Muon/hybrid). These require isolated
 benchmarks and an explicit roadmap decision after generic v5e-8 correctness
 and parity: do not sacrifice core HF semantics to chase unverified speed.
+
+### Additional engineering optimizations to evaluate (not assumed wins)
+
+These opportunities come from current [implementation handoff](HANDOFF.md)
+and profiling methodology. Each requires a controlled, *same-model,
+same-data, same-global-token-budget* comparison on target hardware before
+promoting an optimization. Until that proof exists, these are **candidate
+follow-ups**, not new approved branches or PR numbers.
+
+| Optimization hypothesis | Placement / priority | Experimental acceptance and guardrails |
+|---|---|---|
+| **Vocabulary-parallel LM head and distributed exact CE** | P1 after PR 15, only if 1.3B HBM is limiting | Implement numerically stable distributed max/sum normalization; test tied embeddings, padding/ignore index, z-loss, updates, HF export and collective memory/latency; compare exact CE to unsharded reference |
+| **Tensor/sequence parallelism and collective overlap** | P1 after FSDP path is sound | Inspect model semantics and legal sharding first; show equivalent gradients and exact resume; profile all-gather/reduce-scatter utilization and ensure overlap reduces actual step wall time (not just isolated collective timing) |
+| **Scanned decoder layers / compiled step boundaries** | Consider within PR 04 and PR 09 | Compare compiled loop versus unrolled graph size, graph-cache reuse, recompilation, peak HBM, host stalls and steady-state tokens/s; reject regressions in partial-gradient accumulation, dropout RNG or checkpointing |
+| **Precise precision/memory policy experiments** | PR 08, opt-in only | Compare BF16/FP32 states and selective remat with update/resume numerical tolerances, NaN/overflow incidence, HBM and tokens-to-target-loss; never promise that lower precision is safe across all HF families |
+| **Evaluation/checkpoint interruption overhead and async I/O** | PR 02, 10, 12, 17 | Measure eval graph compilation, save p50/p95 stalls, atomic durable commits, worker cancellation, resumable data cursor and failure injection; never trade away exactness for mean throughput |
+| **Performance regression baselines with environment fingerprints** | PR 01, 11, 13, 17 | Bind git SHA, HF/tokenizer/data revision, XLA/torch/libtpu versions, TPU topology, cache hit/miss, measured supervised tokens, compilation counts, HBM and matched run windows; reject non-comparable improvements |
+| **Optimizer algorithm research (Muon/hybrid), context/pipeline parallelism** | Deferred post-V1 research | Separate benchmarks and explicit product/architecture decisions; require matched quality or tokens-to-target-loss, compatibility/export and restart semantics before considering release |
+
+**Suggested optimization triage:** First fix deterministic CPU conformance
+and successful public TPU lifecycle; then attribute the measured ~319K
+baseline's time to host, compile, dense logits, attention, data and
+optimizer via repeatable profiles. Optimize the largest verified bottleneck
+first. Promote a provider to default only after semantic, hardware, HBM,
+graph and reproducibility gates; a prediction is not evidence.
 
 ## Recommended repository controls
 

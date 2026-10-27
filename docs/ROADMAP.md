@@ -243,6 +243,8 @@ unreviewable branches. Follow the PR title and content format in
 Each entry has its intended outcome, commit-by-commit development outline,
 scope/non-goals, acceptance/verification gates and fallback in
 [`docs/PR_DELIVERY_PLAN.md`](PR_DELIVERY_PLAN.md#detailed-pr-cards).
+The same plan also defines the full [PR title/body contract](PR_DELIVERY_PLAN.md#exact-pr-title-description-and-commit-trace-contract)
+and [additional measured-only optimization experiments](PR_DELIVERY_PLAN.md#additional-engineering-optimizations-to-evaluate-not-assumed-wins).
 **Do not open these candidate branches before legacy PR #18 merges.**
 
 ### Lifecycle and enforcement

@@ -17,7 +17,10 @@ The new roadmap is a series of **multiple outcome-scoped PRs** with
 **multiple small meaningful commits inside each PR**, not a single
 mega-PR, not a single commit per branch, and not many micro-PRs for
 each tiny fix. Every PR's branch, title and body accurately describe
-the coherent implementation/testing/fix/validation deliverable.
+the coherent implementation/testing/fix/validation deliverable. Use the
+[full PR body contract](PR_DELIVERY_PLAN.md#exact-pr-title-description-and-commit-trace-contract)
+and evaluate [additional optimization hypotheses](PR_DELIVERY_PLAN.md#additional-engineering-optimizations-to-evaluate-not-assumed-wins)
+only with measured evidence; these are not automatic new V1 requirements.
 
 - Current [legacy PR #18](https://github.com/Dhiraj309/TrainLM/pull/18)
   on `milestone/m8-m9-optimization-core` has reported merge conflicts
