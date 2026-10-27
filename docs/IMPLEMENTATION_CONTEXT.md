@@ -161,3 +161,12 @@ Use one feature/story per commit. Suggested next messages:
 - `feat(training): complete HF-like lifecycle and resume facade`
 - `feat(optimization): add model capability inspector and plan report`
 - `feat(optimization): add reversible kernel transform registry`
+
+## Codex GitHub write validation (2026-10-27)
+
+An explicitly authorized infrastructure validation uses the isolated branch
+`codex/github-write-validation-20261027` and `CODEX_GITHUB_WRITE_TEST.md`.
+GitHub API identity was verified as `Dignity045`; fetching `main` succeeded
+with per-command network permission. Commit, push, and remote verification
+results are reported by the validation session after execution. This task
+changes no application code or milestone status and requires no CPU/TPU tests.

@@ -1459,3 +1459,12 @@ For cross-session implementation continuity, see
 [`docs/IMPLEMENTATION_CONTEXT.md`](IMPLEMENTATION_CONTEXT.md). It records the
 current measured baseline, public-API boundary, explicit non-goals, and the
 ordered next stories for this PR branch.
+
+## Codex GitHub write validation (2026-10-27)
+
+An explicitly authorized infrastructure validation uses the isolated branch
+`codex/github-write-validation-20261027` and `CODEX_GITHUB_WRITE_TEST.md`.
+GitHub API identity was verified as `Dignity045`; fetching `main` succeeded
+with per-command network permission. Commit, push, and remote verification
+results are reported by the validation session after execution. This task
+changes no application code or milestone status and requires no CPU/TPU tests.
