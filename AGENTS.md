@@ -141,15 +141,20 @@ credentials, or auto-merge.
 Current continuation point
 
 PR #18 is merged to `main`; PR #19 completed T0.1 and PR #20 merged the T0.2
-mapping. Native TorchTPU remains unverified. T1's v5e-1 probe is documented
+mapping. Native TorchTPU production integration remains unverified; the owner
+reported a successful standalone eager smoke. T1's v5e-1 probe is documented
 in `docs/T1_V5E1_PROBE.md` and `notebooks/TorchTPU_T1_v5e1_Probe.ipynb`; use
 v5e-8 for multi-device evidence. The local
 checkout may be on a docs branch; before implementation, fetch and verify the
 latest merged `main`. Do not delete legacy branches until T0 salvage review
 determines whether they preserve needed source or evidence.
 
-Start T1 on the approved Kaggle v5e-1 image and record install provenance,
-device/autograd/optimizer/compile evidence. Use v5e-8 for collectives, DP8,
+Continue T1 using `docs/TORCHTPU_UTILITIES.md`: inventory upstream utilities,
+then shared hardware discovery/reporting, dependency/lifecycle verification,
+and distributed entry feasibility. The owner reported an eager native TPU
+smoke pass; hardware generation and explicit compile are unverified. Discover
+hardware using runtime properties, not the notebook host label. Prefer
+one-chip Cloud TPU v5e when available; do not assume Kaggle offers v5e-1. Use v5e-8 for collectives, DP8,
 sharding, distributed checkpoints, and scale. Create an implementation PR only
 after the T1 evidence identifies a concrete scope and its branch can start
 from verified merged `main`.

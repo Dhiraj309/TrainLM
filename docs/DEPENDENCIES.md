@@ -23,6 +23,19 @@ Python compatibility, device discovery, autograd, distributed operations
 and compilation on Kaggle v5e-8 before adding extras or claiming support.
 Do not guess package versions or assume Pallas/Helion/Tokamax compatibility.
 
+## Owner-reported native probe profile
+
+The owner supplied a passing standalone eager smoke with Python 3.13.18,
+torch 2.14.1+cpu, torch_tpu 0.2.0 and libtpu 0.0.50; tpu-info 0.14.2 was
+installed. This does not establish a supported TrainLM installation:
+`pyproject.toml` currently requires `torch>=2.9,<2.14`. Resolve and test a
+native profile, clean installation and CPU compatibility before changing that
+range. Explicit compile, hardware identity and distributed evidence are pending.
+
+The [utility inventory](TORCHTPU_UTILITIES.md) distinguishes versioned API
+documentation from the current public API policy. Experimental utilities
+need guarded adapters; monitoring, profiling and kernel extras remain optional.
+
 ## Existing support profiles (CPU/CUDA and historical XLA)
 
 | Profile | Python | PyTorch | Transformers | Accelerator packages | Status |

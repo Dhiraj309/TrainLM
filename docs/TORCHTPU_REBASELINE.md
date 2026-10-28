@@ -8,7 +8,10 @@
 
 **Current gate:** T0 is closed; PR #20 merged the accepted T0.2 mapping. T1
 starts on v5e-1 for single-device feasibility; use v5e-8 for tests that need
-multiple devices. TorchTPU remains unverified.
+multiple devices. The owner reported a successful eager native TPU smoke;
+hardware generation, explicit compilation and TrainLM integration remain
+unverified. Follow the [utility inventory and delivery order](TORCHTPU_UTILITIES.md)
+for the T1.1–T1.4 work packages.
 
 ## Project vision and desired developer experience
 
@@ -17,18 +20,33 @@ combining Hugging Face interoperability with a **native TorchTPU-first target**
 for Kaggle TPU v5e-8. Users control configuration and can inspect hardware
 backend, optimization provider, fallback, metrics and resume state. Ordinary
 training must not require manually managing worker launch or rank topology.
+TrainLM must internally discover hardware identity, available devices, memory,
+precision and runtime capabilities using supported TorchTPU/PyTorch utilities.
+Notebook-provider labels are context, not hardware identification. The shared
+report powers preflight, notebook guidance and `trainer.explain()`; missing
+hardware and broken initialization have distinct outcomes. See the
+[UX and discovery contract](TORCHTPU_UTILITIES.md#desired-user-experience-and-internal-discovery-contract).
 
-The desired API below is illustrative; verify actual repository signatures:
+The example uses the existing facade names; native TPU auto-selection and
+the expanded hardware report are planned. The current implementation of auto
+selection only handles CPU/CUDA:
 
 ```python
+from trainlm import TrainLMTrainer, TrainLMTrainingArguments
+
 trainer = TrainLMTrainer(
     model=model,
     tokenizer=tokenizer,
     train_dataset=train_dataset,
-    config=config,
+    args=TrainLMTrainingArguments(
+        output_dir="runs/example",
+        accelerator="auto",
+        max_steps=100,
+    ),
 )
+print(trainer.explain())
 trainer.train()
-trainer.save_pretrained("./trained-model")
+trainer.save_model("./trained-model")
 ```
 
 Preserve supported HF model semantics and generic correctness while making
@@ -43,7 +61,7 @@ reversible.
 | Legacy integration | PR #18 merged into `main` on 2026-10-28; merge commit `23959d29434fd2ae3f78b20469e1d61c6b1e18c9` | T0.1 inventory is complete; no new code PR is active |
 | Earlier salvage | PR #16 was merged into PR #18, which is now merged into `main` | Inventory its code as part of the merged tree; do not merge it again |
 | Existing TPU backend | Primarily PyTorch/XLA with historical measurements | Classify reusable vs XLA-specific components |
-| Native TorchTPU | **Target only**; no native v5e-8 certification established here | Prove device, autograd, distributed and compile support |
+| Native TorchTPU | Owner-reported standalone eager smoke passed; production adapter and v5e certification pending | Discover hardware internally; prove explicit compile, installation and distributed support |
 | GitHub access | Previous authenticated collaborator `Dignity045` branch push succeeded | Recheck actual identity each task; owner account not assumed |
 | CPU tests | PR #18 snapshot: 700 passed / 21 failed under Python 3.12.14, torch 2.9.0+cpu, Transformers 5.0.0, Hub 1.3.5, pytest 9.1.1 | Re-run on merged `main` before the next code PR; failure groups are recorded in `HANDOFF.md` |
 | CPU profiles | `core-minimum` Python 3.12/torch 2.9; `core-current` Python 3.13/torch 2.13 | Inspect actual environment and constraints |
@@ -106,8 +124,8 @@ attention, loss, optimizer, data, checkpoint, tests and documentation.
 | Gate | Outcome | Required acceptance evidence |
 |---|---|---|
 | T0 | Architecture rebaseline and salvage | PR #16/#18 inventory; reusable/XLA-specific/uncertain classification; approved boundaries and PR mapping |
-| T1 | Native TorchTPU environment | Start on v5e-1: package provenance, import, device ops, autograd, optimizer update, and eager/compile smoke. Use v5e-8 for collective and other multi-device feasibility. Record reproducible setup. |
-| T2 | Python-first configs/API | Verified public API, HF tokenizer/dataset/model contracts, CPU tests and actionable errors |
+| T1 | Native TorchTPU utilities and environment | T1.1 inventory → T1.2 shared hardware/capability report → T1.3 verified dependency and process lifecycle → T1.4 multi-device entry probe. Record actual device properties, eager/compile results and reproducible setup; prefer v5e-1 for single-device and v5e-8 for collective evidence. |
+| T2 | Python-first configs/API | Integrate shared discovery into auto backend selection, preflight and explain; verify HF contracts, CPU/CUDA compatibility and actionable errors without manual runtime setup. |
 | T3 | Single-device training/data | TPU reference causal LM step, packed data manifest, uint32/legacy uint16 validation and loss parity |
 | T4 | Eight-device data parallelism | Global valid-token-weighted gradients, unequal masks, accumulation and reference-parity proof |
 | T5 | Checkpoint/resume and HF export | Clean-process resume equivalence and `save_pretrained` round trip |

@@ -9,8 +9,12 @@ TrainLM is rebaselining toward native TorchTPU on Kaggle TPU v5e-8. The
 current backend in the code is PyTorch/XLA; native TorchTPU is a target, not an
 implemented or certified backend. PR #20 closed T0.2. T1 feasibility starts on
 v5e-1 for single-device checks; use v5e-8 when testing multi-device collectives,
-DP8, sharding, distributed checkpoints, or scaling.
+DP8, sharding, distributed checkpoints, or scaling. The owner reported a
+passing standalone eager TPU smoke. T1 now prioritizes shared hardware and
+capability discovery, a verified install profile and process lifecycle, then
+distributed entry checks; native trainer integration remains planned.
 
+- [TorchTPU utility inventory, automatic discovery and UX](TORCHTPU_UTILITIES.md)
 - [T0–T11 roadmap and gates](TORCHTPU_REBASELINE.md)
 - [Code salvage inventory](TORCHTPU_SALVAGE_INVENTORY.md)
 - [Accepted mapping of legacy work to T0–T11](PR_DELIVERY_PLAN.md#t02-accepted-mapping-to-native-torchtpu-gates)

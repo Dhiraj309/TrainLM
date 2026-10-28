@@ -28,6 +28,15 @@ contracts. Preserve HF semantics, correct generic fallbacks and explain
 optimized-provider choices; optimization must not hide data loss or weaken
 checkpoint safety.
 
+## T1 utility discovery refinement
+
+The [utility inventory](TORCHTPU_UTILITIES.md) refines T1 into inventory,
+shared discovery/reporting, installation/lifecycle verification and distributed
+entry feasibility. Reuse public upstream tools behind TrainLM's runtime
+contract; keep hardware detection, worker setup and diagnostics internal.
+These are work packages within the existing serial policy, not new branch
+approvals. T2 integrates the report into backend selection and the public UX.
+
 ## PR-by-PR serial execution
 
 **Current sequence:** T0.2 is merged → establish T1 feasibility on v5e-1 for

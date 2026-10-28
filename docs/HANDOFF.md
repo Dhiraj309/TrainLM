@@ -12,9 +12,14 @@
 - **Probe:** [`T1 v5e-1 guide`](T1_V5E1_PROBE.md) and its
   [Kaggle/Colab notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb) test a tiny
   synthetic forward/backward and optimizer update, with optional `torch.compile`.
-- **Next:** run the probe on the owner-approved Kaggle v5e-1 image and record
-  package provenance and complete output. This workspace lacks PyTorch and
-  has not run the accelerator probe.
+- **Evidence:** the owner reported an eager native TPU allocation,
+  forward/backward and AdamW pass on torch_tpu 0.2.0 with torch 2.14.1+cpu.
+  Hardware generation and explicit compile remain unverified.
+- **Next:** implement shared discovery/reporting from the
+  [utility inventory](TORCHTPU_UTILITIES.md), then verify the dependency and
+  process-lifecycle profile. Collect device properties internally; never infer
+  hardware from a Colab/Kaggle label. Prefer v5e-1 when available, and use
+  v5e-8 for multi-device evidence. Local accelerator tests have not run.
 - **History:** PR #18 (including PR #16) is merged. The old M0–M17 tables and
   P0/P1 XLA backlog below describe historical XLA implementation/evidence;
   use them for salvage, not as the current TorchTPU task list.

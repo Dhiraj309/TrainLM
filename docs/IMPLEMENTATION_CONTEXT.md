@@ -22,13 +22,21 @@
 - T1 policy: use a one-chip Cloud TPU v5e VM first for single-device import,
   device operations, autograd, optimizer, and compile checks. Use v5e-8 for
   collective, DP8, sharding, distributed-checkpoint, or scaling requirements.
-  No TorchTPU probe has run yet; this workspace has no PyTorch installed.
+  An owner-run eager TPU smoke passed; this workspace has no PyTorch installed.
 - [T1 v5e-1 probe guide](T1_V5E1_PROBE.md) and the
   [Kaggle/Colab notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb) describe
-  the prepared synthetic smoke. The owner reported successful TPU allocation
-  followed by a probe subprocess exit; the child error and hardware generation
-  are unverified. Detection and execution now share one process. Do not add
-  guessed dependency pins or support claims from this probe.
+  synthetic smoke. The latest owner output supersedes the failed attempt:
+  allocation, forward, backward and AdamW update passed on Python 3.13.18,
+  torch 2.14.1+cpu, torch_tpu 0.2.0 and libtpu 0.0.50. Hardware generation,
+  explicit compile and production integration remain unverified.
+- The [utility inventory and UX plan](TORCHTPU_UTILITIES.md) maps public upstream
+  APIs to T1–T11 and reusable repository contracts. Next is shared discovery
+  and reporting, then a verified installation/lifecycle profile. A source-level
+  report now observes native TPU availability, device properties, versions and
+  allocation in the probe process; CPU-only contract tests pass. The public
+  trainer has not adopted it yet. Current
+  `accelerator="auto"` selects only CUDA/CPU; `torch<2.14` excludes the
+  successful standalone probe's torch version. Neither gap is fixed yet.
 
 ## Historical XLA development record
 
