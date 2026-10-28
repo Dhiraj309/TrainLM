@@ -114,6 +114,9 @@ def profile_evidence(process: dict | None) -> dict:
                 "source_requirements", "torch_tpu_requirements"))):
         return dict(result, status="invalid_report")
     result.update(status=status, scope="installed_metadata_only")
+    installation = report.get("trainlm_installation")
+    if installation in {"installed", "source_checkout"}:
+        result["trainlm_installation"] = installation
     known_issues = {"source_python_mismatch", "torch_tpu_python_mismatch",
                     "requirement_conflict", "pip_conflicts", "missing_distributions",
                     "pip_check_failed"}

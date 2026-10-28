@@ -90,6 +90,14 @@
   artifact now records whether the command ran, its profile and TPU statuses,
   and whether it used the same source SHA. Package reports include bounded
   parsed `pip check` requirement conflicts instead of only affected names.
+  Because the notebook runs from a source checkout without installing TrainLM,
+  the absent `trainlm` distribution is now reported as `source_checkout` and
+  is not counted as a missing runtime dependency. Other dependency mismatches
+  and `pip check` conflicts remain visible and can still make the profile
+  incompatible. The pip conflict parser accepts both `has requirement` and
+  `requires` output forms; the latest owner report used the earlier parser and
+  exposed only `ipython` as affected, without enough detail to identify its
+  exact constraint.
 
 ## Historical XLA development record
 

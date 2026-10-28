@@ -80,6 +80,11 @@ def inspect_profile(
         project = tomllib.load(handle)["project"]
 
     versions = {canonicalize_name(name): _version(name, provider) for name in PACKAGES}
+    # This check runs from a TrainLM source tree. The source itself is usable
+    # without installing its own distribution (for example, via PYTHONPATH),
+    # so an absent trainlm wheel is informational rather than a missing runtime
+    # dependency.
+    trainlm_installation = "installed" if versions["trainlm"] is not None else "source_checkout"
     optional_versions = {
         canonicalize_name(name): _version(name, provider) for name in OPTIONAL_PACKAGES
     }
@@ -131,7 +136,10 @@ def inspect_profile(
                 if (match := re.match(r"^([A-Za-z0-9_.-]+)\s", line))
             })
             for line in completed.stdout.splitlines()[:32]:
-                match = re.match(r"^([A-Za-z0-9_.-]+)\s+(\S+) has requirement (.+)\.$", line)
+                match = re.match(
+                    r"^([A-Za-z0-9_.-]+)\s+(\S+)\s+(?:has requirement|requires)\s+(.+?)\.?$",
+                    line,
+                )
                 if not match:
                     continue
                 package, version, detail = match.groups()
@@ -169,7 +177,7 @@ def inspect_profile(
         issues.append("requirement_conflict")
     if pip_status == "conflicts":
         issues.append("pip_conflicts")
-    if any(value is None for value in versions.values()) or any(
+    if any(value is None for name, value in versions.items() if name != "trainlm") or any(
         check["status"] == "missing" for check in checks
     ):
         issues.append("missing_distributions")
@@ -187,6 +195,7 @@ def inspect_profile(
         "schema_version": 1,
         "status": status,
         "scope": "installed_metadata_only",
+        "trainlm_installation": trainlm_installation,
         "python_version": python_version,
         "source_python_requirement": source_requires_python,
         "source_python_compatible": python_compatible,

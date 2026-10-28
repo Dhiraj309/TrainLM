@@ -58,7 +58,12 @@ TorchTPU support. “Implemented” means present in that historical code path;
   train; dependency and hardware support remain evidence-gated.
   Installed wheels use their declared package requirements; editable/source
   installs compare against the checked-out project files. The v5e-1 notebook
-  invokes it directly from its source snapshot, without an installation step.
+  invokes it directly from its source snapshot, without an installation step;
+  a missing installed `trainlm` distribution is identified as source-checkout
+  mode rather than a dependency gap. Other package incompatibilities remain
+  visible. Pip conflict details are parsed from both common `pip check` output
+  forms; the latest owner report came from the preceding source revision and
+  reported `ipython` without its exact constraint.
   The 18 old PR cards are candidates, not the active queue.
 
 ## Historical native-backend transition note

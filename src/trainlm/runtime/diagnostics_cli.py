@@ -35,6 +35,7 @@ def _package_profile(root: Path | None) -> dict[str, Any]:
     return {
         "status": report["status"],
         "scope": report["scope"],
+        "trainlm_installation": report["trainlm_installation"],
         "issues": report["issues"],
         "installed_versions": report["installed_versions"],
         "pip_check": report["pip_check"],
