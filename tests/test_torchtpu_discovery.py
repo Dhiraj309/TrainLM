@@ -11,6 +11,7 @@ CONTRACT = runpy.run_path(
 )
 DISCOVER = CONTRACT["discover_tpu"]
 SELECT_AUTO = CONTRACT["select_auto_backend"]
+NORMALIZE_WORKER = CONTRACT["normalize_worker_report"]
 
 
 class DiscoveryTests(unittest.TestCase):
@@ -99,6 +100,32 @@ class DiscoveryTests(unittest.TestCase):
                 {"status": "query_failed", "torch_tpu_version": "0.2.0"},
                 cuda_available=False,
             )
+
+    def test_worker_report_is_bounded_and_rejects_invalid_evidence(self):
+        report = {
+            "schema_version": 1,
+            "status": "ready",
+            "device_type": "tpu",
+            "allocation": "passed",
+            "device_name": "TPU v5e",
+            "topology": [2, 2, 1],
+            "device_count_visible": 1,
+            "secret_field": "do_not_copy",
+        }
+        normalized = NORMALIZE_WORKER(report)
+        self.assertEqual(normalized["status"], "ready")
+        self.assertEqual(normalized["topology"], [2, 2, 1])
+        self.assertNotIn("do_not_copy", str(normalized))
+        self.assertEqual(normalized["source"], "torchtpu_discovery")
+
+        report["device_name"] = "token=do_not_copy"
+        self.assertEqual(NORMALIZE_WORKER(report)["status"], "invalid_report")
+        report["device_name"] = "TPU v5e"
+        report["allocation"] = "not_run"
+        self.assertEqual(NORMALIZE_WORKER(report)["status"], "invalid_report")
+        report["allocation"] = "passed"
+        report["status"] = ["ready"]
+        self.assertEqual(NORMALIZE_WORKER(report)["status"], "invalid_report")
 
 
 if __name__ == "__main__":

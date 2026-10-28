@@ -36,6 +36,9 @@ TorchTPU support. “Implemented” means present in that historical code path;
   through `preflight()` and opt-in `explain(include_hardware=True)`. `auto`
   rejects a detected native TPU rather than silently selecting CPU while the
   native training route is unverified; explicit `tpu` remains the XLA path.
+  The native single-device probe can now persist a bounded device-owned report;
+  trainer diagnostics accept such a report from a future native worker result.
+  The current XLA worker does not emit native evidence.
   The 18 old PR cards are candidates, not the active queue.
 
 ## Historical native-backend transition note

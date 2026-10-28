@@ -86,7 +86,7 @@ ecosystem references, not prerequisites for the basic trainer.
 | `src/trainlm/_tpu_coordinator.py`, `_tpu_checkpoint.py` | Private launch and checkpoint infrastructure | Retain error/lifecycle contracts; audit XLA-specific worker assumptions before reuse. |
 | `src/trainlm/checkpoint/`, `training/` | Resume, export, trainer and metric contracts | Reuse and re-prove device RNG, distributed state and clean-process resume. |
 | `src/trainlm/optimization/`, `monitoring/telemetry.py` | Capability plans, explanations, provider gates and metric schema | Extend the existing report instead of a second independent planner. |
-| `examples/torchtpu_t1_v5e1_probe.py` and T1 notebook | Standalone smoke, broad exception-to-CPU fallback, no hardware property report | Replace notebook-specific detection with the shared diagnostic path; production policy must not hide broken TPU initialization as success. |
+| `examples/torchtpu_t1_v5e1_probe.py` and T1 notebook | Shared device-owned discovery, bounded JSON artifact and labeled CPU fallback; no production native routing | Keep T1 evidence separate from trainer support; verify hardware identity and install profile before enabling a native worker. |
 | `pyproject.toml` | `torch>=2.9,<2.14` | Owner's 2.14.1 smoke is outside the package contract. Test a separate native profile before changing ranges; the script pass is not a TrainLM install test. |
 
 ## Desired user experience and internal discovery contract
@@ -128,6 +128,10 @@ training worker, checks device properties or certifies hardware. `auto` blocks
 on detected TPU until the native route is validated; explicit `tpu` still
 means the historical XLA coordinator. A CLI diagnostic command and notebook
 integration with the trainer remain planned.
+The T1 single-device probe can save a bounded discovery JSON from its owning
+process. Trainer result handling can consume that schema from a future native
+worker summary and show its status beside parent preflight. Today's XLA worker
+does not emit native TorchTPU evidence.
 Code cells remain directly copyable; normal users should not type device
 aliases, rank variables or parse logs. Advanced configuration stays explicit.
 
@@ -141,9 +145,10 @@ These are T1 work packages, not new branches or renumbered GitHub PRs:
    records API availability, TPU allocation, process-visible count, device
    properties and package versions. The standalone probe prints it; a
    non-allocating subset now feeds trainer preflight and opt-in explanation.
-   Next: verify the owner-run report, incomplete properties and version
-   mismatch cases, then integrate worker results with trainer UX. Explicit
-   compile evidence remains pending.
+   A bounded device-owning artifact and worker-result diagnostic bridge exist,
+   but native worker production is pending. Next: verify owner-run reports,
+   incomplete properties and version mismatches. Explicit compile evidence
+   remains pending.
 3. **T1.3 — installation and lifecycle feasibility (partial):** the notebook
    reports installed versions and runs read-only pip dependency checking; its
    eager/compile child processes have timeouts and surface partial output.

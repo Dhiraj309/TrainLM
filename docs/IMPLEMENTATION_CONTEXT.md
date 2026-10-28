@@ -42,6 +42,12 @@
   silently falling back. Explicit `tpu` still uses the XLA coordinator.
   `torch<2.14` excludes the successful standalone probe's torch version; no
   native install profile or dependency change is approved yet.
+- The native T1 single-device process can write a normalized JSON discovery
+  artifact with `--report-json`. Trainer result handling accepts the same
+  bounded `native_tpu_report` field from a worker summary and shows it in
+  `preflight()` and opt-in `explain()`. The report is scoped to the device-owning
+  process and does not certify training. The existing XLA worker does not
+  produce this field; native worker launch and automatic routing remain gated.
 - T1.4 has a single-host v5e-8 opt-in distributed probe and copyable notebook.
   Parent-side TorchTPU launch preparation precedes worker spawning; the probe
   checks topology structure and address count without displaying coordinator

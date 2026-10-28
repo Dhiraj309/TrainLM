@@ -8,6 +8,7 @@ be added behind the same API without changing user code.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
+from copy import deepcopy
 from dataclasses import asdict, dataclass, replace
 import json
 from pathlib import Path
@@ -41,7 +42,9 @@ from trainlm.config import (
 )
 from trainlm.optimization import create_optimizer
 from trainlm.runtime import Runtime
-from trainlm.runtime.torchtpu_discovery import discover_tpu, select_auto_backend
+from trainlm.runtime.torchtpu_discovery import (
+    discover_tpu, normalize_worker_report, select_auto_backend,
+)
 from trainlm.tasks import CausalLMTask
 from trainlm.training import Trainer as EngineTrainer
 from trainlm.training import (
@@ -315,6 +318,7 @@ class TrainLMTrainer:
         self._model_source: ModelSourceConfig | None = None
         self.loaded: LoadedCausalLM | None = None
         self._last_metrics: dict[str, Any] = {}
+        self._native_tpu_worker_report: dict[str, Any] | None = None
         self._train_loader_generator: torch.Generator | None = None
         self._train_loader_generator_initial_state: torch.Tensor | None = None
         self._tpu_coordinator = None
@@ -559,6 +563,13 @@ class TrainLMTrainer:
         """Deliver worker artifacts through public state and callback contracts."""
 
         worker = result.get("worker_summary") or {}
+        self._native_tpu_worker_report = None
+        if "native_tpu_report" in worker:
+            self._native_tpu_worker_report = normalize_worker_report(
+                worker["native_tpu_report"]
+            )
+            worker = {**worker, "native_tpu_report": self._native_tpu_worker_report}
+            result = {**result, "worker_summary": worker}
         state = TrainerState(
             step=int(worker.get("steps", 0)),
             micro_step=int(worker.get("micro_steps", 0)),
@@ -783,6 +794,7 @@ class TrainLMTrainer:
             ),
             "native_tpu_training": "not_integrated",
             "native_tpu": report,
+            "native_tpu_worker": deepcopy(self._native_tpu_worker_report),
         }
 
     def explain(
@@ -834,10 +846,13 @@ class TrainLMTrainer:
                 )
             if format == "text":
                 native = preflight["native_tpu"]
+                worker = preflight["native_tpu_worker"]
                 return (
                     report.to_text()
                     + "\nNative TPU preflight: " + native["status"]
                     + " (training route not integrated; no allocation performed)"
+                    + "\nNative TPU worker report: "
+                    + (worker["status"] if worker is not None else "not available")
                 )
         if format == "dict":
             return report.to_dict()

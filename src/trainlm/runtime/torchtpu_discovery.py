@@ -7,7 +7,8 @@ facts; it does not select a production backend or certify hardware support.
 from __future__ import annotations
 
 from importlib import metadata
-from typing import Any
+import re
+from typing import Any, Mapping
 
 
 def _package_version(name: str) -> str | None:
@@ -130,3 +131,78 @@ def select_auto_backend(report: dict[str, Any], *, cuda_available: bool) -> str:
             "the torch/TorchTPU installation before using accelerator='auto'."
         )
     return "cuda" if cuda_available else "cpu"
+
+
+_WORKER_STATUSES = {
+    "unavailable", "api_unavailable", "query_failed", "allocation_failed",
+    "available_unverified", "ready",
+}
+_WORKER_TEXT_FIELDS = (
+    "device_name", "topology", "torch_version", "torch_tpu_version",
+    "libtpu_version", "error_type", "properties_error_type",
+)
+_WORKER_INT_FIELDS = (
+    "device_count_visible", "hbm_bytes_per_device", "hbm_bytes_per_chip",
+    "devices_per_chip",
+)
+_SAFE_REPORT_TEXT = re.compile(r"[A-Za-z0-9 .,_+()\-]{1,96}\Z")
+
+
+def normalize_worker_report(value: Any) -> dict[str, Any]:
+    """Accept only the bounded T1 report fields from a device-owning worker.
+
+    The normalized report can be persisted or shown to users without carrying
+    arbitrary worker fields, exception messages, addresses or credentials.
+    """
+    invalid = {"schema_version": 1, "source": "torchtpu_discovery",
+               "status": "invalid_report"}
+    if (not isinstance(value, Mapping)
+            or type(value.get("schema_version")) is not int
+            or value.get("schema_version") != 1):
+        return invalid
+    status = value.get("status")
+    allocation = value.get("allocation")
+    device_type = value.get("device_type")
+    if (not isinstance(status, str) or status not in _WORKER_STATUSES
+            or not isinstance(allocation, str)
+            or allocation not in {"not_run", "passed", "failed"}
+            or device_type is not None and (
+                not isinstance(device_type, str)
+                or device_type not in {"cpu", "cuda", "xla", "tpu"}
+            )):
+        return invalid
+    if status == "ready" and (device_type != "tpu" or allocation != "passed"):
+        return invalid
+    if status == "allocation_failed" and allocation != "failed":
+        return invalid
+    if status in {"unavailable", "api_unavailable", "query_failed",
+                  "available_unverified"} and allocation != "not_run":
+        return invalid
+    report: dict[str, Any] = {
+        "schema_version": 1,
+        "source": "torchtpu_discovery",
+        "status": status,
+        "device_type": device_type,
+        "allocation": allocation,
+    }
+    for key in _WORKER_INT_FIELDS:
+        field = value.get(key)
+        if field is not None and (type(field) is not int or field < 0):
+            return invalid
+        report[key] = field
+    if status == "ready" and not report["device_count_visible"]:
+        return invalid
+    for key in _WORKER_TEXT_FIELDS:
+        field = value.get(key)
+        if key == "topology" and isinstance(field, (tuple, list)):
+            if (len(field) > 8 or not all(type(part) is int and part > 0
+                                            for part in field)):
+                return invalid
+            report[key] = list(field)
+            continue
+        if field is not None and (
+            not isinstance(field, str) or _SAFE_REPORT_TEXT.fullmatch(field) is None
+        ):
+            return invalid
+        report[key] = field
+    return report

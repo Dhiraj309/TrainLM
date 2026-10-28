@@ -21,6 +21,7 @@ from importlib import metadata
 import platform
 import re
 import sys
+import tempfile
 
 
 def _parse_args() -> argparse.Namespace:
@@ -45,6 +46,11 @@ def _parse_args() -> argparse.Namespace:
         "--allow-cpu",
         action="store_true",
         help="Allow CPU for a local script check; this is not TPU evidence.",
+    )
+    parser.add_argument(
+        "--report-json",
+        type=Path,
+        help="Write the bounded device-owning discovery report as JSON.",
     )
     args = parser.parse_args()
     if args.steps < 1:
@@ -78,9 +84,23 @@ def _select_device(torch: object, args: argparse.Namespace) -> None:
     source = Path(__file__).resolve().parents[1] / (
         "src/trainlm/runtime/torchtpu_discovery.py"
     )
-    discover = runpy.run_path(str(source))["discover_tpu"]
+    contract = runpy.run_path(str(source))
+    discover = contract["discover_tpu"]
     report = discover(torch)
-    print("tpu_report=" + json.dumps(report, sort_keys=True))
+    normalized = contract["normalize_worker_report"](report)
+    print("tpu_report=" + json.dumps(normalized, sort_keys=True))
+    if args.report_json is not None:
+        destination = args.report_json
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=destination.parent,
+            prefix=destination.name + ".", suffix=".tmp", delete=False,
+        ) as handle:
+            json.dump(normalized, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+            temporary = Path(handle.name)
+        temporary.replace(destination)
+        print("report_json=written")
     if report["status"] == "ready":
         print("tpu_detection=PASS (native PyTorch TPU tensor allocation)")
         if args.device == "auto":

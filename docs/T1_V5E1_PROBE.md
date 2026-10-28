@@ -28,6 +28,15 @@ CPU success is not TPU evidence.
 python examples/torchtpu_t1_v5e1_probe.py
 ```
 
+To save only the bounded discovery result observed inside the probe process,
+use `--report-json` with a local artifact path. The report is written after
+device discovery, before the model smoke; a `ready` report alone does not mean
+the forward, backward or optimizer checks passed.
+
+```bash
+python examples/torchtpu_t1_v5e1_probe.py --report-json t1_worker_discovery.json
+```
+
 The script refuses `cpu` unless `--allow-cpu` is explicitly supplied, so an
 unnoticed CPU fallback cannot be reported as TPU success.
 

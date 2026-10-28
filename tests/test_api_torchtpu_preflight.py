@@ -58,3 +58,32 @@ def test_auto_does_not_fall_back_to_cpu_when_native_tpu_detected(monkeypatch):
     trainer.args = TrainLMTrainingArguments(accelerator="auto")
     with pytest.raises(RuntimeError, match="Native TorchTPU was detected"):
         trainer._make_runtime()
+
+
+def test_worker_report_flows_into_result_and_explanation(monkeypatch, tmp_path):
+    monkeypatch.setattr(api, "discover_tpu", lambda _torch, **_kwargs: _tpu_report())
+    trainer = TrainLMTrainer(
+        model=ModelSourceConfig(
+            provider="huggingface", initialization="pretrained",
+            name_or_path="org/model", revision="a" * 40,
+        ),
+        train_dataset=tmp_path / "train",
+        args=TrainLMTrainingArguments(accelerator="tpu", max_steps=1),
+    )
+    worker_report = {
+        "schema_version": 1, "status": "ready", "device_type": "tpu",
+        "allocation": "passed", "device_name": "TPU v5e",
+        "device_count_visible": 1,
+        "secret_field": "must_not_escape",
+    }
+    result = trainer._consume_tpu_result({
+        "worker_summary": {"steps": 1, "native_tpu_report": worker_report},
+        "metrics": [],
+    })
+    normalized = result["worker_summary"]["native_tpu_report"]
+    assert normalized["status"] == "ready"
+    assert "must_not_escape" not in json.dumps(result)
+    assert trainer.preflight()["native_tpu_worker"] == normalized
+    assert trainer.explain(include_hardware=True)["preflight"][
+        "native_tpu_worker"
+    ] == normalized
