@@ -54,7 +54,7 @@ public workflow supplies a model/config, train and evaluation datasets, and
 familiar training arguments. Worker launch, PJRT/ranks, topology discovery,
 manifest staging, process cleanup, and stage-log parsing remain private.
 
-## Historical XLA-era implementation: public training and data path
+## Implemented public training and data path (historical XLA-era status)
 
 | Status | Feature | Current state |
 | --- | --- | --- |
@@ -70,7 +70,7 @@ manifest staging, process cleanup, and stage-log parsing remain private.
 | `[x]` | Model revision handling | Mutable model selectors are resolved before TPU launch; explicit commit SHAs support offline/cache-only launches. |
 | `[~]` | End-to-end TPU lifecycle | Software plumbing exists, but the latest 135M notebook path still needs an owner-run Kaggle v5e-8 completion after the config-source coordinator fix. |
 
-## Historical XLA-era implementation: runtime, checkpoint, and optimization
+## Implemented runtime, checkpoint, and optimization foundations (historical XLA-era status)
 
 | Status | Feature | Current state / remaining evidence |
 | --- | --- | --- |
@@ -94,7 +94,9 @@ manifest staging, process cleanup, and stage-log parsing remain private.
 | `[x]` | Benchmark/release contracts | Parity, numerical alignment, stability, HLO, scaling, export, repeated-run, and support-manifest validators exist. |
 | `[ ]` | Performance certification | No current result may be marked certified until the locked v5e gates and required evidence artifacts pass. |
 
-## Historical XLA backlog (not the active TorchTPU priority order)
+## Immediate execution-preserving backlog (priority order)
+
+> **Historical XLA backlog:** this is not the active TorchTPU priority order.
 
 | Priority | Status | Task | Completion gate |
 | --- | --- | --- | --- |
@@ -115,7 +117,9 @@ manifest staging, process cleanup, and stage-log parsing remain private.
 | P2 | `[ ]` | Pipeline parallelism | 1F1B/interleaved schedule with an explicit bubble and memory model. |
 | P2 | `[ ]` | Weight-rematerialized TP | Research prototype only after conventional TP×FSDP is stable. |
 
-## Deferred architecture research (not in the active T0–T11 queue)
+## Architecture-changing backlog (TrainLM Lab, not optimizer transforms)
+
+> **Deferred research:** this section is outside the active T0–T11 queue.
 
 | Priority | Status | Feature | Direction |
 | --- | --- | --- | --- |
@@ -154,7 +158,9 @@ manifest staging, process cleanup, and stage-log parsing remain private.
 | P3 | `[ ]` | Runtime recommendations | Turn diagnosed HBM/input/communication gaps into benchmarkable planner candidates. |
 | P3 | `[ ]` | Closed-loop autotuning | Analyzer → plan → run → telemetry → candidate benchmark → retained plan, with rollback and evidence. |
 
-## Historical XLA validation procedure (not TorchTPU validation)
+## Next owner-run TPU procedure
+
+> **Historical XLA validation procedure:** this does not describe TorchTPU validation.
 
 1. Use the owner-approved validation revision from that XLA-era procedure
    (ideally the latest merged `main` after PR #18) in a fresh Kaggle TPU
