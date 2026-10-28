@@ -8,6 +8,8 @@ JAX, libtpu, or profiling packages installed.
 
 ## Proposed native TorchTPU migration profile
 
+The source-level salvage classification is recorded in [the T0.1 inventory](TORCHTPU_SALVAGE_INVENTORY.md).
+
 [The T0–T11 rebaseline](TORCHTPU_REBASELINE.md) targets native TorchTPU
 rather than PyTorch/XLA as the long-term TPU backend. The existing matrix
 below remains the documented CPU/CUDA/XLA profile, **not** a verified
@@ -25,6 +27,8 @@ Do not guess package versions or assume Pallas/Helion/Tokamax compatibility.
 | CUDA portability | 3.13 | 2.13.0 | 5.15.0 | Official matching CUDA wheel | Smoke when available |
 | TPU XLA stable | 3.10–3.13 | 2.9.0 | 5.15.0 | torch-xla 2.9.0, libtpu 0.0.21 | Pending M5 TPU validation |
 | TPU XLA + Pallas | 3.10–3.13 | 2.9.0 | 5.15.0 | XLA/libtpu above, JAX/jaxlib 0.7.1 | Pending M5/kernel validation |
+
+The checked-in CI workflow currently installs the unconstrained development extra on Python 3.11; the minimum/current profiles below are documented compatibility targets, not both exercised by that workflow. The T0.1 CPU baseline was separately run in Python 3.12.14.
 
 The broad core package contract is PyTorch `>=2.9,<2.14`, Transformers
 `>=5.0,<6`, and Hugging Face Hub `>=1.0,<2`. Exact constraint profiles are the
