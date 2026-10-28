@@ -39,6 +39,12 @@
   TPU lifecycle remain unverified. Current
   `accelerator="auto"` selects only CUDA/CPU; `torch<2.14` excludes the
   successful standalone probe's torch version. Neither gap is fixed yet.
+- T1.4 has a single-host v5e-8 opt-in distributed probe and copyable notebook.
+  Parent-side TorchTPU launch preparation precedes worker spawning; the probe
+  checks topology structure and address count without displaying coordinator
+  addresses, then reconciles per-rank `tpu_dist` sum all-reduce results.
+  CPU contract tests and read-only inspection pass. No v5e-8 run, multi-host
+  support, gradient-correct DP, or native trainer integration is claimed.
 
 ## Historical XLA development record
 

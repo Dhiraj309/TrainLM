@@ -144,9 +144,15 @@ These are T1 work packages, not new branches or renumbered GitHub PRs:
    eager/compile child processes have timeouts and surface partial output.
    Resolve the native dependency profile and verify clean install/import,
    repeated runs, cleanup and CPU regression gates on the chosen profile.
-4. **T1.4 — distributed entry feasibility:** on v5e-8, verify supported
-   launch preparation, actual rank/world topology and a simple collective.
-   Full gradient-correct DP remains T4.
+4. **T1.4 — distributed entry feasibility (partial):** the opt-in
+   [single-host v5e-8 notebook](../notebooks/TorchTPU_T1_v5e8_Distributed_Probe.ipynb)
+   uses the [probe script](../examples/torchtpu_t1_distributed_probe.py).
+   Its parent process calls `set_tpu_launch_env` before spawning workers;
+   source-level checks reject inconsistent topology, while each worker
+   initializes `tpu_dist`, reports rank/world and performs one sum all-reduce.
+   The launcher reconciles every rank and bounds execution/cleanup. CPU
+   contracts pass; actual v5e-8 launch and collective evidence are pending.
+   This probe assumes one host and does not establish gradient-correct DP (T4).
 5. **T2–T3:** connect discovery and the native backend to the familiar trainer;
    prove causal-LM/data correctness. T4–T11 retain their original semantic
    gates, with the utilities above assigned to them.
@@ -157,7 +163,7 @@ that hardware. No need to wait for eight devices to implement/test pure
 discovery contracts, and no distributed certification from a single rank.
 
 Before dependencies change or a provider defaults on, require explicit
-version/hardware evidence. The next implementation scope is shared discovery,
-reporting and notebook integration, followed by the verified install profile.
-Current research does not implement native training, change dependency pins,
-or authorize a milestone branch/merge.
+version/hardware evidence. Next, run the T1.2/T1.3 owner hardware checks and
+the opt-in T1.4 collective on an isolated v5e-8 host; use the results to
+decide the native dependency profile and T2 integration scope. Current work
+does not implement native training or change dependency pins.
