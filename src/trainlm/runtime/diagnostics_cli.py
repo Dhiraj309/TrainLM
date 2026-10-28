@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 import json
+from importlib import metadata
 from pathlib import Path
+import re
 import runpy
 import subprocess
 import sys
 from typing import Any
+
+from packaging.requirements import Requirement
+from packaging.utils import canonicalize_name
+from packaging.version import InvalidVersion, Version
 
 from .torchtpu_discovery import discover_tpu, normalize_worker_report
 
@@ -19,7 +25,7 @@ def _source_root() -> Path | None:
 
 def _package_profile(root: Path | None) -> dict[str, Any]:
     if root is None:
-        return {"status": "source_unavailable", "scope": "installed_metadata_only"}
+        return _installed_package_profile()
     script = root / "examples/torchtpu_t1_install_preflight.py"
     try:
         inspect = runpy.run_path(str(script))["inspect_profile"]
@@ -32,6 +38,54 @@ def _package_profile(root: Path | None) -> dict[str, Any]:
         "issues": report["issues"],
         "installed_versions": report["installed_versions"],
         "pip_check": report["pip_check"],
+    }
+
+
+def _installed_package_profile() -> dict[str, Any]:
+    """Check installed wheel metadata when no editable source tree is present."""
+    try:
+        trainlm = metadata.distribution("trainlm")
+    except metadata.PackageNotFoundError:
+        return {"status": "incomplete", "scope": "installed_metadata_only",
+                "issue": "trainlm_not_installed"}
+    versions: dict[str, str | None] = {}
+    checks = []
+    for entry in trainlm.requires or ():
+        try:
+            requirement = Requirement(entry)
+            if requirement.marker and not requirement.marker.evaluate():
+                continue
+            name = canonicalize_name(requirement.name)
+            try:
+                installed = str(Version(metadata.version(name)))
+            except (metadata.PackageNotFoundError, InvalidVersion):
+                installed = None
+            versions[name] = installed
+            result = ("direct_url_not_checked" if requirement.url else
+                      "missing" if installed is None else
+                      "matched" if Version(installed) in requirement.specifier else "mismatch")
+            checks.append({"package": name, "required": str(requirement.specifier) or "any",
+                           "installed": installed, "status": result})
+        except Exception:
+            checks.append({"status": "invalid_requirement"})
+    pip_status = "passed"
+    try:
+        checked = subprocess.run([sys.executable, "-m", "pip", "check"],
+                                 capture_output=True, text=True, timeout=45)
+        pip_status = "passed" if checked.returncode == 0 else "conflicts" if checked.returncode == 1 else "failed"
+    except subprocess.TimeoutExpired:
+        pip_status = "timeout"
+    except OSError:
+        pip_status = "failed"
+    incompatible = any(item.get("status") in {"mismatch", "invalid_requirement"}
+                       for item in checks) or pip_status == "conflicts"
+    incomplete = any(item.get("status") == "missing" for item in checks)
+    return {
+        "status": "incompatible" if incompatible else "incomplete" if incomplete or pip_status != "passed" else "metadata_compatible",
+        "scope": "installed_metadata_only",
+        "trainlm_version": trainlm.version,
+        "requirements": checks,
+        "pip_check": {"status": pip_status},
     }
 
 

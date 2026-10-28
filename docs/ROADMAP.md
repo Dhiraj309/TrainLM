@@ -56,6 +56,8 @@ TorchTPU support. “Implemented” means present in that historical code path;
   Software follow-up adds `trainlm doctor` as one read-only report for package
   compatibility and native TPU discovery. It does not install packages or
   train; dependency and hardware support remain evidence-gated.
+  Installed wheels use their declared package requirements; editable/source
+  installs compare against the checked-out project files.
   The 18 old PR cards are candidates, not the active queue.
 
 ## Historical native-backend transition note

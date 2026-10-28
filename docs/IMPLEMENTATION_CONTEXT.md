@@ -82,8 +82,9 @@
   the native dependency profile, then scope T2 using the shared report.
 - `trainlm doctor` adds a one-command read-only package/runtime report to the
   CLI, reusing the T1 profile and hardware discovery contracts. From a source
-  checkout it records the Git revision. It does not install packages or train;
-  incompatibility remains visible for owner review.
+  checkout it records the Git revision; an installed wheel uses its declared
+  requirements. It does not install packages or train; incompatibility remains
+  visible for owner review.
 
 ## Historical XLA development record
 
