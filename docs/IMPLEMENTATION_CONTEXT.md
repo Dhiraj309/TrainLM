@@ -13,15 +13,16 @@
 - T0.1 code inventory is recorded in `TORCHTPU_SALVAGE_INVENTORY.md`. The
   mapped legacy cards remain candidates, not an approved implementation queue.
 - Current implementation backend: PyTorch/XLA. Target: native TorchTPU on
-  Kaggle TPU v5e-8. No TorchTPU install profile or hardware certification is
-  established.
+  Cloud TPU. No TorchTPU install profile or hardware certification is
+  established. Hosted Kaggle documents v5e-8 and hosted Colab TPU v2; use a
+  one-chip Cloud TPU v5e VM for the planned v5e-1 single-device evidence.
 - The known PR #18 CPU snapshot result is 700 passed / 21 failed under Python
   3.12.14, torch 2.9.0+cpu, Transformers 5.0.0, Hub 1.3.5, pytest 9.1.1. It
   has not been rerun on current `main`.
-- T1 policy: use v5e-1 first for single-device import, device operations,
-  autograd, optimizer, and compile checks. Use v5e-8 for collective, DP8,
-  sharding, distributed-checkpoint, or scaling requirements. No TorchTPU probe
-  has run yet; this workspace has no PyTorch installed.
+- T1 policy: use a one-chip Cloud TPU v5e VM first for single-device import,
+  device operations, autograd, optimizer, and compile checks. Use v5e-8 for
+  collective, DP8, sharding, distributed-checkpoint, or scaling requirements.
+  No TorchTPU probe has run yet; this workspace has no PyTorch installed.
 - [T1 v5e-1 probe guide](T1_V5E1_PROBE.md) and the
   [Kaggle/Colab notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb) describe
   the prepared synthetic smoke. Do not add guessed dependency pins or support
