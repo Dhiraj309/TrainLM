@@ -24,6 +24,8 @@ FATAL = runpy.run_path(str(Path(__file__).with_name("torchtpu_probe_process.py")
 _SMOKE_MARKERS = ("forward=PASS", "autograd=PASS", "optimizer_update=PASS",
                   "result=single-device smoke passed; no distributed or performance claim")
 _FATAL_LABELS = {"core_dump", "shutdown_hang", "python_fatal"}
+_DISCOVERY_STATUSES = {"unavailable", "api_unavailable", "query_failed",
+                       "allocation_failed", "available_unverified", "ready"}
 _VERSION = re.compile(r"[0-9][A-Za-z0-9.!+_-]{0,95}\Z")
 _PACKAGES = {"trainlm", "torch", "torch-tpu", "libtpu", "transformers",
              "huggingface-hub", "pyyaml", "tpu-info", "torch-xla", "jax", "jaxlib"}
@@ -213,11 +215,47 @@ def distributed_evidence(process: dict | None) -> dict:
     return result
 
 
+def doctor_evidence(process: dict | None, *, source_revision: str) -> dict:
+    """Record the doctor command outcome separately from findings it reports."""
+    if process is None:
+        return {"status": "not_run"}
+    raw = process.get("stdout", "")
+    try:
+        payload = json.loads(raw) if isinstance(raw, str) and len(raw) <= 131072 else None
+    except ValueError:
+        payload = None
+    if not isinstance(payload, dict) or payload.get("schema_version") != 1:
+        return {"status": "invalid_report"}
+    package = payload.get("package_profile")
+    native = payload.get("native_tpu")
+    if not isinstance(package, dict) or not isinstance(native, dict):
+        return {"status": "invalid_report"}
+    package_status = package.get("status")
+    allowed = {"metadata_compatible", "incomplete", "incompatible", "check_failed",
+               "source_unavailable"}
+    if not isinstance(package_status, str) or package_status not in allowed:
+        return {"status": "invalid_report"}
+    native_status = native.get("status")
+    if not isinstance(native_status, str) or native_status not in _DISCOVERY_STATUSES:
+        return {"status": "invalid_report"}
+    revision = payload.get("source_revision")
+    matched = revision == source_revision
+    exit_code = process.get("exit_code")
+    return {
+        "status": "completed" if type(exit_code) is int and exit_code in (0, 1) else "failed",
+        "exit_code": exit_code if type(exit_code) is int else None,
+        "diagnostic_status": payload.get("status"),
+        "source_revision_matches": matched,
+        "package_profile_status": package_status,
+        "native_tpu_status": native_status,
+    }
+
+
 def build_evidence(
     *, source_revision: str, notebook_host: str,
     package_process: dict | None = None, eager_process: dict | None = None,
     compile_process: dict | None = None, lifecycle_report: dict | None = None,
-    distributed_process: dict | None = None,
+    distributed_process: dict | None = None, doctor_process: dict | None = None,
 ) -> dict[str, Any]:
     """Build a new snapshot; callers must not mix results from different runs."""
     if not isinstance(source_revision, str) or not re.fullmatch(
@@ -232,6 +270,7 @@ def build_evidence(
         "notebook_host": notebook_host if notebook_host in {"Colab", "Kaggle"} else "other",
         "native_training": "not_integrated", "review": "owner_review_required",
         "checks": {
+            "doctor": doctor_evidence(doctor_process, source_revision=source_revision),
             "package_profile": profile_evidence(package_process),
             "eager": smoke_evidence(eager_process),
             "compile": smoke_evidence(compile_process, compiled=True),
