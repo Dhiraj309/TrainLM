@@ -14,6 +14,7 @@ from .api import (
     _load_public_config,
 )
 from .data import PackedBinDataset
+from .runtime.diagnostics_cli import collect_diagnostics
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -36,6 +37,9 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Validate inputs and print the trainer explanation without training.",
     )
+    commands.add_parser(
+        "doctor", help="Report package compatibility and available TPU runtime facts."
+    )
     return parser
 
 
@@ -54,6 +58,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     parser = _parser()
     args = parser.parse_args(argv)
+    if args.command == "doctor":
+        report = collect_diagnostics()
+        print(json.dumps(report, sort_keys=True))
+        return 1 if report["status"] != "diagnostics_complete" else 0
     if args.command != "train":  # pragma: no cover - argparse owns this guard
         raise AssertionError(f"Unexpected command: {args.command}")
     if args.dry_run and args.resume_from_checkpoint is not None:

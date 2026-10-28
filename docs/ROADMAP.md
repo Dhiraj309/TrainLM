@@ -53,6 +53,9 @@ TorchTPU support. “Implemented” means present in that historical code path;
   incompatible (`trainlm` absent, torch 2.14.1+cpu outside `<2.14`, and
   `pip check` conflicts); explicit compile, lifecycle and T1.4 collective
   remain unrun. Keep the native dependency profile unresolved.
+  Software follow-up adds `trainlm doctor` as one read-only report for package
+  compatibility and native TPU discovery. It does not install packages or
+  train; dependency and hardware support remain evidence-gated.
   The 18 old PR cards are candidates, not the active queue.
 
 ## Historical native-backend transition note

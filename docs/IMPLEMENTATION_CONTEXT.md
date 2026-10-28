@@ -80,6 +80,10 @@
   PyTorch and pytest are unavailable here, so full trainer tests and real
   browser/TPU validation remain pending. Next: owner-run T1 evidence, review
   the native dependency profile, then scope T2 using the shared report.
+- `trainlm doctor` adds a one-command read-only package/runtime report to the
+  CLI, reusing the T1 profile and hardware discovery contracts. From a source
+  checkout it records the Git revision. It does not install packages or train;
+  incompatibility remains visible for owner review.
 
 ## Historical XLA development record
 
