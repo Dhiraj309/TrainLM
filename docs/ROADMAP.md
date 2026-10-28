@@ -24,8 +24,8 @@ DP8 global valid-token gradient correctness, exact resume and T0.1 audit.
 Existing M0–M14 work is the **current/historical PyTorch/XLA baseline**,
 not evidence of native TorchTPU compatibility. The 18 XLA-oriented PR cards
 must be remapped during T0 with owner approval; retain their sequential
-multi-PR, multi-commit workflow. Do not create a new branch until the legacy
-PR #18 is reviewed and merged or the owner explicitly approves a transition.
+multi-PR, multi-commit workflow. PR #18 merged on 2026-10-28; audit the
+merged tree before activating the first new implementation branch.
 
 ## Product goal
 
@@ -51,7 +51,7 @@ is not a successful framework.
 Status flags: `[ ]` not started, `[~]` in progress or awaiting validation,
 `[x]` complete, and `[d]` intentionally deferred.
 
-- Only one **new story PR** may be active at a time. The existing PR #18 is a grandfathered multi-story milestone PR; finish or close it before starting the next story branch.
+- Only one **new story PR** may be active at a time. Legacy PR #18 is merged; complete the post-merge audit before starting the first numbered story branch.
 - Every progress change must update the milestone overview, PR overview, and
   detailed milestone status in the same commit.
 - Every future **PR** is one cohesive deliverable containing multiple small,
@@ -189,12 +189,12 @@ Release evidence uses steady-state medians from three matched runs plus one
 
 ### Transition from historic milestone PRs
 
-The existing [PR #18](https://github.com/Dhiraj309/TrainLM/pull/18),
-`milestone/m8-m9-optimization-core`, must be conflict-resolved, fully
-reviewed, validated and **merged to `main`** before the new sequential PR
-series starts. Its pre-existing `milestone/*` branches are historical; do
-not continue or derive new PRs from them. Preserve historical work and
-evidence, not old future PR scheduling conventions.
+Legacy [PR #18](https://github.com/Dhiraj309/TrainLM/pull/18) merged to
+`main` on 2026-10-28 at `23959d29434fd2ae3f78b20469e1d61c6b1e18c9`. Its
+pre-existing `milestone/*` branches are historical; do not derive new PRs
+from them. T0.1's source classification is in
+[`TORCHTPU_SALVAGE_INVENTORY.md`](TORCHTPU_SALVAGE_INVENTORY.md). Review the
+post-merge audit and remap the XLA-oriented queue before choosing a new branch.
 
 ### Multiple meaningful PRs, each with multiple meaningful commits
 
@@ -214,7 +214,7 @@ explicitly approves a documented change of plan. PR numbers are assigned
 by GitHub; the roadmap numbers below are *planning IDs only*.
 
 Future branch format is `<type>/<NN>-<deliverable>`, starting at `01`
-**after PR #18 merges**, e.g. `perf/03-chunked-loss-no-full-logits`.
+after the post-merge audit is approved, e.g. `perf/03-chunked-loss-no-full-logits`.
 Use `fix`, `feature`, `perf`, `benchmark`, `validation`, `docs`,
 `ci`, `release` according to the predominant deliverable. Preserve
 M0–M17 milestone IDs as lineage in descriptions, not legacy branch names.
@@ -256,7 +256,7 @@ scope/non-goals, acceptance/verification gates and fallback in
 [`docs/PR_DELIVERY_PLAN.md`](PR_DELIVERY_PLAN.md#detailed-pr-cards).
 The same plan also defines the full [PR title/body contract](PR_DELIVERY_PLAN.md#exact-pr-title-description-and-commit-trace-contract)
 and [additional measured-only optimization experiments](PR_DELIVERY_PLAN.md#additional-engineering-optimizations-to-evaluate-not-assumed-wins).
-**Do not open these candidate branches before legacy PR #18 merges.**
+**Do not open these candidate branches before the post-merge audit and PR queue remapping are approved.**
 
 ### Lifecycle and enforcement
 

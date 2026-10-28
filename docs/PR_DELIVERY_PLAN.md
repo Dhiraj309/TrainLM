@@ -1,10 +1,10 @@
 # TrainLM sequential pull-request delivery plan
 
-> **Scope:** Candidate PRs **after** the existing legacy
-> [PR #18](https://github.com/Dhiraj309/TrainLM/pull/18) is conflict-resolved,
-> validated and merged into `main`. These are *planning identifiers*, not
-> actual GitHub PR numbers, existing branches or commitments that a milestone
-> is incomplete. Resolve the post-merge audit before creating the first branch.
+> **Scope:** Candidate PRs after legacy [PR #18](https://github.com/Dhiraj309/TrainLM/pull/18)
+> merged into `main` on 2026-10-28. These are planning identifiers, not actual
+> GitHub PR numbers or commitments. T0.1's read-only inventory is recorded in
+> `TORCHTPU_SALVAGE_INVENTORY.md`; review and remap this XLA-oriented queue
+> before creating the first implementation branch.
 
 ## Native TorchTPU T0–T11 rebaseline: proposed PR remapping
 
@@ -60,9 +60,9 @@ verify new `main` → create PR-plan 02 branch → repeat.**
 - Block rather than silently skip a mandatory acceptance criterion. If a
   performance gate is unattainable, document the measured failure and obtain
   an explicit owner-approved *planning revision* before changing the next PR.
-- The legacy PR #18 has been observed to conflict with current `main`;
-  reconcile without discarding either line's accepted changes. A successful
-  GitHub merge, not the mere absence of local conflicts, unlocks the queue.
+- Legacy PR #18 is merged. Its tree and owner-run TPU evidence still require
+  the post-merge audit; a successful merge does not establish native TorchTPU
+  compatibility or make the XLA-oriented candidate queue automatically valid.
 
 ## Planned PR index
 
@@ -87,9 +87,9 @@ verify new `main` → create PR-plan 02 branch → repeat.**
 | 17 | `ci/17-release-ci-preemption-evidence` | ci(release): enforce reproducibility, hardware gates and recovery | P1 | M14-F3-F4 |
 | 18 | `release/18-dense-ar-v1-support-certification` | release(v1): publish dense-AR support, limitations and evidence | P1 | M14-F5 |
 
-**Candidate-only caveat:** The legacy PR #18 already contains partial or
-complete software implementations across M8–M14. After merge, **audit each
-entry** against current `main` and real TPU evidence. Mark satisfied
+**Candidate-only caveat:** Legacy PR #18 is merged and its code is in current
+`main`. T0.1 has started the source-level salvage audit; **audit each entry**
+against the merged tree and real TPU evidence. Mark satisfied
 deliverables with evidence, consolidate or resequence redundant candidates in
 a separately reviewed plan update, and number the *first newly activated
 real branch* `01`. Don't implement the same code again to satisfy a table.

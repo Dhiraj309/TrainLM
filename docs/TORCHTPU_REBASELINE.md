@@ -49,7 +49,9 @@ verified branch-write exercise. Do not claim current shell authentication
 without checking. Managed network proxy variables and credentials must not
 be modified; request supported per-command network permission where needed.
 
-The path-level read-only salvage classification is in [the T0.1 inventory](TORCHTPU_SALVAGE_INVENTORY.md). PR #18 is merged; this inventory does not establish native TorchTPU compatibility.
+The path-level read-only salvage classification is in
+[the T0.1 inventory](TORCHTPU_SALVAGE_INVENTORY.md). PR #18 is merged;
+this inventory does not establish native TorchTPU compatibility.
 
 ## Layered target architecture
 
@@ -120,9 +122,11 @@ verified merged `main` only after the preceding PR merges**. Branch name,
 PR title, description and commit scope must agree. Preserve commit history
 by default; no direct main pushes, force-pushes, auto-merges or stacked PRs.
 
-## T0.1 — next Codex discovery task
+## T0.1 — read-only Codex discovery task
 
-**Read-only until explicit owner approval for modifications and Git writes.**
+T0.1 records source-level findings and proposes follow-up work. The inventory
+is not an implementation plan approval; code, dependency, and architecture
+changes still require owner review.
 
 1. Verify repository, GitHub identity, permissions and push readiness without
    pushing; inspect PR #18 and the PR #16 code now present in merged `main`.
