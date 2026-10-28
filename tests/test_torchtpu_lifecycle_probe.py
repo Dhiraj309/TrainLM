@@ -92,7 +92,7 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(report["status"], "failed")
         self.assertEqual(report["completed_attempts"], 1)
         self.assertEqual(report["attempts"][0]["status"], "timeout")
-        self.assertEqual(signals, [(222, signal.SIGTERM)])
+        self.assertEqual(signals, [(222, signal.SIGTERM), (222, signal.SIGKILL)])
         self.assertEqual(len(launches), 1)
 
     def test_changed_hardware_fails_repeat_consistency(self):
@@ -136,7 +136,26 @@ class LifecycleTests(unittest.TestCase):
             saved = json.loads((Path(report["artifact_dir"]) / "summary.json").read_text())
         self.assertEqual(report, saved)
         self.assertEqual(report["attempts"][0]["status"], "interrupted")
-        self.assertEqual(signals, [(444, signal.SIGTERM)])
+        self.assertEqual(signals, [(444, signal.SIGTERM), (444, signal.SIGKILL)])
+
+    def test_fatal_teardown_fails_even_with_success_markers_and_zero_exit(self):
+        class FatalProcess(FinishedProcess):
+            def communicate(self, timeout):
+                stdout, _ = super().communicate(timeout)
+                return stdout, "RAW: Dumping core secret=do_not_export\n"
+
+        def launch(command, **kwargs):
+            destination = Path(command[command.index("--report-json") + 1])
+            destination.write_text(json.dumps(ready_report()))
+            return FatalProcess(777)
+
+        with TemporaryDirectory() as directory:
+            report = RUN(Path(directory), process_factory=launch,
+                         kill_group=lambda *args: None)
+        self.assertEqual(report["status"], "failed")
+        self.assertEqual(report["completed_attempts"], 1)
+        self.assertEqual(report["attempts"][0]["fatal_markers"], ["core_dump"])
+        self.assertNotIn("do_not_export", json.dumps(report))
 
     def test_missing_success_markers_fail_without_echoing_worker_error(self):
         class IncompleteProcess:

@@ -12,7 +12,6 @@ import argparse
 import json
 import os
 from pathlib import Path
-import re
 import runpy
 import signal
 import subprocess
@@ -25,35 +24,14 @@ PROBE = ROOT / "examples/torchtpu_t1_v5e1_probe.py"
 NORMALIZE = runpy.run_path(
     str(ROOT / "src/trainlm/runtime/torchtpu_discovery.py")
 )["normalize_worker_report"]
+RUN_PROCESS = runpy.run_path(
+    str(ROOT / "src/trainlm/runtime/torchtpu_probe_process.py")
+)["run_probe_process"]
 PASS_MARKERS = (
     "tpu_detection=PASS (native PyTorch TPU tensor allocation)",
     "forward=PASS", "autograd=PASS", "optimizer_update=PASS",
     "result=single-device smoke passed; no distributed or performance claim",
 )
-
-
-def _terminate_group(process: object, kill_group: object) -> None:
-    for sig in (signal.SIGTERM, signal.SIGKILL):
-        try:
-            kill_group(process.pid, sig)
-        except ProcessLookupError:
-            pass
-        try:
-            process.communicate(timeout=5)
-            return
-        except subprocess.TimeoutExpired:
-            continue
-        except Exception:
-            continue
-
-
-def _error_type(stderr: str) -> str | None:
-    if "PyTorch import failed:" in stderr:
-        return "ImportError"
-    matches = re.findall(
-        r"(?:^|\n)([A-Za-z_][A-Za-z0-9_]*(?:Error|Exception)):", stderr
-    )
-    return matches[-1] if matches else None
 
 
 def run_once(
@@ -66,27 +44,12 @@ def run_once(
         sys.executable, str(PROBE), "--device", "tpu", "--steps", "1",
         "--report-json", str(report_path),
     ]
-    try:
-        process = process_factory(
-            command, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True, start_new_session=True,
-        )
-    except Exception as exc:
-        return {"attempt": index, "status": "failed", "report": None,
-                "error_type": type(exc).__name__}
-    try:
-        stdout, stderr = process.communicate(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        _terminate_group(process, kill_group)
-        return {"attempt": index, "status": "timeout", "report": None,
-                "error_type": "TimeoutExpired"}
-    except KeyboardInterrupt:
-        _terminate_group(process, kill_group)
-        raise
-    except Exception as exc:
-        _terminate_group(process, kill_group)
-        return {"attempt": index, "status": "failed", "report": None,
-                "error_type": type(exc).__name__}
+    process = RUN_PROCESS(command, cwd=ROOT, timeout=timeout,
+                          process_factory=process_factory, kill_group=kill_group)
+    if process["status"] in {"timeout", "interrupted"}:
+        return {"attempt": index, "status": process["status"], "report": None,
+                "error_type": process["error_type"],
+                "cleanup_completed": process["cleanup_completed"]}
 
     report = None
     if report_path.is_file():
@@ -94,20 +57,22 @@ def run_once(
             report = NORMALIZE(json.loads(report_path.read_text(encoding="utf-8")))
         except (OSError, ValueError):
             report = {"schema_version": 1, "status": "invalid_report"}
-    lines = set(stdout.splitlines())
+    lines = set(process["stdout"].splitlines())
     passed = (
-        process.returncode == 0
+        process["status"] == "completed"
         and report is not None and report["status"] == "ready"
         and all(marker in lines for marker in PASS_MARKERS)
     )
     return {
         "attempt": index,
         "status": "passed" if passed else "failed",
-        "exit_code": process.returncode,
+        "exit_code": process["exit_code"],
         "report": report,
         "missing_markers": [marker.split("=", 1)[0] for marker in PASS_MARKERS
                             if marker not in lines],
-        "error_type": _error_type(stderr),
+        "error_type": process["error_type"],
+        "fatal_markers": process["fatal_markers"],
+        "cleanup_completed": process["cleanup_completed"],
     }
 
 

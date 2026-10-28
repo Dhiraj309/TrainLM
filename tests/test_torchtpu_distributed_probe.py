@@ -1,10 +1,13 @@
 """Pure launch/worker contracts; hardware execution remains owner-run."""
 
 import json
+from contextlib import redirect_stdout
+import io
 import runpy
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 
 CONTRACT = runpy.run_path(
@@ -14,9 +17,35 @@ CONTRACT = runpy.run_path(
 INSPECT = CONTRACT["inspect_launch_environment"]
 PREPARE = CONTRACT["prepare_launch_environment"]
 SUMMARIZE = CONTRACT["summarize_workers"]
+LAUNCH = runpy.run_path(str(Path(__file__).resolve().parents[1]
+                           / "examples/torchtpu_t1_distributed_probe.py"))["launch"]
 
 
 class LaunchContractTests(unittest.TestCase):
+    def test_launcher_rejects_fatal_teardown_after_all_collectives_pass(self):
+        records = [{"rank": rank, "local_rank": rank, "world_size": 2,
+                    "collective": "passed"} for rank in range(2)]
+        process = {
+            "status": "failed", "exit_code": 0, "error_type": None,
+            "fatal_markers": ["core_dump"],
+            "stdout": "\n".join("TRAINLM_T1_DISTRIBUTED=" + json.dumps(record)
+                                for record in records),
+        }
+        contract = dict(CONTRACT, prepare_launch_environment=lambda *args: {
+            "status": "ready", "world_size": 2,
+        })
+        output = io.StringIO()
+        with patch.dict("sys.modules", {"torch": SimpleNamespace()}), patch.dict(
+            LAUNCH.__globals__, {"RUN_PROCESS": lambda *a, **kw: process,
+                                 "CONTRACT": contract}
+        ), redirect_stdout(output):
+            self.assertEqual(LAUNCH(2, 10), 1)
+        summary_line = output.getvalue().splitlines()[-1]
+        summary = json.loads(summary_line.removeprefix("collective_summary="))
+        self.assertEqual(summary["status"], "failed")
+        self.assertEqual(summary["reports_received"], 2)
+        self.assertEqual(summary["fatal_markers"], ["core_dump"])
+
     def test_complete_single_host_topology_redacts_addresses(self):
         secret = "private-coordinator.example:8471"
         env = {

@@ -12,7 +12,6 @@ import os
 from pathlib import Path
 import runpy
 import signal
-import subprocess
 import sys
 from datetime import timedelta
 
@@ -21,6 +20,9 @@ ROOT = Path(__file__).resolve().parents[1]
 CONTRACT = runpy.run_path(
     str(ROOT / "src/trainlm/runtime/torchtpu_distributed_probe.py")
 )
+RUN_PROCESS = runpy.run_path(
+    str(ROOT / "src/trainlm/runtime/torchtpu_probe_process.py")
+)["run_probe_process"]
 PREFIX = "TRAINLM_T1_DISTRIBUTED="
 
 
@@ -66,34 +68,32 @@ def launch(expected_world: int, timeout: int) -> int:
         "--nnodes=1", f"--nproc-per-node={expected_world}",
         str(Path(__file__).resolve()), "--worker",
     ]
-    process = subprocess.Popen(
-        command, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        text=True, start_new_session=True,
-    )
-    try:
-        stdout, _stderr = process.communicate(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        os.killpg(process.pid, signal.SIGTERM)
-        try:
-            process.communicate(timeout=5)
-        except subprocess.TimeoutExpired:
-            os.killpg(process.pid, signal.SIGKILL)
-            process.communicate()
-        print("result=timeout; worker process group terminated")
+    process = RUN_PROCESS(command, cwd=ROOT, timeout=timeout)
+    if process["status"] in {"timeout", "interrupted"}:
+        print("collective_summary=" + json.dumps({
+            key: process[key] for key in (
+                "status", "error_type", "cleanup_completed", "exit_code"
+            )
+        }, sort_keys=True))
         return 1
 
     records = []
-    for line in stdout.splitlines():
+    for line in process["stdout"].splitlines():
         if line.startswith(PREFIX):
             try:
-                records.append(json.loads(line[len(PREFIX):]))
-            except json.JSONDecodeError:
+                record = json.loads(line[len(PREFIX):])
+                if not isinstance(record, dict):
+                    raise ValueError("worker record must be an object")
+                records.append(record)
+            except ValueError:
                 print("result=malformed worker report")
                 return 1
     summary = CONTRACT["summarize_workers"](records, expected_world)
-    if process.returncode != 0:
+    if process["status"] != "completed":
         summary["status"] = "failed"
-        summary["worker_exit_code"] = process.returncode
+    summary["worker_exit_code"] = process["exit_code"]
+    summary["fatal_markers"] = process["fatal_markers"]
+    summary["error_type"] = process["error_type"]
     print("collective_summary=" + json.dumps(summary, sort_keys=True))
     return 0 if summary["status"] == "passed" else 1
 
@@ -112,7 +112,15 @@ def main() -> int:
     if args.inspect:
         print(json.dumps(CONTRACT["inspect_launch_environment"](os.environ), sort_keys=True))
         return 0
-    return launch(args.expected_world_size, args.timeout)
+    previous_handler = signal.signal(signal.SIGTERM, _interrupt_on_term)
+    try:
+        return launch(args.expected_world_size, args.timeout)
+    finally:
+        signal.signal(signal.SIGTERM, previous_handler)
+
+
+def _interrupt_on_term(_signum: int, _frame: object) -> None:
+    raise KeyboardInterrupt
 
 
 if __name__ == "__main__":
