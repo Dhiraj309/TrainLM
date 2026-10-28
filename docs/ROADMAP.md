@@ -57,7 +57,8 @@ TorchTPU support. “Implemented” means present in that historical code path;
   compatibility and native TPU discovery. It does not install packages or
   train; dependency and hardware support remain evidence-gated.
   Installed wheels use their declared package requirements; editable/source
-  installs compare against the checked-out project files.
+  installs compare against the checked-out project files. The v5e-1 notebook
+  invokes it directly from its source snapshot, without an installation step.
   The 18 old PR cards are candidates, not the active queue.
 
 ## Historical native-backend transition note

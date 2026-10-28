@@ -84,7 +84,9 @@
   CLI, reusing the T1 profile and hardware discovery contracts. From a source
   checkout it records the Git revision; an installed wheel uses its declared
   requirements. It does not install packages or train; incompatibility remains
-  visible for owner review.
+  visible for owner review. The v5e-1 notebook now invokes that same CLI from
+  its fresh checkout without installing the package, so its actual Colab
+  report can be compared with the separate eager-smoke evidence.
 
 ## Historical XLA development record
 
