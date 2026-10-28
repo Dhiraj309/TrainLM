@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, replace
+import json
 from pathlib import Path
 import re
 from typing import TYPE_CHECKING, Any, Literal
@@ -40,6 +41,7 @@ from trainlm.config import (
 )
 from trainlm.optimization import create_optimizer
 from trainlm.runtime import Runtime
+from trainlm.runtime.torchtpu_discovery import discover_tpu, select_auto_backend
 from trainlm.tasks import CausalLMTask
 from trainlm.training import Trainer as EngineTrainer
 from trainlm.training import (
@@ -415,7 +417,12 @@ class TrainLMTrainer:
                 "TrainLMTrainer; use accelerator='auto' for local execution."
             )
         if accelerator == "auto":
-            accelerator = "cuda" if torch.cuda.is_available() else "cpu"
+            report = discover_tpu(
+                torch, verify_allocation=False, include_properties=False
+            )
+            accelerator = select_auto_backend(
+                report, cuda_available=torch.cuda.is_available()
+            )
         if accelerator == "cuda" and not torch.cuda.is_available():
             raise RuntimeError("accelerator='cuda' requested but CUDA is unavailable.")
         precision = "bf16" if self.args.bf16 else "fp16" if self.args.fp16 else "fp32"
@@ -761,8 +768,26 @@ class TrainLMTrainer:
         torch.save(state, path)
         return path
 
+    def preflight(self) -> dict[str, Any]:
+        """Inspect native TPU availability without allocating or launching workers.
+
+        This parent-process snapshot cannot certify hardware, compilation or
+        native training. Device properties and allocation belong to a worker.
+        """
+        report = discover_tpu(torch, verify_allocation=False, include_properties=False)
+        return {
+            "schema_version": 1,
+            "requested_accelerator": self.args.accelerator,
+            "selected_backend": (
+                "xla" if self._tpu_coordinator is not None else self.runtime.name
+            ),
+            "native_tpu_training": "not_integrated",
+            "native_tpu": report,
+        }
+
     def explain(
-        self, *, format: Literal["dict", "json", "text"] = "dict", strict: bool = False
+        self, *, format: Literal["dict", "json", "text"] = "dict",
+        strict: bool = False, include_hardware: bool = False
     ) -> dict[str, Any] | str:
         """Explain capabilities and execution selection without launching work."""
 
@@ -798,6 +823,22 @@ class TrainLMTrainer:
             )
         if strict:
             report.require_supported()
+        if include_hardware:
+            preflight = self.preflight()
+            if format == "dict":
+                return {**report.to_dict(), "preflight": preflight}
+            if format == "json":
+                return json.dumps(
+                    {**report.to_dict(), "preflight": preflight},
+                    indent=2, sort_keys=True,
+                )
+            if format == "text":
+                native = preflight["native_tpu"]
+                return (
+                    report.to_text()
+                    + "\nNative TPU preflight: " + native["status"]
+                    + " (training route not integrated; no allocation performed)"
+                )
         if format == "dict":
             return report.to_dict()
         if format == "json":

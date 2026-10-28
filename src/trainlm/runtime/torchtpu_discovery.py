@@ -35,7 +35,9 @@ def _property(props: Any, name: str) -> str | int | float | list[int] | None:
     return None
 
 
-def discover_tpu(torch: Any, *, verify_allocation: bool = True) -> dict[str, Any]:
+def discover_tpu(
+    torch: Any, *, verify_allocation: bool = True, include_properties: bool = True
+) -> dict[str, Any]:
     """Report TPU availability and hardware facts inside the owning process.
 
     A failed allocation is never translated into CPU success. Device count is
@@ -87,22 +89,44 @@ def discover_tpu(torch: Any, *, verify_allocation: bool = True) -> dict[str, Any
             return report
         report["allocation"] = "passed"
 
-    tpu = getattr(torch, "tpu", None)
-    getter = getattr(tpu, "get_device_properties", None)
-    if callable(getter):
-        try:
-            props = getter()
-            for field in (
-                "name",
-                "topology",
-                "hbm_bytes_per_device",
-                "hbm_bytes_per_chip",
-                "devices_per_chip",
-            ):
-                report["device_name" if field == "name" else field] = _property(
-                    props, field
-                )
-        except Exception as exc:
-            report["properties_error_type"] = _error(exc)
+    if include_properties:
+        tpu = getattr(torch, "tpu", None)
+        getter = getattr(tpu, "get_device_properties", None)
+        if callable(getter):
+            try:
+                props = getter()
+                for field in (
+                    "name",
+                    "topology",
+                    "hbm_bytes_per_device",
+                    "hbm_bytes_per_chip",
+                    "devices_per_chip",
+                ):
+                    report["device_name" if field == "name" else field] = _property(
+                        props, field
+                    )
+            except Exception as exc:
+                report["properties_error_type"] = _error(exc)
     report["status"] = "ready" if verify_allocation else "available_unverified"
     return report
+
+
+def select_auto_backend(report: dict[str, Any], *, cuda_available: bool) -> str:
+    """Preserve CPU/CUDA auto routing while native TPU training is unverified.
+
+    A detected TPU must not silently become a CPU run. Explicit ``tpu`` still
+    selects the historical XLA coordinator until a native route is validated.
+    """
+    if report.get("device_type") == "tpu":
+        raise RuntimeError(
+            "Native TorchTPU was detected, but TrainLM's native TPU training "
+            "route is not integrated. Use accelerator='tpu' only for the "
+            "existing PyTorch/XLA coordinator, or choose 'cpu'/'cuda' explicitly."
+        )
+    if (report.get("torch_tpu_version") is not None
+            and report.get("status") in {"api_unavailable", "query_failed"}):
+        raise RuntimeError(
+            "TorchTPU is installed, but accelerator discovery failed. Check "
+            "the torch/TorchTPU installation before using accelerator='auto'."
+        )
+    return "cuda" if cuda_available else "cpu"

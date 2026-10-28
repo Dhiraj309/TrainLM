@@ -27,9 +27,11 @@ report powers preflight, notebook guidance and `trainer.explain()`; missing
 hardware and broken initialization have distinct outcomes. See the
 [UX and discovery contract](TORCHTPU_UTILITIES.md#desired-user-experience-and-internal-discovery-contract).
 
-The example uses the existing facade names; native TPU auto-selection and
-the expanded hardware report are planned. The current implementation of auto
-selection only handles CPU/CUDA:
+The example below shows the target UX after native routing. Current `auto`
+selects CPU/CUDA when no TPU is detected and fails during construction on a
+detected TPU until the native route is validated. CPU/CUDA trainers can call
+the non-allocating `preflight()` now; explicit `tpu` still uses XLA. Native TPU
+training auto-selection and the expanded worker hardware report are planned:
 
 ```python
 from trainlm import TrainLMTrainer, TrainLMTrainingArguments
@@ -44,7 +46,7 @@ trainer = TrainLMTrainer(
         max_steps=100,
     ),
 )
-print(trainer.explain())
+print(trainer.explain(include_hardware=True))
 trainer.train()
 trainer.save_model("./trained-model")
 ```

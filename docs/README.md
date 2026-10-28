@@ -13,6 +13,8 @@ DP8, sharding, distributed checkpoints, or scaling. The owner reported a
 passing standalone eager TPU smoke. T1 now prioritizes shared hardware and
 capability discovery, a verified install profile and process lifecycle, then
 distributed entry checks; native trainer integration remains planned.
+Trainer preflight now exposes a non-allocating discovery snapshot; native TPU
+training and automatic TPU routing remain unverified and disabled.
 
 - [TorchTPU utility inventory, automatic discovery and UX](TORCHTPU_UTILITIES.md)
 - [T0–T11 roadmap and gates](TORCHTPU_REBASELINE.md)

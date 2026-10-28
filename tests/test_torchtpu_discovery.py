@@ -6,9 +6,11 @@ from types import SimpleNamespace
 import unittest
 
 
-DISCOVER = runpy.run_path(
+CONTRACT = runpy.run_path(
     str(Path(__file__).resolve().parents[1] / "src/trainlm/runtime/torchtpu_discovery.py")
-)["discover_tpu"]
+)
+DISCOVER = CONTRACT["discover_tpu"]
+SELECT_AUTO = CONTRACT["select_auto_backend"]
 
 
 class DiscoveryTests(unittest.TestCase):
@@ -64,6 +66,39 @@ class DiscoveryTests(unittest.TestCase):
         self.assertEqual(report["error_type"], "RuntimeError")
         self.assertNotIn("should_not_appear", str(report))
         self.assertEqual(report["allocation"], "failed")
+
+    def test_parent_preflight_skips_allocation_and_device_properties(self):
+        accelerator = SimpleNamespace(
+            current_accelerator=lambda: SimpleNamespace(type="tpu"),
+            is_available=lambda: True,
+            device_count=lambda: 1,
+        )
+        def must_not_call(*args, **kwargs):
+            raise AssertionError("parent must not allocate or inspect properties")
+        torch = SimpleNamespace(
+            accelerator=accelerator,
+            empty=must_not_call,
+            tpu=SimpleNamespace(get_device_properties=must_not_call),
+        )
+        report = DISCOVER(torch, verify_allocation=False, include_properties=False)
+        self.assertEqual(report["status"], "available_unverified")
+        self.assertEqual(report["allocation"], "not_run")
+        self.assertIsNone(report["device_name"])
+
+    def test_auto_routing_preserves_cpu_cuda_and_blocks_native_tpu(self):
+        absent = {"status": "unavailable", "device_type": "cpu"}
+        self.assertEqual(SELECT_AUTO(absent, cuda_available=False), "cpu")
+        self.assertEqual(SELECT_AUTO(absent, cuda_available=True), "cuda")
+        with self.assertRaisesRegex(RuntimeError, "Native TorchTPU was detected"):
+            SELECT_AUTO(
+                {"status": "available_unverified", "device_type": "tpu"},
+                cuda_available=False,
+            )
+        with self.assertRaisesRegex(RuntimeError, "accelerator discovery failed"):
+            SELECT_AUTO(
+                {"status": "query_failed", "torch_tpu_version": "0.2.0"},
+                cuda_available=False,
+            )
 
 
 if __name__ == "__main__":

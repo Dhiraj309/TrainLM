@@ -32,6 +32,10 @@ TorchTPU support. “Implemented” means present in that historical code path;
   T1.4 now has an opt-in single-host v5e-8 launch/collective probe with
   topology and rank reconciliation; only its CPU-side contracts have run.
   The actual multi-device result remains owner-run evidence.
+  A guarded trainer preflight now exposes non-allocating native TPU discovery
+  through `preflight()` and opt-in `explain(include_hardware=True)`. `auto`
+  rejects a detected native TPU rather than silently selecting CPU while the
+  native training route is unverified; explicit `tpu` remains the XLA path.
   The 18 old PR cards are candidates, not the active queue.
 
 ## Historical native-backend transition note

@@ -121,9 +121,13 @@ execution mode, cache/profile availability, probe results and failure details.
 Each optional fact carries its source and unavailable/error reason. An unknown
 generation can permit a generic smoke; it cannot satisfy a v5e-specific gate.
 
-`trainer.explain()` should expose a readable summary plus machine-readable
-details. A proposed CLI diagnostic command and notebook cell should consume
-the same service. These UX extensions are planned, not implemented signatures.
+`trainer.preflight()` now returns a source-level, non-allocating TPU snapshot
+with the selected existing backend; `trainer.explain(include_hardware=True)`
+adds it to text, JSON or dict output. Neither method initializes a native
+training worker, checks device properties or certifies hardware. `auto` blocks
+on detected TPU until the native route is validated; explicit `tpu` still
+means the historical XLA coordinator. A CLI diagnostic command and notebook
+integration with the trainer remain planned.
 Code cells remain directly copyable; normal users should not type device
 aliases, rank variables or parse logs. Advanced configuration stays explicit.
 
@@ -135,10 +139,11 @@ These are T1 work packages, not new branches or renumbered GitHub PRs:
    version policy, reuse boundaries and owner evidence.
 2. **T1.2 — shared discovery/reporting (partial):** a source-level report
    records API availability, TPU allocation, process-visible count, device
-   properties and package versions. The standalone probe prints it. Next:
-   verify the owner-run report, incomplete properties and version mismatch
-   cases, then integrate with the trainer and notebook UX. Explicit compile
-   evidence remains pending.
+   properties and package versions. The standalone probe prints it; a
+   non-allocating subset now feeds trainer preflight and opt-in explanation.
+   Next: verify the owner-run report, incomplete properties and version
+   mismatch cases, then integrate worker results with trainer UX. Explicit
+   compile evidence remains pending.
 3. **T1.3 — installation and lifecycle feasibility (partial):** the notebook
    reports installed versions and runs read-only pip dependency checking; its
    eager/compile child processes have timeouts and surface partial output.

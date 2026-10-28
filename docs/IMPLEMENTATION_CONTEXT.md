@@ -30,15 +30,18 @@
   torch 2.14.1+cpu, torch_tpu 0.2.0 and libtpu 0.0.50. Hardware generation,
   explicit compile and production integration remain unverified.
 - The [utility inventory and UX plan](TORCHTPU_UTILITIES.md) maps public upstream
-  APIs to T1–T11 and reusable repository contracts. Next is shared discovery
-  and reporting, then a verified installation/lifecycle profile. A source-level
+  APIs to T1–T11 and reusable repository contracts. A source-level
   report now observes native TPU availability, device properties, versions and
   allocation in the probe process; CPU-only contract tests pass. The public
-  trainer has not adopted it yet. The notebook now checks package conflicts
-  read-only and bounds eager/compile child processes; clean installation and
-  TPU lifecycle remain unverified. Current
-  `accelerator="auto"` selects only CUDA/CPU; `torch<2.14` excludes the
-  successful standalone probe's torch version. Neither gap is fixed yet.
+  trainer now uses a non-allocating view for `preflight()` and optional
+  `explain(include_hardware=True)`, but native worker routing is not integrated.
+  The notebook checks package conflicts read-only and bounds eager/compile
+  child processes; clean installation and TPU lifecycle remain unverified.
+  `accelerator="auto"` selects CUDA/CPU only when native TPU is not detected;
+  it now raises on detected TPU or broken TorchTPU discovery rather than
+  silently falling back. Explicit `tpu` still uses the XLA coordinator.
+  `torch<2.14` excludes the successful standalone probe's torch version; no
+  native install profile or dependency change is approved yet.
 - T1.4 has a single-host v5e-8 opt-in distributed probe and copyable notebook.
   Parent-side TorchTPU launch preparation precedes worker spawning; the probe
   checks topology structure and address count without displaying coordinator
