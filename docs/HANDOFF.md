@@ -9,8 +9,9 @@
   multi-device collectives, DP8, sharding, distributed checkpoints, and scaling.
 - **Verified base:** `main` at `e575bf6f6681dc9a6883d73bf51bda7aed9a6353`
   after PR #20.
-- **Probe:** [`T1 v5e-1 guide`](T1_V5E1_PROBE.md); it tests a tiny synthetic
-  forward/backward and optimizer update, with optional `torch.compile`.
+- **Probe:** [`T1 v5e-1 guide`](T1_V5E1_PROBE.md) and its
+  [Kaggle/Colab notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb) test a tiny
+  synthetic forward/backward and optimizer update, with optional `torch.compile`.
 - **Next:** run the probe on the owner-approved Kaggle v5e-1 image and record
   package provenance and complete output. This workspace lacks PyTorch and
   has not run the accelerator probe.

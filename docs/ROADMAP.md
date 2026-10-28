@@ -17,6 +17,8 @@ TorchTPU support. “Implemented” means present in that historical code path;
 - **Current target:** Native TorchTPU on Kaggle TPU v5e-8; not yet verified
 - **Current gate:** T0 is closed; PR #20 merged the T0.2 mapping. T1 begins
   with v5e-1 single-device feasibility, using v5e-8 for multi-device checks.
+  The [v5e-1 probe notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb) and
+  [run guide](T1_V5E1_PROBE.md) are prepared but have not been hardware-run.
   The 18 old PR cards are candidates, not the active queue.
 
 ## Historical native-backend transition note
