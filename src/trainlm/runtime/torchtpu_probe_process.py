@@ -94,6 +94,9 @@ def run_probe_process(
             else "failed"
         )
         result["error_type"] = type(exc).__name__
+        if isinstance(exc, subprocess.TimeoutExpired):
+            for key, value in (("stdout", exc.stdout), ("stderr", exc.stderr)):
+                result[key] = value.decode(errors="replace") if isinstance(value, bytes) else value or ""
         result["cleanup_completed"] = terminate_process_group(
             process, kill_group, grace=shutdown_grace,
         )

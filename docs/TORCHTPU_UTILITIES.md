@@ -137,6 +137,18 @@ aliases, rank variables or parse logs. Advanced configuration stays explicit.
 
 ## Revised delivery order and acceptance
 
+The direction review retains the T0–T11 sequence. The immediate usability
+improvement is reproducible evidence: both notebooks now launch from a fresh
+detached source snapshot and provide a downloadable versioned summary through
+`runtime/torchtpu_evidence.py`. The shared process harness rejects fatal
+teardown output and cleans surviving children after parent exit. Raw logs stay
+local; package incompatibilities, skipped checks and CPU-only runs remain
+distinct in the exported report.
+
+Use the same report contract for the planned CLI diagnostic surface during
+T2, after the native install profile is reviewed. New kernel, optimizer or
+parallelism features remain behind their existing later acceptance gates.
+
 These are T1 work packages, not new branches or renumbered GitHub PRs:
 
 1. **T1.1 — capability inventory (this document):** record public facilities,

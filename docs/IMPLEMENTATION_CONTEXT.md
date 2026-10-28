@@ -61,6 +61,19 @@
   addresses, then reconciles per-rank `tpu_dist` sum all-reduce results.
   CPU contract tests and read-only inspection pass. No v5e-8 run, multi-host
   support, gradient-correct DP, or native trainer integration is claimed.
+- T1 notebook usability/reliability checkpoint: direct Colab links, fresh
+  detached source snapshots, source-change guards and a downloadable scoped
+  JSON report are implemented. Fatal teardown logs cannot pass on exit zero;
+  timeout/interruption cleanup kills surviving child processes even after
+  the launcher exits. The report keeps CPU, skipped and incompatible outcomes
+  explicit and excludes raw logs, environment dumps, addresses and paths.
+  Validation: 38 source-level tests pass on Python 3.12.14, including a real
+  process-group cleanup test. Both notebooks' setup, metadata, expected
+  missing-PyTorch failure/skip, download and changed-source guard paths were
+  exercised using local test clones and a simulated Colab download callback.
+  PyTorch and pytest are unavailable here, so full trainer tests and real
+  browser/TPU validation remain pending. Next: owner-run T1 evidence, review
+  the native dependency profile, then scope T2 using the shared report.
 
 ## Historical XLA development record
 

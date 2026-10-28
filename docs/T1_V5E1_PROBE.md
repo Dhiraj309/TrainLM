@@ -4,6 +4,12 @@
 
 Open the notebook in Colab to run or copy cells directly, which avoids selecting code from this guide on a mobile device.
 
+The setup cell clones a fresh snapshot of the T1 branch, records its full
+commit SHA, and preserves existing checkouts. Later cells reject changed
+source so results cannot silently come from an older or edited checkout.
+The last cell downloads `trainlm_t1_evidence.json` in Colab or provides a
+file link on other notebook hosts. Run it even when a diagnostic cell fails.
+
 Use this probe on a single-chip Cloud TPU v5e VM with the owner-approved
 TorchTPU runtime. By default, it detects TPU through a real allocation and
 runs the smoke in the same process, or selects CPU with an explicit CPU-only
@@ -93,12 +99,18 @@ before another TPU launch. Record the actual accelerator identity separately.
 
 ## Evidence to record
 
-Save the VM machine type and image/runtime identifier, accelerator type,
-Python and PyTorch versions, printed Torch/TPU/XLA-related distribution
-versions, exact command,
-and complete output. Record whether import, device placement, forward,
-autograd, optimizer update, and optional compilation passed. Do not include
-tokens, credentials, or unrelated environment variables in the evidence.
+Share the downloaded JSON and the actual VM machine type, image/runtime
+identifier and accelerator type. The report records the source SHA, Python
+and package versions, normalized discovery, and package/eager/compile/
+lifecycle/collective outcomes. CPU runs retain a non-TPU label and skipped
+checks stay `not_run`. It does not export raw logs, environment variables,
+coordinator addresses or local artifact paths. Keep raw output locally for
+investigation; review any additional logs before sharing them.
+
+Package incompatibility remains visible even when the standalone TPU smoke
+passes. Fatal core-dump or shutdown-hang messages fail a probe despite exit
+code zero. These are feasibility observations requiring owner review; the
+report never marks the entire T1 gate or native training as certified.
 
 This is intended as a v5e-1 single-device smoke only. It cannot establish multi-device
 collectives, DP8, sharding/FSDP, distributed checkpoint behavior, v5e-8

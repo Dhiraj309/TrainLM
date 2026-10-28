@@ -54,6 +54,27 @@ class ProbeProcessTests(unittest.TestCase):
         self.assertTrue(result["cleanup_completed"])
         self.assertEqual(calls, [(100, signal.SIGTERM), (100, signal.SIGKILL)])
 
+    def test_timeout_retains_partial_output_for_local_notebook_diagnosis(self):
+        class TimedOut:
+            pid = 111
+            returncode = None
+            calls = 0
+
+            def communicate(self, timeout):
+                self.calls += 1
+                if self.calls == 1:
+                    raise subprocess.TimeoutExpired("probe", timeout,
+                                                    output=b"device=tpu\n", stderr=b"initializing\n")
+                self.returncode = -15
+                return "", ""
+
+        result = RUN(["unused"], cwd=Path.cwd(), timeout=1,
+                     process_factory=lambda *a, **kw: TimedOut(),
+                     kill_group=lambda *args: None)
+        self.assertEqual(result["status"], "timeout")
+        self.assertEqual(result["stdout"], "device=tpu\n")
+        self.assertEqual(result["stderr"], "initializing\n")
+
     @unittest.skipUnless(sys.platform == "linux", "Linux process-group contract")
     def test_real_timeout_kills_grandchild_that_ignores_sigterm(self):
         processes = []
