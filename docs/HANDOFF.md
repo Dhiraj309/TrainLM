@@ -1,46 +1,37 @@
 # TrainLM implementation handoff
 
-> **Sequential multi-PR delivery:** Legacy [PR #18](https://github.com/Dhiraj309/TrainLM/pull/18)
-> merged to `main` on 2026-10-28 at `23959d29434fd2ae3f78b20469e1d61c6b1e18c9`.
-> The [PR delivery plan](PR_DELIVERY_PLAN.md) is a candidate queue, not an
-> approved TorchTPU implementation order. T0.1 has produced the read-only
-> [salvage inventory](TORCHTPU_SALVAGE_INVENTORY.md), with a proposed
-> [T0.2 mapping](PR_DELIVERY_PLAN.md#t02-candidate-mapping-to-native-torchtpu-gates).
-> The map is not an approved implementation queue; owner review is required
-> before activating a numbered implementation PR from verified `main`.
+## Current roadmap state
 
-This is the concise implementation and target-hardware handoff for the
-legacy integration PR #18 and subsequent approved work. It separates code
-that exists from code proven on target hardware, and keeps
-execution-preserving work separate from architecture-changing research.
-Historical milestone branch names below are archival context, not current
-execution instructions.
+- **Direction:** native TorchTPU on Kaggle TPU v5e-8. The code currently uses
+  PyTorch/XLA; TorchTPU is not implemented or certified.
+- **Current gate:** T0 architecture rebaseline. T0.1 inventory is complete;
+  T0.2 card mapping is under review in PR #20. No implementation queue is
+  approved yet.
+- **Verified base:** `main` at `0d1673cce040646e642498cda462cca907e1701c`
+  after PR #19. PR #20 reviews the T0.2 proposal.
+- **Next after review:** establish T1 installation, device, autograd, optimizer,
+  collective, and compile feasibility on the owner-approved Kaggle image.
+- **History:** PR #18 (including PR #16) is merged. The old M0–M17 tables and
+  P0/P1 XLA backlog below describe historical XLA implementation/evidence;
+  use them for salvage, not as the current TorchTPU task list.
 
-## Proposed native TorchTPU architecture transition
+See the [docs guide](README.md), [T0–T11 plan](TORCHTPU_REBASELINE.md),
+[salvage inventory](TORCHTPU_SALVAGE_INVENTORY.md), and [T0.2 mapping](PR_DELIVERY_PLAN.md#t02-candidate-mapping-to-native-torchtpu-gates)
+for the active planning sources.
 
-See [T0–T11 native TorchTPU rebaseline](TORCHTPU_REBASELINE.md).
-Native TorchTPU is the **target**, not a certified existing backend.
-Historical PyTorch/XLA code and TPU evidence require T0 salvage review.
-PR #16 was merged into PR #18 and is now included in `main`. T0.1's
-read-only module classification and dependency findings are in
-[TORCHTPU_SALVAGE_INVENTORY.md](TORCHTPU_SALVAGE_INVENTORY.md). PyTorch/XLA
-remains the only documented implementation backend; native TorchTPU has no
-verified install or hardware evidence yet. Continue the sequential PR and
-incremental-commit policy after owner review of the inventory and T0.2 mapping.
+This handoff retains implementation and target-hardware notes from the legacy
+XLA work. Each feature status below refers to the backend named in its row; it
+does not transfer to native TorchTPU.
 
-## Verified post-PR #18 baseline
+## Verified baseline and known CPU failures
 
-- Remote `main`: `23959d29434fd2ae3f78b20469e1d61c6b1e18c9`.
-- PR #18: merged on 2026-10-28; PR #16's changes arrived through PR #18.
-- CPU suite on the PR #18 snapshot: 700 passed, 21 failed. Environment and
-  failure categories are recorded below; this is not a rerun on merged `main`.
-- Native TorchTPU: target architecture only; no native certification claim.
-
-The 21 recorded failures were 5 Phi configuration cases, 1 checkpoint reload,
-12 loss-layout parity cases, 1 scalar-materialization assertion, 1 stale
-roadmap contract, and 1 wheel smoke blocked because the environment's venv had
-no `pip` module. Baseline versions: Python 3.12.14, torch 2.9.0+cpu,
-Transformers 5.0.0, huggingface-hub 1.3.5, pytest 9.1.1.
+The available run is from the PR #18 snapshot, not a rerun on merged `main`:
+700 passed and 21 failed under Python 3.12.14, torch 2.9.0+cpu, Transformers
+5.0.0, huggingface-hub 1.3.5, and pytest 9.1.1. Failures: five Phi
+configuration cases, one checkpoint reload, twelve loss-layout parity cases,
+one scalar-materialization assertion, one stale roadmap contract, and one
+wheel smoke test blocked by missing `pip` in the venv. This is a CPU-only
+baseline, not TPU evidence.
 
 ## Status legend
 
@@ -63,7 +54,7 @@ public workflow supplies a model/config, train and evaluation datasets, and
 familiar training arguments. Worker launch, PJRT/ranks, topology discovery,
 manifest staging, process cleanup, and stage-log parsing remain private.
 
-## Implemented public training and data path
+## Historical XLA-era implementation: public training and data path
 
 | Status | Feature | Current state |
 | --- | --- | --- |
@@ -79,7 +70,7 @@ manifest staging, process cleanup, and stage-log parsing remain private.
 | `[x]` | Model revision handling | Mutable model selectors are resolved before TPU launch; explicit commit SHAs support offline/cache-only launches. |
 | `[~]` | End-to-end TPU lifecycle | Software plumbing exists, but the latest 135M notebook path still needs an owner-run Kaggle v5e-8 completion after the config-source coordinator fix. |
 
-## Implemented runtime, checkpoint, and optimization foundations
+## Historical XLA-era implementation: runtime, checkpoint, and optimization
 
 | Status | Feature | Current state / remaining evidence |
 | --- | --- | --- |
@@ -103,7 +94,7 @@ manifest staging, process cleanup, and stage-log parsing remain private.
 | `[x]` | Benchmark/release contracts | Parity, numerical alignment, stability, HLO, scaling, export, repeated-run, and support-manifest validators exist. |
 | `[ ]` | Performance certification | No current result may be marked certified until the locked v5e gates and required evidence artifacts pass. |
 
-## Immediate execution-preserving backlog (priority order)
+## Historical XLA backlog (not the active TorchTPU priority order)
 
 | Priority | Status | Task | Completion gate |
 | --- | --- | --- | --- |
@@ -124,7 +115,7 @@ manifest staging, process cleanup, and stage-log parsing remain private.
 | P2 | `[ ]` | Pipeline parallelism | 1F1B/interleaved schedule with an explicit bubble and memory model. |
 | P2 | `[ ]` | Weight-rematerialized TP | Research prototype only after conventional TP×FSDP is stable. |
 
-## Architecture-changing backlog (TrainLM Lab, not optimizer transforms)
+## Deferred architecture research (not in the active T0–T11 queue)
 
 | Priority | Status | Feature | Direction |
 | --- | --- | --- | --- |
@@ -163,11 +154,11 @@ manifest staging, process cleanup, and stage-log parsing remain private.
 | P3 | `[ ]` | Runtime recommendations | Turn diagnosed HBM/input/communication gaps into benchmarkable planner candidates. |
 | P3 | `[ ]` | Closed-loop autotuning | Analyzer → plan → run → telemetry → candidate benchmark → retained plan, with rollback and evidence. |
 
-## Next owner-run TPU procedure
+## Historical XLA validation procedure (not TorchTPU validation)
 
-1. Use the owner-approved current validation revision (ideally the latest
-   merged `main` after PR #18) in a fresh Kaggle TPU session; do not assume an
-   old milestone branch is the active work branch.
+1. Use the owner-approved validation revision from that XLA-era procedure
+   (ideally the latest merged `main` after PR #18) in a fresh Kaggle TPU
+   session; do not treat an old milestone branch as current.
 2. Run the install cell, restart the session exactly once, then run the
    remaining notebook top-to-bottom.
 3. Confirm `probe`, `model_preflight`, and `train` complete for the pretrained

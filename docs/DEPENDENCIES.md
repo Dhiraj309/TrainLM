@@ -1,5 +1,9 @@
 # Dependency and Compatibility Policy
 
+> **Current:** CPU/CUDA core and optional PyTorch/XLA profiles are documented.
+> **Target:** native TorchTPU has no verified package profile yet. Do not infer
+> support from the proposed T0–T11 architecture or the XLA constraints below.
+
 **Matrix:** [`compatibility/dependency_matrix_v1.json`](../compatibility/dependency_matrix_v1.json)
 
 TrainLM separates portable model/trainer dependencies from accelerator-specific
@@ -19,7 +23,7 @@ Python compatibility, device discovery, autograd, distributed operations
 and compilation on Kaggle v5e-8 before adding extras or claiming support.
 Do not guess package versions or assume Pallas/Helion/Tokamax compatibility.
 
-## Support profiles
+## Existing support profiles (CPU/CUDA and historical XLA)
 
 | Profile | Python | PyTorch | Transformers | Accelerator packages | Status |
 |---|---|---|---|---|---|

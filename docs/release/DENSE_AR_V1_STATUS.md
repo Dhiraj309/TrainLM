@@ -1,16 +1,21 @@
 # Dense-AR V1 development support status
 
+> **Historical release snapshot:** This page and its machine-readable manifest
+> describe the `0.1.0-dev` PyTorch/XLA-era support state. The active target is
+> native TorchTPU under T0–T11; this page does not establish TorchTPU support.
+
 The machine-readable source for this page is
 [`support/dense_ar_v1.json`](../../support/dense_ar_v1.json). It describes the
 current development release, not a completed hardware certification.
 
-## Current support
+## Recorded `0.1.0-dev` support snapshot (PyTorch/XLA era)
 
 - **CPU:** compatible portable execution; not performance certified.
 - **CUDA:** compatible portable execution; Tier 1 release evidence is pending.
 - **TPU v5e-8 through PyTorch/XLA:** experimental coordinator path; correctness,
   lifecycle, canonical export, and performance certification remain pending.
-- **TorchTPU:** deferred to M15. It is not silently selected by this release.
+- **TorchTPU:** not present in this release snapshot. Native TorchTPU is the
+  current architecture target, pending T0/T1 review and hardware validation.
 
 The portable Hugging Face implementation remains the semantic fallback.
 Chunked linear causal cross-entropy is the portable full-logits bypass.

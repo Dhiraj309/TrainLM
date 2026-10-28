@@ -1,33 +1,33 @@
 # TrainLM Roadmap
 
-The concise current-state checklist and continuation order live in
-[`HANDOFF.md`](HANDOFF.md). Its `[x]`, `[~]`, and `[ ]` marks distinguish tested
-implementation, partial or target-evidence-pending work, and future work; this
-roadmap remains the detailed milestone specification. The post-legacy
-multi-PR delivery roadmap and planned commits are in
-[`PR_DELIVERY_PLAN.md`](PR_DELIVERY_PLAN.md).
+> **Status: historical M0–M17 specification.** This document preserves the
+> detailed PyTorch/XLA-era roadmap and evidence for traceability. Its milestone
+> checkboxes and old XLA PR cards do not describe the active native TorchTPU
+> queue. For current work, start at [the docs guide](README.md), then follow
+> [T0–T11](TORCHTPU_REBASELINE.md), the [salvage inventory](TORCHTPU_SALVAGE_INVENTORY.md),
+> and the [owner-reviewed T0.2 mapping](PR_DELIVERY_PLAN.md#t02-candidate-mapping-to-native-torchtpu-gates).
 
-- **Status:** Active implementation plan
-- **Product:** Hugging Face-native, TPU-optimized autoregressive pretraining
-- **Primary hardware:** Google TPU v5e-8, single VM
-- **Current TPU backend:** PyTorch/XLA
-- **Target TPU architecture:** Native TorchTPU-first (T0–T11 proposal; hardware verification pending)
-- **Dataset path:** Hugging Face-hosted packed `.bin` shards
-- **Roadmap branch:** `roadmap/hf-tpu-parity`
-- **Performance reference:** LaughLM at `0705d255faab`
+Historical status labels below refer to software and evidence in the backend
+that existed at the time, primarily PyTorch/XLA. They do not imply native
+TorchTPU support. “Implemented” means present in that historical code path;
+“partial” means validation remained; “deferred” means it was not delivered.
 
-## Proposed native TorchTPU rebaseline (2026-10-27)
+- **Historical product:** Hugging Face-native dense autoregressive training
+- **Historical TPU backend:** PyTorch/XLA
+- **Current target:** Native TorchTPU on Kaggle TPU v5e-8; not yet verified
+- **Current gate:** T0.1 inventory is complete; T0.2 mapping is under review
+  in PR #20. After T0 review, T1 is environment feasibility. The 18 old PR
+  cards are candidates, not the active queue.
 
-The [T0–T11 native TorchTPU plan](TORCHTPU_REBASELINE.md) records the new
-**target architecture**, migration classification, HF data/export contracts,
-DP8 global valid-token gradient correctness, exact resume and T0.1 audit.
-Existing M0–M14 work is the **current/historical PyTorch/XLA baseline**,
-not evidence of native TorchTPU compatibility. The 18 XLA-oriented PR cards
-must be remapped during T0 with owner approval; retain their sequential
-multi-PR, multi-commit workflow. PR #18 merged on 2026-10-28; audit the
-merged tree before activating the first new implementation branch.
+## Historical native-backend transition note
 
-## Product goal
+The [T0–T11 plan](TORCHTPU_REBASELINE.md) is the current target architecture.
+Existing M0–M14 work and measurements are salvage material, not TorchTPU
+certification. PR #18 is merged, T0.1 inventory is complete, and the T0.2
+candidate mapping is under owner review in PR #20. No numbered implementation
+queue is active until the owner approves the mapping.
+
+## Historical M0–M17 product goal and acceptance gates
 
 TrainLM will load an ordinary dense autoregressive Hugging Face
 `AutoModelForCausalLM`, train it efficiently on Google TPUs through TrainLM's
@@ -46,7 +46,7 @@ The normative model and support definition is in [`SCOPE.md`](SCOPE.md).
 Merely executing is not optimization, and making only Llama-style models fast
 is not a successful framework.
 
-## Operating rules
+## Historical roadmap operating rules
 
 Status flags: `[ ]` not started, `[~]` in progress or awaiting validation,
 `[x]` complete, and `[d]` intentionally deferred.
@@ -69,7 +69,7 @@ Every implementation change includes a focused diff, static review, relevant
 non-TPU tests, an exact TPU command when required, saved evidence, and a keep,
 revise, or revert decision.
 
-## Desired user experience and acceptance boundary
+## Historical XLA-era user experience and acceptance boundary
 
 The user-facing workflow must remain Hugging Face-like: load a model or HF ID,
 supply a tokenizer/processing class and train/eval datasets, set familiar
@@ -185,7 +185,7 @@ Validated reference: `1.014M` global tok/s, `53.1%` non-embedding MFU,
 Release evidence uses steady-state medians from three matched runs plus one
 200-update real-shard stability run.
 
-## Branch and PR policy
+## Historical branch and PR policy
 
 ### Transition from historic milestone PRs
 
@@ -257,7 +257,7 @@ scope/non-goals, acceptance/verification gates and fallback in
 [`docs/PR_DELIVERY_PLAN.md`](PR_DELIVERY_PLAN.md#detailed-pr-cards).
 The same plan also defines the full [PR title/body contract](PR_DELIVERY_PLAN.md#exact-pr-title-description-and-commit-trace-contract)
 and [additional measured-only optimization experiments](PR_DELIVERY_PLAN.md#additional-engineering-optimizations-to-evaluate-not-assumed-wins).
-**Do not open these candidate branches before the post-merge audit and PR queue remapping are approved.**
+**This historical candidate list is not the active queue. Use the T0.2 mapping and obtain owner approval before creating a branch.**
 
 ### Lifecycle and enforcement
 
