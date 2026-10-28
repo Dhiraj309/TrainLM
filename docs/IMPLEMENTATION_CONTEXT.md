@@ -30,9 +30,10 @@
   synthetic smoke. The latest owner run at source `f122b7e1` passed allocation,
   forward, autograd and AdamW update on Python 3.13.18, torch 2.14.1+cpu,
   torch_tpu 0.2.0 and libtpu 0.0.50. Runtime properties reported device name
-  `TPU v5e` and one visible device; topology and VM image/machine type were not
-  recorded, so the exact v5e VM shape is unverified. Explicit compile, lifecycle
-  and production integration remain unverified. The package profile was
+  `TPU v5e` and one visible device; the owner confirmed this was v5e-1. The
+  shared notebook output did not show the VM image or topology; Colab may have
+  hidden those details. Explicit compile, lifecycle and production integration
+  remain unverified. The package profile was
   incompatible: TrainLM was absent from installed metadata, torch 2.14.1+cpu
   exceeds TrainLM's `<2.14` constraint, and `pip check` reported conflicts.
   Do not change dependency pins from this result.

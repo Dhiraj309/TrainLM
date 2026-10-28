@@ -72,8 +72,9 @@ seconds. A timeout is a failure, not TPU support evidence.
 
 The Colab report at source `f122b7e1` passed native TPU allocation, forward,
 autograd and AdamW update. Runtime properties returned device name `TPU v5e`
-and one process-visible device; topology, VM image and machine type were not
-included, so the exact v5e VM shape is unverified. Python was 3.13.18 with
+and one process-visible device; the owner confirmed this was v5e-1. The shared
+Colab output did not include topology or VM image details, which Colab may
+hide. Python was 3.13.18 with
 torch 2.14.1+cpu, torch_tpu 0.2.0 and libtpu 0.0.50. The read-only package
 profile was `incompatible`: TrainLM was absent from installed metadata, torch
 2.14.1+cpu is outside TrainLM's declared `<2.14` range, and `pip check`

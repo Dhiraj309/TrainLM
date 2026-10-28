@@ -198,8 +198,9 @@ does not implement native training or change dependency pins.
 
 Latest owner-run T1.2 observation: native allocation, forward/backward and
 AdamW update passed; runtime properties reported one visible device named
-`TPU v5e`. Exact VM identity/topology, compilation and repeat-process behavior
-remain unknown. The same environment failed package-profile checks because
+`TPU v5e`; the owner confirmed v5e-1. The shared Colab output may omit VM
+image/topology details. Compilation and repeat-process behavior remain
+unrecorded. The same environment failed package-profile checks because
 TrainLM was not installed, torch 2.14.1+cpu lies outside its current `<2.14`
 contract, and `pip check` found conflicts. Treat this as a successful eager
 runtime smoke with an unresolved compatibility profile, not a clean-install
