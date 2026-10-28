@@ -88,16 +88,18 @@ The normative sequence and specific PR/commit plan are
 focused PRs, each with multiple logical commits, not a single PR for the
 whole roadmap and not one commit per PR.**
 
-- **First:** Resolve, review, validate and merge legacy PR #18 from
-  `milestone/m8-m9-optimization-core` into `main`. GitHub currently
-  reports merge conflicts; do not claim this PR merged or try to start
-  new development branches before resolution and verified merge.
-- **Then:** Reconcile the post-merge tree and actual TPU evidence against
-  PR plan cards. Approve/reorder or skip redundant planned work in
-  docs before activation, without renaming prior milestone history.
+- **Completed:** PR #18, including PR #16, merged into `main` on 2026-10-28.
+  PR #19 established the T0.1 inventory; PR #20 proposes the T0.2 mapping.
+- **Current:** T0.1 inventory is complete; review the T0.2 map and actual
+  owner-run TPU evidence. The old 18-card XLA queue is historical until the
+  owner approves its remapping.
+- **Next:** Complete T0 decisions before starting T1 or a numbered
+  implementation branch. Current facts and labels are indexed in
+  `docs/README.md`; the M0–M17 roadmap and implementation log are historical
+  XLA records unless a page explicitly says otherwise.
 - **Per PR:** Create `<type>/<NN>-<deliverable>` from the new, fetched
   `origin/main` only after the previous PR was merged and its remote
-  `main` SHA verified. Planned IDs start at 01 after the legacy merge.
+  `main` SHA verified. New planning IDs start at 01 only after T0 review and approval.
   A PR's branch name, PR title and body must match the full scope of
   its proposed commits, tests, fixes and docs.
 - **During development:** Use small, coherent implementation/test/fix/
@@ -120,7 +122,8 @@ Read `docs/TORCHTPU_REBASELINE.md`. Native TorchTPU is the target backend;
 existing PyTorch/XLA implementation and M0–M14 evidence are historical
 salvage, not native certification. T0 inventories reusable, XLA-specific
 and uncertain code before remapping the XLA-oriented 18-PR candidate queue.
-T0.1 is read-only discovery until owner approval for file or Git changes.
+T0.1 was read-only discovery. T0.2 is a proposed mapping; owner approval is
+required before changing the roadmap queue or beginning T1 implementation.
 For future implementation, propose logical commit messages and tests and
 obtain explicit owner approval before commit, push, new PR or merge.
 Maintain multiple small commits per approved PR, with branch/title/body
@@ -133,24 +136,25 @@ credentials, or auto-merge.
 
 Current continuation point
 
-Legacy PR #18 (`milestone/m8-m9-optimization-core`) is the only active
-integration PR. It contains implementation across the public TPU
-facade/coordinator, capability planner, optimization and release contracts,
-but requires conflict resolution against `main`, acceptance review and
-validation. **Do not claim it is merged or create a post-legacy branch
-until GitHub reports merged and remote `main` is verified.**
+PR #18 is merged to `main`; PR #19 completed the T0.1 inventory, and PR #20
+reviews the proposed T0.2 mapping from the 18 legacy XLA cards to T0–T11.
+Native TorchTPU remains unverified. The local checkout may be on a docs branch; before implementation,
+verify PR #20 outcome and fetch the latest merged `main`. Do not delete legacy
+branches until T0 salvage review determines whether they preserve needed
+source or evidence.
 
-After merging, inspect the actual merged `main`, the handoff and owner-run
-TPU evidence. Reconcile the 18 candidate multi-commit PR cards in
-`docs/PR_DELIVERY_PLAN.md`. Activate only the first demonstrably needed
-PR, with a descriptive branch/title/body and multiple focused commits.
+After owner review of T0.2, establish T1 on the approved Kaggle TPU image and
+record supported install provenance, device/autograd/optimizer/collective/
+compile evidence. Create the next numbered implementation PR only after its
+scope and acceptance criteria are approved and its branch can start from
+verified merged `main`.
 
-Codex may read, test, commit and push to the existing approved PR branch,
-but must not create parallel PRs, push to `main`, or merge without
-explicit owner authorization. Retain the HF-like UX, reversible capability
-planning, CPU test gates and honest TPU certification boundary.
+Codex may read, test, commit and push to an approved PR branch, but must not
+push to `main`, force-push, or merge without explicit owner authorization.
+Retain the HF-like UX, reversible capability planning, CPU test gates, and
+honest separation between historical XLA evidence and native TorchTPU claims.
 
-Definition of done
+Historical M8-F0 definition of done
 
 The next M8-F0 story is ready for review when:
 

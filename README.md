@@ -4,16 +4,22 @@ TrainLM is a Hugging Face-native framework for efficient language-model
 pretraining, with Google TPU execution provided through replaceable runtime and
 kernel backends.
 
-The project is implementing its dense autoregressive V1 foundation. Before
-relying on a model-support or performance claim, read the
-[dense-AR support contract](docs/SCOPE.md).
+## Project status and roadmap
 
-Environment support and exact CPU/TPU profiles are defined by the
-[dependency compatibility policy](docs/DEPENDENCIES.md).
+The current development direction is native TorchTPU on Kaggle TPU v5e-8.
+The project is in the T0 architecture rebaseline: existing PyTorch/XLA code is
+being classified for reuse, replacement, or preservation as an optional XLA
+backend. Native TorchTPU support is not implemented or certified yet.
 
-The active implementation handoff, measured TPU baseline, public-API
-boundary, and next commit sequence are tracked in
-[docs/IMPLEMENTATION_CONTEXT.md](docs/IMPLEMENTATION_CONTEXT.md).
+- [Current roadmap and documentation guide](docs/README.md)
+- [T0–T11 native TorchTPU roadmap](docs/TORCHTPU_REBASELINE.md)
+- [T0.1 code inventory](docs/TORCHTPU_SALVAGE_INVENTORY.md)
+- [T0.2 candidate work mapping](docs/PR_DELIVERY_PLAN.md#t02-candidate-mapping-to-native-torchtpu-gates)
+
+The M0–M17 material below and in the detailed roadmap records the earlier
+PyTorch/XLA development. Treat its completed, partial, and deferred labels as
+XLA-era status; they do not certify TorchTPU. Before relying on a model-support
+or performance claim, read the [dense-AR support contract](docs/SCOPE.md).
 
 Model architecture and training-policy boundaries are defined by the
 [configuration ownership contract](docs/configuration/OWNERSHIP.md).

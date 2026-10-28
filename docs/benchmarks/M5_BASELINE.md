@@ -6,7 +6,7 @@ does not enable family-specific attention or loss transforms.
 
 ## Locked workload
 
-Use [`laughlm_135m_v5e8_v1.json`](../manifests/laughlm_135m_v5e8_v1.json):
+Use [`laughlm_135m_v5e8_v1.json`](../../benchmarks/manifests/laughlm_135m_v5e8_v1.json):
 
 - TPU v5e-8, one host, eight data-parallel replicas;
 - sequence length 2,048, microbatch 2 per device, GA32;

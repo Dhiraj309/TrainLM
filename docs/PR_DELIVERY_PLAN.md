@@ -1,18 +1,19 @@
 # TrainLM sequential pull-request delivery plan
 
-> **Scope:** Candidate PRs after legacy [PR #18](https://github.com/Dhiraj309/TrainLM/pull/18)
-> merged into `main` on 2026-10-28. These are planning identifiers, not actual
-> GitHub PR numbers or commitments. T0.1's read-only inventory is recorded in
-> `TORCHTPU_SALVAGE_INVENTORY.md`; review and remap this XLA-oriented queue
-> before creating the first implementation branch.
+> **Status: historical candidate cards plus proposed T0.2 mapping.** The 18
+> cards below were written for the PyTorch/XLA roadmap. They are not the active
+> TorchTPU queue. PR #18 is merged; T0.1 inventory is in
+> `TORCHTPU_SALVAGE_INVENTORY.md`, and T0.2 mapping is under review in PR #20.
+> Owner review is required before activating implementation work.
 
 ## Native TorchTPU T0–T11 rebaseline: proposed PR remapping
 
 The [new target plan](TORCHTPU_REBASELINE.md) proposes native TorchTPU-first
 execution. **The 18 candidate cards below reflect an XLA-oriented roadmap,
-not an approved TorchTPU delivery queue.** T0 must inventory reusable and
-XLA-specific implementation and remap these cards with owner approval
-before starting plan 01. Keep the established multiple sequential PRs,
+not an approved TorchTPU delivery queue.** T0.1 has inventoried reusable and
+XLA-specific implementation; T0.2 proposes a remapping for owner review.
+Approve the mapping before starting plan 01. Keep the established multiple
+sequential PRs,
 multiple focused commits per PR, matching branch/title/body and strict
 merge-to-main-before-next-branch rules. T0–T11 are architectural gates,
 not a requirement to create one giant PR per milestone.
@@ -31,9 +32,10 @@ checkpoint safety.
 
 ## PR-by-PR serial execution
 
-**Legacy PR #18 merges → audit merged `main` → create PR-plan 01 branch from
-that `main` → make multiple small commits → review/test/merge →
-verify new `main` → create PR-plan 02 branch → repeat.**
+**Current sequence:** review and approve T0.2 → establish T1 feasibility on the
+owner-approved TorchTPU image → approve the first code deliverable from
+verified `main` → review/test/merge → verify `main` → then activate the next
+approved deliverable. The old numbered cards below do not set this order.
 
 - A **PR-plan number** is a planned delivery slot, not a GitHub PR number.
   GitHub assigns its own PR number on creation. Do not create the next branch
@@ -60,9 +62,9 @@ verify new `main` → create PR-plan 02 branch → repeat.**
 - Block rather than silently skip a mandatory acceptance criterion. If a
   performance gate is unattainable, document the measured failure and obtain
   an explicit owner-approved *planning revision* before changing the next PR.
-- Legacy PR #18 is merged. Its tree and owner-run TPU evidence still require
-  the post-merge audit; a successful merge does not establish native TorchTPU
-  compatibility or make the XLA-oriented candidate queue automatically valid.
+- PR #18 is merged and T0.1 inventory is complete. PR #20 proposes the T0.2
+  mapping. The mapping remains subject to owner review; neither a merge nor
+  XLA evidence establishes native TorchTPU compatibility.
 
 ## T0.2 candidate mapping to native TorchTPU gates
 
@@ -108,7 +110,7 @@ when the owner approves a deliverable after T1/T0 review.
 4. **Later gates:** earn distributed correctness, checkpoint/export, compile,
    optimization, and benchmark work in T3–T11 order as dependencies are proven.
 
-## Planned PR index
+## Historical XLA-era candidate cards (not an approved queue)
 
 | Plan | Branch | GitHub PR title | Tier | Traceability |
 |---:|---|---|---|---|

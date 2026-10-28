@@ -1,68 +1,41 @@
 # TrainLM implementation context
 
-This document is the handoff for continuing TrainLM work in another Codex
-session or in Codex Cloud. It records the agreed product direction and the
-current implementation boundary; update it whenever a milestone changes.
+> **Document status:** This file preserves detailed implementation history.
+> For the live project state and sequence, use [the docs guide](README.md),
+> [the handoff](HANDOFF.md), and [T0–T11](TORCHTPU_REBASELINE.md). The
+> numbered M0–M14 notes below record the prior PyTorch/XLA implementation;
+> they are not native TorchTPU milestones or certification.
 
-For the status-focused checklist of implemented work, target-hardware evidence,
-immediate priorities, architecture research, and telemetry work, see
-[`HANDOFF.md`](HANDOFF.md).
+## Current project snapshot
 
-## Sequential multi-PR delivery (after legacy PR #18)
+- PR #18, including PR #16, is merged. Verified `main` after PR #19 is
+  `0d1673cce040646e642498cda462cca907e1701c`.
+- T0.1 code inventory is recorded in `TORCHTPU_SALVAGE_INVENTORY.md`; T0.2
+  maps the 18 XLA-era cards in `PR_DELIVERY_PLAN.md` and is under review in
+  PR #20. The candidate mapping is not an approved implementation queue.
+- Current implementation backend: PyTorch/XLA. Target: native TorchTPU on
+  Kaggle TPU v5e-8. No TorchTPU install profile or hardware certification is
+  established.
+- The known PR #18 CPU snapshot result is 700 passed / 21 failed under Python
+  3.12.14, torch 2.9.0+cpu, Transformers 5.0.0, Hub 1.3.5, pytest 9.1.1. It
+  has not been rerun on current `main`.
+- Next gate after T0 review: T1 environment feasibility on the owner-approved
+  Kaggle image. Do not add guessed dependency pins or start a numbered code PR
+  before the owner reviews the mapping and T1 prerequisites.
 
-See [`docs/PR_DELIVERY_PLAN.md`](PR_DELIVERY_PLAN.md) and
-[`docs/ROADMAP.md`](ROADMAP.md#branch-and-pr-policy).
+## Historical XLA development record
 
-The new roadmap is a series of **multiple outcome-scoped PRs** with
-**multiple small meaningful commits inside each PR**, not a single
-mega-PR, not a single commit per branch, and not many micro-PRs for
-each tiny fix. Every PR's branch, title and body accurately describe
-the coherent implementation/testing/fix/validation deliverable. Use the
-[full PR body contract](PR_DELIVERY_PLAN.md#exact-pr-title-description-and-commit-trace-contract)
-and evaluate [additional optimization hypotheses](PR_DELIVERY_PLAN.md#additional-engineering-optimizations-to-evaluate-not-assumed-wins)
-only with measured evidence; these are not automatic new V1 requirements.
+The sections below preserve the former M0–M14 implementation context, TPU
+measurements, and technical investigations. Interpret backend-specific status
+as applying to PyTorch/XLA only. Reuse decisions belong to the T0 inventory;
+old XLA targets and PR cards do not automatically remain TorchTPU requirements.
 
-- Legacy [PR #18](https://github.com/Dhiraj309/TrainLM/pull/18) merged on
-  2026-10-28. Verified remote `main` is
-  `23959d29434fd2ae3f78b20469e1d61c6b1e18c9` (merge commit #18).
-  The local discovery checkout may still be on the merged milestone branch;
-  new work must start from this verified `main`.
-- Audit its merged changes and owner-run TPU evidence. Reconcile the
-  candidate 01–18 cards; remove or mark proven work as satisfied and
-  reassign sequential IDs as necessary **before creating any** future
-  branches. Do not duplicate existing code simply to fulfill a plan.
-- New branch format `<type>/<NN>-<outcome>`, e.g.
-  `perf/03-chunked-loss-no-full-logits`, starting at 01 after the approved
-  post-merge audit and PR queue remapping.
-  Each PR starts only from latest **merged** `origin/main`, after the
-  previous PR has merged and its SHA/files are verified.
-- Within one branch, make as many focused implementation, tests,
-  regression-fix, review and docs commits as the deliverable requires.
-  Prefer owner-approved merge or rebase merge preserving separate
-  commits. No default squash, auto-merge, force-push or direct push to
-  protected `main`.
-- Preserve HF-like public UX, generic semantic correctness, portable
-  export/checkpoints and truthful TPU certification; avoid changing
-  managed proxy variables or credentials.
+## Sequential PR delivery policy
 
-## Native TorchTPU target rebaseline and current facts
-
-Read [the proposed T0–T11 plan](TORCHTPU_REBASELINE.md) before new TPU
-runtime work. Existing PyTorch/XLA code, performance results and M0–M14
-milestones are current/historical salvage material, not verified native
-TorchTPU support. The old 18 PR cards need T0 remapping before activation.
-PR #16 was merged into PR #18, and both are now present in `main`. The
-read-only T0.1 source classification is recorded in
-[`TORCHTPU_SALVAGE_INVENTORY.md`](TORCHTPU_SALVAGE_INVENTORY.md). It identifies
-generic training, HF, data, checkpoint, and planning code as reuse candidates;
-XLA runtime, PJRT worker, and XLA/Pallas provider code remain backend-specific.
-Native TorchTPU is still unverified. The PR #18 CPU snapshot baseline was
-700 passed / 21 failed on Python 3.12.14, torch 2.9.0+cpu, Transformers 5.0.0,
-Hub 1.3.5, pytest 9.1.1; it has not been rerun on merged `main`.
-Repository permissions and the current GitHub identity were verified during
-T0.1. This baseline has not been rerun on merged `main`. T0.2 proposes a
-legacy-card mapping in `PR_DELIVERY_PLAN.md`; it remains subject to owner
-review and does not activate a new implementation queue.
+See [the current PR plan](PR_DELIVERY_PLAN.md) for the proposed T0.2 mapping
+and [the roadmap](ROADMAP.md) for the historical M0–M17 specification.
+Future implementation work follows the owner-approved T0–T11 sequence, with
+small commits and verified `main` between PRs.
 
 ## Product intent
 
@@ -112,12 +85,13 @@ The worker script, rank probe, preflight stage, cache directory, manifest
 layout, and log parsing are internal implementation details. An equivalent
 `trainlm train` CLI/config path is required for unattended jobs.
 
-## Current repository state
+## Historical XLA repository state at the recorded milestone
 
 - PR1 and PR2 are merged.
 - PR3 (`milestone/m5-m7-xla-compatibility`) was rebase-merged into `main`,
   preserving its individual feature commits in linear mainline history.
-- PR4 is the active implementation branch: `milestone/m8-m9-optimization-core`.
+- At that historical snapshot, PR4 was the active implementation branch:
+  `milestone/m8-m9-optimization-core`.
 - PR4 has been synchronized with the merged PR3 mainline; remote backup branches
   preserve the pre-synchronization PR3 and PR4 tips.
 - Codex may inspect, commit, push story branches and open PRs in accordance
@@ -126,7 +100,7 @@ layout, and log parsing are internal implementation details. An equivalent
 - Do not claim TPU validation from a local run. TPU validation is performed by
   the owner on Kaggle/Cloud TPU.
 
-## Measured TPU evidence
+## Historical PyTorch/XLA TPU evidence
 
 The current generic PyTorch/XLA path has completed a v5e-8 two-update smoke
 and a 100-step baseline. The latest sparse-loss-materialization run reports

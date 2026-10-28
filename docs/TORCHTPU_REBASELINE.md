@@ -6,6 +6,10 @@
 > Existing code and benchmarks are salvage material; no rewrite is approved
 > solely by publishing this plan.
 
+**Current gate:** T0.1 inventory is complete. T0.2 mapping is under owner
+review in PR #20. No implementation queue is approved; T1 begins after T0
+review and uses an owner-approved Kaggle image.
+
 ## Project vision and desired developer experience
 
 TrainLM is an open-source, Python-first language-model training framework
@@ -36,7 +40,7 @@ reversible.
 | Item | Verified/recorded context | Required next action |
 |---|---|---|
 | Repository | `Dhiraj309/TrainLM` | Verify checkout, branch, origin, permissions |
-| Legacy integration | PR #18 merged into `main` on 2026-10-28; merge commit `23959d29434fd2ae3f78b20469e1d61c6b1e18c9` | T0.1 audits the merged tree before activating a new PR |
+| Legacy integration | PR #18 merged into `main` on 2026-10-28; merge commit `23959d29434fd2ae3f78b20469e1d61c6b1e18c9` | T0.1 inventory is complete; no new code PR is active |
 | Earlier salvage | PR #16 was merged into PR #18, which is now merged into `main` | Inventory its code as part of the merged tree; do not merge it again |
 | Existing TPU backend | Primarily PyTorch/XLA with historical measurements | Classify reusable vs XLA-specific components |
 | Native TorchTPU | **Target only**; no native v5e-8 certification established here | Prove device, autograd, distributed and compile support |
