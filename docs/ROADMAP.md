@@ -193,8 +193,9 @@ Legacy [PR #18](https://github.com/Dhiraj309/TrainLM/pull/18) merged to
 `main` on 2026-10-28 at `23959d29434fd2ae3f78b20469e1d61c6b1e18c9`. Its
 pre-existing `milestone/*` branches are historical; do not derive new PRs
 from them. T0.1's source classification is in
-[`TORCHTPU_SALVAGE_INVENTORY.md`](TORCHTPU_SALVAGE_INVENTORY.md). Review the
-post-merge audit and remap the XLA-oriented queue before choosing a new branch.
+[`TORCHTPU_SALVAGE_INVENTORY.md`](TORCHTPU_SALVAGE_INVENTORY.md); T0.2's
+proposed mapping is in [`PR_DELIVERY_PLAN.md`](PR_DELIVERY_PLAN.md#t02-candidate-mapping-to-native-torchtpu-gates).
+Owner review is required before activating a new implementation branch.
 
 ### Multiple meaningful PRs, each with multiple meaningful commits
 

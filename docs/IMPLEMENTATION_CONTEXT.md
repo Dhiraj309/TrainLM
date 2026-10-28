@@ -60,7 +60,9 @@ Native TorchTPU is still unverified. The PR #18 CPU snapshot baseline was
 700 passed / 21 failed on Python 3.12.14, torch 2.9.0+cpu, Transformers 5.0.0,
 Hub 1.3.5, pytest 9.1.1; it has not been rerun on merged `main`.
 Repository permissions and the current GitHub identity were verified during
-T0.1. This baseline has not been rerun on merged `main`.
+T0.1. This baseline has not been rerun on merged `main`. T0.2 proposes a
+legacy-card mapping in `PR_DELIVERY_PLAN.md`; it remains subject to owner
+review and does not activate a new implementation queue.
 
 ## Product intent
 
