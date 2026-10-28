@@ -122,6 +122,17 @@ verified merged `main` only after the preceding PR merges**. Branch name,
 PR title, description and commit scope must agree. Preserve commit history
 by default; no direct main pushes, force-pushes, auto-merges or stacked PRs.
 
+## T0.2 — proposed legacy-card mapping
+
+The source review is recorded in [the salvage inventory](TORCHTPU_SALVAGE_INVENTORY.md).
+The former 18-card XLA queue has a proposed T0–T11 disposition in
+[`PR_DELIVERY_PLAN.md`](PR_DELIVERY_PLAN.md#t02-candidate-mapping-to-native-torchtpu-gates).
+It is a review artifact, not permission to start implementation. Preserve old
+IDs for traceability; create fresh sequential PR IDs only after owner review.
+T1 must establish TorchTPU package provenance and real v5e-8 device,
+autograd, optimizer, collective, and compile behavior before dependency or
+support claims change.
+
 ## T0.1 — read-only Codex discovery task
 
 T0.1 records source-level findings and proposes follow-up work. The inventory

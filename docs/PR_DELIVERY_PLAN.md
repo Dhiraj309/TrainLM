@@ -64,6 +64,50 @@ verify new `main` → create PR-plan 02 branch → repeat.**
   the post-merge audit; a successful merge does not establish native TorchTPU
   compatibility or make the XLA-oriented candidate queue automatically valid.
 
+## T0.2 candidate mapping to native TorchTPU gates
+
+This is a proposed disposition of the 18 legacy cards, based on the merged
+source inventory. It is not an approved implementation queue. A card is not
+"satisfied" merely because XLA code or CPU contract tests exist. Preserve the
+legacy IDs here for traceability; assign fresh sequential branch IDs only
+when the owner approves a deliverable after T1/T0 review.
+
+| Legacy card | T0–T11 mapping | Disposition for native target |
+|---|---|---|
+| 01 CPU regression baseline | T0, T2 | Establish a clean reproducible CPU baseline before treating CPU regression gates as reliable. The recorded PR #18 snapshot is 700 passed / 21 failed; no native TPU implication. |
+| 02 TPU trainer lifecycle/resume | T2–T5 | Reuse the public HF-like facade and generic lifecycle contracts; audit coordinator, worker launch, and resume for XLA assumptions after T1. |
+| 03 Chunked causal loss | T7 | Retain reference implementation and semantic tests as candidates. Re-prove gradients, masks, memory, and dispatch on TorchTPU before enabling a provider. |
+| 04 Compiled accumulation | T6, T9 | Replace XLA-specific host/PJRT behavior with an evidence-led TorchTPU compile design; do not port XLA calls by name. |
+| 05 Pallas MHA | T7 | Hold pending verified TorchTPU/Pallas compatibility and a supported compiler path. |
+| 06 GQA/MQA, windows, ALiBi | T7 | Retain model semantics/specifications; provider implementation and hardware support require T1/T7 evidence. |
+| 07 Reversible QKV/MLP transforms | T7, T8 | Keep generic state-layout transforms and parity tests as candidates; provider activation waits for native forward/backward and export evidence. |
+| 08 Optimizer/rematerialization policy | T8, T9 | Revisit optimizer and recomputation contracts against native semantics; XLA optimizer and compiler controls are backend-specific. |
+| 09 Data prefetch/cache/graph stability | T3, T6 | Reuse data readers/cursors where topology-independent. Defer XLA compile-cache and graph controls until TorchTPU APIs are verified. |
+| 10 Telemetry and XLA profile | T10 | Preserve portable metric schemas and user reporting; replace or retain XLA collectors only as an optional XLA backend. |
+| 11 850K optimization gate | T10 | Retire the numeric gate as a TorchTPU acceptance target until a matched native baseline and workload are measured. |
+| 12 Numerical/resume/HF export parity | T4, T5 | Keep as required correctness outcomes; define native-device reference parity and clean-process resume tests. |
+| 13 LaughLM 135M certification | T10 | Re-establish a matched TorchTPU benchmark, warm-up accounting, and evidence bundle before setting thresholds. |
+| 14 Dense-family conformance | T2, T3 | Reuse HF compatibility fixtures; native device, dtype, and gradient coverage must be added after T1. |
+| 15 FSDP scale | T11 | Defer until native single-device and DP8 contracts are established; current XLA FSDP annotations do not imply TorchTPU support. |
+| 16 HF-like CLI/config journey | T2 | Audit existing API/CLI and retain generic pieces; only implement verified gaps. |
+| 17 CI/release/preemption | T1, T5, T10 | Add native environment CI only after a supported install/runtime exists; keep XLA CI separately labeled. |
+| 18 Dense-AR V1 certification | T10, T11 | Keep as a later release outcome; define support and certification from actual native evidence, not historical XLA results. |
+
+### Proposed sequencing gates
+
+1. **T0 closeout:** owner reviews this mapping, confirms salvage boundaries, and
+   chooses which unresolved legacy cards remain relevant.
+2. **T1:** on the owner-approved Kaggle image, establish install provenance,
+   import/device/autograd/optimizer/collective/compile behavior, and capture
+   versions and a minimal reproducible smoke. No dependency pins or support
+   claims change before this evidence exists.
+3. **After T1:** approve one outcome-scoped PR from verified merged `main`.
+   Prioritize a clean CPU regression baseline and the smallest native reference
+   training/data vertical slice; do not activate XLA-only performance cards
+   solely to preserve their old order.
+4. **Later gates:** earn distributed correctness, checkpoint/export, compile,
+   optimization, and benchmark work in T3–T11 order as dependencies are proven.
+
 ## Planned PR index
 
 | Plan | Branch | GitHub PR title | Tier | Traceability |
@@ -88,8 +132,8 @@ verify new `main` → create PR-plan 02 branch → repeat.**
 | 18 | `release/18-dense-ar-v1-support-certification` | release(v1): publish dense-AR support, limitations and evidence | P1 | M14-F5 |
 
 **Candidate-only caveat:** Legacy PR #18 is merged and its code is in current
-`main`. T0.1 has started the source-level salvage audit; **audit each entry**
-against the merged tree and real TPU evidence. Mark satisfied
+`main`. T0.1 inventory and the proposed T0.2 mapping are recorded;
+**review each entry** against the merged tree and real TPU evidence. Mark satisfied
 deliverables with evidence, consolidate or resequence redundant candidates in
 a separately reviewed plan update, and number the *first newly activated
 real branch* `01`. Don't implement the same code again to satisfy a table.
