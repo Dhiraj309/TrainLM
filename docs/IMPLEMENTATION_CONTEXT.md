@@ -22,8 +22,10 @@
   autograd, optimizer, and compile checks. Use v5e-8 for collective, DP8,
   sharding, distributed-checkpoint, or scaling requirements. No TorchTPU probe
   has run yet; this workspace has no PyTorch installed.
-- [T1 v5e-1 probe guide](T1_V5E1_PROBE.md) describes the prepared synthetic
-  smoke. Do not add guessed dependency pins or support claims from this probe.
+- [T1 v5e-1 probe guide](T1_V5E1_PROBE.md) and the
+  [Kaggle/Colab notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb) describe
+  the prepared synthetic smoke. Do not add guessed dependency pins or support
+  claims from this probe.
 
 ## Historical XLA development record
 

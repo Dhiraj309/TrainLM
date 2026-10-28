@@ -10,6 +10,11 @@ documented by the owner-approved Kaggle image.
 Start a fresh v5e-1 session with the intended image. Record the image/runtime
 name before running the probe. In a notebook cell, run:
 
+The [Kaggle/Colab-style notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb)
+provides a guided version of these steps. Colab is supported only when it uses
+the same owner-approved TorchTPU runtime; a generic Colab accelerator is not
+equivalent.
+
 ```bash
 python examples/torchtpu_t1_v5e1_probe.py --device '<runtime-documented-device>'
 ```

@@ -106,6 +106,8 @@ whole roadmap and not one commit per PR.**
   regression/docs commits. Do not squash meaningful change history by
   default, invent a minimum commit count, or rewrite a reviewed branch.
   Commit in response to new evidence and follow-up reviews on the same PR.
+  For same-scope docs, examples, and notebook follow-ups, continue on the
+  existing approved story branch/PR rather than opening a new branch.
 - **Before merge:** Verify tests and docs, source/head SHAs, review/CI,
   HF semantic safety, security, user UX and evidence required by the
   PR's particular acceptance contract. TPU hardware verification is
@@ -140,7 +142,8 @@ Current continuation point
 
 PR #18 is merged to `main`; PR #19 completed T0.1 and PR #20 merged the T0.2
 mapping. Native TorchTPU remains unverified. T1's v5e-1 probe is documented
-in `docs/T1_V5E1_PROBE.md`; use v5e-8 for multi-device evidence. The local
+in `docs/T1_V5E1_PROBE.md` and `notebooks/TorchTPU_T1_v5e1_Probe.ipynb`; use
+v5e-8 for multi-device evidence. The local
 checkout may be on a docs branch; before implementation, fetch and verify the
 latest merged `main`. Do not delete legacy branches until T0 salvage review
 determines whether they preserve needed source or evidence.

@@ -17,6 +17,7 @@ DP8, sharding, distributed checkpoints, or scaling.
 - [Current handoff and verified baseline](HANDOFF.md)
 - [Current implementation context](IMPLEMENTATION_CONTEXT.md)
 - [T1 v5e-1 single-device probe](T1_V5E1_PROBE.md)
+- [Kaggle/Colab-style T1 probe notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb)
 
 ## Status meanings
 
