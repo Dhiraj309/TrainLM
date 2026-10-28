@@ -88,7 +88,8 @@
   its fresh checkout without installing the package, so its actual Colab
   report can be compared with the separate eager-smoke evidence. The downloadable
   artifact now records whether the command ran, its profile and TPU statuses,
-  and whether it used the same source SHA.
+  and whether it used the same source SHA. Package reports include bounded
+  parsed `pip check` requirement conflicts instead of only affected names.
 
 ## Historical XLA development record
 

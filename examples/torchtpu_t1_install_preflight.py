@@ -109,6 +109,7 @@ def inspect_profile(
     pip_status = "not_run"
     pip_problem_count = None
     pip_conflict_packages = []
+    pip_conflict_details = []
     try:
         completed = pip_runner(
             [sys.executable, "-m", "pip", "check"],
@@ -129,6 +130,29 @@ def inspect_profile(
                 for line in completed.stdout.splitlines()
                 if (match := re.match(r"^([A-Za-z0-9_.-]+)\s", line))
             })
+            for line in completed.stdout.splitlines()[:32]:
+                match = re.match(r"^([A-Za-z0-9_.-]+)\s+(\S+) has requirement (.+)\.$", line)
+                if not match:
+                    continue
+                package, version, detail = match.groups()
+                missing = detail.endswith(", which is not installed")
+                mismatch = re.match(r"^(.+), but you have ([A-Za-z0-9_.-]+)\s+(\S+)$", detail)
+                requirement_text = detail[:-len(", which is not installed")] if missing else mismatch.group(1) if mismatch else ""
+                if not requirement_text:
+                    continue
+                try:
+                    requirement = Requirement(requirement_text)
+                    if not requirement.url:
+                        pip_conflict_details.append({
+                            "package": canonicalize_name(package),
+                            "installed_version": version[:96],
+                            "dependency": canonicalize_name(requirement.name),
+                            "required": str(requirement.specifier) or "any",
+                            "issue": "missing_dependency" if missing else "version_mismatch",
+                            "installed_dependency_version": mismatch.group(3)[:96] if mismatch else None,
+                        })
+                except Exception:
+                    continue
     except subprocess.TimeoutExpired:
         pip_status = "timeout"
     except Exception:
@@ -172,7 +196,8 @@ def inspect_profile(
         "source_requirements": source_checks,
         "torch_tpu_requirements": upstream_checks,
         "pip_check": {"status": pip_status, "problem_count": pip_problem_count,
-                      "affected_packages": pip_conflict_packages},
+                      "affected_packages": pip_conflict_packages,
+                      "conflicts": pip_conflict_details},
         "issues": sorted(set(issues)),
     }
 

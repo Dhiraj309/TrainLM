@@ -123,6 +123,25 @@ def profile_evidence(process: dict | None) -> dict:
         if key in _PACKAGES and (version is None or isinstance(version, str)
                                 and _VERSION.fullmatch(version))
     }
+    pip_check = report.get("pip_check")
+    if isinstance(pip_check, dict):
+        conflicts = []
+        for item in pip_check.get("conflicts", [])[:32] if isinstance(pip_check.get("conflicts"), list) else []:
+            if not isinstance(item, dict):
+                continue
+            package, dependency = item.get("package"), item.get("dependency")
+            required, issue = item.get("required"), item.get("issue")
+            version = item.get("installed_version")
+            if (not isinstance(package, str) or not re.fullmatch(r"[a-z0-9_.-]{1,96}", package)
+                    or not isinstance(dependency, str) or not re.fullmatch(r"[a-z0-9_.-]{1,96}", dependency)
+                    or not isinstance(required, str) or not re.fullmatch(r"[A-Za-z0-9.!<>=~*+, -]{1,128}", required)
+                    or issue not in {"missing_dependency", "version_mismatch"}
+                    or not isinstance(version, str) or _VERSION.fullmatch(version) is None):
+                continue
+            conflicts.append({"package": package, "installed_version": version,
+                              "dependency": dependency, "required": required,
+                              "issue": issue})
+        result["pip_check_conflicts"] = conflicts
     # Keep the useful resolver comparison without URLs or arbitrary metadata.
     for field in ("source_requirements", "torch_tpu_requirements"):
         result[field] = []
