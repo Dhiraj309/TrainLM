@@ -1,0 +1,23 @@
+# Pretrained dense-AR TPU smoke configuration.
+# Supply SmolLM2-tokenized packed shards; LaughLM-tokenized shards are only
+# suitable for exercising lifecycle plumbing because their tokenizer differs.
+api_version: "1"
+model:
+  provider: huggingface
+  initialization: pretrained
+  name_or_path: HuggingFaceTB/SmolLM2-135M-Instruct
+  revision: main
+  dtype: bfloat16
+  trust_remote_code: false
+training_args:
+  output_dir: runs/smollm2-135m-tpu
+  max_steps: 6
+  # Lifecycle smoke only; increase after the memory-bounded loss path is active.
+  sequence_length: 128
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 1
+  # Evaluation is opt-in after this train/checkpoint lifecycle smoke succeeds.
+  save_steps: 2
+  logging_steps: 1
+  bf16: true
+  accelerator: tpu

@@ -235,6 +235,8 @@ class Trainer:
         }
         if self.state.loss is not None:
             metrics["loss"] = self.state.loss
+        if self.state.grad_norm is not None:
+            metrics["grad_norm"] = self.state.grad_norm
         self.callback_handler.on_metrics(self.state, self.control, metrics)
 
     def request_stop(self) -> None:
@@ -299,6 +301,7 @@ class Trainer:
         total_sequences: int,
         loss_numerator: torch.Tensor,
         exact_tokens: bool,
+        grad_norm: torch.Tensor | None,
     ) -> None:
         """Commit one optimizer update after all microbatches are reduced."""
 
@@ -311,8 +314,12 @@ class Trainer:
             self.state.loss = (
                 loss_value / total_tokens if exact_tokens else loss_value
             )
+            self.state.grad_norm = (
+                float(grad_norm.detach().item()) if grad_norm is not None else None
+            )
         else:
             self.state.loss = None
+            self.state.grad_norm = None
         self.state.learning_rate = self._current_learning_rate()
 
     def _train_step(self) -> None:
@@ -393,7 +400,7 @@ class Trainer:
                 1.0 / total_tokens,
             )
 
-        self.runtime.clip_gradients(
+        grad_norm = self.runtime.clip_gradients(
             self.model.parameters(),
             self.config.trainer.max_grad_norm,
         )
@@ -402,13 +409,17 @@ class Trainer:
             self.optimizer,
         )
 
-        self.runtime.synchronize()
+        # XLA flushes the optimizer update in ``on_step_end`` below. Calling
+        # synchronize here as well creates two mark_step boundaries per update
+        # and fragments the lazy graph on TPU. Other runtimes keep their normal
+        # optimizer semantics through their own on_step_end hook.
 
         self._update_accumulated_state(
             total_tokens=total_tokens,
             total_sequences=total_sequences,
             loss_numerator=loss_numerator,
             exact_tokens=exact_tokens,
+            grad_norm=grad_norm,
         )
         self._advance_scheduler(total_tokens=total_tokens)
         self.state.learning_rate = self._current_learning_rate()
@@ -440,7 +451,11 @@ class Trainer:
     def _evaluation_results(self):
         """Yield evaluation results without retaining the evaluation set."""
 
-        for batch in self.eval_dataloader:
+        evaluation = getattr(self.config, "evaluation", None)
+        maximum = getattr(evaluation, "max_batches", None)
+        for batch_index, batch in enumerate(self.eval_dataloader):
+            if maximum is not None and batch_index >= maximum:
+                break
             yield self._evaluation_step(batch)
 
     def evaluate(self) -> dict[str, float]:
@@ -466,12 +481,21 @@ class Trainer:
 
         try:
             with torch.no_grad():
+                distributed_aggregator = getattr(
+                    self.task,
+                    "aggregate_distributed_evaluation_stream",
+                    None,
+                )
                 stream_aggregator = getattr(
                     self.task,
                     "aggregate_evaluation_stream",
                     None,
                 )
-                if callable(stream_aggregator):
+                if self.runtime.is_distributed and callable(distributed_aggregator):
+                    metrics = distributed_aggregator(
+                        self._evaluation_results(), self.runtime
+                    )
+                elif callable(stream_aggregator):
                     metrics = stream_aggregator(self._evaluation_results())
                 else:
                     results: list[TaskResult] = []

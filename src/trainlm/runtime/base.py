@@ -126,13 +126,15 @@ class ExecutionBackend(Protocol):
         self,
         parameters: Iterable[nn.Parameter],
         max_norm: float,
-    ) -> None: ...
+    ) -> torch.Tensor | None: ...
 
     def scale_gradients(
         self,
         parameters: Iterable[nn.Parameter],
         scale: float,
     ) -> None: ...
+
+    def reduce_sum(self, value: torch.Tensor) -> torch.Tensor: ...
 
     def optimizer_step(self, optimizer: Optimizer) -> None: ...
 

@@ -31,7 +31,7 @@ def configure_environment() -> None:
         os.environ.pop(name, None)
 
 
-def run_worker(index, args, shards) -> None:
+def run_worker(index, args, shards, eval_shards) -> None:
     import torch
     import torch_xla
     import torch_xla.core.xla_model as xm
@@ -40,18 +40,12 @@ def run_worker(index, args, shards) -> None:
     torch.set_num_threads(1)
     rank, world = int(xr.global_ordinal()), int(xr.world_size())
     event("worker_entered", rank=rank, world_size=world)
-    expected_world = int(args.expected_world_size)
-    if world != expected_world:
-        raise RuntimeError(
-            f"Expected world_size={expected_world}, got {world}; "
-            "no implicit fallback is enabled."
-        )
     # Cache must be configured before the first tensor computation, including probe.
     xr.initialize_cache(str(Path(args.cache_dir) / f"rank-{rank}"))
     device = torch_xla.device()
     total = xm.all_reduce(xm.REDUCE_SUM, torch.tensor(float(rank + 1), device=device))
     torch_xla.sync(wait=True)
-    expected_sum = expected_world * (expected_world + 1) / 2
+    expected_sum = world * (world + 1) / 2
     if total.item() != expected_sum:
         raise RuntimeError(
             f"Collective probe failed (expected rank sum {expected_sum:g})."
@@ -66,14 +60,13 @@ def run_worker(index, args, shards) -> None:
         xm.rendezvous("trainlm-model-preflight-finished")
         return
     from trainlm_tpu_training import train_fn
-    train_fn(index, args, shards)
+    train_fn(index, args, shards, eval_shards)
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--probe-only", action="store_true")
     parser.add_argument("--model-preflight", action="store_true")
-    parser.add_argument("--expected-world-size", type=int, default=8)
     parser.add_argument("--max-steps", type=int, default=2)
     parser.add_argument("--warmup-steps", type=int, default=5)
     parser.add_argument("--gradient-accumulation-steps", type=int, default=32)
@@ -81,6 +74,11 @@ def parse_args():
     parser.add_argument("--sequence-length", type=int, default=2048)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--log-every-steps", type=int, default=10)
+    parser.add_argument("--save-every-steps", type=int)
+    parser.add_argument("--resume-from-checkpoint")
+    parser.add_argument("--eval-manifest-dir")
+    parser.add_argument("--eval-every-steps", type=int)
+    parser.add_argument("--max-eval-batches", type=int)
     parser.add_argument("--learning-rate", type=float, default=2e-4)
     parser.add_argument("--beta1", type=float, default=0.9)
     parser.add_argument("--beta2", type=float, default=0.95)
@@ -93,6 +91,17 @@ def parse_args():
         default="wsd",
     )
     parser.add_argument("--precision", choices=("fp32", "bf16"), default="bf16")
+    parser.add_argument(
+        "--logging-verbosity",
+        choices=("quiet", "normal", "verbose"),
+        default="normal",
+    )
+    parser.add_argument(
+        "--loss-implementation",
+        choices=("auto", "causal_lm", "model", "chunked_linear"),
+        default="causal_lm",
+    )
+    parser.add_argument("--logits-chunk-size", type=int)
     parser.add_argument("--cache-dir", default="/tmp/trainlm_xla_cache")
     parser.add_argument("--output-dir", default="runs/trainlm_v5e8")
     parser.add_argument("--manifest-dir", default="data/packed/train")
@@ -113,14 +122,29 @@ def parse_args():
     parser.add_argument("--model-id", default="")
     parser.add_argument("--model-revision", default="")
     parser.add_argument("--trust-remote-code", action="store_true")
+    parser.add_argument("--model-source-json", default="")
     parser.add_argument("--export-hf", action="store_true")
     args = parser.parse_args()
     for name in ("max_steps", "gradient_accumulation_steps", "micro_batch_per_device",
                  "sequence_length", "log_every_steps", "shard_count", "token_vocab_size"):
         if getattr(args, name) < 1:
             parser.error(f"--{name.replace('_', '-')} must be positive")
-    if args.expected_world_size < 1:
-        parser.error("--expected-world-size must be positive")
+    if args.save_every_steps is not None and args.save_every_steps < 1:
+        parser.error("--save-every-steps must be positive")
+    if args.resume_from_checkpoint is not None and not Path(
+        args.resume_from_checkpoint
+    ).is_dir():
+        parser.error("--resume-from-checkpoint must be an existing directory")
+    if (args.eval_manifest_dir is None) != (args.eval_every_steps is None):
+        parser.error("--eval-manifest-dir and --eval-every-steps must be used together")
+    if args.eval_every_steps is not None and args.eval_every_steps < 1:
+        parser.error("--eval-every-steps must be positive")
+    if args.max_eval_batches is not None and args.max_eval_batches < 1:
+        parser.error("--max-eval-batches must be positive")
+    if args.max_eval_batches is not None and args.eval_manifest_dir is None:
+        parser.error("--max-eval-batches requires --eval-manifest-dir")
+    if args.logits_chunk_size is not None and args.logits_chunk_size < 1:
+        parser.error("--logits-chunk-size must be positive")
     if args.sequence_length < 2 or args.warmup_steps < 0:
         parser.error("sequence length must be >=2 and warmup steps >=0")
     if (
@@ -157,6 +181,7 @@ def main() -> None:
     import torch_xla
     event("xla_imported")
     shards = None
+    eval_shards = None
     if not (args.probe_only or args.model_preflight):
         event("data_preflight")
         # Validate once on the host, then pass small immutable descriptors to
@@ -165,8 +190,17 @@ def main() -> None:
         shards = _shards(args)
         event("data_validated", shards=len(shards),
               tokens=sum(s.manifest.token_count for s in shards))
+        if args.eval_manifest_dir is not None:
+            eval_args = argparse.Namespace(**vars(args))
+            eval_args.manifest_dir = args.eval_manifest_dir
+            eval_args.data_mode = "local"
+            eval_shards = _shards(eval_args)
+            event("eval_data_validated", shards=len(eval_shards),
+                  tokens=sum(s.manifest.token_count for s in eval_shards))
     event("launch_dp8")
-    torch_xla.launch(run_worker, args=(args, shards), start_method="spawn")
+    torch_xla.launch(
+        run_worker, args=(args, shards, eval_shards), start_method="spawn"
+    )
     event("all_workers_finished")
 
 

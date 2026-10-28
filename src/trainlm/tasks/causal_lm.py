@@ -15,6 +15,8 @@ from trainlm.model.outputs import normalize_causal_lm_output
 from trainlm.runtime import ExecutionBackend
 
 from .base import TaskResult, TokenCounts
+from .chunked_loss import RematerializationPolicy
+from .training_view import LinearCausalLMTrainingView
 
 
 class CausalLMTask:
@@ -30,14 +32,21 @@ class CausalLMTask:
             "supervised_tokens"
         ),
         z_loss: float = 0.0,
-        loss_implementation: Literal["auto", "causal_lm", "model"] = "auto",
+        loss_implementation: Literal[
+            "auto", "causal_lm", "model", "chunked_linear"
+        ] = "auto",
         assume_all_supervised: bool = False,
+        training_view: LinearCausalLMTrainingView | None = None,
+        logits_chunk_size: int = 2048,
+        rematerialization: RematerializationPolicy = "disabled",
     ) -> None:
         if normalization not in {"supervised_tokens", "batch"}:
             raise ValueError(f"Unsupported loss normalization: {normalization}")
         if z_loss < 0:
             raise ValueError("z_loss must be non-negative.")
-        if loss_implementation not in {"auto", "causal_lm", "model"}:
+        if loss_implementation not in {
+            "auto", "causal_lm", "model", "chunked_linear"
+        }:
             raise ValueError(
                 f"Unsupported loss implementation: {loss_implementation}"
             )
@@ -45,6 +54,17 @@ class CausalLMTask:
         self.normalization = normalization
         self.z_loss = z_loss
         self.loss_implementation = loss_implementation
+        if loss_implementation == "chunked_linear" and training_view is None:
+            raise ValueError(
+                "chunked_linear loss requires an explicit LinearCausalLMTrainingView."
+            )
+        if isinstance(logits_chunk_size, bool) or not isinstance(logits_chunk_size, int) or logits_chunk_size < 1:
+            raise ValueError("logits_chunk_size must be a positive integer.")
+        if rematerialization not in {"disabled", "per_chunk"}:
+            raise ValueError("Unsupported loss rematerialization policy.")
+        self.training_view = training_view
+        self.logits_chunk_size = logits_chunk_size
+        self.rematerialization = rematerialization
         if not isinstance(assume_all_supervised, bool):
             raise ValueError("assume_all_supervised must be boolean.")
         self.assume_all_supervised = assume_all_supervised
@@ -112,6 +132,38 @@ class CausalLMTask:
             "eval_perplexity": perplexity,
         }
 
+    def aggregate_distributed_evaluation_stream(
+        self,
+        results: Iterable[TaskResult],
+        backend: ExecutionBackend,
+    ) -> dict[str, float]:
+        """Reduce the loss numerator and denominator across all replicas."""
+
+        weight_name = (
+            "supervised_tokens"
+            if self.normalization == "supervised_tokens"
+            else "sequences"
+        )
+        totals: torch.Tensor | None = None
+        for result in results:
+            weight = getattr(result.tokens, weight_name)
+            contribution = result.loss.detach().to(torch.float32) * weight
+            current = torch.stack(
+                (contribution, contribution.new_tensor(float(weight)))
+            )
+            totals = current if totals is None else totals + current
+        if totals is None:
+            raise ValueError("Evaluation contains no normalization units.")
+        totals = backend.reduce_sum(totals)
+        if totals[1].item() <= 0:
+            raise ValueError("Evaluation contains no normalization units.")
+        eval_loss = (totals[0] / totals[1]).item()
+        try:
+            perplexity = math.exp(eval_loss)
+        except OverflowError:
+            perplexity = float("inf")
+        return {"eval_loss": eval_loss, "eval_perplexity": perplexity}
+
     def _step(
         self,
         model: nn.Module,
@@ -153,6 +205,35 @@ class CausalLMTask:
             for key, value in task_batch.items()
             if key not in {"labels", "loss_mask"}
         }
+        if self.loss_implementation == "chunked_linear":
+            assert self.training_view is not None
+            # Packed TPU batches are explicitly all-supervised. Avoid sending
+            # a denominator reduction to the host once per microstep in this
+            # hot path; the chunked loss can use the static target geometry.
+            chunk_loss_mask = (
+                None
+                if self.assume_all_supervised and counts.ignored_tokens == 0
+                else loss_mask
+            )
+            with backend.autocast():
+                loss, z_loss_value = self.training_view.loss(
+                    model_inputs,
+                    model_labels,
+                    loss_mask=chunk_loss_mask,
+                    chunk_size=self.logits_chunk_size,
+                    ignore_index=self.ignore_index,
+                    z_loss=self.z_loss,
+                    rematerialization=self.rematerialization,
+                )
+            metrics: dict[str, torch.Tensor | float] = {}
+            if z_loss_value is not None:
+                metrics["z_loss"] = z_loss_value.detach()
+            return TaskResult(
+                loss=loss,
+                tokens=counts,
+                metrics=metrics,
+                loss_source="trainlm_chunked_linear",
+            )
         if self._dispatcher is None or self._dispatcher_model is not model:
             self._dispatcher = ForwardBatchDispatcher.from_model(model)
             self._dispatcher_model = model
