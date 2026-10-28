@@ -14,7 +14,8 @@ backend. Native TorchTPU support is not implemented or certified yet.
 - [Current roadmap and documentation guide](docs/README.md)
 - [T0–T11 native TorchTPU roadmap](docs/TORCHTPU_REBASELINE.md)
 - [T0.1 code inventory](docs/TORCHTPU_SALVAGE_INVENTORY.md)
-- [T0.2 candidate work mapping](docs/PR_DELIVERY_PLAN.md#t02-candidate-mapping-to-native-torchtpu-gates)
+- [Accepted T0.2 work mapping](docs/PR_DELIVERY_PLAN.md#t02-accepted-mapping-to-native-torchtpu-gates)
+- [T1 v5e-1 probe and run guide](docs/T1_V5E1_PROBE.md)
 
 The M0–M17 material below and in the detailed roadmap records the earlier
 PyTorch/XLA development. Treat its completed, partial, and deferred labels as

@@ -8,20 +8,22 @@
 
 ## Current project snapshot
 
-- PR #18, including PR #16, is merged. Verified `main` after PR #19 is
-  `0d1673cce040646e642498cda462cca907e1701c`.
-- T0.1 code inventory is recorded in `TORCHTPU_SALVAGE_INVENTORY.md`; T0.2
-  maps the 18 XLA-era cards in `PR_DELIVERY_PLAN.md` and is under review in
-  PR #20. The candidate mapping is not an approved implementation queue.
+- PR #18, including PR #16, is merged. PR #20 merged the accepted T0.2 mapping;
+  verified `main` is `e575bf6f6681dc9a6883d73bf51bda7aed9a6353`.
+- T0.1 code inventory is recorded in `TORCHTPU_SALVAGE_INVENTORY.md`. The
+  mapped legacy cards remain candidates, not an approved implementation queue.
 - Current implementation backend: PyTorch/XLA. Target: native TorchTPU on
   Kaggle TPU v5e-8. No TorchTPU install profile or hardware certification is
   established.
 - The known PR #18 CPU snapshot result is 700 passed / 21 failed under Python
   3.12.14, torch 2.9.0+cpu, Transformers 5.0.0, Hub 1.3.5, pytest 9.1.1. It
   has not been rerun on current `main`.
-- Next gate after T0 review: T1 environment feasibility on the owner-approved
-  Kaggle image. Do not add guessed dependency pins or start a numbered code PR
-  before the owner reviews the mapping and T1 prerequisites.
+- T1 policy: use v5e-1 first for single-device import, device operations,
+  autograd, optimizer, and compile checks. Use v5e-8 for collective, DP8,
+  sharding, distributed-checkpoint, or scaling requirements. No TorchTPU probe
+  has run yet; this workspace has no PyTorch installed.
+- [T1 v5e-1 probe guide](T1_V5E1_PROBE.md) describes the prepared synthetic
+  smoke. Do not add guessed dependency pins or support claims from this probe.
 
 ## Historical XLA development record
 
@@ -32,7 +34,7 @@ old XLA targets and PR cards do not automatically remain TorchTPU requirements.
 
 ## Sequential PR delivery policy
 
-See [the current PR plan](PR_DELIVERY_PLAN.md) for the proposed T0.2 mapping
+See [the current PR plan](PR_DELIVERY_PLAN.md) for the accepted T0.2 mapping
 and [the roadmap](ROADMAP.md) for the historical M0–M17 specification.
 Future implementation work follows the owner-approved T0–T11 sequence, with
 small commits and verified `main` between PRs.

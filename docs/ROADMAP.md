@@ -5,7 +5,7 @@
 > checkboxes and old XLA PR cards do not describe the active native TorchTPU
 > queue. For current work, start at [the docs guide](README.md), then follow
 > [T0–T11](TORCHTPU_REBASELINE.md), the [salvage inventory](TORCHTPU_SALVAGE_INVENTORY.md),
-> and the [owner-reviewed T0.2 mapping](PR_DELIVERY_PLAN.md#t02-candidate-mapping-to-native-torchtpu-gates).
+> and the [accepted T0.2 mapping](PR_DELIVERY_PLAN.md#t02-accepted-mapping-to-native-torchtpu-gates).
 
 Historical status labels below refer to software and evidence in the backend
 that existed at the time, primarily PyTorch/XLA. They do not imply native
@@ -15,17 +15,18 @@ TorchTPU support. “Implemented” means present in that historical code path;
 - **Historical product:** Hugging Face-native dense autoregressive training
 - **Historical TPU backend:** PyTorch/XLA
 - **Current target:** Native TorchTPU on Kaggle TPU v5e-8; not yet verified
-- **Current gate:** T0.1 inventory is complete; T0.2 mapping is under review
-  in PR #20. After T0 review, T1 is environment feasibility. The 18 old PR
-  cards are candidates, not the active queue.
+- **Current gate:** T0 is closed; PR #20 merged the T0.2 mapping. T1 begins
+  with v5e-1 single-device feasibility, using v5e-8 for multi-device checks.
+  The 18 old PR cards are candidates, not the active queue.
 
 ## Historical native-backend transition note
 
 The [T0–T11 plan](TORCHTPU_REBASELINE.md) is the current target architecture.
 Existing M0–M14 work and measurements are salvage material, not TorchTPU
-certification. PR #18 is merged, T0.1 inventory is complete, and the T0.2
-candidate mapping is under owner review in PR #20. No numbered implementation
-queue is active until the owner approves the mapping.
+certification. PR #18 is merged, T0.1 inventory is complete, and PR #20
+merged the T0.2 mapping. The owner approved v5e-1 for single-device T1
+feasibility, with v5e-8 reserved for checks that require multiple devices.
+The old XLA cards are still not an approved implementation queue.
 
 ## Historical M0–M17 product goal and acceptance gates
 
@@ -194,8 +195,9 @@ Legacy [PR #18](https://github.com/Dhiraj309/TrainLM/pull/18) merged to
 pre-existing `milestone/*` branches are historical; do not derive new PRs
 from them. T0.1's source classification is in
 [`TORCHTPU_SALVAGE_INVENTORY.md`](TORCHTPU_SALVAGE_INVENTORY.md); T0.2's
-proposed mapping is in [`PR_DELIVERY_PLAN.md`](PR_DELIVERY_PLAN.md#t02-candidate-mapping-to-native-torchtpu-gates).
-Owner review is required before activating a new implementation branch.
+accepted mapping is in [`PR_DELIVERY_PLAN.md`](PR_DELIVERY_PLAN.md#t02-accepted-mapping-to-native-torchtpu-gates).
+Owner approval of a concrete scope is required before activating a new
+implementation branch.
 
 ### Multiple meaningful PRs, each with multiple meaningful commits
 

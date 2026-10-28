@@ -89,12 +89,12 @@ focused PRs, each with multiple logical commits, not a single PR for the
 whole roadmap and not one commit per PR.**
 
 - **Completed:** PR #18, including PR #16, merged into `main` on 2026-10-28.
-  PR #19 established the T0.1 inventory; PR #20 proposes the T0.2 mapping.
-- **Current:** T0.1 inventory is complete; review the T0.2 map and actual
-  owner-run TPU evidence. The old 18-card XLA queue is historical until the
-  owner approves its remapping.
-- **Next:** Complete T0 decisions before starting T1 or a numbered
-  implementation branch. Current facts and labels are indexed in
+  PR #19 established the T0.1 inventory; PR #20 merged the T0.2 mapping.
+- **Current:** T1 environment feasibility. Start with single-device evidence
+  on v5e-1; use v5e-8 for collectives, DP8, sharding, distributed checkpoints,
+  and scaling. The 18-card XLA queue is historical, not an active queue.
+- **Next:** Select the first implementation scope from verified T1 evidence.
+  Current facts and labels are indexed in
   `docs/README.md`; the M0–M17 roadmap and implementation log are historical
   XLA records unless a page explicitly says otherwise.
 - **Per PR:** Create `<type>/<NN>-<deliverable>` from the new, fetched
@@ -122,10 +122,12 @@ Read `docs/TORCHTPU_REBASELINE.md`. Native TorchTPU is the target backend;
 existing PyTorch/XLA implementation and M0–M14 evidence are historical
 salvage, not native certification. T0 inventories reusable, XLA-specific
 and uncertain code before remapping the XLA-oriented 18-PR candidate queue.
-T0.1 was read-only discovery. T0.2 is a proposed mapping; owner approval is
-required before changing the roadmap queue or beginning T1 implementation.
-For future implementation, propose logical commit messages and tests and
-obtain explicit owner approval before commit, push, new PR or merge.
+T0.1 was read-only discovery; T0.2 is the owner-approved mapping merged by
+PR #20. T1 feasibility is authorized on v5e-1 for single-device checks, with
+v5e-8 for multi-device checks. No dependency pins or support claims change
+until environment evidence is reviewed. For future implementation, propose
+logical commit messages and obtain explicit owner approval before commit,
+push, new PR or merge.
 Maintain multiple small commits per approved PR, with branch/title/body
 matching scope, and the next branch only after verified merge to `main`.
 Use the requested trailer where appropriate:
@@ -136,18 +138,18 @@ credentials, or auto-merge.
 
 Current continuation point
 
-PR #18 is merged to `main`; PR #19 completed the T0.1 inventory, and PR #20
-reviews the proposed T0.2 mapping from the 18 legacy XLA cards to T0–T11.
-Native TorchTPU remains unverified. The local checkout may be on a docs branch; before implementation,
-verify PR #20 outcome and fetch the latest merged `main`. Do not delete legacy
-branches until T0 salvage review determines whether they preserve needed
-source or evidence.
+PR #18 is merged to `main`; PR #19 completed T0.1 and PR #20 merged the T0.2
+mapping. Native TorchTPU remains unverified. T1's v5e-1 probe is documented
+in `docs/T1_V5E1_PROBE.md`; use v5e-8 for multi-device evidence. The local
+checkout may be on a docs branch; before implementation, fetch and verify the
+latest merged `main`. Do not delete legacy branches until T0 salvage review
+determines whether they preserve needed source or evidence.
 
-After owner review of T0.2, establish T1 on the approved Kaggle TPU image and
-record supported install provenance, device/autograd/optimizer/collective/
-compile evidence. Create the next numbered implementation PR only after its
-scope and acceptance criteria are approved and its branch can start from
-verified merged `main`.
+Start T1 on the approved Kaggle v5e-1 image and record install provenance,
+device/autograd/optimizer/compile evidence. Use v5e-8 for collectives, DP8,
+sharding, distributed checkpoints, and scale. Create an implementation PR only
+after the T1 evidence identifies a concrete scope and its branch can start
+from verified merged `main`.
 
 Codex may read, test, commit and push to an approved PR branch, but must not
 push to `main`, force-push, or merge without explicit owner authorization.

@@ -4,19 +4,22 @@
 
 - **Direction:** native TorchTPU on Kaggle TPU v5e-8. The code currently uses
   PyTorch/XLA; TorchTPU is not implemented or certified.
-- **Current gate:** T0 architecture rebaseline. T0.1 inventory is complete;
-  T0.2 card mapping is under review in PR #20. No implementation queue is
-  approved yet.
-- **Verified base:** `main` at `0d1673cce040646e642498cda462cca907e1701c`
-  after PR #19. PR #20 reviews the T0.2 proposal.
-- **Next after review:** establish T1 installation, device, autograd, optimizer,
-  collective, and compile feasibility on the owner-approved Kaggle image.
+- **Current gate:** T1 native-runtime feasibility. PR #20 merged the accepted
+  T0.2 mapping. Start with v5e-1 single-device checks; use v5e-8 for
+  multi-device collectives, DP8, sharding, distributed checkpoints, and scaling.
+- **Verified base:** `main` at `e575bf6f6681dc9a6883d73bf51bda7aed9a6353`
+  after PR #20.
+- **Probe:** [`T1 v5e-1 guide`](T1_V5E1_PROBE.md); it tests a tiny synthetic
+  forward/backward and optimizer update, with optional `torch.compile`.
+- **Next:** run the probe on the owner-approved Kaggle v5e-1 image and record
+  package provenance and complete output. This workspace lacks PyTorch and
+  has not run the accelerator probe.
 - **History:** PR #18 (including PR #16) is merged. The old M0–M17 tables and
   P0/P1 XLA backlog below describe historical XLA implementation/evidence;
   use them for salvage, not as the current TorchTPU task list.
 
 See the [docs guide](README.md), [T0–T11 plan](TORCHTPU_REBASELINE.md),
-[salvage inventory](TORCHTPU_SALVAGE_INVENTORY.md), and [T0.2 mapping](PR_DELIVERY_PLAN.md#t02-candidate-mapping-to-native-torchtpu-gates)
+[salvage inventory](TORCHTPU_SALVAGE_INVENTORY.md), and [T0.2 mapping](PR_DELIVERY_PLAN.md#t02-accepted-mapping-to-native-torchtpu-gates)
 for the active planning sources.
 
 This handoff retains implementation and target-hardware notes from the legacy

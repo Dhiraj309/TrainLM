@@ -6,9 +6,9 @@
 > Existing code and benchmarks are salvage material; no rewrite is approved
 > solely by publishing this plan.
 
-**Current gate:** T0.1 inventory is complete. T0.2 mapping is under owner
-review in PR #20. No implementation queue is approved; T1 begins after T0
-review and uses an owner-approved Kaggle image.
+**Current gate:** T0 is closed; PR #20 merged the accepted T0.2 mapping. T1
+starts on v5e-1 for single-device feasibility; use v5e-8 for tests that need
+multiple devices. TorchTPU remains unverified.
 
 ## Project vision and desired developer experience
 
@@ -97,15 +97,16 @@ attention, loss, optimizer, data, checkpoint, tests and documentation.
 - Validate reference correctness first, native TPU correctness second,
   explicit optimized dispatch third and matched hardware performance last.
   Never infer performance from fusion/compilation alone.
-- Record actual Kaggle v5e-8 evidence for TPU-only gates; Codex CPU results
-  are not TPU certification. FSDP/tensor parallelism are gated future scope.
+- Use v5e-1 for initial single-device feasibility and record the exact image
+  and software provenance. Use actual Kaggle v5e-8 evidence for gates that
+  require multiple devices; CPU results are not TPU certification.
 
 ## Proposed T0–T11 milestones and acceptance gates
 
 | Gate | Outcome | Required acceptance evidence |
 |---|---|---|
 | T0 | Architecture rebaseline and salvage | PR #16/#18 inventory; reusable/XLA-specific/uncertain classification; approved boundaries and PR mapping |
-| T1 | Native TorchTPU environment | Real v5e-8 import, device ops, autograd, optimizer step, multi-device feasibility and reproducible setup |
+| T1 | Native TorchTPU environment | Start on v5e-1: package provenance, import, device ops, autograd, optimizer update, and eager/compile smoke. Use v5e-8 for collective and other multi-device feasibility. Record reproducible setup. |
 | T2 | Python-first configs/API | Verified public API, HF tokenizer/dataset/model contracts, CPU tests and actionable errors |
 | T3 | Single-device training/data | TPU reference causal LM step, packed data manifest, uint32/legacy uint16 validation and loss parity |
 | T4 | Eight-device data parallelism | Global valid-token-weighted gradients, unequal masks, accumulation and reference-parity proof |
@@ -126,16 +127,16 @@ verified merged `main` only after the preceding PR merges**. Branch name,
 PR title, description and commit scope must agree. Preserve commit history
 by default; no direct main pushes, force-pushes, auto-merges or stacked PRs.
 
-## T0.2 — proposed legacy-card mapping
+## T0.2 — accepted legacy-card mapping
 
 The source review is recorded in [the salvage inventory](TORCHTPU_SALVAGE_INVENTORY.md).
-The former 18-card XLA queue has a proposed T0–T11 disposition in
-[`PR_DELIVERY_PLAN.md`](PR_DELIVERY_PLAN.md#t02-candidate-mapping-to-native-torchtpu-gates).
-It is a review artifact, not permission to start implementation. Preserve old
-IDs for traceability; create fresh sequential PR IDs only after owner review.
-T1 must establish TorchTPU package provenance and real v5e-8 device,
-autograd, optimizer, collective, and compile behavior before dependency or
-support claims change.
+The former 18-card XLA queue has an owner-approved T0–T11 disposition in
+[`PR_DELIVERY_PLAN.md`](PR_DELIVERY_PLAN.md#t02-accepted-mapping-to-native-torchtpu-gates).
+It is a mapping, not an approved implementation queue. Preserve old IDs for
+traceability; create fresh sequential PR IDs only for an owner-approved scope.
+T1 establishes package provenance and single-device behavior on v5e-1, then
+uses v5e-8 for collectives and other requirements that need multiple devices,
+before dependency or support claims change.
 
 ## T0.1 — read-only Codex discovery task
 
