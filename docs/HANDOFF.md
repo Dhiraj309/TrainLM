@@ -4,8 +4,10 @@
 > merged to `main` on 2026-10-28 at `23959d29434fd2ae3f78b20469e1d61c6b1e18c9`.
 > The [PR delivery plan](PR_DELIVERY_PLAN.md) is a candidate queue, not an
 > approved TorchTPU implementation order. T0.1 has produced the read-only
-> [salvage inventory](TORCHTPU_SALVAGE_INVENTORY.md). Start a numbered future
-> PR only after owner review of the post-merge audit and from verified `main`.
+> [salvage inventory](TORCHTPU_SALVAGE_INVENTORY.md), with a proposed
+> [T0.2 mapping](PR_DELIVERY_PLAN.md#t02-candidate-mapping-to-native-torchtpu-gates).
+> The map is not an approved implementation queue; owner review is required
+> before activating a numbered implementation PR from verified `main`.
 
 This is the concise implementation and target-hardware handoff for the
 legacy integration PR #18 and subsequent approved work. It separates code
@@ -24,7 +26,7 @@ read-only module classification and dependency findings are in
 [TORCHTPU_SALVAGE_INVENTORY.md](TORCHTPU_SALVAGE_INVENTORY.md). PyTorch/XLA
 remains the only documented implementation backend; native TorchTPU has no
 verified install or hardware evidence yet. Continue the sequential PR and
-incremental-commit policy after owner review of the inventory.
+incremental-commit policy after owner review of the inventory and T0.2 mapping.
 
 ## Verified post-PR #18 baseline
 
