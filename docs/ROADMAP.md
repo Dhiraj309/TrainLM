@@ -20,7 +20,10 @@ TorchTPU support. “Implemented” means present in that historical code path;
   v5e-8 and hosted Colab TPU v2, so neither is the v5e-1 target; use a
   one-chip Cloud TPU v5e VM. Use v5e-8 for multi-device checks.
   The [v5e-1 probe notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb) and
-  [run guide](T1_V5E1_PROBE.md) are prepared but have not been hardware-run.
+  [run guide](T1_V5E1_PROBE.md) are prepared. The owner reported a Colab TPU
+  allocation pass but the following smoke process exited with status 1; the
+  full child error is unavailable, and hardware generation is unverified. A
+  follow-up moves detection and execution into one process.
   The 18 old PR cards are candidates, not the active queue.
 
 ## Historical native-backend transition note

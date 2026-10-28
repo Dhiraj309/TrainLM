@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Single-device PyTorch smoke probe for the owner-provided TorchTPU runtime.
 
-This script intentionally does not guess a TorchTPU package or device API.
-Pass the device string documented by the installed Kaggle runtime. The probe
-checks eager tensor/model execution, autograd, and an optimizer update. Pass
+The default device mode detects a real TPU tensor allocation and runs the
+probe in the same process, avoiding a second TPU runtime initialization.
+Explicit device strings are also supported. The probe checks model execution,
+autograd, and an optimizer update. Pass
 ``--compile`` separately to probe the runtime's ``torch.compile`` support.
 
 It does not test collectives, sharding, distributed checkpoints, or scaling.
@@ -23,8 +24,8 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--device",
-        required=True,
-        help="Device string from the installed runtime's public documentation.",
+        default="auto",
+        help="Device to use (default: auto detects TPU, then labels CPU fallback).",
     )
     parser.add_argument(
         "--steps",
@@ -67,15 +68,34 @@ def _print_environment(torch: object) -> None:
         print("  (none found)")
 
 
+def _select_device(torch: object, args: argparse.Namespace) -> None:
+    if args.device != "auto":
+        return
+
+    print("device_detection=trying native TPU allocation")
+    try:
+        probe = torch.empty(1, device=torch.device("tpu"))
+        probe.cpu()
+    except Exception as exc:
+        args.device = "cpu"
+        args.allow_cpu = True
+        message = str(exc).replace("\n", " ")[:240]
+        print(f"tpu_detection=FAIL ({type(exc).__name__}: {message})")
+        print("scope=CPU-only smoke; no TPU evidence")
+    else:
+        args.device = "tpu"
+        print("tpu_detection=PASS (native PyTorch TPU tensor allocation)")
+
+
 def _run(torch: object, args: argparse.Namespace) -> None:
     device = torch.device(args.device)
     if device.type == "cpu" and not args.allow_cpu:
         raise SystemExit(
             "Refusing CPU: pass --allow-cpu only for a local script check. "
-            "For T1, use the device string documented by the Kaggle runtime."
+            "For T1, use an owner-approved native TorchTPU runtime."
         )
     if device.type == "cpu":
-        print("scope=CPU script check only; this is not TPU evidence")
+        print("scope=CPU-only smoke; this is not TPU evidence")
 
     print(f"device={device}")
     model = torch.nn.Sequential(
@@ -135,6 +155,7 @@ def main() -> int:
         return 2
 
     _print_environment(torch)
+    _select_device(torch, args)
     _run(torch, args)
     return 0
 

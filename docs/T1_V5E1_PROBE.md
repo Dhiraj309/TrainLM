@@ -1,8 +1,9 @@
 # T1 single-device probe on v5e-1
 
 Use this probe on a single-chip Cloud TPU v5e VM with the owner-approved
-TorchTPU runtime. The notebook detects the official PyTorch device by testing
-a real allocation and otherwise runs an explicitly labeled CPU smoke.
+TorchTPU runtime. By default, it detects TPU through a real allocation and
+runs the smoke in the same process, or selects CPU with an explicit CPU-only
+label.
 
 Hosted [Kaggle notebooks](https://www.kaggle.com/product-announcements/607202)
 currently document TPU v5e-8; the [public Colab TPU notebook](https://colab.research.google.com/notebooks/tpu.ipynb)
@@ -20,12 +21,11 @@ running the probe. In a notebook cell,
 run:
 
 The [Kaggle/Colab-style notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb)
-provides a guided version and selects tpu when a real tensor allocation
-succeeds, otherwise running an explicitly labeled CPU smoke. CPU success is
-not TPU evidence.
+provides a guided version and runs detection and the smoke in one process.
+CPU success is not TPU evidence.
 
 ```bash
-python examples/torchtpu_t1_v5e1_probe.py --device tpu
+python examples/torchtpu_t1_v5e1_probe.py
 ```
 
 The script refuses `cpu` unless `--allow-cpu` is explicitly supplied, so an
@@ -37,11 +37,12 @@ PyTorch compile entry point separately, run:
 
 ```bash
 python examples/torchtpu_t1_v5e1_probe.py \
-  --device tpu --compile
+  --compile
 ```
 
 Compilation may take longer than eager execution. Preserve the complete output
-and any runtime/compiler error; do not silently fall back to eager mode.
+and any runtime/compiler error; do not silently fall back to eager mode. TPU
+detection and training share one process to avoid starting two TPU runtimes.
 
 ## Evidence to record
 
@@ -52,7 +53,7 @@ and complete output. Record whether import, device placement, forward,
 autograd, optimizer update, and optional compilation passed. Do not include
 tokens, credentials, or unrelated environment variables in the evidence.
 
-This is a v5e-1 single-device smoke only. It cannot establish multi-device
+This is intended as a v5e-1 single-device smoke only. It cannot establish multi-device
 collectives, DP8, sharding/FSDP, distributed checkpoint behavior, v5e-8
 performance, or production support. Run those checks on v5e-8 when the
 operation requires multiple devices. A failure on v5e-1 is useful T1 evidence;

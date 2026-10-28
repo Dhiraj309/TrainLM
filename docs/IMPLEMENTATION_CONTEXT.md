@@ -25,8 +25,10 @@
   No TorchTPU probe has run yet; this workspace has no PyTorch installed.
 - [T1 v5e-1 probe guide](T1_V5E1_PROBE.md) and the
   [Kaggle/Colab notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb) describe
-  the prepared synthetic smoke. Do not add guessed dependency pins or support
-  claims from this probe.
+  the prepared synthetic smoke. The owner reported successful TPU allocation
+  followed by a probe subprocess exit; the child error and hardware generation
+  are unverified. Detection and execution now share one process. Do not add
+  guessed dependency pins or support claims from this probe.
 
 ## Historical XLA development record
 
