@@ -27,10 +27,15 @@
   An owner-run eager TPU smoke passed; this workspace has no PyTorch installed.
 - [T1 v5e-1 probe guide](T1_V5E1_PROBE.md) and the
   [Colab-openable Kaggle/Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/docs/01-t1-v5e1-probe/notebooks/TorchTPU_T1_v5e1_Probe.ipynb) describe
-  synthetic smoke. The latest owner output supersedes the failed attempt:
-  allocation, forward, backward and AdamW update passed on Python 3.13.18,
-  torch 2.14.1+cpu, torch_tpu 0.2.0 and libtpu 0.0.50. Hardware generation,
-  explicit compile and production integration remain unverified.
+  synthetic smoke. The latest owner run at source `f122b7e1` passed allocation,
+  forward, autograd and AdamW update on Python 3.13.18, torch 2.14.1+cpu,
+  torch_tpu 0.2.0 and libtpu 0.0.50. Runtime properties reported device name
+  `TPU v5e` and one visible device; topology and VM image/machine type were not
+  recorded, so the exact v5e VM shape is unverified. Explicit compile, lifecycle
+  and production integration remain unverified. The package profile was
+  incompatible: TrainLM was absent from installed metadata, torch 2.14.1+cpu
+  exceeds TrainLM's `<2.14` constraint, and `pip check` reported conflicts.
+  Do not change dependency pins from this result.
 - The [utility inventory and UX plan](TORCHTPU_UTILITIES.md) maps public upstream
   APIs to T1–T11 and reusable repository contracts. A source-level
   report now observes native TPU availability, device properties, versions and

@@ -195,3 +195,12 @@ version/hardware evidence. Next, run the T1.2/T1.3 owner hardware checks and
 the opt-in T1.4 collective on an isolated v5e-8 host; use the results to
 decide the native dependency profile and T2 integration scope. Current work
 does not implement native training or change dependency pins.
+
+Latest owner-run T1.2 observation: native allocation, forward/backward and
+AdamW update passed; runtime properties reported one visible device named
+`TPU v5e`. Exact VM identity/topology, compilation and repeat-process behavior
+remain unknown. The same environment failed package-profile checks because
+TrainLM was not installed, torch 2.14.1+cpu lies outside its current `<2.14`
+contract, and `pip check` found conflicts. Treat this as a successful eager
+runtime smoke with an unresolved compatibility profile, not a clean-install
+or v5e VM shape certification.

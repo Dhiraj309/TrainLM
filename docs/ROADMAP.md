@@ -46,6 +46,12 @@ TorchTPU support. “Implemented” means present in that historical code path;
   are covered on CPU; the export preserves skipped checks and package
   mismatches. Owner-run hardware evidence still gates the dependency profile
   decision and T2 integration scope.
+  The latest owner eager run passed allocation, forward, autograd and AdamW
+  update with a runtime-reported `TPU v5e` device and one visible device. The
+  machine type/image and topology were not captured. Its package profile is
+  incompatible (`trainlm` absent, torch 2.14.1+cpu outside `<2.14`, and
+  `pip check` conflicts); explicit compile, lifecycle and T1.4 collective
+  remain unrun. Keep the native dependency profile unresolved.
   The 18 old PR cards are candidates, not the active queue.
 
 ## Historical native-backend transition note

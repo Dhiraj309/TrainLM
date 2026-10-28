@@ -68,6 +68,26 @@ The notebook reports installed versions and read-only pip dependency conflicts
 before the smoke; it bounds eager runs to 300 seconds and compile runs to 900
 seconds. A timeout is a failure, not TPU support evidence.
 
+### Latest owner result (2026-10-28)
+
+The Colab report at source `f122b7e1` passed native TPU allocation, forward,
+autograd and AdamW update. Runtime properties returned device name `TPU v5e`
+and one process-visible device; topology, VM image and machine type were not
+included, so the exact v5e VM shape is unverified. Python was 3.13.18 with
+torch 2.14.1+cpu, torch_tpu 0.2.0 and libtpu 0.0.50. The read-only package
+profile was `incompatible`: TrainLM was absent from installed metadata, torch
+2.14.1+cpu is outside TrainLM's declared `<2.14` range, and `pip check`
+reported conflicts. TorchTPU's own torch requirement matched this version.
+No packages were installed or changed by the notebook. Explicit compile and
+repeat-process lifecycle checks were skipped.
+
+Before resolving the dependency profile, run the check in a clean environment
+with TrainLM installed from this source revision. Record the actual accelerator
+and VM image, then repeat on a torch version inside TrainLM's declared range
+that is supported by the installed TorchTPU wheel. Keep compatibility and
+hardware results separate; do not widen dependency bounds from this Colab
+runtime alone.
+
 Compilation may take longer than eager execution. Preserve the complete output
 and any runtime/compiler error; do not silently fall back to eager mode. TPU
 detection and training share one process to avoid starting two TPU runtimes.
