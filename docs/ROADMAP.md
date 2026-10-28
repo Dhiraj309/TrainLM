@@ -26,7 +26,9 @@ TorchTPU support. “Implemented” means present in that historical code path;
   adds shared discovery/reporting, dependency/lifecycle verification and
   distributed entry checks as T1.1–T1.4 before public integration. T1.2 now
   has a source-level report for TPU availability and properties, used by the
-  standalone probe; native trainer routing remains pending.
+  standalone probe; native trainer routing remains pending. T1.3 now has a
+  read-only package preflight and bounded probe execution in the notebook;
+  clean-install and accelerator lifecycle results remain owner-run work.
   The 18 old PR cards are candidates, not the active queue.
 
 ## Historical native-backend transition note

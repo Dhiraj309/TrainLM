@@ -40,6 +40,10 @@ python examples/torchtpu_t1_v5e1_probe.py \
   --compile
 ```
 
+The notebook reports installed versions and read-only pip dependency conflicts
+before the smoke; it bounds eager runs to 300 seconds and compile runs to 900
+seconds. A timeout is a failure, not TPU support evidence.
+
 Compilation may take longer than eager execution. Preserve the complete output
 and any runtime/compiler error; do not silently fall back to eager mode. TPU
 detection and training share one process to avoid starting two TPU runtimes.

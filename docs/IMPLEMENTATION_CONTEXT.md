@@ -34,7 +34,9 @@
   and reporting, then a verified installation/lifecycle profile. A source-level
   report now observes native TPU availability, device properties, versions and
   allocation in the probe process; CPU-only contract tests pass. The public
-  trainer has not adopted it yet. Current
+  trainer has not adopted it yet. The notebook now checks package conflicts
+  read-only and bounds eager/compile child processes; clean installation and
+  TPU lifecycle remain unverified. Current
   `accelerator="auto"` selects only CUDA/CPU; `torch<2.14` excludes the
   successful standalone probe's torch version. Neither gap is fixed yet.
 

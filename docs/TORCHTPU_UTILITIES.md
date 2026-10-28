@@ -139,9 +139,11 @@ These are T1 work packages, not new branches or renumbered GitHub PRs:
    verify the owner-run report, incomplete properties and version mismatch
    cases, then integrate with the trainer and notebook UX. Explicit compile
    evidence remains pending.
-3. **T1.3 — installation and lifecycle feasibility:** resolve the native
-   dependency profile, verify a clean install/import, repeat notebook runs,
-   bounded failures and cleanup. Run CPU regression gates on the chosen profile.
+3. **T1.3 — installation and lifecycle feasibility (partial):** the notebook
+   reports installed versions and runs read-only pip dependency checking; its
+   eager/compile child processes have timeouts and surface partial output.
+   Resolve the native dependency profile and verify clean install/import,
+   repeated runs, cleanup and CPU regression gates on the chosen profile.
 4. **T1.4 — distributed entry feasibility:** on v5e-8, verify supported
    launch preparation, actual rank/world topology and a simple collective.
    Full gradient-correct DP remains T4.
