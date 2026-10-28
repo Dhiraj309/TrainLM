@@ -1,20 +1,18 @@
 # TrainLM sequential pull-request delivery plan
 
-> **Status: historical candidate cards plus proposed T0.2 mapping.** The 18
+> **Status: historical candidate cards plus accepted T0.2 mapping.** The 18
 > cards below were written for the PyTorch/XLA roadmap. They are not the active
 > TorchTPU queue. PR #18 is merged; T0.1 inventory is in
-> `TORCHTPU_SALVAGE_INVENTORY.md`, and T0.2 mapping is under review in PR #20.
-> Owner review is required before activating implementation work.
+> `TORCHTPU_SALVAGE_INVENTORY.md`; PR #20 merged the T0.2 mapping.
 
-## Native TorchTPU T0–T11 rebaseline: proposed PR remapping
+## Native TorchTPU T0–T11 rebaseline: accepted T0.2 mapping
 
 The [new target plan](TORCHTPU_REBASELINE.md) proposes native TorchTPU-first
 execution. **The 18 candidate cards below reflect an XLA-oriented roadmap,
-not an approved TorchTPU delivery queue.** T0.1 has inventoried reusable and
-XLA-specific implementation; T0.2 proposes a remapping for owner review.
-Approve the mapping before starting plan 01. Keep the established multiple
-sequential PRs,
-multiple focused commits per PR, matching branch/title/body and strict
+not an approved TorchTPU delivery queue.** T0.1 inventoried reusable and
+XLA-specific implementation; PR #20 merged the owner-approved T0.2 mapping.
+Keep the established sequential PRs and multiple focused commits per PR, with
+matching branch/title/body and strict
 merge-to-main-before-next-branch rules. T0–T11 are architectural gates,
 not a requirement to create one giant PR per milestone.
 
@@ -32,8 +30,9 @@ checkpoint safety.
 
 ## PR-by-PR serial execution
 
-**Current sequence:** review and approve T0.2 → establish T1 feasibility on the
-owner-approved TorchTPU image → approve the first code deliverable from
+**Current sequence:** T0.2 is merged → establish T1 feasibility on v5e-1 for
+single-device behavior, using v5e-8 for checks that require multiple devices
+→ approve the first code deliverable from
 verified `main` → review/test/merge → verify `main` → then activate the next
 approved deliverable. The old numbered cards below do not set this order.
 
@@ -62,17 +61,18 @@ approved deliverable. The old numbered cards below do not set this order.
 - Block rather than silently skip a mandatory acceptance criterion. If a
   performance gate is unattainable, document the measured failure and obtain
   an explicit owner-approved *planning revision* before changing the next PR.
-- PR #18 is merged and T0.1 inventory is complete. PR #20 proposes the T0.2
-  mapping. The mapping remains subject to owner review; neither a merge nor
-  XLA evidence establishes native TorchTPU compatibility.
+- PR #18 is merged, T0.1 inventory is complete, and PR #20 merged the T0.2
+  mapping. Neither the mapping nor XLA evidence establishes native TorchTPU
+  compatibility.
 
-## T0.2 candidate mapping to native TorchTPU gates
+## T0.2 accepted mapping to native TorchTPU gates
 
-This is a proposed disposition of the 18 legacy cards, based on the merged
-source inventory. It is not an approved implementation queue. A card is not
+This is the owner-approved disposition of the 18 legacy cards, merged in
+PR #20 and based on the source inventory. It is not an implementation queue.
+A card is not
 "satisfied" merely because XLA code or CPU contract tests exist. Preserve the
 legacy IDs here for traceability; assign fresh sequential branch IDs only
-when the owner approves a deliverable after T1/T0 review.
+when the owner approves a deliverable based on T1 evidence.
 
 | Legacy card | T0–T11 mapping | Disposition for native target |
 |---|---|---|
@@ -97,12 +97,11 @@ when the owner approves a deliverable after T1/T0 review.
 
 ### Proposed sequencing gates
 
-1. **T0 closeout:** owner reviews this mapping, confirms salvage boundaries, and
-   chooses which unresolved legacy cards remain relevant.
-2. **T1:** on the owner-approved Kaggle image, establish install provenance,
-   import/device/autograd/optimizer/collective/compile behavior, and capture
-   versions and a minimal reproducible smoke. No dependency pins or support
-   claims change before this evidence exists.
+1. **T0 closeout:** complete; the owner-approved T0.2 mapping merged in PR #20.
+2. **T1:** start on v5e-1 with install provenance, import/device/autograd/
+   optimizer behavior, and eager/compile smoke. Use v5e-8 for collective and
+   other multi-device feasibility. Capture versions and reproducible output;
+   no dependency pins or support claims change before this evidence exists.
 3. **After T1:** approve one outcome-scoped PR from verified merged `main`.
    Prioritize a clean CPU regression baseline and the smallest native reference
    training/data vertical slice; do not activate XLA-only performance cards
@@ -134,7 +133,7 @@ when the owner approves a deliverable after T1/T0 review.
 | 18 | `release/18-dense-ar-v1-support-certification` | release(v1): publish dense-AR support, limitations and evidence | P1 | M14-F5 |
 
 **Candidate-only caveat:** Legacy PR #18 is merged and its code is in current
-`main`. T0.1 inventory and the proposed T0.2 mapping are recorded;
+`main`. T0.1 inventory and the accepted T0.2 mapping are recorded;
 **review each entry** against the merged tree and real TPU evidence. Mark satisfied
 deliverables with evidence, consolidate or resequence redundant candidates in
 a separately reviewed plan update, and number the *first newly activated

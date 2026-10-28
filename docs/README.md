@@ -7,15 +7,16 @@ PyTorch/XLA work. Read the status labels before treating an item as current.
 
 TrainLM is rebaselining toward native TorchTPU on Kaggle TPU v5e-8. The
 current backend in the code is PyTorch/XLA; native TorchTPU is a target, not an
-implemented or certified backend. The active planning work is T0: inventory
-existing code, map old proposals to native gates, and decide the next work only
-after owner review.
+implemented or certified backend. PR #20 closed T0.2. T1 feasibility starts on
+v5e-1 for single-device checks; use v5e-8 when testing multi-device collectives,
+DP8, sharding, distributed checkpoints, or scaling.
 
 - [T0–T11 roadmap and gates](TORCHTPU_REBASELINE.md)
 - [Code salvage inventory](TORCHTPU_SALVAGE_INVENTORY.md)
-- [Candidate work mapped to T0–T11](PR_DELIVERY_PLAN.md#t02-candidate-mapping-to-native-torchtpu-gates)
+- [Accepted mapping of legacy work to T0–T11](PR_DELIVERY_PLAN.md#t02-accepted-mapping-to-native-torchtpu-gates)
 - [Current handoff and verified baseline](HANDOFF.md)
 - [Current implementation context](IMPLEMENTATION_CONTEXT.md)
+- [T1 v5e-1 single-device probe](T1_V5E1_PROBE.md)
 
 ## Status meanings
 
