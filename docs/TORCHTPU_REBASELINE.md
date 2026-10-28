@@ -36,18 +36,22 @@ reversible.
 | Item | Verified/recorded context | Required next action |
 |---|---|---|
 | Repository | `Dhiraj309/TrainLM` | Verify checkout, branch, origin, permissions |
-| Legacy integration | PR #18 open from `milestone/m8-m9-optimization-core` into `main` | Review conflicts, CI and target evidence before merge |
-| Earlier salvage | PR #16 **merged into PR #18's branch**, not necessarily `main` | Inventory code and tests, not an automatic separate merge |
+| Legacy integration | PR #18 merged into `main` on 2026-10-28; merge commit `23959d29434fd2ae3f78b20469e1d61c6b1e18c9` | T0.1 audits the merged tree before activating a new PR |
+| Earlier salvage | PR #16 was merged into PR #18, which is now merged into `main` | Inventory its code as part of the merged tree; do not merge it again |
 | Existing TPU backend | Primarily PyTorch/XLA with historical measurements | Classify reusable vs XLA-specific components |
 | Native TorchTPU | **Target only**; no native v5e-8 certification established here | Prove device, autograd, distributed and compile support |
 | GitHub access | Previous authenticated collaborator `Dignity045` branch push succeeded | Recheck actual identity each task; owner account not assumed |
-| CPU tests | Historical 326 executed / 320 passed / 6 failed (5 Phi config, 1 checkpoint reload) | Rerun, report actual versions/failures |
+| CPU tests | PR #18 snapshot: 700 passed / 21 failed under Python 3.12.14, torch 2.9.0+cpu, Transformers 5.0.0, Hub 1.3.5, pytest 9.1.1 | Re-run on merged `main` before the next code PR; failure groups are recorded in `HANDOFF.md` |
 | CPU profiles | `core-minimum` Python 3.12/torch 2.9; `core-current` Python 3.13/torch 2.13 | Inspect actual environment and constraints |
 
 The old report that GitHub pushes were unverified is superseded by the
 verified branch-write exercise. Do not claim current shell authentication
 without checking. Managed network proxy variables and credentials must not
 be modified; request supported per-command network permission where needed.
+
+The path-level read-only salvage classification is in
+[the T0.1 inventory](TORCHTPU_SALVAGE_INVENTORY.md). PR #18 is merged;
+this inventory does not establish native TorchTPU compatibility.
 
 ## Layered target architecture
 
@@ -118,12 +122,14 @@ verified merged `main` only after the preceding PR merges**. Branch name,
 PR title, description and commit scope must agree. Preserve commit history
 by default; no direct main pushes, force-pushes, auto-merges or stacked PRs.
 
-## T0.1 — next Codex discovery task
+## T0.1 — read-only Codex discovery task
 
-**Read-only until explicit owner approval for modifications and Git writes.**
+T0.1 records source-level findings and proposes follow-up work. The inventory
+is not an implementation plan approval; code, dependency, and architecture
+changes still require owner review.
 
 1. Verify repository, GitHub identity, permissions and push readiness without
-   pushing; inspect PR #18 and the PR #16 code already merged into its branch.
+   pushing; inspect PR #18 and the PR #16 code now present in merged `main`.
 2. Inventory modules by path as reusable, XLA-specific or uncertain; propose
    native TorchTPU boundaries and dependency feasibility.
 3. Read `AGENTS.md`, `ROADMAP.md`, `IMPLEMENTATION_CONTEXT.md` and

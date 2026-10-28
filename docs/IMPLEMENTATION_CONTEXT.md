@@ -8,7 +8,7 @@ For the status-focused checklist of implemented work, target-hardware evidence,
 immediate priorities, architecture research, and telemetry work, see
 [`HANDOFF.md`](HANDOFF.md).
 
-## Sequential multi-PR delivery (effective after legacy PR #18)
+## Sequential multi-PR delivery (after legacy PR #18)
 
 See [`docs/PR_DELIVERY_PLAN.md`](PR_DELIVERY_PLAN.md) and
 [`docs/ROADMAP.md`](ROADMAP.md#branch-and-pr-policy).
@@ -22,16 +22,18 @@ the coherent implementation/testing/fix/validation deliverable. Use the
 and evaluate [additional optimization hypotheses](PR_DELIVERY_PLAN.md#additional-engineering-optimizations-to-evaluate-not-assumed-wins)
 only with measured evidence; these are not automatic new V1 requirements.
 
-- Current [legacy PR #18](https://github.com/Dhiraj309/TrainLM/pull/18)
-  on `milestone/m8-m9-optimization-core` has reported merge conflicts
-  with `main` and is **not yet merged**. Resolve, review, validate,
-  merge and verify it before creating the first new PR-series branch.
+- Legacy [PR #18](https://github.com/Dhiraj309/TrainLM/pull/18) merged on
+  2026-10-28. Verified remote `main` is
+  `23959d29434fd2ae3f78b20469e1d61c6b1e18c9` (merge commit #18).
+  The local discovery checkout may still be on the merged milestone branch;
+  new work must start from this verified `main`.
 - Audit its merged changes and owner-run TPU evidence. Reconcile the
   candidate 01–18 cards; remove or mark proven work as satisfied and
   reassign sequential IDs as necessary **before creating any** future
   branches. Do not duplicate existing code simply to fulfill a plan.
 - New branch format `<type>/<NN>-<outcome>`, e.g.
-  `perf/03-chunked-loss-no-full-logits`, starting at 01 after transition.
+  `perf/03-chunked-loss-no-full-logits`, starting at 01 after the approved
+  post-merge audit and PR queue remapping.
   Each PR starts only from latest **merged** `origin/main`, after the
   previous PR has merged and its SHA/files are verified.
 - Within one branch, make as many focused implementation, tests,
@@ -49,11 +51,16 @@ Read [the proposed T0–T11 plan](TORCHTPU_REBASELINE.md) before new TPU
 runtime work. Existing PyTorch/XLA code, performance results and M0–M14
 milestones are current/historical salvage material, not verified native
 TorchTPU support. The old 18 PR cards need T0 remapping before activation.
-PR #16 was **merged into the PR #18 branch**; PR #18 remains open against
-`main`. Prior GitHub collaborator `Dignity045` push verification succeeded,
-but do not assume current owner-account authentication. The historical CPU
-326/320/6 result and minimum/current dependency profiles require rerun.
-T0.1 is a read-only inventory and baseline task until owner approval.
+PR #16 was merged into PR #18, and both are now present in `main`. The
+read-only T0.1 source classification is recorded in
+[`TORCHTPU_SALVAGE_INVENTORY.md`](TORCHTPU_SALVAGE_INVENTORY.md). It identifies
+generic training, HF, data, checkpoint, and planning code as reuse candidates;
+XLA runtime, PJRT worker, and XLA/Pallas provider code remain backend-specific.
+Native TorchTPU is still unverified. The PR #18 CPU snapshot baseline was
+700 passed / 21 failed on Python 3.12.14, torch 2.9.0+cpu, Transformers 5.0.0,
+Hub 1.3.5, pytest 9.1.1; it has not been rerun on merged `main`.
+Repository permissions and the current GitHub identity were verified during
+T0.1. This baseline has not been rerun on merged `main`.
 
 ## Product intent
 

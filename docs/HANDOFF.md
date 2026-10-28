@@ -1,14 +1,11 @@
 # TrainLM implementation handoff
 
-> **Sequential multi-PR delivery notice (2026-10-27):** This file
-> contains historical branch pointers. Legacy [PR #18](https://github.com/Dhiraj309/TrainLM/pull/18)
-> is open and currently conflicts with `main`; resolve, validate and merge
-> it first. The new [PR delivery plan](PR_DELIVERY_PLAN.md) defines **many
-> separate outcome-focused PRs**, each with **multiple small, traceable
-> commits**, their aligned branch/title/description, and strict dependency
-> gates. Start only the first approved future PR from **merged** `main`;
-> after each new PR merges, verify remote `main` before branching for the
-> next. Do not create or use old milestone branches as future PR bases.
+> **Sequential multi-PR delivery:** Legacy [PR #18](https://github.com/Dhiraj309/TrainLM/pull/18)
+> merged to `main` on 2026-10-28 at `23959d29434fd2ae3f78b20469e1d61c6b1e18c9`.
+> The [PR delivery plan](PR_DELIVERY_PLAN.md) is a candidate queue, not an
+> approved TorchTPU implementation order. T0.1 has produced the read-only
+> [salvage inventory](TORCHTPU_SALVAGE_INVENTORY.md). Start a numbered future
+> PR only after owner review of the post-merge audit and from verified `main`.
 
 This is the concise implementation and target-hardware handoff for the
 legacy integration PR #18 and subsequent approved work. It separates code
@@ -22,9 +19,26 @@ execution instructions.
 See [T0–T11 native TorchTPU rebaseline](TORCHTPU_REBASELINE.md).
 Native TorchTPU is the **target**, not a certified existing backend.
 Historical PyTorch/XLA code and TPU evidence require T0 salvage review.
-PR #16 was merged into PR #18's branch; PR #18 remains the integration
-PR. The next Codex discovery step is T0.1, read-only until owner approval.
-The existing sequential PR and incremental-commit policy remains binding.
+PR #16 was merged into PR #18 and is now included in `main`. T0.1's
+read-only module classification and dependency findings are in
+[TORCHTPU_SALVAGE_INVENTORY.md](TORCHTPU_SALVAGE_INVENTORY.md). PyTorch/XLA
+remains the only documented implementation backend; native TorchTPU has no
+verified install or hardware evidence yet. Continue the sequential PR and
+incremental-commit policy after owner review of the inventory.
+
+## Verified post-PR #18 baseline
+
+- Remote `main`: `23959d29434fd2ae3f78b20469e1d61c6b1e18c9`.
+- PR #18: merged on 2026-10-28; PR #16's changes arrived through PR #18.
+- CPU suite on the PR #18 snapshot: 700 passed, 21 failed. Environment and
+  failure categories are recorded below; this is not a rerun on merged `main`.
+- Native TorchTPU: target architecture only; no native certification claim.
+
+The 21 recorded failures were 5 Phi configuration cases, 1 checkpoint reload,
+12 loss-layout parity cases, 1 scalar-materialization assertion, 1 stale
+roadmap contract, and 1 wheel smoke blocked because the environment's venv had
+no `pip` module. Baseline versions: Python 3.12.14, torch 2.9.0+cpu,
+Transformers 5.0.0, huggingface-hub 1.3.5, pytest 9.1.1.
 
 ## Status legend
 
