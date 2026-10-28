@@ -35,8 +35,10 @@
   allocation in the probe process; CPU-only contract tests pass. The public
   trainer now uses a non-allocating view for `preflight()` and optional
   `explain(include_hardware=True)`, but native worker routing is not integrated.
-  The notebook checks package conflicts read-only and bounds eager/compile
-  child processes; clean installation and TPU lifecycle remain unverified.
+  The notebook runs a read-only metadata/profile check against TrainLM's
+  source requirements, TorchTPU's installed requirements and `pip check`,
+  then bounds eager/compile child processes. It does not alter packages;
+  clean installation and TPU lifecycle remain unverified.
   `accelerator="auto"` selects CUDA/CPU only when native TPU is not detected;
   it now raises on detected TPU or broken TorchTPU discovery rather than
   silently falling back. Explicit `tpu` still uses the XLA coordinator.

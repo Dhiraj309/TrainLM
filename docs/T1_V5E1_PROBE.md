@@ -23,6 +23,11 @@ run:
 The [Kaggle/Colab-style notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb)
 provides a guided version and runs detection and the smoke in one process.
 CPU success is not TPU evidence.
+Its first diagnostic cell runs the read-only
+[install-profile check](../examples/torchtpu_t1_install_preflight.py) and
+prints a structured result. An `incompatible` or `incomplete` profile is not
+silently treated as an install pass; the standalone smoke remains a separate
+environment experiment.
 
 ```bash
 python examples/torchtpu_t1_v5e1_probe.py

@@ -150,8 +150,11 @@ These are T1 work packages, not new branches or renumbered GitHub PRs:
    incomplete properties and version mismatches. Explicit compile evidence
    remains pending.
 3. **T1.3 — installation and lifecycle feasibility (partial):** the notebook
-   reports installed versions and runs read-only pip dependency checking; its
-   eager/compile child processes have timeouts and surface partial output.
+   runs a [read-only profile check](../examples/torchtpu_t1_install_preflight.py)
+   comparing installed metadata to TrainLM's source requirements, TorchTPU's
+   installed requirements and `pip check`. Its eager/compile child processes
+   have timeouts and surface partial output. A metadata-compatible result is
+   not native runtime certification.
    Resolve the native dependency profile and verify clean install/import,
    repeated runs, cleanup and CPU regression gates on the chosen profile.
 4. **T1.4 — distributed entry feasibility (partial):** the opt-in

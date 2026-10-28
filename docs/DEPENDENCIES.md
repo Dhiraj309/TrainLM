@@ -36,6 +36,21 @@ The [utility inventory](TORCHTPU_UTILITIES.md) distinguishes versioned API
 documentation from the current public API policy. Experimental utilities
 need guarded adapters; monitoring, profiling and kernel extras remain optional.
 
+### Read-only native install-profile check
+
+Run `python examples/torchtpu_t1_install_preflight.py` from a TrainLM checkout,
+or use the package-preflight cell in the
+[T1 notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb). The command reads
+installed distribution metadata, the checkout's `pyproject.toml`, and the
+result of `pip check`. It does not import torch, initialize a TPU, install
+packages or change the declared dependency range. Its JSON result distinguishes
+`metadata_compatible`, `incomplete`, `incompatible` and `check_failed`.
+The command exits zero only for `metadata_compatible`; that status validates
+package metadata, not device behavior or native trainer support. The observed
+torch 2.14.1+cpu probe profile conflicts with the current source requirement
+`torch<2.14`, so the range remains unresolved pending clean-install and CPU/
+TPU evidence.
+
 ## Existing support profiles (CPU/CUDA and historical XLA)
 
 | Profile | Python | PyTorch | Transformers | Accelerator packages | Status |
