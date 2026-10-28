@@ -14,6 +14,9 @@ Those checks require v5e-8 and remain separate acceptance evidence.
 from __future__ import annotations
 
 import argparse
+import json
+from pathlib import Path
+import runpy
 from importlib import metadata
 import platform
 import re
@@ -69,22 +72,27 @@ def _print_environment(torch: object) -> None:
 
 
 def _select_device(torch: object, args: argparse.Namespace) -> None:
-    if args.device != "auto":
+    if args.device not in {"auto", "tpu"}:
         return
 
-    print("device_detection=trying native TPU allocation")
-    try:
-        probe = torch.empty(1, device=torch.device("tpu"))
-        probe.cpu()
-    except Exception as exc:
-        args.device = "cpu"
-        args.allow_cpu = True
-        message = str(exc).replace("\n", " ")[:240]
-        print(f"tpu_detection=FAIL ({type(exc).__name__}: {message})")
-        print("scope=CPU-only smoke; no TPU evidence")
-    else:
-        args.device = "tpu"
+    source = Path(__file__).resolve().parents[1] / (
+        "src/trainlm/runtime/torchtpu_discovery.py"
+    )
+    discover = runpy.run_path(str(source))["discover_tpu"]
+    report = discover(torch)
+    print("tpu_report=" + json.dumps(report, sort_keys=True))
+    if report["status"] == "ready":
         print("tpu_detection=PASS (native PyTorch TPU tensor allocation)")
+        if args.device == "auto":
+            args.device = "tpu"
+        return
+
+    print(f"tpu_detection=FAIL ({report['status']})")
+    if args.device == "tpu":
+        raise SystemExit("Explicit TPU requested but native TPU discovery failed.")
+    args.device = "cpu"
+    args.allow_cpu = True
+    print("scope=CPU-only smoke; no TPU evidence")
 
 
 def _run(torch: object, args: argparse.Namespace) -> None:
