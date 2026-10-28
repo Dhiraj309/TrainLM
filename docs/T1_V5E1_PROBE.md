@@ -1,5 +1,9 @@
 # T1 single-device probe on v5e-1
 
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/docs/01-t1-v5e1-probe/notebooks/TorchTPU_T1_v5e1_Probe.ipynb)
+
+Open the notebook in Colab to run or copy cells directly, which avoids selecting code from this guide on a mobile device.
+
 Use this probe on a single-chip Cloud TPU v5e VM with the owner-approved
 TorchTPU runtime. By default, it detects TPU through a real allocation and
 runs the smoke in the same process, or selects CPU with an explicit CPU-only

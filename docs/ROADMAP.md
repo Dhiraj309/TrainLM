@@ -19,7 +19,7 @@ TorchTPU support. “Implemented” means present in that historical code path;
   with v5e-1 single-device feasibility. Hosted Kaggle currently documents
   v5e-8 and hosted Colab TPU v2, so neither is the v5e-1 target; use a
   one-chip Cloud TPU v5e VM. Use v5e-8 for multi-device checks.
-  The [v5e-1 probe notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb) and
+  The [v5e-1 probe notebook (open in Colab)](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/docs/01-t1-v5e1-probe/notebooks/TorchTPU_T1_v5e1_Probe.ipynb) and
   [run guide](T1_V5E1_PROBE.md) have an owner-reported eager TPU pass:
   allocation, forward, backward and AdamW update succeeded. Hardware generation
   and explicit compile remain unverified. The current [utility inventory](TORCHTPU_UTILITIES.md)

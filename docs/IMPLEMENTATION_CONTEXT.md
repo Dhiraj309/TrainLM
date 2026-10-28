@@ -26,7 +26,7 @@
   collective, DP8, sharding, distributed-checkpoint, or scaling requirements.
   An owner-run eager TPU smoke passed; this workspace has no PyTorch installed.
 - [T1 v5e-1 probe guide](T1_V5E1_PROBE.md) and the
-  [Kaggle/Colab notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb) describe
+  [Colab-openable Kaggle/Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/docs/01-t1-v5e1-probe/notebooks/TorchTPU_T1_v5e1_Probe.ipynb) describe
   synthetic smoke. The latest owner output supersedes the failed attempt:
   allocation, forward, backward and AdamW update passed on Python 3.13.18,
   torch 2.14.1+cpu, torch_tpu 0.2.0 and libtpu 0.0.50. Hardware generation,

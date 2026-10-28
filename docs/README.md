@@ -23,8 +23,8 @@ training and automatic TPU routing remain unverified and disabled.
 - [Current handoff and verified baseline](HANDOFF.md)
 - [Current implementation context](IMPLEMENTATION_CONTEXT.md)
 - [T1 v5e-1 single-device probe](T1_V5E1_PROBE.md)
-- [Kaggle/Colab-style T1 probe notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb)
-- [Optional single-host v5e-8 distributed probe notebook](../notebooks/TorchTPU_T1_v5e8_Distributed_Probe.ipynb)
+- [Open T1 single-device probe directly in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/docs/01-t1-v5e1-probe/notebooks/TorchTPU_T1_v5e1_Probe.ipynb) · [view notebook source](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb)
+- [Open optional v5e-8 distributed probe directly in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/docs/01-t1-v5e1-probe/notebooks/TorchTPU_T1_v5e8_Distributed_Probe.ipynb) · [view notebook source](../notebooks/TorchTPU_T1_v5e8_Distributed_Probe.ipynb)
 
 ## Status meanings
 

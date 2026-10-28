@@ -161,7 +161,7 @@ These are T1 work packages, not new branches or renumbered GitHub PRs:
    verify clean install/import, repeated runs, cleanup and CPU regression
    gates on the chosen profile.
 4. **T1.4 — distributed entry feasibility (partial):** the opt-in
-   [single-host v5e-8 notebook](../notebooks/TorchTPU_T1_v5e8_Distributed_Probe.ipynb)
+   [single-host v5e-8 notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/docs/01-t1-v5e1-probe/notebooks/TorchTPU_T1_v5e8_Distributed_Probe.ipynb)
    uses the [probe script](../examples/torchtpu_t1_distributed_probe.py).
    Its parent process calls `set_tpu_launch_env` before spawning workers;
    source-level checks reject inconsistent topology, while each worker
