@@ -62,6 +62,31 @@ Compilation may take longer than eager execution. Preserve the complete output
 and any runtime/compiler error; do not silently fall back to eager mode. TPU
 detection and training share one process to avoid starting two TPU runtimes.
 
+## Optional restart and cleanup check
+
+The [lifecycle harness](../examples/torchtpu_t1_lifecycle_probe.py) prints its
+plan without launching anything by default:
+
+```bash
+python examples/torchtpu_t1_lifecycle_probe.py
+```
+
+On an isolated single-device TPU runtime, opt in with `--run`. It launches two
+fresh processes sequentially, requires each native allocation and one-step
+smoke to pass, compares device/version observations, and saves `summary.json`
+plus each discovery report in a new session directory. Each child is bounded
+to 300 seconds; timeout or interruption terminates its process group. The
+notebook has a copyable cell with `RUN_LIFECYCLE = False` by default.
+
+```bash
+python examples/torchtpu_t1_lifecycle_probe.py --run --repeats 2 \
+  --timeout 300 --output-dir t1_lifecycle_reports
+```
+
+Do not infer cleanup or repeatability from a dry run or CPU test. If the first
+attempt fails, the harness stops; preserve the saved result and investigate
+before another TPU launch. Record the actual accelerator identity separately.
+
 ## Evidence to record
 
 Save the VM machine type and image/runtime identifier, accelerator type,

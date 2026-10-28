@@ -9,7 +9,9 @@
 ## Current project snapshot
 
 - PR #18, including PR #16, is merged. PR #20 merged the accepted T0.2 mapping;
-  verified `main` is `e575bf6f6681dc9a6883d73bf51bda7aed9a6353`.
+  fetched `origin/main` on 2026-10-28 is
+  `06fbea314f26edf02526a2ca250559041aefdc23` after the first T1 notebook
+  commits were rebase-merged. The active T1 branch continues separately.
 - T0.1 code inventory is recorded in `TORCHTPU_SALVAGE_INVENTORY.md`. The
   mapped legacy cards remain candidates, not an approved implementation queue.
 - Current implementation backend: PyTorch/XLA. Target: native TorchTPU on
@@ -38,7 +40,10 @@
   The notebook runs a read-only metadata/profile check against TrainLM's
   source requirements, TorchTPU's installed requirements and `pip check`,
   then bounds eager/compile child processes. It does not alter packages;
-  clean installation and TPU lifecycle remain unverified.
+  clean installation remains unverified. An opt-in T1 lifecycle harness can
+  start two or three fresh single-device probe processes, bound each run,
+  terminate its process group on timeout, and save sanitized per-run evidence.
+  Its source-level CPU tests pass; no TPU repeat-run/teardown result exists.
   `accelerator="auto"` selects CUDA/CPU only when native TPU is not detected;
   it now raises on detected TPU or broken TorchTPU discovery rather than
   silently falling back. Explicit `tpu` still uses the XLA coordinator.

@@ -28,8 +28,9 @@ TorchTPU support. “Implemented” means present in that historical code path;
   has a source-level report for TPU availability and properties, used by the
   standalone probe; native trainer routing remains pending. T1.3 now has a
   read-only metadata/profile check (source and TorchTPU requirements plus
-  `pip check`) and bounded probe execution in the notebook; clean-install and
-  accelerator lifecycle results remain owner-run work.
+  `pip check`), bounded probe execution, and an opt-in repeat-process lifecycle
+  harness in the notebook; clean-install and accelerator lifecycle results
+  remain owner-run work.
   T1.4 now has an opt-in single-host v5e-8 launch/collective probe with
   topology and rank reconciliation; only its CPU-side contracts have run.
   The actual multi-device result remains owner-run evidence.

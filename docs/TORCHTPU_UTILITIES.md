@@ -154,9 +154,12 @@ These are T1 work packages, not new branches or renumbered GitHub PRs:
    comparing installed metadata to TrainLM's source requirements, TorchTPU's
    installed requirements and `pip check`. Its eager/compile child processes
    have timeouts and surface partial output. A metadata-compatible result is
-   not native runtime certification.
-   Resolve the native dependency profile and verify clean install/import,
-   repeated runs, cleanup and CPU regression gates on the chosen profile.
+   not native runtime certification. An opt-in
+   [single-device lifecycle probe](../examples/torchtpu_t1_lifecycle_probe.py)
+   performs bounded sequential restarts and records normalized observations;
+   only its CPU contracts have run. Resolve the native dependency profile and
+   verify clean install/import, repeated runs, cleanup and CPU regression
+   gates on the chosen profile.
 4. **T1.4 — distributed entry feasibility (partial):** the opt-in
    [single-host v5e-8 notebook](../notebooks/TorchTPU_T1_v5e8_Distributed_Probe.ipynb)
    uses the [probe script](../examples/torchtpu_t1_distributed_probe.py).
