@@ -44,7 +44,13 @@ TorchTPU support. “Implemented” means present in that historical code path;
   Both T1 notebooks now offer direct Colab entry and a downloadable evidence
   JSON tied to a fresh source SHA. The v5e-1 notebook runs the repository CPU
   suite before the TPU probe and records it as a separate conformance result;
-  it installs no packages and a CPU pass does not certify TPU support. Process
+  it installs no packages and a CPU pass does not certify TPU support. The
+  owner run at source `08f02fb` had 746 passes and 17 failures. Two facade tests
+  selected auto on a TPU host, the wheel smoke required `venv`, and a roadmap
+  check used a stale heading; these harness failures are corrected locally.
+  Twelve loss-layout parity cases and a scalar-materialization assertion also
+  failed in the old Torch 2.9 baseline, so re-run before deciding on Torch 2.14.
+  Process
   cleanup and fatal teardown checks
   are covered on CPU; the export preserves skipped checks and package
   mismatches. Owner-run hardware evidence still gates the dependency profile

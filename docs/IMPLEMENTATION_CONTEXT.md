@@ -83,9 +83,15 @@
   process-group cleanup test. Both notebooks' setup, metadata, expected
   missing-PyTorch failure/skip, download and changed-source guard paths were
   exercised using local test clones and a simulated Colab download callback.
-  PyTorch and pytest are unavailable here, so full trainer tests and real
-  browser/TPU validation remain pending. Next: owner-run T1 evidence, review
-  the native dependency profile, then scope T2 using the shared report.
+  The owner ran the full CPU suite at source `08f02fb`: 746 passed, 17 failed
+  under Python 3.13.18/Torch 2.14.1. Two facade tests incorrectly used auto
+  device selection on the attached TPU; the wheel smoke assumed `venv` was
+  available; and a roadmap test referenced a renamed historical heading.
+  Those causes are corrected locally. Twelve loss-layout parity cases and the
+  scalar-materialization assertion also failed in the older Torch 2.9 baseline,
+  so this run does not identify them as Torch 2.14 regressions. The full suite
+  must be rerun before changing the dependency range. PyTorch and pytest remain
+  unavailable in this workspace.
 - `trainlm doctor` adds a one-command read-only package/runtime report to the
   CLI, reusing the T1 profile and hardware discovery contracts. From a source
   checkout it records the Git revision; an installed wheel uses its declared

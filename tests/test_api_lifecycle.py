@@ -50,6 +50,7 @@ def test_facade_runs_eval_save_and_forwards_metrics(tmp_path):
             output_dir=tmp_path,
             max_steps=1,
             sequence_length=4,
+            accelerator="cpu",
             logging_steps=1,
             eval_steps=1,
             save_steps=1,
@@ -72,6 +73,7 @@ def test_facade_resumes_local_training_state(tmp_path):
             output_dir=tmp_path,
             max_steps=1,
             sequence_length=4,
+            accelerator="cpu",
             save_steps=1,
         ),
     )
@@ -85,6 +87,7 @@ def test_facade_resumes_local_training_state(tmp_path):
             output_dir=tmp_path,
             max_steps=2,
             sequence_length=4,
+            accelerator="cpu",
         ),
     )
     state = resumed.train(resume_from_checkpoint=checkpoint)

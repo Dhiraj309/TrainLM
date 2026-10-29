@@ -41,7 +41,14 @@ documentation from the current public API policy. Experimental utilities
 need guarded adapters; monitoring, profiling and kernel extras remain optional.
 The v5e-1 notebook also runs the repository CPU test suite against the runtime's
 already installed Python/PyTorch versions. Its result is recorded separately
-from TPU discovery and eager execution, and it does not install packages.
+from TPU discovery and eager execution, and it does not install packages. The
+owner run at source `08f02fb` produced 746 passes and 17 failures. Two facade
+tests had left `accelerator="auto"` on a TPU host, the wheel smoke required
+`venv`/`ensurepip`, and the roadmap contract used an obsolete heading; these
+test-harness issues were corrected locally. Twelve loss-layout parity cases
+and one scalar-materialization failure are also present in the older Torch 2.9
+baseline. Rerun CPU conformance before deciding whether to expand the Torch
+range; the current evidence is not sufficient to do so.
 
 ### Read-only native install-profile check
 

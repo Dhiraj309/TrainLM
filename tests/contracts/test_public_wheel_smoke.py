@@ -21,30 +21,31 @@ def test_installed_wheel_exposes_public_surface_outside_checkout(tmp_path: Path)
         ],
         check=True,
     )
-    environment = tmp_path / "environment"
-    subprocess.run(
-        [sys.executable, "-m", "venv", "--system-site-packages", str(environment)],
-        check=True,
-    )
-    python = environment / "bin" / "python"
     wheel = next(wheel_dir.glob("trainlm-*.whl"))
+    site_packages = tmp_path / "site-packages"
     subprocess.run(
-        [str(python), "-m", "pip", "install", "--no-deps", str(wheel)],
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--no-deps",
+            "--target",
+            str(site_packages),
+            str(wheel),
+        ],
         check=True,
     )
     smoke_dir = tmp_path / "outside-checkout"
     smoke_dir.mkdir()
-    subprocess.run(
-        [
-            str(python),
-            "-I",
-            "-c",
-            """
+    smoke_code = f"""
+import sys
+sys.path.insert(0, {str(site_packages)!r})
 from pathlib import Path
 import trainlm
-assert 'site-packages' in Path(trainlm.__file__).as_posix()
+assert Path(trainlm.__file__).resolve().is_relative_to(Path({str(site_packages)!r}))
 assert trainlm.PUBLIC_API_VERSION == '1'
-assert set(trainlm.__all__) == {
+assert set(trainlm.__all__) == {{
     'DEPRECATED_CONFIG_KEYS',
     'HuggingFaceShardSourceConfig',
     'HuggingFaceShardSpec',
@@ -52,11 +53,12 @@ assert set(trainlm.__all__) == {
     'PackedBinDataset',
     'TrainLMTrainer',
     'TrainLMTrainingArguments',
-}
+}}
 args = trainlm.TrainLMTrainingArguments(max_steps=1, accelerator='cpu')
 assert args.max_steps == 1
-""",
-        ],
+"""
+    subprocess.run(
+        [sys.executable, "-I", "-c", smoke_code],
         check=True,
         cwd=smoke_dir,
     )
