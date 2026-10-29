@@ -62,6 +62,27 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(checks["eager"]["device"], "cpu")
         self.assertEqual(checks["distributed"], {"status": "not_run"})
 
+    def test_cpu_conformance_requires_a_clean_test_suite_exit(self):
+        passed = process("700 passed in 12.0s")
+        failed = process("1 failed, 699 passed in 12.0s", exit_code=1)
+        timed_out = process(status="timeout", exit_code=-9, cleanup_completed=True)
+        self.assertEqual(build(cpu_conformance_process=passed)["checks"][
+            "cpu_conformance"]["status"], "passed")
+        check = build(cpu_conformance_process=failed)["checks"]["cpu_conformance"]
+        self.assertEqual(check["status"], "failed")
+        self.assertEqual(check["scope"], "repository_cpu_test_suite")
+        self.assertEqual(build(cpu_conformance_process=timed_out)["checks"][
+            "cpu_conformance"]["status"], "timeout")
+        self.assertEqual(build()["checks"]["cpu_conformance"], {"status": "not_run"})
+        unavailable = build(cpu_conformance_process={
+            "status": "not_run", "reason": "pytest_unavailable",
+        })["checks"]["cpu_conformance"]
+        self.assertEqual(unavailable, {
+            "status": "not_run", "reason": "pytest_unavailable",
+        })
+        self.assertNotIn("stdout", build(cpu_conformance_process=passed)[
+            "checks"]["cpu_conformance"])
+
     def test_compile_requires_explicit_compile_markers(self):
         self.assertEqual(build(compile_process=smoke())["checks"]["compile"]["status"], "failed")
         self.assertEqual(build(compile_process=smoke(compiled=True))[

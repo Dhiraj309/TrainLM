@@ -164,6 +164,34 @@ def profile_evidence(process: dict | None) -> dict:
     return result
 
 
+def cpu_conformance_evidence(process: dict | None) -> dict:
+    """Classify the repository CPU test-suite subprocess without exporting logs."""
+    if process is None:
+        return {"status": "not_run"}
+    status = process.get("status")
+    if status == "not_run":
+        reason = process.get("reason")
+        return {"status": "not_run", **({"reason": reason} if reason == "pytest_unavailable" else {})}
+    exit_code = process.get("exit_code")
+    error_type = process.get("error_type")
+    cleanup_completed = process.get("cleanup_completed")
+    if status in {"timeout", "interrupted"}:
+        outcome = status
+    elif status == "completed" and type(exit_code) is int and exit_code == 0:
+        outcome = "passed"
+    else:
+        outcome = "failed"
+    return {
+        "status": outcome,
+        "scope": "repository_cpu_test_suite",
+        "exit_code": exit_code if type(exit_code) is int else None,
+        "error_type": error_type if isinstance(error_type, str) and re.fullmatch(
+            r"[A-Za-z_][A-Za-z0-9_]{0,63}", error_type) else None,
+        "cleanup_completed": cleanup_completed
+        if type(cleanup_completed) is bool else None,
+    }
+
+
 def lifecycle_evidence(report: dict | None) -> dict:
     if report is None:
         return {"status": "not_run"}
@@ -276,6 +304,7 @@ def doctor_evidence(process: dict | None, *, source_revision: str) -> dict:
 def build_evidence(
     *, source_revision: str, notebook_host: str,
     package_process: dict | None = None, eager_process: dict | None = None,
+    cpu_conformance_process: dict | None = None,
     compile_process: dict | None = None, lifecycle_report: dict | None = None,
     distributed_process: dict | None = None, doctor_process: dict | None = None,
 ) -> dict[str, Any]:
@@ -294,6 +323,7 @@ def build_evidence(
         "checks": {
             "doctor": doctor_evidence(doctor_process, source_revision=source_revision),
             "package_profile": profile_evidence(package_process),
+            "cpu_conformance": cpu_conformance_evidence(cpu_conformance_process),
             "eager": smoke_evidence(eager_process),
             "compile": smoke_evidence(compile_process, compiled=True),
             "lifecycle": lifecycle_evidence(lifecycle_report),

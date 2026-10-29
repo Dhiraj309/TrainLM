@@ -39,6 +39,9 @@ pending.
 The [utility inventory](TORCHTPU_UTILITIES.md) distinguishes versioned API
 documentation from the current public API policy. Experimental utilities
 need guarded adapters; monitoring, profiling and kernel extras remain optional.
+The v5e-1 notebook also runs the repository CPU test suite against the runtime's
+already installed Python/PyTorch versions. Its result is recorded separately
+from TPU discovery and eager execution, and it does not install packages.
 
 ### Read-only native install-profile check
 

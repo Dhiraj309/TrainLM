@@ -71,7 +71,11 @@
   support, gradient-correct DP, or native trainer integration is claimed.
 - T1 notebook usability/reliability checkpoint: direct Colab links, fresh
   detached source snapshots, source-change guards and a downloadable scoped
-  JSON report are implemented. Fatal teardown logs cannot pass on exit zero;
+  JSON report are implemented. The v5e-1 notebook now runs the repository CPU
+  test suite in a bounded subprocess before its eager TPU smoke, using the runtime's
+  installed Python and PyTorch without installing packages. CPU suite status
+  is recorded separately from native TPU evidence. Fatal teardown logs cannot
+  pass on exit zero;
   timeout/interruption cleanup kills surviving child processes even after
   the launcher exits. The report keeps CPU, skipped and incompatible outcomes
   explicit and excludes raw logs, environment dumps, addresses and paths.

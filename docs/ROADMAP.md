@@ -42,7 +42,10 @@ TorchTPU support. “Implemented” means present in that historical code path;
   trainer diagnostics accept such a report from a future native worker result.
   The current XLA worker does not emit native evidence.
   Both T1 notebooks now offer direct Colab entry and a downloadable evidence
-  JSON tied to a fresh source SHA. Process cleanup and fatal teardown checks
+  JSON tied to a fresh source SHA. The v5e-1 notebook runs the repository CPU
+  suite before the TPU probe and records it as a separate conformance result;
+  it installs no packages and a CPU pass does not certify TPU support. Process
+  cleanup and fatal teardown checks
   are covered on CPU; the export preserves skipped checks and package
   mismatches. Owner-run hardware evidence still gates the dependency profile
   decision and T2 integration scope.
