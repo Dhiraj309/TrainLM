@@ -162,7 +162,7 @@ Branch names describe repository work, not the tool or contributor:
 | [x] | PR1 | `milestone/m0-m2-foundation` | M0-M2 | 15 | Contracts and generic HF CPU conformance |
 | [~] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 18 | Merged; post-merge data/trainer validation remains tracked by validation gates |
 | [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 16 | Implementation merge-ready; DP8 launcher/data/attention/optimizer fixes landed; v5e-8 baseline is 319,302 tok/s after sparse-loss fix, performance work pending |
-| [~] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11+ | Public lifecycle, adapters, planner, and transactional application implemented; canonical layouts, public integration, and optimized loss pending |
+| [~] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11+ | Public lifecycle, adapters, planner, transactional application, and canonical layouts implemented; public integration and optimized loss pending |
 | [ ] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | 850K and hard LaughLM parity |
 | [ ] | PR6 | `milestone/m13-m14-family-release` | M13-M14 | 12 | Cross-family certification and V1 release |
 
@@ -319,7 +319,7 @@ TPU runtime foundation`; branch `milestone/m5-m7-xla-compatibility`.
 | [~] | M5 | F1-F7 implemented; DP8 launch, host data preparation, timing, expected-world-size gates, and two-update v5e-8 smoke passed; certification remains pending |
 | [~] | M6 | F1-F4 positional, attention, block-layout, and TPU round-trip coverage implemented; Llama preflight passed, cross-family validation pending |
 | [~] | M7 | F1-F5 distributed resume, async lifecycle, canonical HF export, telemetry, and integrity gates implemented; v5e-8 smoke and measured baseline passed, reliability certification pending |
-| [~] | M8 | Public lifecycle, adapters, planner, and transactional application implemented; canonical layouts, public plan integration, and CLI/hardware gates pending |
+| [~] | M8 | Public lifecycle, adapters, planner, transactional application, and canonical layouts implemented; public plan integration and CLI/hardware gates pending |
 | [ ] | M9 | Memory-efficient causal loss |
 | [ ] | M10 | TPU attention and 850K gate |
 | [ ] | M11 | Projection, optimizer, remat, and HLO tuning |
@@ -715,8 +715,8 @@ lifecycle facade, TPU metric/state bridge, replicated-worker checkpoints,
 standalone lifecycle operations, and global token stopping are implemented;
 the optional exact-class adapter registry and deterministic pure planner are
 implemented, together with staged transactional application/undo that preserves
-canonical tensor ownership. Canonical layouts, public plan/CLI integration, and
-target-hardware validation remain.
+canonical tensor ownership, plus explicit canonical pack/split and optimizer
+conversion. Public plan/CLI integration and target-hardware validation remain.
 
 **Goal:** Provide a minimal Hugging Face-like trainer surface while transforming
 loaded HF models safely without family logic in core.
@@ -790,13 +790,21 @@ loaded HF models safely without family logic in core.
   original Parameter/buffer reuse, and reverse restoration on commit failure.
   Undo validates copies before graph edits and preserves trained state; stale
   ownership or failed inverse validation cannot silently replace live tensors.
-  Layout-changing transforms wait for M8-F5, public trainer wiring for M8-F6.
+  Layout-changing transforms require M8-F5 mappings; public trainer wiring is M8-F6.
 
-- [ ] **M8-F5 — State-dict conversion**
+- [x] **M8-F5 — State-dict conversion**
   `feat(optimization): add reversible parameter layout mappings`
   Pack/split maps, aliases, dtype/shape validation, transformed resume, and
   canonical import/export.
   **Acceptance:** Train/save/reload matches canonical HF state.
+  Implemented through explicit, versioned tensor/alias metadata and reversible
+  pack/split mappings. Registered mapped application validates canonical values;
+  model/optimizer/scheduler/RNG restore is transactional, including runtime
+  buffers. Named AdamW/SGD slots preserve independent moment precision and reject
+  inconsistent groups/steps. Mapped undo redirects a supplied optimizer, and a
+  canonical model copy exports through plain HF without packed parameter names.
+  Tied packed sources and unsupported optimizer state remain explicit blockers;
+  public lifecycle wiring and hardware validation remain separate gates.
 
 - [ ] **M8-F6 — Explain report**
   `feat(optimization): expose model optimization explanation`

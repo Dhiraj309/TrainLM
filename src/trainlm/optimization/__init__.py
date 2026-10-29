@@ -25,6 +25,7 @@ from .planner import OperationRequest, ProviderDefinition, plan_optimizations
 from .application import (
     AppliedExecutionPlan, TransformationError, TransformHandler, TransformRegistry, apply_execution_plan,
 )
+from .layouts import StateTensor, TensorPack, StateLayout, convert_optimizer_state, named_optimizer_state
 
 __all__ = [
     "CapabilityFact",
@@ -57,4 +58,9 @@ __all__ = [
     "TransformHandler",
     "TransformRegistry",
     "apply_execution_plan",
+    "StateTensor",
+    "TensorPack",
+    "StateLayout",
+    "convert_optimizer_state",
+    "named_optimizer_state",
 ]
