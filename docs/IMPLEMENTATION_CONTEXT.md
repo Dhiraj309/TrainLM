@@ -164,15 +164,17 @@ limits, canonical HF export/reload, and failed-export propagation.
 Implement one small commit/story at a time and update `docs/ROADMAP.md` and
 this file in every turn:
 
-1. **M8-F4 transactional transforms:** apply plans before optimizer construction,
-   resolve real forward/inverse handlers, validate targets and parameter aliases,
-   and roll back every mutation on failure. No providers are enabled by default.
-2. **M8-F0 integration gate:** align the public CLI/config entry point with the
+1. **M8-F5 canonical state conversion:** add alias-aware pack/split mappings and
+   transformed resume/HF export. M8-F4 blocks layout-changing transforms until
+   this contract is implemented. No providers are enabled by default.
+2. **M8-F6 public plan integration:** connect inspection/planning/application to
+   trainer setup before optimizer creation and expose selections/fallbacks.
+3. **M8-F0 integration gate:** align the public CLI/config entry point with the
    facade and validate the implemented TPU lifecycle on owner hardware without
    blocking independent planner implementation.
-3. **M9 loss path:** add chunked/rematerialized causal loss and benchmark it
+4. **M9 loss path:** add chunked/rematerialized causal loss and benchmark it
    against the measured 319K baseline before enabling it by default.
-4. **M10+ kernels:** integrate TPU attention/projection/norm/optimizer/remat
+5. **M10+ kernels:** integrate TPU attention/projection/norm/optimizer/remat
    providers only after shape, dtype, mask, and backward correctness tests.
 
 ## Implemented adapter registry and planner (M8-F2/F3)
@@ -192,8 +194,8 @@ transform description includes its existing inverse ID. See
 [planner contract](optimization/PLANNER.md) for policies and integration boundaries.
 
 No optimized provider is registered by default. Selection neither executes a
-kernel nor certifies an optimization. M8-F4 application/rollback, M8-F5 canonical
-state conversion, and M8-F6 public explanation/runtime integration remain open;
+kernel nor certifies an optimization. M8-F5 canonical state conversion and M8-F6
+public explanation/runtime integration remain open;
 the public CPU/CUDA/TPU execution paths are unchanged by this slice.
 
 The full CPU regression run for this slice executed 392 tests: 386 passed and
@@ -203,6 +205,32 @@ version/semantic guards, backend/precision/mask/shape/backward eligibility,
 strict and explicit fallbacks, canonical plan ordering/IDs, immutable contexts,
 stale capability bindings, conflicting transforms, and version-one JSON schema
 round trips. No accelerator kernels or hardware were exercised.
+
+## Implemented transactional application (M8-F4)
+
+`optimization.apply_execution_plan()` replays inspection/adapter resolution and
+planning inputs to reject stale plans, resolves registered forward/inverse
+handlers, and preflights target selectors/classes/aliases/ownership. All module
+work happens on isolated copies before live graph edits. Canonical names,
+metadata, values, hooks, modes, alias groups, and inverse class/topology are
+validated. Only then are original Parameter/buffer objects rebound into staged
+replacements and committed together. Failed commits restore the original modules
+without requiring a provider inverse to succeed.
+
+The returned undo handle preserves trained values, gradients, optimizer references,
+ties, and current mode. Failed/stale undo leaves replacements installed rather
+than losing live tensors. Call application before optimizer construction;
+external optimizer references cannot be discovered automatically. See the
+[application contract](optimization/APPLICATION.md) for the trusted-handler,
+single-writer, dense-state, and no-global-side-effect boundaries. Layout-changing
+transforms remain blocked until M8-F5; public trainer integration remains M8-F6.
+
+The full CPU regression run for application executed 410 tests: 404 passed and
+the same 6 pre-existing onboarding failures remained. All 18 new transaction
+tests passed. They cover output/gradient/optimizer equivalence, trained undo,
+forward/inverse/validator/commit failure injection, stale plan/context/ownership
+guards, module/tensor aliases, hook-removal handles, buffers, modes, RNG state,
+and no-op/reference plans. No GPU/TPU execution was exercised.
 
 ## Definition of done for the public surface
 

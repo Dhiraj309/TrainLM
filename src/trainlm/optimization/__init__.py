@@ -22,6 +22,9 @@ from .inspection import inspect_dense_causal_lm
 from .adapters import AdapterDefinition, AdapterRegistry, AdapterResolution
 from .requirements import CapabilityRequirement, PlanningContext, ShapeConstraint, VersionRequirement
 from .planner import OperationRequest, ProviderDefinition, plan_optimizations
+from .application import (
+    AppliedExecutionPlan, TransformationError, TransformHandler, TransformRegistry, apply_execution_plan,
+)
 
 __all__ = [
     "CapabilityFact",
@@ -49,4 +52,9 @@ __all__ = [
     "OperationRequest",
     "ProviderDefinition",
     "plan_optimizations",
+    "AppliedExecutionPlan",
+    "TransformationError",
+    "TransformHandler",
+    "TransformRegistry",
+    "apply_execution_plan",
 ]

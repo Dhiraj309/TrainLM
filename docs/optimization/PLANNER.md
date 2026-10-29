@@ -90,14 +90,16 @@ requirements changes the ID. Expected capability fingerprints detect stale
 snapshots. Conflicting transform IDs block the whole plan, clearing transforms
 so a partial selection cannot be mistaken for an actionable plan.
 
-## Remaining integration
+## Application and remaining integration
 
-The existing version-one capability/plan JSON Schemas are unchanged. This slice
-does not apply transforms or supply inverse handlers, convert checkpoint layouts,
-or change `TrainLMTrainer` execution. Transactional application is M8-F4,
-canonical state conversion is M8-F5, and public plan-aware explanation/strict
-runtime integration is M8-F6. CPU tests establish selection and non-mutation
-behavior; GPU/TPU kernel correctness and performance remain separate gates.
+The existing version-one capability/plan JSON Schemas are unchanged.
+[M8-F4 application](APPLICATION.md) now validates the original planning inputs,
+stages registered forward/inverse handlers, preserves canonical tensor ownership,
+and commits or restores modules together. The planner itself remains pure.
+Canonical state conversion is M8-F5, and public plan-aware explanation/strict
+runtime integration is M8-F6. `TrainLMTrainer` execution is unchanged. CPU tests
+establish selection/non-mutation/application behavior; GPU/TPU kernel correctness
+and performance remain separate gates.
 
 The full CPU regression command
 `OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 .venv/bin/python -m pytest -q`
