@@ -26,6 +26,7 @@ from .application import (
     AppliedExecutionPlan, TransformationError, TransformHandler, TransformRegistry, apply_execution_plan,
 )
 from .layouts import StateTensor, TensorPack, StateLayout, convert_optimizer_state, named_optimizer_state
+from .integration import OptimizationOptions, OptimizationError
 
 __all__ = [
     "CapabilityFact",
@@ -63,4 +64,6 @@ __all__ = [
     "StateLayout",
     "convert_optimizer_state",
     "named_optimizer_state",
+    "OptimizationOptions",
+    "OptimizationError",
 ]

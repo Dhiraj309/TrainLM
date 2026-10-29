@@ -52,6 +52,7 @@ from trainlm.training import Trainer, TrainerCallback, TrainerPhase, create_sche
 from trainlm._tpu_lifecycle import (
     _WorkerBatches, _WorkerCheckpointIO, _WorkerEvaluationTask, _global_stop_steps,
 )
+from trainlm._tpu_optimization import model_source, prepare_session, apply_worker_profile
 
 
 class PrintMetrics(TrainerCallback):
@@ -136,18 +137,20 @@ class FinalCheckpoint(TrainerCallback):
 
 def _export_model(trainer, checkpoint_io, destination, original_attention):
     """All ranks materialize weights; only rank zero writes the plain HF export."""
+    export_model = (checkpoint_io._collective(trainer, checkpoint_io.optimization.canonical_model)
+                    if checkpoint_io.optimization is not None else trainer.model)
     cpu_state = checkpoint_io._collective(trainer, lambda: {
-        key: value.detach().cpu() for key, value in trainer.model.state_dict().items()
+        key: value.detach().cpu() for key, value in export_model.state_dict().items()
     })
     def write():
         if not trainer.runtime.is_primary_process:
             return
-        config = trainer.model.config
+        config = export_model.config
         attention = getattr(config, "_attn_implementation", None)
         try:
             # A private runtime attention registry is not part of a plain HF model.
             config._attn_implementation = original_attention
-            trainer.model.save_pretrained(
+            export_model.save_pretrained(
                 destination, state_dict=cpu_state, safe_serialization=True,
             )
         finally:
@@ -156,34 +159,7 @@ def _export_model(trainer, checkpoint_io, destination, original_attention):
 
 
 def _source(args: argparse.Namespace) -> ModelSourceConfig:
-    if args.model_id:
-        return ModelSourceConfig(
-            provider="huggingface",
-            initialization="pretrained",
-            name_or_path=args.model_id,
-            revision=args.model_revision or None,
-            trust_remote_code=args.trust_remote_code,
-            dtype="float32",
-            use_safetensors=True,
-        )
-    return ModelSourceConfig(
-        provider="huggingface",
-        initialization="config",
-        model_type="llama",
-        dtype="float32",
-        config_overrides={
-            "vocab_size": 32064,
-            "hidden_size": 1024,
-            "intermediate_size": 2816,
-            "num_hidden_layers": 8,
-            "num_attention_heads": 8,
-            "num_key_value_heads": 8,
-            "max_position_embeddings": args.sequence_length,
-            "tie_word_embeddings": True,
-            "use_cache": False,
-            "_attn_implementation": "sdpa",
-        },
-    )
+    return model_source(args)
 
 
 def _install_xla_attention(model: torch.nn.Module) -> str | None:
@@ -263,11 +239,14 @@ def model_preflight(args: argparse.Namespace) -> None:
     loaded = load_huggingface_causal_lm(source)
     if hasattr(loaded.model.config, "use_cache"):
         loaded.model.config.use_cache = False
+    optimization = prepare_session(loaded.model, args)
     model = runtime.prepare_model(loaded.model)
     model.train()
     if hasattr(model, "tie_weights"):
         model.tie_weights()
     _install_xla_attention(model)
+    apply_worker_profile(optimization, model, get_rng=lambda: xm.get_rng_state(device),
+                         set_rng=lambda value: xm.set_rng_state(value, device))
     input_ids = torch.zeros(
         (args.micro_batch_per_device, args.sequence_length),
         dtype=torch.long,
@@ -388,6 +367,7 @@ def _train_fn(index: int, args: argparse.Namespace, shards, resources) -> None:
     loaded = load_huggingface_causal_lm(source)
     if hasattr(loaded.model.config, "use_cache"):
         loaded.model.config.use_cache = False
+    optimization = prepare_session(loaded.model, args)
     input_vocab = loaded.model.get_input_embeddings().weight.shape[0]
     if any(s.manifest.token_id_max >= input_vocab for s in (*shards, *(eval_shards or ()))):
         raise ValueError("Shard token IDs exceed the selected HF model vocabulary.")
@@ -396,6 +376,10 @@ def _train_fn(index: int, args: argparse.Namespace, shards, resources) -> None:
     model.tie_weights()
     original_attention = getattr(model.config, "_attn_implementation", None)
     attention_backend = _install_xla_attention(model)
+    if attention_backend is not None:
+        optimization.runtime_adapters = [{"name": attention_backend, "role": "dtype_compatibility", "performance_certified": False}]
+    apply_worker_profile(optimization, model, get_rng=lambda: xm.get_rng_state(device),
+                         set_rng=lambda value: xm.set_rng_state(value, device))
     if getattr(model.config, "tie_word_embeddings", False):
         if model.get_input_embeddings().weight is not model.get_output_embeddings().weight:
             raise RuntimeError("HF tied embedding aliases were lost during device placement.")
@@ -417,9 +401,10 @@ def _train_fn(index: int, args: argparse.Namespace, shards, resources) -> None:
         runtime=RuntimeConfig(device="xla", precision=args.precision),
         parallelism=ParallelismConfig(data=world_size),
         optimizations=OptimizationConfig(
-            policy="auto",
+            policy=args.optimization_policy,
             compile=False,
-            allow_fallbacks=True,
+            allow_fallbacks=(args.optimization_policy != "required" if args.optimization_fallbacks is None
+                             else args.optimization_fallbacks == "allow"),
             compilation_cache_dir=str(Path(args.cache_dir) / f"rank-{rank}"),
             accumulation_strategy="microstep",
         ),
@@ -493,6 +478,8 @@ def _train_fn(index: int, args: argparse.Namespace, shards, resources) -> None:
         "eval_steps": args.eval_steps,
         "versions": {"torch": str(torch.__version__), "torch_xla": str(torch_xla.__version__)},
     }))
+    if args.optimization_factory is not None or args.optimization_policy != "auto" or args.optimization_fallbacks is not None:
+        context["optimization_plan_id"] = optimization.plan.plan_id
     checkpoint_io = _WorkerCheckpointIO(
         args.output_dir, batches, context,
         get_rng=lambda: xm.get_rng_state(device),
@@ -501,6 +488,7 @@ def _train_fn(index: int, args: argparse.Namespace, shards, resources) -> None:
             "trainlm-worker-checkpoint-errors", error,
             lambda errors: next((item for item in errors if item is not None), None),
         ),
+        optimization=optimization.applied,
     )
     final_state = FinalCheckpoint(checkpoint_io, args.final_checkpoint_dir)
     trainer = Trainer(
@@ -515,6 +503,7 @@ def _train_fn(index: int, args: argparse.Namespace, shards, resources) -> None:
         callbacks=[metrics, final_state],
         checkpoint_saver=checkpoint_io.save,
         checkpoint_loader=checkpoint_io.load,
+        model_prepared=True,
     )
     final_state.trainer = trainer
     print({"stage": "train_start", "rank": rank,
@@ -603,6 +592,7 @@ def _train_fn(index: int, args: argparse.Namespace, shards, resources) -> None:
         "export_dir": str(export_dir) if export_dir is not None else None,
         "max_tokens": args.max_tokens,
         "effective_max_steps": args.max_steps,
+        "optimization": optimization.report(),
     }
     if runtime.is_primary_process:
         output = Path(args.output_dir)

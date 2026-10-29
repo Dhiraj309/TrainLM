@@ -162,7 +162,7 @@ Branch names describe repository work, not the tool or contributor:
 | [x] | PR1 | `milestone/m0-m2-foundation` | M0-M2 | 15 | Contracts and generic HF CPU conformance |
 | [~] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 18 | Merged; post-merge data/trainer validation remains tracked by validation gates |
 | [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 16 | Implementation merge-ready; DP8 launcher/data/attention/optimizer fixes landed; v5e-8 baseline is 319,302 tok/s after sparse-loss fix, performance work pending |
-| [~] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11+ | Public lifecycle, adapters, planner, transactional application, and canonical layouts implemented; public integration and optimized loss pending |
+| [~] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11+ | Public optimization lifecycle, adapters/planner, application, and canonical layouts implemented; CLI/hardware gates and optimized loss pending |
 | [ ] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | 850K and hard LaughLM parity |
 | [ ] | PR6 | `milestone/m13-m14-family-release` | M13-M14 | 12 | Cross-family certification and V1 release |
 
@@ -319,7 +319,7 @@ TPU runtime foundation`; branch `milestone/m5-m7-xla-compatibility`.
 | [~] | M5 | F1-F7 implemented; DP8 launch, host data preparation, timing, expected-world-size gates, and two-update v5e-8 smoke passed; certification remains pending |
 | [~] | M6 | F1-F4 positional, attention, block-layout, and TPU round-trip coverage implemented; Llama preflight passed, cross-family validation pending |
 | [~] | M7 | F1-F5 distributed resume, async lifecycle, canonical HF export, telemetry, and integrity gates implemented; v5e-8 smoke and measured baseline passed, reliability certification pending |
-| [~] | M8 | Public lifecycle, adapters, planner, transactional application, and canonical layouts implemented; public plan integration and CLI/hardware gates pending |
+| [~] | M8 | Public optimization lifecycle, adapters/planner, application, and canonical layouts implemented; CLI/config and hardware gates pending |
 | [ ] | M9 | Memory-efficient causal loss |
 | [ ] | M10 | TPU attention and 850K gate |
 | [ ] | M11 | Projection, optimizer, remat, and HLO tuning |
@@ -716,7 +716,8 @@ standalone lifecycle operations, and global token stopping are implemented;
 the optional exact-class adapter registry and deterministic pure planner are
 implemented, together with staged transactional application/undo that preserves
 canonical tensor ownership, plus explicit canonical pack/split and optimizer
-conversion. Public plan/CLI integration and target-hardware validation remain.
+conversion. Public plan/setup/checkpoint/export integration is implemented;
+public CLI/config alignment and target-hardware validation remain.
 
 **Goal:** Provide a minimal Hugging Face-like trainer surface while transforming
 loaded HF models safely without family logic in core.
@@ -804,18 +805,27 @@ loaded HF models safely without family logic in core.
   inconsistent groups/steps. Mapped undo redirects a supplied optimizer, and a
   canonical model copy exports through plain HF without packed parameter names.
   Tied packed sources and unsupported optimizer state remain explicit blockers;
-  public lifecycle wiring and hardware validation remain separate gates.
+  public lifecycle wiring is now M8-F6; hardware validation remains a separate gate.
 
-- [ ] **M8-F6 — Explain report**
+- [x] **M8-F6 — Explain report**
   `feat(optimization): expose model optimization explanation`
   Human/JSON capabilities, providers, transforms, fallbacks, backend, graph,
   and certification.
   **Acceptance:** Strict mode fails before TPU allocation when unsupported.
+  Implemented through opt-in public profiles and policy/fallback arguments.
+  Inspection/planning/host validation precede placement; transforms precede
+  optimizer creation. Explain exposes source capabilities, providers/fallbacks,
+  evaluation exclusions, applied transforms, backend/precision, graph flags,
+  and uncertified status in dict/JSON/text. Transformed checkpoints and export
+  use canonical state conversion. TPU profiles validate on the host before the
+  collective probe, bind worker plans, and return structured actual reports.
 
 ### Exit gate
 
 - [ ] No-op and fixture transforms are transactional, explainable,
   checkpoint-safe, and backend-independent.
+  CPU facade and controlled worker tests cover these paths; actual accelerator
+  validation and public CLI/config alignment remain open before full M8 signoff.
 
 ## M9 — Memory-efficient causal-LM loss
 

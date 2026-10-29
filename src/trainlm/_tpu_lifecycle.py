@@ -89,7 +89,7 @@ class _WorkerBatches(IterableDataset):
 class _WorkerCheckpointIO:
     """Publish only after every rank has written a checked, atomic payload."""
 
-    def __init__(self, output_dir, batches, context, *, get_rng, set_rng, exchange_error=None):
+    def __init__(self, output_dir, batches, context, *, get_rng, set_rng, exchange_error=None, optimization=None):
         self.output_dir = Path(output_dir)
         self.batches = batches
         self.context = context
@@ -97,6 +97,7 @@ class _WorkerCheckpointIO:
         self.set_rng = set_rng
         self.exchange_error = exchange_error
         self.saved_paths = []
+        self.optimization = optimization
 
     def _collective(self, engine, operation):
         """Bring every worker to the same outcome before the next barrier."""
@@ -145,15 +146,18 @@ class _WorkerCheckpointIO:
             "param_groups": [{**group, "params": group_names}
                              for group, group_names in zip(optimizer["param_groups"], names)],
         }
+        canonical = (self.optimization.training_state_dict(engine.optimizer, engine.scheduler)
+                     if self.optimization is not None else None)
         payload = _cpu_tree({
-            "schema_version": 1,
+            "schema_version": 2 if canonical is not None else 1,
             "format": "trainlm_replicated_worker",
             "rank": runtime.rank,
             "world_size": runtime.world_size,
             "context": self.context,
-            "model": engine.model.state_dict(),
-            "optimizer": optimizer,
-            "scheduler": engine.scheduler.state_dict(),
+            "model": engine.model.state_dict() if canonical is None else None,
+            "optimizer": optimizer if canonical is None else None,
+            "scheduler": engine.scheduler.state_dict() if canonical is None else None,
+            "optimization": canonical,
             "runtime": dict(runtime.state_dict()),
             "trainer": {key: value for key, value in asdict(engine.state).items()
                         if key not in {"phase", "is_training", "should_stop", "failure"}},
@@ -213,7 +217,7 @@ class _WorkerCheckpointIO:
             raise ValueError("Worker checkpoint payload checksum does not match.")
         # The format contains tensors and primitive containers only.
         payload = torch.load(rank_path, map_location="cpu", weights_only=True)
-        if (payload["schema_version"] != 1 or payload["format"] != commit["format"]
+        if (payload["schema_version"] not in {1, 2} or payload["format"] != commit["format"]
                 or payload["rank"] != runtime.rank or payload["world_size"] != runtime.world_size
                 or payload["context"] != self.context):
             raise ValueError("Worker checkpoint payload identity does not match.")
@@ -226,8 +230,27 @@ class _WorkerCheckpointIO:
         PackedDataCursor.from_state(self.batches.reader, cursor)
         if cursor.next_partition_index != state["micro_step"]:
             raise ValueError("Worker checkpoint data cursor does not match consumed batches.")
+        if payload["schema_version"] == 2:
+            if self.optimization is None:
+                raise ValueError("Worker checkpoint requires its optimization profile.")
+            self.optimization.load_training_state_dict(payload["optimization"], engine.optimizer, engine.scheduler)
+        elif self.optimization is not None:
+            raise ValueError("Legacy worker state cannot restore a transformed optimizer.")
+        else:
+            self._load_legacy_optimizer(engine, payload)
+        runtime.load_state_dict(payload["runtime"])
+        for key, value in state.items():
+            setattr(engine.state, key, value)
+        self.batches.start_index = cursor.next_partition_index
+        engine._train_iterator = None
+        torch.set_rng_state(payload["cpu_rng"])
+        self.set_rng(payload["device_rng"])
+        return path
+
+    @staticmethod
+    def _load_legacy_optimizer(engine, payload):
         optimizer = payload["optimizer"]
-        names = self._optimizer_names(engine)
+        names = _WorkerCheckpointIO._optimizer_names(engine)
         if [group["params"] for group in optimizer["param_groups"]] != names:
             raise ValueError("Worker checkpoint optimizer parameter ownership changed.")
         current = engine.optimizer.state_dict()
@@ -246,14 +269,6 @@ class _WorkerCheckpointIO:
         if callable(cast_moments):
             cast_moments()
         engine.scheduler.load_state_dict(payload["scheduler"])
-        runtime.load_state_dict(payload["runtime"])
-        for key, value in state.items():
-            setattr(engine.state, key, value)
-        self.batches.start_index = cursor.next_partition_index
-        engine._train_iterator = None
-        torch.set_rng_state(payload["cpu_rng"])
-        self.set_rng(payload["device_rng"])
-        return path
 
 
 class _WorkerEvaluationTask(CausalLMTask):

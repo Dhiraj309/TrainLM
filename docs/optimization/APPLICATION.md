@@ -3,7 +3,7 @@
 `apply_execution_plan()` is the M8-F4 application boundary. It stages module
 replacements without executing optimizer steps, compilers, or accelerator
 initialization. No transforms are registered or enabled by default. The existing
-public trainer continues its current execution path until M8-F6 integration.
+public trainer now invokes this boundary for explicit [optimization profiles](PUBLIC.md).
 
 ## Plan and handler validation
 
@@ -96,9 +96,9 @@ outside the provider contract.
 
 [M8-F5](LAYOUTS.md) now supports declared pack/split mappings, named optimizer
 conversion, transformed model/optimizer resume, and canonical HF export. Tied
-packed sources and unsupported optimizer state remain guarded. M8-F6 must
-connect plans/application/state conversion to public trainer setup and
-explanations. Real GPU/TPU provider correctness and throughput remain separate
+packed sources and unsupported optimizer state remain guarded. M8-F6 now
+connects plans/application/state conversion to public trainer setup and
+explanations through explicit profiles. Real GPU/TPU correctness and throughput remain separate
 validation gates.
 
 The full CPU regression command

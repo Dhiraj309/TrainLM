@@ -98,7 +98,7 @@ stages registered forward/inverse handlers, preserves canonical tensor ownership
 and commits or restores modules together. The planner itself remains pure.
 [M8-F5 canonical conversion](LAYOUTS.md) adds explicit pack/split and named
 optimizer mappings. Public plan-aware explanation/strict runtime integration is
-M8-F6. `TrainLMTrainer` execution is unchanged. CPU tests
+M8-F6, now wired through [the public trainer](PUBLIC.md). CPU tests
 establish selection/non-mutation/application behavior; GPU/TPU kernel correctness
 and performance remain separate gates.
 

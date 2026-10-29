@@ -73,6 +73,11 @@ def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--probe-only", action="store_true")
     parser.add_argument("--model-preflight", action="store_true")
+    parser.add_argument("--optimization-preflight", action="store_true")
+    parser.add_argument("--optimization-factory")
+    parser.add_argument("--optimization-policy", choices=("auto", "required", "disabled"), default="auto")
+    parser.add_argument("--optimization-fallbacks", choices=("allow", "forbid"))
+    parser.add_argument("--optimization-plan-id")
     parser.add_argument("--expected-world-size", type=int, default=8)
     parser.add_argument("--max-steps", type=lambda value: None if value.lower() == "none" else int(value), default=2)
     parser.add_argument("--max-tokens", type=int)
@@ -164,6 +169,8 @@ def parse_args():
         parser.error("export requires --export-dir")
     if args.operation == "save_state" and not args.final_checkpoint_dir:
         parser.error("save_state requires --final-checkpoint-dir")
+    if args.optimization_policy == "required" and args.optimization_fallbacks == "allow":
+        parser.error("required optimization policy cannot allow fallbacks")
     return args
 
 
@@ -171,6 +178,15 @@ def main() -> None:
     faulthandler.enable()
     args = parse_args()
     configure_environment()
+    if args.optimization_preflight or ((args.optimization_factory or args.optimization_policy == "required"
+                                       or args.optimization_fallbacks == "forbid") and not args.optimization_plan_id):
+        # Host planning/application validation runs before importing XLA or
+        # allocating a collective-probe tensor. No provider callbacks are pickled.
+        from trainlm._tpu_optimization import host_preflight
+        report = host_preflight(args)
+        args.optimization_plan_id = report["execution_plan"]["plan_id"]
+        if args.optimization_preflight:
+            return
     memory = Path("/proc/meminfo")
     if memory.exists():
         event("host_memory", meminfo=[

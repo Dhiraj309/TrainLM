@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 import json
 from pathlib import Path
 import subprocess
@@ -44,6 +44,10 @@ class _TPURunRequest:
     operation: str = "train"
     final_checkpoint_dir: Path | None = None
     export_dir: Path | None = None
+    optimization_factory: str | None = None
+    optimization_policy: str = "auto"
+    optimization_allow_fallbacks: bool | None = None
+    optimization_plan_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         values = asdict(self)
@@ -82,6 +86,13 @@ class _TPUCoordinator:
             # A successful subprocess must produce artifacts for this invocation.
             for name in ("summary.json", "metrics.jsonl"):
                 (request.output_dir / name).unlink(missing_ok=True)
+            if request.optimization_factory is not None or request.optimization_policy == "required" or request.optimization_allow_fallbacks is False:
+                preflight = request.output_dir / "optimization_preflight.json"
+                preflight.unlink(missing_ok=True)
+                self._run_stage("optimization_preflight", request, "--optimization-preflight")
+                report = json.loads(preflight.read_text(encoding="utf-8"))
+                request = replace(request, optimization_plan_id=report["execution_plan"]["plan_id"])
+                completed_stages.append("optimization_preflight")
             self._run_stage("probe", request, "--probe-only")
             completed_stages.append("probe")
             self._run_stage("model_preflight", request, "--model-preflight")
@@ -195,6 +206,7 @@ class _TPUCoordinator:
             "--expected-world-size", str(request.expected_world_size),
             "--max-steps", str(request.max_steps),
             "--operation", request.operation,
+            "--optimization-policy", request.optimization_policy,
             "--gradient-accumulation-steps", str(request.gradient_accumulation_steps),
             "--micro-batch-per-device", str(request.micro_batch_per_device),
             "--sequence-length", str(request.sequence_length),
@@ -228,9 +240,13 @@ class _TPUCoordinator:
             ("--max-tokens", request.max_tokens),
             ("--final-checkpoint-dir", request.final_checkpoint_dir),
             ("--export-dir", request.export_dir),
+            ("--optimization-factory", request.optimization_factory),
+            ("--optimization-plan-id", request.optimization_plan_id),
         ):
             if value is not None:
                 command.extend((option, str(value.resolve() if isinstance(value, Path) else value)))
+        if request.optimization_allow_fallbacks is not None:
+            command.extend(("--optimization-fallbacks", "allow" if request.optimization_allow_fallbacks else "forbid"))
         return command
 
     @staticmethod

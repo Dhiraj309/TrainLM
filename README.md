@@ -158,5 +158,11 @@ methods can reopen trained state after training exits. See the
 [TPU worker lifecycle contract](docs/training/TPU_WORKER_LIFECYCLE.md) for return
 paths, token-limit rounding, and same-topology resume restrictions. Structured
 metrics reach public callbacks; worker scripts and stage logs stay internal.
-TPU hardware validation, public CLI alignment, and automatic capability-based
-kernel planning remain in progress.
+Optional capability-based planning/application now runs behind explicit
+`optimization=` profiles. Use `optimization_policy="required"` to reject
+unavailable optimizations, and `trainer.explain(format="text")` or
+`format="json"` to inspect providers, fallbacks, applied transforms, and
+certification boundaries. No optimized providers are enabled by default; see
+the [public optimization contract](docs/optimization/PUBLIC.md).
+TPU hardware validation, public CLI/config alignment, and certified optimized
+kernel providers remain in progress.

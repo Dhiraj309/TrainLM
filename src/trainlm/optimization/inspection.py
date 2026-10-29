@@ -113,8 +113,16 @@ def inspect_dense_causal_lm(model: nn.Module, *, source_provider: str = "externa
         else _unknown("Projection layout is not exposed as separate Q/K/V modules.")
     )
 
-    input_embedding = getattr(model, "get_input_embeddings", lambda: None)()
-    output_embedding = getattr(model, "get_output_embeddings", lambda: None)()
+    def optional_embedding(name):
+        try:
+            getter = getattr(model, name, None)
+            return getter() if callable(getter) else None
+        except NotImplementedError:
+            warnings.append(f"Optional {name} hook is not implemented; capability remains unknown.")
+            return None
+
+    input_embedding = optional_embedding("get_input_embeddings")
+    output_embedding = optional_embedding("get_output_embeddings")
     embedding = (
         ComponentCapability(
             status="known",
@@ -132,7 +140,7 @@ def inspect_dense_causal_lm(model: nn.Module, *, source_provider: str = "externa
             facts=(_fact("tied", output_embedding.weight is input_embedding.weight, "parameter alias"),),
             evidence=("get_output_embeddings()",),
         )
-        if isinstance(output_embedding, nn.Linear) and input_embedding is not None
+        if isinstance(output_embedding, nn.Linear) and isinstance(input_embedding, nn.Embedding)
         else _unknown("Model does not expose a standard linear output embedding.")
     )
 

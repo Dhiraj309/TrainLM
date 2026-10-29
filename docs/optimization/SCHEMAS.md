@@ -69,5 +69,6 @@ provider declarations and emits deterministic decisions without applying them.
 The version-one JSON Schemas remain unchanged. [Transactional application and
 inverse handlers](APPLICATION.md) now operate on these plans without changing
 canonical tensor ownership unless an explicit [layout conversion](LAYOUTS.md)
-declares the change. Public runtime integration remains M8-F6 work; selection
+declares the change. [Public runtime integration](PUBLIC.md) now consumes these
+contracts without enabling default optimized providers; selection
 does not certify GPU/TPU execution.
