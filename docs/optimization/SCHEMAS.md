@@ -68,5 +68,6 @@ planner](PLANNER.md) now produce these contracts. Planning evaluates explicit
 provider declarations and emits deterministic decisions without applying them.
 The version-one JSON Schemas remain unchanged. [Transactional application and
 inverse handlers](APPLICATION.md) now operate on these plans without changing
-canonical tensor ownership. Parameter-layout conversion and public runtime
-integration remain separate M8 work; selection does not certify GPU/TPU execution.
+canonical tensor ownership unless an explicit [layout conversion](LAYOUTS.md)
+declares the change. Public runtime integration remains M8-F6 work; selection
+does not certify GPU/TPU execution.

@@ -19,7 +19,7 @@ handler binds its provider/component, inverse ID, exact source module classes,
 forward/inverse callables, and an optional provider-specific validator. Every
 transform must belong to a selected provider. Missing/mismatched handlers,
 blocked plans, unsupported target classes, and layout-changing declarations
-fail before any transform callback runs.
+without a validated [M8-F5 state mapping](LAYOUTS.md) fail before forward callbacks.
 
 Targets are registered child-module paths; a whole `*` path segment expands
 deterministically to one segment, as in `model.layers.*.self_attn`. Root
@@ -38,7 +38,8 @@ isolated copy to validate canonical restoration. The application checks:
 - existing hook registrations/dispatch flags and per-module train/eval modes;
 - canonical module classes/topology after inverse conversion.
 
-Handlers cannot add hot-path hooks or silently change weights/layouts. CPU Torch
+Handlers cannot add hot-path hooks or silently change weights/layouts. Declared
+layout changes are checked through inverse canonical conversion. CPU Torch
 and Python RNG state, plus CUDA RNG state when already initialized, are preserved
 around staging and inverse validation. Materialized dense tensors are supported;
 meta/sparse tensors and modules that cannot be deep-copied are not accepted by
@@ -47,7 +48,8 @@ remain the provider's audited responsibility; CPU fixture tests are not kernel
 certification.
 
 After every target passes, staged replacements reuse the model's **original
-Parameter and buffer objects**. Commit installs all replacements through ordinary
+unmapped Parameter and buffer objects**. Explicit packs create new parameter
+ownership before optimizer construction. Commit installs replacements through ordinary
 PyTorch registration dictionaries and verifies global canonical ownership.
 Cross-target and embedding/head ties therefore remain intact. A staging failure
 leaves the live graph untouched. A commit failure restores installed original
@@ -57,8 +59,9 @@ hook dictionaries are reused so the caller's removal handles remain functional.
 
 ## Optimizer ordering and undo
 
-Call application before optimizer construction, compilation, and preferably
-device placement. Passing an existing optimizer is rejected; the application
+Call application before optimizer construction and compilation. Choose device
+placement before taking a handle used for later state I/O, because `.to()` may
+replace tensor ownership. Passing an existing optimizer is rejected; the application
 cannot discover optimizers or references held elsewhere by the caller.
 
 ```python
@@ -77,8 +80,10 @@ applied.revert()
 ```
 
 `AppliedExecutionPlan.revert()` validates all inverses on copies before restoring
-original modules. It preserves current parameter values, gradients, optimizer
-references, tied aliases, buffers, and train/eval modes. Repeating undo is a
+original modules. It preserves current parameter values, gradients, tied aliases,
+buffers, and train/eval modes. Layout-preserving transforms retain optimizer
+references; layout-changing transforms require `revert(optimizer)` to convert
+slots and redirect that optimizer's parameters. Repeating undo is a
 no-op. If another operation replaced a target or changed tensor ownership, undo
 is refused rather than restoring stale tensors. If inverse validation fails,
 the live optimized modules remain installed; no partial undo is attempted.
@@ -89,9 +94,10 @@ outside the provider contract.
 
 ## Remaining work
 
-`parameter_layout_change=True` is intentionally blocked until M8-F5 adds
-canonical state conversion, alias-aware pack/split mappings, transformed resume,
-and HF export. M8-F6 must connect plans/application to public trainer setup and
+[M8-F5](LAYOUTS.md) now supports declared pack/split mappings, named optimizer
+conversion, transformed model/optimizer resume, and canonical HF export. Tied
+packed sources and unsupported optimizer state remain guarded. M8-F6 must
+connect plans/application/state conversion to public trainer setup and
 explanations. Real GPU/TPU provider correctness and throughput remain separate
 validation gates.
 

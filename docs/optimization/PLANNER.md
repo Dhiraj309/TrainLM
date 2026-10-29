@@ -96,8 +96,9 @@ The existing version-one capability/plan JSON Schemas are unchanged.
 [M8-F4 application](APPLICATION.md) now validates the original planning inputs,
 stages registered forward/inverse handlers, preserves canonical tensor ownership,
 and commits or restores modules together. The planner itself remains pure.
-Canonical state conversion is M8-F5, and public plan-aware explanation/strict
-runtime integration is M8-F6. `TrainLMTrainer` execution is unchanged. CPU tests
+[M8-F5 canonical conversion](LAYOUTS.md) adds explicit pack/split and named
+optimizer mappings. Public plan-aware explanation/strict runtime integration is
+M8-F6. `TrainLMTrainer` execution is unchanged. CPU tests
 establish selection/non-mutation/application behavior; GPU/TPU kernel correctness
 and performance remain separate gates.
 

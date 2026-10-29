@@ -16,6 +16,8 @@ from .adapters import AdapterRegistry
 from .plan import ExecutionPlan, ModelTransformation
 from .planner import OperationRequest, ProviderDefinition, plan_optimizations
 from .requirements import PlanningContext, _text
+from .layouts import StateLayout, TensorPack, _clone, module_tensors, named_optimizer_state, convert_optimizer_state, prepare_optimizer_state
+from .state_io import CanonicalStateIO, copy_tensors
 
 
 class TransformationError(RuntimeError):
@@ -32,6 +34,7 @@ class TransformHandler:
     forward: Callable[[nn.Module], nn.Module]
     inverse: Callable[[nn.Module], nn.Module]
     validate: Callable[[nn.Module, nn.Module], None] | None = None
+    layout: StateLayout | Callable[[nn.Module], StateLayout] | None = None
 
     def __post_init__(self) -> None:
         for name in ("transform_id", "inverse_transform_id", "provider", "component"):
@@ -46,6 +49,8 @@ class TransformHandler:
             raise ValueError("Forward and inverse handlers must be callable.")
         if self.validate is not None and not callable(self.validate):
             raise ValueError("Handler validation must be callable.")
+        if self.layout is not None and not isinstance(self.layout, StateLayout) and not callable(self.layout):
+            raise ValueError("Handler layout must be a StateLayout or layout factory.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -180,8 +185,12 @@ def _check_module_aliases(groups, candidate: nn.Module) -> None:
             raise TransformationError(f"Shared module aliases changed: {paths}")
 
 
-def _reuse_tensors(source: nn.Module, candidate: nn.Module) -> None:
+def _reuse_tensors(source: nn.Module, candidate: nn.Module, layout=None) -> None:
+    mapped = {name for pack in layout.packs for name in pack.sources} if layout is not None else set()
+    candidate_bindings = _bindings(candidate)
     for (kind, path), (tensor, _) in _bindings(source).items():
+        if path in mapped or (tensor is None and (kind, path) not in candidate_bindings):
+            continue
         parent_path, _, name = path.rpartition(".")
         parent = candidate.get_submodule(parent_path) if parent_path else candidate
         entries = parent._parameters if kind == "parameter" else parent._buffers
@@ -203,17 +212,70 @@ class _Replacement:
     original: nn.Module
     replacement: nn.Module
     handler: TransformHandler
+    layout: StateLayout | None = None
 
 
 class AppliedExecutionPlan:
     """Undo handle; canonical Parameter objects survive application and training."""
 
-    def __init__(self, model, plan, replacements):
+    def __init__(self, model, plan, replacements, state_layout):
         self.model = model
         self.plan = plan
         self._replacements = tuple(replacements)
         self._bindings = _bindings(model)
         self._reverted = False
+        self.state_layout = state_layout
+
+    def _check_live(self):
+        for record in self._replacements:
+            if self.model.get_submodule(record.path) is not record.replacement:
+                raise TransformationError(f"Replacement is no longer installed: {record.path}")
+        current = _bindings(self.model)
+        if current.keys() != self._bindings.keys() or any(
+            current[key][0] is not value[0] or current[key][1] != value[1]
+            for key, value in self._bindings.items()
+        ):
+            raise TransformationError("Tensor ownership changed since application; refusing stale undo/state I/O.")
+        self.state_layout.check_module(self.model, transformed=True)
+
+    def canonical_state_dict(self):
+        self._check_live()
+        return CanonicalStateIO(self.model, self.state_layout, self.plan.plan_id).model_state_dict()
+
+    def load_canonical_state_dict(self, state):
+        self._check_live()
+        CanonicalStateIO(self.model, self.state_layout, self.plan.plan_id).load_model_state_dict(state)
+
+    def training_state_dict(self, optimizer, scheduler=None):
+        self._check_live()
+        return CanonicalStateIO(self.model, self.state_layout, self.plan.plan_id).training_state_dict(optimizer, scheduler)
+
+    def load_training_state_dict(self, payload, optimizer, scheduler=None):
+        self._check_live()
+        CanonicalStateIO(self.model, self.state_layout, self.plan.plan_id).load_training_state_dict(payload, optimizer, scheduler)
+
+    def canonical_model(self):
+        self._check_live()
+        canonical = CanonicalStateIO(self.model, self.state_layout, self.plan.plan_id).model_state_dict(include_nonpersistent=True)
+        with _preserve_rng():
+            memo = {}
+            result = deepcopy(self.model, memo)
+            for record in self._replacements:
+                target = deepcopy(record.original, memo)
+                modes = dict(record.replacement.named_modules(remove_duplicate=False))
+                for path, child in target.named_modules(remove_duplicate=False):
+                    child.__dict__["training"] = modes.get(path, record.replacement).training
+                _install(result, record.path, target)
+            StateLayout(self.state_layout.tensors, aliases=self.state_layout.aliases).check_module(result)
+            copy_tensors(result, canonical)
+        return result
+
+    def export_huggingface(self, destination):
+        canonical = self.canonical_model()
+        if not callable(getattr(canonical, "save_pretrained", None)):
+            raise TransformationError("Canonical model does not implement save_pretrained.")
+        canonical.save_pretrained(destination, safe_serialization=True)
+        return destination
 
     @property
     def applied_transform_ids(self) -> tuple[str, ...]:
@@ -223,19 +285,13 @@ class AppliedExecutionPlan:
     def is_reverted(self) -> bool:
         return self._reverted
 
-    def revert(self) -> nn.Module:
+    def revert(self, optimizer=None) -> nn.Module:
         if self._reverted:
             return self.model
         try:
-            for record in self._replacements:
-                if self.model.get_submodule(record.path) is not record.replacement:
-                    raise TransformationError(f"Replacement is no longer installed: {record.path}")
-            current = _bindings(self.model)
-            if current.keys() != self._bindings.keys() or any(
-                current[key][0] is not value[0] or current[key][1] != value[1]
-                for key, value in self._bindings.items()
-            ):
-                raise TransformationError("Tensor ownership changed since application; refusing stale undo.")
+            self._check_live()
+            if self.state_layout.packs:
+                return self._revert_layout(optimizer)
             with _preserve_rng():
                 for record in self._replacements:
                     restored = record.handler.inverse(deepcopy(record.replacement))
@@ -256,6 +312,63 @@ class AppliedExecutionPlan:
         self._reverted = True
         return self.model
 
+    def _revert_layout(self, optimizer):
+        canonical = CanonicalStateIO(self.model, self.state_layout, self.plan.plan_id).model_state_dict(include_nonpersistent=True)
+        optimizer_state = (convert_optimizer_state(self.state_layout, named_optimizer_state(self.model, optimizer),
+                                                  to_canonical=True) if optimizer is not None else None)
+        with _preserve_rng():
+            for record in self._replacements:
+                restored = record.handler.inverse(deepcopy(record.replacement))
+                expected = deepcopy(record.original)
+                local = {name.removeprefix(record.path + "."): value for name, value in canonical.items()
+                         if name.startswith(record.path + ".")}
+                copy_tensors(expected, local)
+                _check_state(expected, restored)
+                _check_hooks(expected, restored)
+                _check_canonical_classes(expected, restored)
+        # Only packed source tensors lost ownership during application. Other
+        # tensors still belong to both the original and replacement modules.
+        originals = {}
+        for record in self._replacements:
+            for name, tensor in module_tensors(record.original).items():
+                originals[f"{record.path}.{name}"] = tensor
+        packed_sources = {name for pack in self.state_layout.packs for name in pack.sources}
+        before = {name: (_clone(originals[name]), originals[name].grad) for name in packed_sources}
+        old_optimizer = (optimizer.state, optimizer.param_groups) if optimizer is not None else None
+        live = module_tensors(self.model)
+        installed = []
+        try:
+            with torch.no_grad():
+                for name in packed_sources:
+                    originals[name].copy_(canonical[name])
+                specs = {item.name: item for item in self.state_layout.tensors}
+                for pack in self.state_layout.packs:
+                    gradient = live[pack.target].grad
+                    parts = gradient.split([specs[name].shape[pack.dimension] for name in pack.sources], dim=pack.dimension) if gradient is not None else [None] * len(pack.sources)
+                    for name, part in zip(pack.sources, parts):
+                        originals[name].grad = _clone(part) if part is not None else None
+            for record in reversed(self._replacements):
+                modes = dict(record.replacement.named_modules(remove_duplicate=False))
+                for path, child in record.original.named_modules(remove_duplicate=False):
+                    child.__dict__["training"] = modes.get(path, record.replacement).training
+                installed.append(record)
+                _install(self.model, record.path, record.original)
+            StateLayout(self.state_layout.tensors, aliases=self.state_layout.aliases).check_module(self.model)
+            if optimizer is not None:
+                optimizer.state, optimizer.param_groups = prepare_optimizer_state(self.model, optimizer_state)
+        except BaseException:
+            for record in reversed(installed):
+                _install(self.model, record.path, record.replacement)
+            with torch.no_grad():
+                for name, (value, gradient) in before.items():
+                    originals[name].copy_(value)
+                    originals[name].grad = gradient
+            if old_optimizer is not None:
+                optimizer.state, optimizer.param_groups = old_optimizer
+            raise
+        self._reverted = True
+        return self.model
+
 
 def _install(model: nn.Module, path: str, replacement: nn.Module) -> None:
     parent_path, _, name = path.rpartition(".")
@@ -269,12 +382,14 @@ def _preflight(model, plan, registry):
     modules = dict(model.named_modules(remove_duplicate=False))
     targets = []
     for transform in plan.transformations:
-        if transform.parameter_layout_change is not False:
-            raise TransformationError("Parameter-layout changes require M8-F5 conversion support.")
         if not any(decision.component == transform.component and decision.selected_provider == transform.provider
                    and decision.status in {"selected", "fallback"} for decision in plan.decisions):
             raise TransformationError(f"Transformation has no selected provider: {transform.transform_id}")
         handler = registry.resolve(transform)
+        if transform.parameter_layout_change is not False and handler.layout is None:
+            raise TransformationError("Parameter-layout changes require a registered M8-F5 state mapping.")
+        if transform.parameter_layout_change is False and handler.layout is not None:
+            raise TransformationError("Handler declares a layout change absent from the execution plan.")
         matched = set()
         for pattern in transform.target_paths:
             parts = pattern.split(".")
@@ -316,8 +431,8 @@ def apply_execution_plan(
 
     Call before constructing an optimizer or compiling/placing a model. Handlers
     may only mutate their isolated argument; global patches and external side
-    effects are outside the provider contract. Layout-changing transforms are
-    intentionally refused until canonical conversion is available.
+    effects are outside the provider contract. Layout changes require an explicit
+    validated StateLayout mapping before optimizer construction.
     """
     if not isinstance(model, nn.Module) or not isinstance(plan, ExecutionPlan):
         raise TypeError("Application requires a torch module and ExecutionPlan.")
@@ -336,19 +451,39 @@ def apply_execution_plan(
     staged, cache, committed = [], {}, []
     original_bindings = _bindings(model)
     module_aliases = _module_alias_groups(model)
+    canonical_layout = StateLayout.from_module(model)
+    layouts = {}
+    with _preserve_rng():
+        for path, original, handler in targets:
+            layout = handler.layout(deepcopy(original)) if callable(handler.layout) else handler.layout
+            if layout is not None:
+                if not isinstance(layout, StateLayout):
+                    raise TransformationError("Layout factory did not return a StateLayout.")
+                layout.check_module(original)
+                original_tensors = module_tensors(original)
+                if any(original_tensors[name].grad is not None for pack in layout.packs for name in pack.sources):
+                    raise TransformationError("Apply layout transforms at initialization with cleared gradients.")
+            layouts[path] = layout
+    packs = tuple(pack for path, layout in layouts.items() if layout is not None
+                  for pack in layout.prefixed(path).packs)
+    try:
+        state_layout = StateLayout(canonical_layout.tensors, packs, canonical_layout.aliases)
+    except ValueError as exc:
+        raise TransformationError(f"Unsafe global state mapping: {exc}") from exc
     try:
         with _preserve_rng():
             for path, original, handler in targets:
+                layout = layouts[path]
                 key = (id(original), handler.transform_id)
                 if key not in cache:
                     replacement = handler.forward(deepcopy(original))
-                    _check_state(original, replacement)
+                    _check_replacement(original, replacement, layout)
                     _check_hooks(original, replacement)
                     _check_modes(original, replacement)
                     _check_module_aliases(_module_alias_groups(original), replacement)
                     if handler.validate is not None:
                         handler.validate(deepcopy(original), replacement)
-                        _check_state(original, replacement)
+                        _check_replacement(original, replacement, layout)
                         _check_hooks(original, replacement)
                         _check_modes(original, replacement)
                         _check_module_aliases(_module_alias_groups(original), replacement)
@@ -357,9 +492,9 @@ def apply_execution_plan(
                     _check_hooks(original, restored)
                     _check_modes(original, restored)
                     _check_canonical_classes(original, restored)
-                    _reuse_tensors(original, replacement)
+                    _reuse_tensors(original, replacement, layout)
                     cache[key] = replacement
-                staged.append(_Replacement(path, original, cache[key], handler))
+                staged.append(_Replacement(path, original, cache[key], handler, layout))
         if any(model.get_submodule(record.path) is not record.original for record in staged):
             raise TransformationError("Module topology changed while staging transforms.")
         for record in staged:
@@ -367,8 +502,12 @@ def apply_execution_plan(
             _install(model, record.path, record.replacement)
         after = _bindings(model)
         _check_module_aliases(module_aliases, model)
-        if after.keys() != original_bindings.keys() or any(
-            after[key][0] is not value[0] or after[key][1] != value[1] for key, value in original_bindings.items()
+        state_layout.check_module(model, transformed=True)
+        mapped = {name for pack in packs for name in pack.sources}
+        if (not packs and after.keys() != original_bindings.keys()) or any(
+            key[1] not in mapped and value[0] is not None and
+            (key not in after or after[key][0] is not value[0] or after[key][1] != value[1])
+            for key, value in original_bindings.items()
         ):
             raise TransformationError("Application changed canonical tensor ownership.")
     except BaseException as exc:
@@ -377,4 +516,15 @@ def apply_execution_plan(
         if isinstance(exc, (TransformationError, KeyboardInterrupt, SystemExit)):
             raise
         raise TransformationError(f"Transform staging failed; original model restored: {exc}") from exc
-    return AppliedExecutionPlan(model, plan, staged)
+    return AppliedExecutionPlan(model, plan, staged, state_layout)
+
+
+def _check_replacement(original, replacement, layout):
+    if layout is None:
+        _check_state(original, replacement)
+        return
+    layout.check_module(replacement, transformed=True)
+    canonical = layout.convert(module_tensors(replacement), to_canonical=True, include_nonpersistent=True)
+    for name, value in module_tensors(original).items():
+        if value.device != canonical[name].device or not torch.equal(value.detach(), canonical[name]):
+            raise TransformationError(f"Mapped canonical tensor values changed: {name}")
