@@ -164,9 +164,9 @@ limits, canonical HF export/reload, and failed-export propagation.
 Implement one small commit/story at a time and update `docs/ROADMAP.md` and
 this file in every turn:
 
-1. **M8-F2/F3 planner:** add version-guarded adapter registry and a pure,
-   reversible optimization plan. Every transform needs an eligibility reason,
-   fallback reason, and rollback path.
+1. **M8-F4 transactional transforms:** apply plans before optimizer construction,
+   resolve real forward/inverse handlers, validate targets and parameter aliases,
+   and roll back every mutation on failure. No providers are enabled by default.
 2. **M8-F0 integration gate:** align the public CLI/config entry point with the
    facade and validate the implemented TPU lifecycle on owner hardware without
    blocking independent planner implementation.
@@ -174,6 +174,35 @@ this file in every turn:
    against the measured 319K baseline before enabling it by default.
 4. **M10+ kernels:** integrate TPU attention/projection/norm/optimizer/remat
    providers only after shape, dtype, mask, and backward correctness tests.
+
+## Implemented adapter registry and planner (M8-F2/F3)
+
+`optimization.AdapterRegistry` resolves exact qualified model/config classes,
+explicit package-version guards, semantic guards, and evidence-backed capability
+overrides without changing model weights, aliases, mode, or generic execution.
+No family-name or subclass guessing is used. Missing guards preserve the generic
+report with rejection reasons; ambiguous or contradictory adapters fail explicitly.
+
+`optimization.plan_optimizations()` selects declarative providers against an
+immutable context of backend, precision, mask, shapes, backward intent, versions,
+and adapter ID. It supports disabled/auto/required policies and explicit provider
+requests, deterministic priority/ID selection, reference fallback, stale-report
+rejection, conflicting-transform blocking, and content-addressed plan IDs. Every
+transform description includes its existing inverse ID. See
+[planner contract](optimization/PLANNER.md) for policies and integration boundaries.
+
+No optimized provider is registered by default. Selection neither executes a
+kernel nor certifies an optimization. M8-F4 application/rollback, M8-F5 canonical
+state conversion, and M8-F6 public explanation/runtime integration remain open;
+the public CPU/CUDA/TPU execution paths are unchanged by this slice.
+
+The full CPU regression run for this slice executed 392 tests: 386 passed and
+the same 6 pre-existing onboarding failures remained. All 35 new adapter/planner
+tests passed. Coverage includes registry removal and non-mutation, class/config/
+version/semantic guards, backend/precision/mask/shape/backward eligibility,
+strict and explicit fallbacks, canonical plan ordering/IDs, immutable contexts,
+stale capability bindings, conflicting transforms, and version-one JSON schema
+round trips. No accelerator kernels or hardware were exercised.
 
 ## Definition of done for the public surface
 

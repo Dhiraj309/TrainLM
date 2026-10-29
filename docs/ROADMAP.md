@@ -162,7 +162,7 @@ Branch names describe repository work, not the tool or contributor:
 | [x] | PR1 | `milestone/m0-m2-foundation` | M0-M2 | 15 | Contracts and generic HF CPU conformance |
 | [~] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 18 | Merged; post-merge data/trainer validation remains tracked by validation gates |
 | [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 16 | Implementation merge-ready; DP8 launcher/data/attention/optimizer fixes landed; v5e-8 baseline is 319,302 tok/s after sparse-loss fix, performance work pending |
-| [~] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11+ | Public TPU lifecycle and token stopping implemented; CLI/hardware gates, planner, and optimized loss pending |
+| [~] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11+ | Public lifecycle, optional adapter registry, and pure planner implemented; application, CLI/hardware gates, and optimized loss pending |
 | [ ] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | 850K and hard LaughLM parity |
 | [ ] | PR6 | `milestone/m13-m14-family-release` | M13-M14 | 12 | Cross-family certification and V1 release |
 
@@ -319,7 +319,7 @@ TPU runtime foundation`; branch `milestone/m5-m7-xla-compatibility`.
 | [~] | M5 | F1-F7 implemented; DP8 launch, host data preparation, timing, expected-world-size gates, and two-update v5e-8 smoke passed; certification remains pending |
 | [~] | M6 | F1-F4 positional, attention, block-layout, and TPU round-trip coverage implemented; Llama preflight passed, cross-family validation pending |
 | [~] | M7 | F1-F5 distributed resume, async lifecycle, canonical HF export, telemetry, and integrity gates implemented; v5e-8 smoke and measured baseline passed, reliability certification pending |
-| [~] | M8 | Public TPU lifecycle and token stopping implemented; CLI/hardware gates and reversible planner pending |
+| [~] | M8 | Public lifecycle, exact-class adapters, and pure planner implemented; transactional application, canonical layouts, public plan integration, and CLI/hardware gates pending |
 | [ ] | M9 | Memory-efficient causal loss |
 | [ ] | M10 | TPU attention and 850K gate |
 | [ ] | M11 | Projection, optimizer, remat, and HLO tuning |
@@ -713,7 +713,9 @@ trainer itself.
 **Status:** [~] In progress — the coordinator, packed-data adapter, local
 lifecycle facade, TPU metric/state bridge, replicated-worker checkpoints,
 standalone lifecycle operations, and global token stopping are implemented;
-public CLI/config alignment, target-hardware validation, and planning remain.
+the optional exact-class adapter registry and deterministic pure planner are
+implemented. Transactional application, canonical layouts, public plan/CLI
+integration, and target-hardware validation remain.
 
 **Goal:** Provide a minimal Hugging Face-like trainer surface while transforming
 loaded HF models safely without family logic in core.
@@ -756,16 +758,26 @@ loaded HF models safely without family logic in core.
   Implemented through config, module, parameter-alias, and forward-signature
   evidence; unproven residual/custom-normalization semantics remain unknown.
 
-- [ ] **M8-F2 — Adapter registry**
+- [x] **M8-F2 — Adapter registry**
   `feat(optimization): add optional model adapter registry`
   Resolve explicit model/class adapters with semantic and version guards.
   **Acceptance:** Removing adapters preserves M6 compatibility.
+  Implemented as an immutable, opt-in registry with exact qualified model/config
+  classes, mandatory version guards, semantic requirements, evidence-backed
+  overrides, and explicit ambiguity/contradiction rejection. Removing adapters
+  restores generic inspection without editing the model or runtime paths.
 
-- [ ] **M8-F3 — Pure planner**
+- [x] **M8-F3 — Pure planner**
   `feat(optimization): select kernels transforms and fallbacks`
   Match capability to provider by backend, shape, dtype, mask, and backward
   support under auto/required/disabled/explicit policies.
   **Acceptance:** Deterministic snapshots explain every decision.
+  Implemented through declarative provider constraints and immutable runtime
+  context; priorities and provider IDs determine selection independently of
+  registration order. Plans explain reference/explicit fallbacks and strict
+  blocking, bind capability/context fingerprints, retain inverse declarations,
+  and reject conflicting transforms. No providers are enabled or applied by
+  default; this is selection evidence, not accelerator certification.
 
 - [ ] **M8-F4 — Transactional transforms**
   `feat(optimization): apply validated reversible model transforms`
