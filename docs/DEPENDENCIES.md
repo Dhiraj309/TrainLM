@@ -25,12 +25,16 @@ Do not guess package versions or assume Pallas/Helion/Tokamax compatibility.
 
 ## Owner-reported native probe profile
 
-The owner supplied a passing standalone eager smoke with Python 3.13.18,
+The owner supplied repeated passing standalone eager smokes with Python 3.13.18,
 torch 2.14.1+cpu, torch_tpu 0.2.0 and libtpu 0.0.50; tpu-info 0.14.2 was
-installed. This does not establish a supported TrainLM installation:
-`pyproject.toml` currently requires `torch>=2.9,<2.14`. Resolve and test a
-native profile, clean installation and CPU compatibility before changing that
-range. Explicit compile, hardware identity and distributed evidence are pending.
+installed. The latest report correctly identifies a source checkout (TrainLM
+need not be installed as a distribution for the notebook to import it). It
+also reports that `torch>=2.9,<2.14` excludes 2.14.1 and that IPython 7.34.0
+requires missing `jedi`; Jedi is unrelated to TrainLM's declared dependencies.
+The TorchTPU package's own Torch range accepts 2.14.1, but that is not proof of
+TrainLM CPU or trainer compatibility. Keep the range unchanged until CPU
+conformance is run. Explicit compile, lifecycle and distributed evidence are
+pending.
 
 The [utility inventory](TORCHTPU_UTILITIES.md) distinguishes versioned API
 documentation from the current public API policy. Experimental utilities

@@ -46,13 +46,15 @@ TorchTPU support. “Implemented” means present in that historical code path;
   are covered on CPU; the export preserves skipped checks and package
   mismatches. Owner-run hardware evidence still gates the dependency profile
   decision and T2 integration scope.
-  The latest owner eager run passed allocation, forward, autograd and AdamW
-  update with a runtime-reported `TPU v5e` device and one visible device. The
-  owner confirmed the hardware was v5e-1; the shared Colab output did not show
-  image or topology details. Its package profile is
-  incompatible (`trainlm` absent, torch 2.14.1+cpu outside `<2.14`, and
-  `pip check` conflicts); explicit compile, lifecycle and T1.4 collective
-  remain unrun. Keep the native dependency profile unresolved.
+  The latest owner eager run at source `d3dea896` passed allocation, forward,
+  autograd and AdamW update with a runtime-reported `TPU v5e` device and one
+  visible device. The owner confirmed the hardware was v5e-1; the shared Colab
+  output did not show image or topology details. The package profile correctly
+  reports `source_checkout`; torch 2.14.1+cpu remains outside `<2.14`, and
+  `pip check` found that IPython 7.34.0 requires missing `jedi`. The latter is
+  unrelated to TrainLM's declared dependencies. Explicit compile, lifecycle
+  and T1.4 collective remain unrun. Keep the native dependency profile
+  unresolved pending CPU conformance and native runtime evidence.
   Software follow-up adds `trainlm doctor` as one read-only report for package
   compatibility and native TPU discovery. It does not install packages or
   train; dependency and hardware support remain evidence-gated.
@@ -62,8 +64,7 @@ TorchTPU support. “Implemented” means present in that historical code path;
   a missing installed `trainlm` distribution is identified as source-checkout
   mode rather than a dependency gap. Other package incompatibilities remain
   visible. Pip conflict details are parsed from both common `pip check` output
-  forms; the latest owner report came from the preceding source revision and
-  reported `ipython` without its exact constraint.
+  forms; the latest owner report identifies the IPython-to-Jedi conflict.
   The 18 old PR cards are candidates, not the active queue.
 
 ## Historical native-backend transition note
