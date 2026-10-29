@@ -7,7 +7,9 @@ import pytest
 import torch
 from torch.utils.data import DataLoader
 
-from trainlm._tpu_lifecycle import _WorkerBatches, _WorkerCheckpointIO, _WorkerEvaluationTask
+from trainlm._tpu_lifecycle import (
+    _WorkerBatches, _WorkerCheckpointIO, _WorkerEvaluationTask, _global_stop_steps,
+)
 from trainlm.config import (
     CheckpointConfig, EvaluationConfig, LoggingConfig, OptimizerConfig, TrainConfig, TrainerConfig,
 )
@@ -205,8 +207,9 @@ def test_replicated_checkpoint_commit_waits_for_all_rank_writes(tmp_path, fail_r
             assert len(json.loads(commit.read_text())["ranks"]) == 2
 
 
-def test_worker_training_body_wires_lifecycle_using_cpu_runtime(tmp_path, monkeypatch):
-    """Execute the real body with XLA APIs replaced by CPU-only doubles."""
+@pytest.fixture
+def cpu_worker(monkeypatch):
+    """Load the real worker body with XLA APIs replaced by CPU-only doubles."""
     import sys
     from types import ModuleType
     from tests.test_tpu_entrypoint import load_script
@@ -263,7 +266,21 @@ def test_worker_training_body_wires_lifecycle_using_cpu_runtime(tmp_path, monkey
         return SimpleNamespace(model=model, config=config,
             metadata=SimpleNamespace(resolved_revision=None, to_dict=lambda: {}))
     monkeypatch.setattr(module, "load_huggingface_causal_lm", load_model)
-    entrypoint = load_script("trainlm_tpu_worker")
+    return SimpleNamespace(module=module, entrypoint=load_script("trainlm_tpu_worker"), closed=closed)
+
+
+def worker_args(cpu_worker, tmp_path, monkeypatch, *options):
+    import sys
+    monkeypatch.setattr(sys, "argv", ["worker", "--expected-world-size", "1",
+        "--max-steps", "2", "--warmup-steps", "0", "--gradient-accumulation-steps", "1",
+        "--micro-batch-per-device", "2", "--sequence-length", "4", "--precision", "fp32",
+        "--scheduler", "constant", "--log-every-steps", "1", "--output-dir", str(tmp_path), *options])
+    return cpu_worker.entrypoint.parse_args()
+
+
+def test_worker_training_body_wires_lifecycle_using_cpu_runtime(tmp_path, monkeypatch, cpu_worker):
+    import sys
+    module, entrypoint, closed = cpu_worker.module, cpu_worker.entrypoint, cpu_worker.closed
     monkeypatch.setattr(sys, "argv", ["worker", "--expected-world-size", "1",
         "--max-steps", "2", "--warmup-steps", "0", "--gradient-accumulation-steps", "1",
         "--micro-batch-per-device", "2", "--sequence-length", "4",
@@ -286,3 +303,140 @@ def test_worker_training_body_wires_lifecycle_using_cpu_runtime(tmp_path, monkey
         assert len(summary["checkpoints"]) == 1
         assert summary["resumed_from_checkpoint"] == args.resume_from_checkpoint
     assert len(closed) == 5  # two training loaders and three evaluation passes
+
+
+@pytest.mark.parametrize("steps,tokens,world,expected", [
+    (None, 97, 8, 2), (4, 97, 8, 2), (1, 97, 8, 1), (3, None, 8, 3),
+])
+def test_global_token_limit_stops_on_complete_updates(steps, tokens, world, expected):
+    assert _global_stop_steps(steps, tokens, sequence_length=4, batch_size=2,
+                              accumulation_steps=2, world_size=world) == expected
+
+
+@pytest.mark.parametrize("step_limit,token_limit,expected_steps", [(None, 13, 2), (1, 100, 1)])
+def test_token_only_and_combined_limits_in_real_worker_body(tmp_path, monkeypatch, cpu_worker,
+                                                         step_limit, token_limit, expected_steps):
+    args = worker_args(cpu_worker, tmp_path / "run", monkeypatch,
+        "--max-steps", str(step_limit), "--max-tokens", str(token_limit),
+        "--gradient-accumulation-steps", "2",
+        "--final-checkpoint-dir", str(tmp_path / "final"))
+    with _reader(tmp_path / "data", (96,)) as reader:
+        cpu_worker.module.train_fn(0, args, reader.shards)
+    summary = json.loads((tmp_path / "run" / "summary.json").read_text())
+    assert summary["steps"] == expected_steps
+    assert summary["micro_steps"] == expected_steps * 2
+    assert summary["global_supervised_tokens"] == expected_steps * 12
+    assert summary["max_tokens"] == token_limit
+    assert summary["final_checkpoint"] == str(tmp_path / "final")
+    assert (tmp_path / "final" / "commit.json").is_file()
+    assert args.max_steps == step_limit  # worker did not rewrite the public request
+
+
+def test_standalone_operations_reopen_final_worker_state_without_training(tmp_path, monkeypatch, cpu_worker):
+    from pathlib import Path
+    module = cpu_worker.module
+    original_load = module.load_huggingface_causal_lm
+    def load_with_export(source):
+        loaded = original_load(source)
+        def save_pretrained(destination, *, state_dict, safe_serialization):
+            assert safe_serialization
+            destination = Path(destination)
+            destination.mkdir(parents=True, exist_ok=True)
+            torch.save(state_dict, destination / "weights.pt")
+        loaded.model.save_pretrained = save_pretrained
+        return loaded
+    monkeypatch.setattr(module, "load_huggingface_causal_lm", load_with_export)
+    with _reader(tmp_path / "data", (96,)) as reader:
+        shards = {"train": reader.shards, "evaluation": reader.shards}
+        # Evaluation before training does not require enough data for max_steps.
+        before_args = worker_args(cpu_worker, tmp_path / "before", monkeypatch,
+                                  "--operation", "evaluate", "--eval-manifest-dir", "unused",
+                                  "--max-steps", "1000")
+        module.train_fn(0, before_args, shards)
+        before = json.loads((tmp_path / "before" / "summary.json").read_text())
+        assert before["steps"] == 0 and before["checkpoints"] == []
+        args = worker_args(cpu_worker, tmp_path / "train", monkeypatch,
+                          "--eval-manifest-dir", "unused",
+                          "--final-checkpoint-dir", str(tmp_path / "final"))
+        module.train_fn(0, args, shards)
+        original = torch.load(tmp_path / "final" / "rank-0.pt", weights_only=True)
+        assert original["trainer"]["step"] == 2
+        for operation in ("evaluate", "export", "save_state"):
+            options = ["--operation", operation, "--eval-manifest-dir", "unused",
+                       "--resume-from-checkpoint", str(tmp_path / "final")]
+            if operation == "export":
+                options += ["--export-dir", str(tmp_path / "export")]
+            if operation == "save_state":
+                options += ["--final-checkpoint-dir", str(tmp_path / "saved")]
+            request = worker_args(cpu_worker, tmp_path / operation, monkeypatch, *options)
+            module.train_fn(0, request, shards)
+            summary = json.loads((tmp_path / operation / "summary.json").read_text())
+            assert summary["steps"] == 2 and summary["micro_steps"] == 2
+            if operation == "evaluate":
+                assert summary["evaluation_metrics"]["eval_loss"] != before["evaluation_metrics"]["eval_loss"]
+                assert summary["checkpoints"] == []
+            elif operation == "export":
+                exported = torch.load(tmp_path / "export" / "weights.pt", weights_only=True)
+                torch.testing.assert_close(exported, original["model"], rtol=0, atol=0)
+            else:
+                saved = torch.load(tmp_path / "saved" / "rank-0.pt", weights_only=True)
+                assert saved["optimizer"]["param_groups"] == original["optimizer"]["param_groups"]
+                for key in ("scheduler", "trainer", "data", "device_rng"):
+                    assert saved[key] == original[key]
+                for key in ("model", "cpu_rng"):
+                    torch.testing.assert_close(saved[key], original[key], rtol=0, atol=0)
+                torch.testing.assert_close(saved["optimizer"]["state"], original["optimizer"]["state"], rtol=0, atol=0)
+        assert len(cpu_worker.closed) == 3  # one train and two evaluation loaders
+
+
+def test_plain_hf_export_preserves_weights_ties_and_omits_private_attention(tmp_path, cpu_worker):
+    from transformers import AutoModelForCausalLM, LlamaConfig
+    model = AutoModelForCausalLM.from_config(LlamaConfig(
+        vocab_size=32, hidden_size=16, intermediate_size=32, num_hidden_layers=1,
+        num_attention_heads=2, num_key_value_heads=2, max_position_embeddings=8,
+        tie_word_embeddings=True,
+    ))
+    model.config._attn_implementation = "trainlm_xla_sdpa"
+    engine = SimpleNamespace(model=model, runtime=TorchRuntime(device="cpu"))
+    checkpoint = _WorkerCheckpointIO(tmp_path, None, {}, get_rng=lambda: 0, set_rng=lambda value: None)
+    cpu_worker.module._export_model(engine, checkpoint, tmp_path / "export", "sdpa")
+    assert model.config._attn_implementation == "trainlm_xla_sdpa"
+    restored = AutoModelForCausalLM.from_pretrained(tmp_path / "export", local_files_only=True)
+    torch.testing.assert_close(restored.state_dict(), model.state_dict(), rtol=0, atol=0)
+    assert restored.get_input_embeddings().weight is restored.get_output_embeddings().weight
+    assert restored.config._attn_implementation != "trainlm_xla_sdpa"
+
+
+def test_state_saved_before_training_is_resumable(tmp_path, monkeypatch, cpu_worker):
+    with _reader(tmp_path / "data", (96,)) as reader:
+        request = worker_args(cpu_worker, tmp_path / "initial", monkeypatch,
+            "--operation", "save_state", "--final-checkpoint-dir", str(tmp_path / "state-0"))
+        cpu_worker.module.train_fn(0, request, reader.shards)
+        initial = torch.load(tmp_path / "state-0" / "rank-0.pt", weights_only=True)
+        assert initial["trainer"]["step"] == 0 and initial["data"]["next_partition_index"] == 0
+        assert initial["optimizer"]["state"] == {}
+        request = worker_args(cpu_worker, tmp_path / "resumed", monkeypatch,
+            "--resume-from-checkpoint", str(tmp_path / "state-0"),
+            "--final-checkpoint-dir", str(tmp_path / "state-2"))
+        cpu_worker.module.train_fn(0, request, reader.shards)
+        final = torch.load(tmp_path / "state-2" / "rank-0.pt", weights_only=True)
+        assert final["trainer"]["step"] == 2 and final["data"]["next_partition_index"] == 2
+        assert final["optimizer"]["state"]
+
+
+def test_failed_export_does_not_write_success_summary(tmp_path, monkeypatch, cpu_worker):
+    load = cpu_worker.module.load_huggingface_causal_lm
+    def failing_model(source):
+        loaded = load(source)
+        def save(*args, **kwargs):
+            raise OSError("export disk full")
+        loaded.model.save_pretrained = save
+        return loaded
+    monkeypatch.setattr(cpu_worker.module, "load_huggingface_causal_lm", failing_model)
+    request = worker_args(cpu_worker, tmp_path / "run", monkeypatch,
+                          "--operation", "export", "--export-dir", str(tmp_path / "export"))
+    with _reader(tmp_path / "data", (96,)) as reader:
+        with pytest.raises(ValueError, match="export disk full"):
+            cpu_worker.module.train_fn(0, request, reader.shards)
+    assert not (tmp_path / "run" / "summary.json").exists()
+    assert cpu_worker.closed == []  # no train/evaluation loader was started

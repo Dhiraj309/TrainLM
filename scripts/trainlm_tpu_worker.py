@@ -74,7 +74,11 @@ def parse_args():
     parser.add_argument("--probe-only", action="store_true")
     parser.add_argument("--model-preflight", action="store_true")
     parser.add_argument("--expected-world-size", type=int, default=8)
-    parser.add_argument("--max-steps", type=int, default=2)
+    parser.add_argument("--max-steps", type=lambda value: None if value.lower() == "none" else int(value), default=2)
+    parser.add_argument("--max-tokens", type=int)
+    parser.add_argument("--operation", choices=("train", "evaluate", "export", "save_state"), default="train")
+    parser.add_argument("--final-checkpoint-dir")
+    parser.add_argument("--export-dir")
     parser.add_argument("--warmup-steps", type=int, default=5)
     parser.add_argument("--gradient-accumulation-steps", type=int, default=32)
     parser.add_argument("--micro-batch-per-device", type=int, default=2)
@@ -122,7 +126,7 @@ def parse_args():
     args = parser.parse_args()
     for name in ("max_steps", "gradient_accumulation_steps", "micro_batch_per_device",
                  "sequence_length", "log_every_steps", "shard_count", "token_vocab_size"):
-        if getattr(args, name) < 1:
+        if getattr(args, name) is not None and getattr(args, name) < 1:
             parser.error(f"--{name.replace('_', '-')} must be positive")
     if args.expected_world_size < 1:
         parser.error("--expected-world-size must be positive")
@@ -150,6 +154,16 @@ def parse_args():
             parser.error(f"--{name.replace('_', '-')} must be positive")
     if args.eval_steps is not None and not args.eval_manifest_dir:
         parser.error("--eval-steps requires --eval-manifest-dir")
+    if args.max_tokens is not None and args.max_tokens < 1:
+        parser.error("--max-tokens must be positive")
+    if args.max_steps is None and args.max_tokens is None:
+        parser.error("set --max-steps or --max-tokens")
+    if args.operation == "evaluate" and not args.eval_manifest_dir:
+        parser.error("evaluation requires --eval-manifest-dir")
+    if args.operation == "export" and not args.export_dir:
+        parser.error("export requires --export-dir")
+    if args.operation == "save_state" and not args.final_checkpoint_dir:
+        parser.error("save_state requires --final-checkpoint-dir")
     return args
 
 

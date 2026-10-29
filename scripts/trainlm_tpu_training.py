@@ -48,9 +48,9 @@ from trainlm.model import load_huggingface_causal_lm
 from trainlm.model.outputs import normalize_causal_lm_output
 from trainlm.optimization import create_optimizer
 from trainlm.runtime import XlaRuntime
-from trainlm.training import Trainer, TrainerCallback, create_scheduler
+from trainlm.training import Trainer, TrainerCallback, TrainerPhase, create_scheduler
 from trainlm._tpu_lifecycle import (
-    _WorkerBatches, _WorkerCheckpointIO, _WorkerEvaluationTask,
+    _WorkerBatches, _WorkerCheckpointIO, _WorkerEvaluationTask, _global_stop_steps,
 )
 
 
@@ -64,10 +64,13 @@ class PrintMetrics(TrainerCallback):
         self.measured_tokens = 0
         self.metrics_path = Path(args.output_dir) / "metrics.jsonl"
 
-    def on_train_begin(self, state, control):
+    def reset_artifact(self):
         if self.runtime.is_primary_process:
             self.metrics_path.parent.mkdir(parents=True, exist_ok=True)
             self.metrics_path.unlink(missing_ok=True)
+
+    def on_train_begin(self, state, control):
+        self.reset_artifact()
         if state.step >= self.args.warmup_steps:
             torch_xla.sync(wait=True)
             self.start_time = time.perf_counter()
@@ -107,6 +110,49 @@ class EvaluationLoader:
             yield from parallel.per_device_loader(self.device)
         finally:
             parallel.close()
+
+
+class FinalCheckpoint(TrainerCallback):
+    """Retain worker-owned state before the training engine releases runtime resources."""
+
+    def __init__(self, checkpoint_io, destination):
+        self.checkpoint_io = checkpoint_io
+        self.destination = destination
+        self.trainer = None
+        self.path = None
+
+    def on_train_end(self, state, control):
+        if self.destination is None or state.failure is not None:
+            return
+        runtime = self.trainer.runtime
+        success = False
+        try:
+            runtime.before_checkpoint("final-state")
+            self.path = self.checkpoint_io.save(self.trainer, Path(self.destination).resolve())
+            success = True
+        finally:
+            runtime.after_checkpoint("final-state", success=success)
+
+
+def _export_model(trainer, checkpoint_io, destination, original_attention):
+    """All ranks materialize weights; only rank zero writes the plain HF export."""
+    cpu_state = checkpoint_io._collective(trainer, lambda: {
+        key: value.detach().cpu() for key, value in trainer.model.state_dict().items()
+    })
+    def write():
+        if not trainer.runtime.is_primary_process:
+            return
+        config = trainer.model.config
+        attention = getattr(config, "_attn_implementation", None)
+        try:
+            # A private runtime attention registry is not part of a plain HF model.
+            config._attn_implementation = original_attention
+            trainer.model.save_pretrained(
+                destination, state_dict=cpu_state, safe_serialization=True,
+            )
+        finally:
+            config._attn_implementation = attention
+    checkpoint_io._collective(trainer, write)
 
 
 def _source(args: argparse.Namespace) -> ModelSourceConfig:
@@ -257,6 +303,9 @@ def train_fn(index: int, args: argparse.Namespace, shards) -> None:
 
 def _train_fn(index: int, args: argparse.Namespace, shards, resources) -> None:
     del index
+    # Derive an absolute stop from requested global tokens without mutating the
+    # caller's arguments or truncating the worker's fixed accumulation shape.
+    args = argparse.Namespace(**vars(args))
     rank = int(xr.global_ordinal())
     world_size = int(xr.world_size())
     if world_size != args.expected_world_size:
@@ -264,6 +313,11 @@ def _train_fn(index: int, args: argparse.Namespace, shards, resources) -> None:
             f"Torch/XLA launched {world_size} process(es); "
             f"expected {args.expected_world_size}."
         )
+    args.max_steps = _global_stop_steps(
+        args.max_steps, args.max_tokens, sequence_length=args.sequence_length,
+        batch_size=args.micro_batch_per_device,
+        accumulation_steps=args.gradient_accumulation_steps, world_size=world_size,
+    )
 
     torch.manual_seed(args.seed)
     device = torch_xla.device()
@@ -299,7 +353,7 @@ def _train_fn(index: int, args: argparse.Namespace, shards, resources) -> None:
         host_remainder="drop",
     )
     partitioned = PartitionedPackedBatchReader(reader, partition)
-    if len(partitioned) < args.max_steps * args.gradient_accumulation_steps:
+    if args.operation == "train" and len(partitioned) < args.max_steps * args.gradient_accumulation_steps:
         raise ValueError("Not enough complete rank-local batches for this run; add shards or reduce steps.")
     batches = _WorkerBatches(partitioned)
     loader = DataLoader(
@@ -340,6 +394,7 @@ def _train_fn(index: int, args: argparse.Namespace, shards, resources) -> None:
     model = runtime.prepare_model(loaded.model)
     # Device conversion can replace Parameter objects and tied aliases.
     model.tie_weights()
+    original_attention = getattr(model.config, "_attn_implementation", None)
     attention_backend = _install_xla_attention(model)
     if getattr(model.config, "tie_word_embeddings", False):
         if model.get_input_embeddings().weight is not model.get_output_embeddings().weight:
@@ -447,6 +502,7 @@ def _train_fn(index: int, args: argparse.Namespace, shards, resources) -> None:
             lambda errors: next((item for item in errors if item is not None), None),
         ),
     )
+    final_state = FinalCheckpoint(checkpoint_io, args.final_checkpoint_dir)
     trainer = Trainer(
         config=config,
         model=model,
@@ -456,10 +512,11 @@ def _train_fn(index: int, args: argparse.Namespace, shards, resources) -> None:
         task=task,
         train_dataloader=loader,
         eval_dataloader=eval_loader,
-        callbacks=[metrics],
+        callbacks=[metrics, final_state],
         checkpoint_saver=checkpoint_io.save,
         checkpoint_loader=checkpoint_io.load,
     )
+    final_state.trainer = trainer
     print({"stage": "train_start", "rank": rank,
            "parameters": sum(p.numel() for p in model.parameters()),
            "attention": attention_backend or getattr(model.config, "_attn_implementation", None),
@@ -467,20 +524,36 @@ def _train_fn(index: int, args: argparse.Namespace, shards, resources) -> None:
            "materialize_loss_every_steps": args.log_every_steps,
            "max_steps": args.max_steps}, flush=True)
     parallel_loader = None
+    evaluation_metrics = None
+    export_dir = None
     try:
         if args.resume_from_checkpoint:
             trainer.load_checkpoint(args.resume_from_checkpoint)
-        # Restore the committed cursor before starting any prefetch threads.
-        parallel_loader = pl.ParallelLoader(
-            loader, [device], loader_prefetch_size=16, device_prefetch_size=8,
-            host_to_device_transfer_threads=1, batches_per_execution=1,
-        )
-        trainer.train_dataloader = parallel_loader.per_device_loader(device)
-        state = trainer.train()
+        if args.operation == "train":
+            # Restore the committed cursor before starting any prefetch threads.
+            parallel_loader = pl.ParallelLoader(
+                loader, [device], loader_prefetch_size=16, device_prefetch_size=8,
+                host_to_device_transfer_threads=1, batches_per_execution=1,
+            )
+            trainer.train_dataloader = parallel_loader.per_device_loader(device)
+            trainer.train()
+        else:
+            metrics.reset_artifact()
+            trainer.prepare()
+            if args.operation == "evaluate":
+                evaluation_metrics = trainer.evaluate()
+            elif args.operation == "save_state":
+                final_state.path = trainer.save_checkpoint(Path(args.final_checkpoint_dir).resolve())
+        if args.operation == "export" or args.export_hf:
+            export_dir = Path(args.export_dir or Path(args.output_dir) / "hf_export").resolve()
+            _export_model(trainer, checkpoint_io, export_dir, original_attention)
         torch_xla.sync(wait=True)
     finally:
         if parallel_loader is not None:
             parallel_loader.close()
+        if trainer.state.phase != TrainerPhase.FINALIZED:
+            trainer.finalize()
+    state = trainer.state
     # Rank-local timing alone can overstate DP throughput. Use the slowest
     # replica's synchronized window and report supervised and scheduled tokens.
     elapsed = None
@@ -524,6 +597,12 @@ def _train_fn(index: int, args: argparse.Namespace, shards, resources) -> None:
         "performance_certified": False,
         "checkpoints": checkpoint_io.saved_paths,
         "resumed_from_checkpoint": args.resume_from_checkpoint,
+        "operation": args.operation,
+        "final_checkpoint": str(final_state.path) if final_state.path is not None else None,
+        "evaluation_metrics": evaluation_metrics,
+        "export_dir": str(export_dir) if export_dir is not None else None,
+        "max_tokens": args.max_tokens,
+        "effective_max_steps": args.max_steps,
     }
     if runtime.is_primary_process:
         output = Path(args.output_dir)
@@ -532,12 +611,4 @@ def _train_fn(index: int, args: argparse.Namespace, shards, resources) -> None:
         import torch_xla.debug.metrics as xla_metrics
         (output / "xla_metrics.txt").write_text(xla_metrics.metrics_report(), encoding="utf-8")
         print({"stage": "train_finished", "summary": str(output / "summary.json")}, flush=True)
-    if args.export_hf:
-        xm.rendezvous("trainlm-before-export")
-        # All replicas participate in XLA-to-CPU transfer before only rank zero
-        # serializes canonical HF weights. This is export, not exact resume.
-        cpu_state = {key: value.detach().cpu() for key, value in model.state_dict().items()}
-        if rank == 0:
-            model.save_pretrained(Path(args.output_dir) / "hf_export",
-                                  state_dict=cpu_state, safe_serialization=True)
     xm.rendezvous("trainlm-finished")

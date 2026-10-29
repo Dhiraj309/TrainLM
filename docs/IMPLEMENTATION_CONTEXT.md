@@ -114,6 +114,9 @@ matched runs; planning ranges are not guarantees.
   consumption-based packed-data cursors, and an all-rank commit gate;
 - TPU `train(resume_from_checkpoint=...)` and periodic packed-data evaluation,
   including cross-rank token-weighted loss reduction and public metric delivery;
+- standalone TPU evaluation, plain HF model export, and full state saving by
+  reopening a retained final worker checkpoint; global supervised-token stopping
+  rounds up to complete optimizer updates without changing accumulation shapes;
 - a family-neutral structural inspector used by `trainer.explain()` that
   reports only config/module/alias/signature-backed facts and leaves residual
   or custom semantics explicitly unknown.
@@ -127,8 +130,15 @@ and resumes same-topology replicated checkpoints before starting prefetch. The
 private format is distinct from the M7 sharded manifest and cannot reshard or
 resume CPU/CUDA checkpoints. Incomplete/corrupt or incompatible checkpoints are
 rejected. See [worker lifecycle details](training/TPU_WORKER_LIFECYCLE.md).
-Standalone TPU `evaluate()`, `save_model()`, `save_state()`, max-tokens stopping,
-and target-hardware lifecycle validation remain outstanding. Do not mark M8-F0
+TPU `evaluate()`, `save_model()`, and `save_state()` now launch private worker
+operations against the latest retained state, or the initial pretrained model
+before training. A final checkpoint is saved before training runtime teardown,
+even without periodic saves. `save_state()` returns a committed checkpoint
+directory suitable for explicit resume; operation logs are kept separately from
+training artifacts. Token-only runs use `max_steps=None` and `max_tokens=N`,
+where N is a global supervised-token budget rounded up to a full optimizer
+update. Target-hardware lifecycle validation, public CLI/config alignment, and
+capability-based optimization planning remain outstanding. Do not mark M8-F0
 complete or claim CUDA/TPU certification from CPU tests.
 
 The CPU/CUDA public path remains supported, including explicit
@@ -139,23 +149,27 @@ Checkpoint lifecycle validation uses CPU doubles for the worker's XLA APIs,
 exact interrupted/uninterrupted dropout-training comparisons, mixed moment
 precision, corrupt/incompatible cursor rejection, and two-rank publication and
 failure coordination. Real TPU validation belongs to the owner's environment.
-The full CPU regression run for this story executed 341 tests: 335 passed and
+The full CPU regression run after standalone lifecycle implementation executed
+357 tests: 351 passed and
 6 failed. The failures match onboarding: five Phi cases hit Transformers 5.0.0's
 missing `PhiConfig.pad_token_id`, and the existing TrainLM save/reload test
 reports changed embedding weights. These defects are tracked separately from
 the lifecycle implementation; no assertions were disabled or source patched.
+The focused facade/worker/lifecycle group passed all 44 tests, including
+standalone operations against trained state, initial-state resume, token-only
+limits, canonical HF export/reload, and failed-export propagation.
 
 ## Required next sequence
 
 Implement one small commit/story at a time and update `docs/ROADMAP.md` and
 this file in every turn:
 
-1. **M8-F0 remaining public lifecycle:** add standalone TPU evaluation/export
-   and state saving plus max-tokens stopping; retain an explicit hardware
-   validation gate for the implemented checkpoint/cadence path.
-2. **M8-F2/F3 planner:** add version-guarded adapter registry and a pure,
+1. **M8-F2/F3 planner:** add version-guarded adapter registry and a pure,
    reversible optimization plan. Every transform needs an eligibility reason,
    fallback reason, and rollback path.
+2. **M8-F0 integration gate:** align the public CLI/config entry point with the
+   facade and validate the implemented TPU lifecycle on owner hardware without
+   blocking independent planner implementation.
 3. **M9 loss path:** add chunked/rematerialized causal loss and benchmark it
    against the measured 319K baseline before enabling it by default.
 4. **M10+ kernels:** integrate TPU attention/projection/norm/optimizer/remat

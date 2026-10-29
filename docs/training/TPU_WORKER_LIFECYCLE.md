@@ -9,6 +9,38 @@ batches and rank remainders are dropped. Metrics reduce loss sums and supervised
 token counts across ranks before computing loss and perplexity. Each cadence
 boundary evaluates before saving, matching the backend-neutral trainer engine.
 
+## Standalone public operations
+
+`trainer.evaluate()` evaluates the latest trained state and returns evaluation
+metrics, also forwarding them to public metric callbacks. It requires validation
+data. `trainer.save_model(output_dir)` writes a plain Hugging Face model directory
+with canonical CPU weights and the original attention configuration; private XLA
+attention registry names are not exported. `trainer.save_state(output_dir)` saves
+full replicated training state and returns a unique committed checkpoint directory
+under the requested output directory. That path can be passed directly to
+`trainer.train(resume_from_checkpoint=path)` in a compatible new trainer.
+
+Because workers exit after each operation, public training retains a private
+final checkpoint under `.trainlm_state/` even when `save_steps` is unset. It is
+written at a completed-update boundary before runtime teardown. Standalone
+operations transparently reconstruct workers from that snapshot; they perform
+no optimizer updates. Before training, the same methods use initial pretrained
+state. A successful `save_state()` becomes the latest retained checkpoint.
+Private `.trainlm_operations/` directories isolate operation logs and summaries
+from training artifacts. Retained checkpoints cost disk space for complete
+per-rank replicas; there is no automatic retention deletion.
+
+## Token-based stopping
+
+Set `max_steps=None, max_tokens=N` for a token-only run. N counts supervised
+tokens **globally**, including every replica, and is an absolute progress limit
+when resuming. A packed optimizer update contributes
+`(sequence_length - 1) * per_device_train_batch_size * gradient_accumulation_steps * world_size`
+supervised tokens. The worker rounds the token budget up to an optimizer-update
+boundary, preserving fixed accumulation shapes. Overshoot is less than one full
+update. When both step and token limits are configured, the first limit wins.
+This TPU policy differs from the portable engine's partial-accumulation stopping.
+
 ## Checkpoint ownership and publication
 
 Each worker writes its full replicated model, optimizer slots keyed by canonical
@@ -35,7 +67,8 @@ Resume requires the same topology, precision, model source/config/revision,
 dataset and partition, training/evaluation geometry, optimizer, scheduler,
 evaluation cadence, and PyTorch/XLA versions. Every worker verifies its own
 checksum, and rank errors are exchanged before continuation. Linear/cosine
-schedules must retain their original `max_steps` horizon. Constant and token-WSD
+schedules must retain their original effective step horizon (after applying any
+token limit). Constant and token-WSD
 schedules may extend `max_steps`, provided enough complete batches remain.
 CPU/CUDA facade checkpoints and M7 sharded artifacts are not accepted by this
 private worker format. Only complete committed checkpoints are resumable.
@@ -53,10 +86,15 @@ checkpoint artifacts on Kaggle/Cloud TPU before marking the hardware gate done.
 
 The complete CPU regression command was
 `OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 .venv/bin/python -m pytest -q`.
-It executed 341 tests: 335 passed and 6 failed, matching the six pre-existing
+It executed 357 tests: 351 passed and 6 failed, matching the six pre-existing
 onboarding failures (five missing Phi padding configuration errors and one
-TrainLM save/reload weight mismatch). All new lifecycle tests passed.
+TrainLM save/reload weight mismatch). The focused facade/worker/lifecycle group
+passed all 44 tests; all new lifecycle tests passed.
 
-Standalone TPU `evaluate()`, public model export/state-save methods, and
-max-tokens stopping remain separate unfinished stories. The existing worker
-`--export-hf` flag exports final model weights only; it is not a resume checkpoint.
+Additional CPU tests cover reopening final trained state for standalone
+evaluation/export/state saving, saving initial state and resuming it, token-only
+and combined stopping limits, plain HF export/reload with weight ties, and failed
+export propagation. Real TPU lifecycle correctness remains a hardware gate.
+Public CLI/config alignment remains unfinished. The private worker's
+`--operation` modes support these operations; its `--export-hf` flag continues to
+export final model weights only, rather than a resume checkpoint.

@@ -18,6 +18,18 @@ from trainlm.data import PackedDataCursor, PackedDataCursorState
 from trainlm.tasks import CausalLMTask
 
 
+def _global_stop_steps(max_steps, max_tokens, *, sequence_length, batch_size,
+                       accumulation_steps, world_size):
+    """Round global supervised-token limits up to a full optimizer update."""
+    tokens_per_update = (sequence_length - 1) * batch_size * accumulation_steps * world_size
+    token_steps = ((max_tokens + tokens_per_update - 1) // tokens_per_update
+                   if max_tokens is not None else None)
+    limits = [value for value in (max_steps, token_steps) if value is not None]
+    if not limits or min(limits) < 1:
+        raise ValueError("Training requires a positive step or token limit.")
+    return min(limits)
+
+
 def _cpu_tree(value):
     if isinstance(value, torch.Tensor):
         return value.detach().cpu()

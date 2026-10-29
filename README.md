@@ -146,9 +146,17 @@ train_dataset = PackedBinDataset.from_directory(
 ```
 
 The facade delegates local runs to the portable CPU/CUDA engine and routes
-`accelerator="tpu"` through a private single-VM coordinator. The initial TPU
-bridge accepts a reconstructible pretrained Hugging Face model source and a
-local directory of validated shard manifests; public packed-binary dataset
-construction, TPU checkpoint parity, and automatic capability-based kernel
-planning remain in progress. Structured worker metrics are delivered through
-public callbacks; worker scripts and stage logs are internal details.
+`accelerator="tpu"` through a private single-VM coordinator. Select
+`accelerator="cuda"` for the existing single-process GPU path; GPU hardware
+certification and multi-GPU support are not established here.
+
+The TPU path accepts a reconstructible pretrained Hugging Face model source
+and validated packed-binary data. It supports checkpoint resume, periodic and
+standalone evaluation, plain HF model export, full state saving, and global
+token-based stopping. Workers retain a final checkpoint internally so public
+methods can reopen trained state after training exits. See the
+[TPU worker lifecycle contract](docs/training/TPU_WORKER_LIFECYCLE.md) for return
+paths, token-limit rounding, and same-topology resume restrictions. Structured
+metrics reach public callbacks; worker scripts and stage logs stay internal.
+TPU hardware validation, public CLI alignment, and automatic capability-based
+kernel planning remain in progress.
