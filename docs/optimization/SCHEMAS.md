@@ -61,9 +61,11 @@ Language-neutral JSON Schemas are versioned at
 `schemas/optimization/model_capabilities_v1.schema.json` and
 `schemas/optimization/execution_plan_v1.schema.json`.
 
-## Deliberate exclusions
+## Implementation boundary
 
-This commit does not inspect models, select providers, resolve adapters, apply
-transforms, or change parameter layouts. Those behaviors are introduced in M8
-after generic HF compatibility and TPU correctness gates. These schemas are the
-stable contract those later implementations must obey.
+Generic structural inspection and the [optional adapter registry and pure
+planner](PLANNER.md) now produce these contracts. Planning evaluates explicit
+provider declarations and emits deterministic decisions without applying them.
+The version-one JSON Schemas remain unchanged. Transactional application,
+inverse handlers, parameter-layout conversion, and public runtime integration
+remain separate M8 work; selection does not certify GPU/TPU execution.

@@ -19,6 +19,9 @@ from .optimizers import (
     create_optimizer,
 )
 from .inspection import inspect_dense_causal_lm
+from .adapters import AdapterDefinition, AdapterRegistry, AdapterResolution
+from .requirements import CapabilityRequirement, PlanningContext, ShapeConstraint, VersionRequirement
+from .planner import OperationRequest, ProviderDefinition, plan_optimizations
 
 __all__ = [
     "CapabilityFact",
@@ -36,4 +39,14 @@ __all__ = [
     "ProviderDecision",
     "create_optimizer",
     "inspect_dense_causal_lm",
+    "AdapterDefinition",
+    "AdapterRegistry",
+    "AdapterResolution",
+    "CapabilityRequirement",
+    "PlanningContext",
+    "ShapeConstraint",
+    "VersionRequirement",
+    "OperationRequest",
+    "ProviderDefinition",
+    "plan_optimizations",
 ]
