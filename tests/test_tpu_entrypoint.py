@@ -97,3 +97,16 @@ def test_lifecycle_cli_requires_evaluation_data_and_positive_cadence(monkeypatch
     assert args.resume_from_checkpoint == "checkpoint-2"
     assert args.save_steps == 2 and args.eval_steps == 1
 
+
+def test_standalone_modes_and_token_only_cli_validate_requirements(monkeypatch):
+    module = load_script("trainlm_tpu_worker")
+    for options in (["--max-steps", "none"], ["--max-tokens", "0"],
+                    ["--operation", "evaluate"], ["--operation", "export"],
+                    ["--operation", "save_state"]):
+        monkeypatch.setattr(sys, "argv", ["worker", *options])
+        with pytest.raises(SystemExit):
+            module.parse_args()
+    monkeypatch.setattr(sys, "argv", ["worker", "--max-steps", "none", "--max-tokens", "100"])
+    args = module.parse_args()
+    assert args.max_steps is None and args.max_tokens == 100
+

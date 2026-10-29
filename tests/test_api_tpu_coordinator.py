@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 import subprocess
+from dataclasses import replace
 
 import pytest
 import torch
@@ -246,3 +247,78 @@ def test_coordinator_rejects_stale_success_artifacts(tmp_path, monkeypatch):
                         subprocess.CompletedProcess(command, 0, stdout=""))
     with pytest.raises(TPUCoordinatorError, match="did not write summary"):
         _TPUCoordinator(worker).run(request)
+
+
+def test_public_tpu_methods_reuse_latest_checkpoint_and_isolate_operation_artifacts(tmp_path):
+    class LifecycleCoordinator(RecordingCoordinator):
+        def run(self, request):
+            self.requests.append(request)
+            summary = {"steps": 2, "operation": request.operation}
+            if request.operation in {"train", "save_state"}:
+                summary["final_checkpoint"] = str(request.final_checkpoint_dir)
+            elif request.operation == "export":
+                summary["export_dir"] = str(request.export_dir)
+            elif request.operation == "evaluate":
+                summary["evaluation_metrics"] = {"eval_loss": 1.25}
+            return {"status": "completed", "worker_summary": summary,
+                    "metrics": [{"eval_loss": 1.25}] if request.operation == "evaluate" else []}
+    coordinator = LifecycleCoordinator()
+    callback = MetricsRecorder()
+    trainer = TrainLMTrainer(
+        model="org/model", train_dataset=tmp_path / "train", eval_dataset=tmp_path / "validation",
+        args=TrainLMTrainingArguments(accelerator="tpu", output_dir=tmp_path / "run",
+                                     max_steps=None, max_tokens=100),
+        callbacks=[callback],
+    )
+    trainer._tpu_coordinator = coordinator
+    trainer.train()
+    original_checkpoint = coordinator.requests[0].final_checkpoint_dir
+    assert coordinator.requests[0].max_steps is None
+    assert coordinator.requests[0].max_tokens == 100
+    assert trainer.evaluate() == {"eval_loss": 1.25}
+    assert trainer.save_model(tmp_path / "export") == tmp_path / "export"
+    saved = trainer.save_state(tmp_path / "states")
+    assert saved.parent == tmp_path / "states"
+    assert saved == coordinator.requests[-1].final_checkpoint_dir
+    assert trainer._tpu_checkpoint == saved
+    for request in coordinator.requests[1:]:
+        assert request.resume_from_checkpoint == original_checkpoint
+        assert request.output_dir != tmp_path / "run"
+    assert len({request.output_dir for request in coordinator.requests}) == 4
+    assert callback.metrics == [{"eval_loss": 1.25}]
+    trainer.evaluate()
+    assert coordinator.requests[-1].resume_from_checkpoint == saved
+    assert trainer.model is None and trainer.engine is None
+
+
+def test_tpu_evaluation_requires_data_without_launching_workers(tmp_path):
+    trainer = TrainLMTrainer(model="org/model", train_dataset=tmp_path,
+                            args=TrainLMTrainingArguments(accelerator="tpu"))
+    coordinator = RecordingCoordinator()
+    trainer._tpu_coordinator = coordinator
+    with pytest.raises(ValueError, match="eval_dataset"):
+        trainer.evaluate()
+    assert coordinator.requests == []
+
+
+@pytest.mark.parametrize("operation", ["evaluate", "export", "save_state"])
+def test_coordinator_routes_standalone_worker_modes(tmp_path, monkeypatch, operation):
+    worker = tmp_path / "worker.py"
+    worker.write_text("# worker\n")
+    request = replace(_request(tmp_path), operation=operation,
+                      final_checkpoint_dir=tmp_path / "state", export_dir=tmp_path / "export",
+                      max_steps=None, max_tokens=100)
+    commands = []
+    def run(command, **kwargs):
+        commands.append(command)
+        if "--probe-only" not in command and "--model-preflight" not in command:
+            (request.output_dir / "summary.json").write_text(json.dumps({"operation": operation}))
+        return subprocess.CompletedProcess(command, 0, stdout="passed")
+    monkeypatch.setattr(subprocess, "run", run)
+    summary = _TPUCoordinator(worker).run(request)
+    assert summary["completed_stages"] == ["probe", "model_preflight", operation]
+    assert commands[-1][commands[-1].index("--operation") + 1] == operation
+    assert commands[-1][commands[-1].index("--max-steps") + 1] == "None"
+    assert commands[-1][commands[-1].index("--max-tokens") + 1] == "100"
+    assert (request.output_dir / f"{operation}.log").is_file()
+    json.dumps(request.to_dict())

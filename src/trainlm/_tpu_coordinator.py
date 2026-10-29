@@ -21,7 +21,7 @@ class _TPURunRequest:
     model: ModelSourceConfig
     manifest_dir: Path
     output_dir: Path
-    max_steps: int
+    max_steps: int | None
     gradient_accumulation_steps: int
     micro_batch_per_device: int
     sequence_length: int
@@ -40,12 +40,16 @@ class _TPURunRequest:
     eval_manifest_dir: Path | None = None
     eval_batch_size: int = 1
     resume_from_checkpoint: Path | None = None
+    max_tokens: int | None = None
+    operation: str = "train"
+    final_checkpoint_dir: Path | None = None
+    export_dir: Path | None = None
 
     def to_dict(self) -> dict[str, Any]:
         values = asdict(self)
         values["manifest_dir"] = str(self.manifest_dir)
         values["output_dir"] = str(self.output_dir)
-        for name in ("eval_manifest_dir", "resume_from_checkpoint"):
+        for name in ("eval_manifest_dir", "resume_from_checkpoint", "final_checkpoint_dir", "export_dir"):
             values[name] = str(getattr(self, name)) if getattr(self, name) is not None else None
         return values
 
@@ -82,13 +86,13 @@ class _TPUCoordinator:
             completed_stages.append("probe")
             self._run_stage("model_preflight", request, "--model-preflight")
             completed_stages.append("model_preflight")
-            self._run_stage("train", request)
-            completed_stages.append("train")
+            self._run_stage(request.operation, request)
+            completed_stages.append(request.operation)
             worker_summary_path = request.output_dir / "summary.json"
             if not worker_summary_path.is_file():
                 raise TPUCoordinatorError(
-                    "TPU training exited successfully but did not write summary.json. "
-                    f"Inspect {request.output_dir / 'train.log'}."
+                    f"TPU {request.operation} exited successfully but did not write summary.json. "
+                    f"Inspect {request.output_dir / (request.operation + '.log')}."
                 )
             worker_summary = json.loads(
                 worker_summary_path.read_text(encoding="utf-8")
@@ -190,6 +194,7 @@ class _TPUCoordinator:
             str(self.worker_script),
             "--expected-world-size", str(request.expected_world_size),
             "--max-steps", str(request.max_steps),
+            "--operation", request.operation,
             "--gradient-accumulation-steps", str(request.gradient_accumulation_steps),
             "--micro-batch-per-device", str(request.micro_batch_per_device),
             "--sequence-length", str(request.sequence_length),
@@ -220,6 +225,9 @@ class _TPUCoordinator:
             ("--eval-batch-size", request.eval_batch_size),
             ("--eval-manifest-dir", request.eval_manifest_dir),
             ("--resume-from-checkpoint", request.resume_from_checkpoint),
+            ("--max-tokens", request.max_tokens),
+            ("--final-checkpoint-dir", request.final_checkpoint_dir),
+            ("--export-dir", request.export_dir),
         ):
             if value is not None:
                 command.extend((option, str(value.resolve() if isinstance(value, Path) else value)))

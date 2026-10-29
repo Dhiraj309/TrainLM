@@ -8,9 +8,10 @@ be added behind the same API without changing user code.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
+from uuid import uuid4
 
 import torch
 from torch import nn
@@ -179,6 +180,7 @@ class TrainLMTrainer:
         self._train_loader_generator: torch.Generator | None = None
         self._train_loader_generator_initial_state: torch.Tensor | None = None
         self._tpu_coordinator = None
+        self._tpu_checkpoint: Path | None = None
         if self.args.accelerator == "tpu":
             if any(value is not None for value in (optimizer, scheduler, runtime)):
                 raise ValueError(
@@ -186,15 +188,6 @@ class TrainLMTrainer:
                     "each worker; do not pass local instances."
                 )
             self._model_source = self._coerce_model_source(model)
-            if self.args.max_steps is None:
-                raise NotImplementedError(
-                    "The TPU coordinator currently requires max_steps; max_tokens-only "
-                    "execution will be added with lifecycle parity."
-                )
-            if self.args.max_tokens is not None:
-                raise NotImplementedError(
-                    "TPU max_tokens stopping will be added with lifecycle parity."
-                )
             if self.args.fp16:
                 raise ValueError("TPU execution supports fp32 or bf16, not fp16.")
             from trainlm._tpu_coordinator import _TPUCoordinator
@@ -407,6 +400,8 @@ class TrainLMTrainer:
         """Deliver worker artifacts through public state and callback contracts."""
 
         worker = result.get("worker_summary") or {}
+        if worker.get("final_checkpoint") is not None:
+            self._tpu_checkpoint = Path(worker["final_checkpoint"])
         state = TrainerState(
             step=int(worker.get("steps", 0)),
             micro_step=int(worker.get("micro_steps", 0)),
@@ -505,7 +500,7 @@ class TrainLMTrainer:
             manifest_directory(self.eval_dataset, "evaluation")
             if self.eval_dataset is not None else None
         )
-        if self._model_source is None or self.args.max_steps is None:
+        if self._model_source is None:
             raise RuntimeError("TPU request prerequisites were not initialized.")
         precision = (
             "bf16" if self.args.bf16 else "fp16" if self.args.fp16 else "fp32"
@@ -534,13 +529,30 @@ class TrainLMTrainer:
             resume_from_checkpoint=(
                 Path(resume_from_checkpoint) if resume_from_checkpoint is not None else None
             ),
+            max_tokens=self.args.max_tokens,
+            final_checkpoint_dir=Path(self.args.output_dir) / ".trainlm_state" / uuid4().hex,
         )
 
+    def _run_tpu_operation(self, operation: str, output_dir=None):
+        request = self._make_tpu_request(self._tpu_checkpoint)
+        operation_dir = Path(self.args.output_dir) / ".trainlm_operations" / uuid4().hex
+        destination = Path(output_dir or self.args.output_dir)
+        request = replace(
+            request, operation=operation, output_dir=operation_dir,
+            final_checkpoint_dir=(destination / f"checkpoint-state-{uuid4().hex}"
+                                  if operation == "save_state" else None),
+            export_dir=destination if operation == "export" else None,
+        )
+        return self._consume_tpu_result(self._tpu_coordinator.run(request))
+
     def evaluate(self) -> dict[str, float]:
+        if self._tpu_coordinator is not None:
+            if self.eval_dataset is None:
+                raise ValueError("Evaluation requires eval_dataset.")
+            result = self._run_tpu_operation("evaluate")
+            return dict(result["worker_summary"]["evaluation_metrics"])
         if self.engine is None:
-            raise NotImplementedError(
-                "TPU evaluation will be added with lifecycle parity."
-            )
+            raise RuntimeError("Trainer engine was not initialized.")
         return self.engine.evaluate()
 
     def log_metrics(self, split: str, metrics: Mapping[str, Any]) -> None:
@@ -555,10 +567,11 @@ class TrainLMTrainer:
         }
 
     def save_model(self, output_dir: str | Path | None = None) -> Path:
+        if self._tpu_coordinator is not None:
+            result = self._run_tpu_operation("export", output_dir)
+            return Path(result["worker_summary"]["export_dir"])
         if self.model is None:
-            raise NotImplementedError(
-                "TPU model export will be added with lifecycle parity."
-            )
+            raise RuntimeError("Trainer model was not initialized.")
         destination = Path(output_dir or self.args.output_dir)
         destination.mkdir(parents=True, exist_ok=True)
         if hasattr(self.model, "save_pretrained"):
@@ -568,10 +581,11 @@ class TrainLMTrainer:
         return destination
 
     def save_state(self, output_dir: str | Path | None = None) -> Path:
+        if self._tpu_coordinator is not None:
+            result = self._run_tpu_operation("save_state", output_dir)
+            return Path(result["worker_summary"]["final_checkpoint"])
         if self.engine is None or self.optimizer is None or self.scheduler is None:
-            raise NotImplementedError(
-                "TPU state saving will be added with lifecycle parity."
-            )
+            raise RuntimeError("Trainer engine was not initialized.")
         destination = Path(output_dir or self.args.output_dir)
         destination.mkdir(parents=True, exist_ok=True)
         state = {
