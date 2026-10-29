@@ -322,3 +322,30 @@ def test_coordinator_routes_standalone_worker_modes(tmp_path, monkeypatch, opera
     assert commands[-1][commands[-1].index("--max-tokens") + 1] == "100"
     assert (request.output_dir / f"{operation}.log").is_file()
     json.dumps(request.to_dict())
+
+
+@pytest.mark.parametrize("preflight_fails", [False, True])
+def test_optimization_preflight_precedes_every_accelerator_stage(tmp_path, monkeypatch, preflight_fails):
+    worker = tmp_path / "worker.py"
+    worker.write_text("# worker\n")
+    request = replace(_request(tmp_path), optimization_factory="fixture:profile", optimization_policy="required")
+    commands = []
+    def run(command, **kwargs):
+        commands.append(command)
+        if "--optimization-preflight" in command:
+            if preflight_fails:
+                return subprocess.CompletedProcess(command, 1, stdout="unsupported required shape")
+            (request.output_dir / "optimization_preflight.json").write_text(json.dumps({"execution_plan": {"plan_id": "verified"}}))
+        elif "--probe-only" not in command and "--model-preflight" not in command:
+            (request.output_dir / "summary.json").write_text('{"steps": 2}')
+        return subprocess.CompletedProcess(command, 0, stdout="passed")
+    monkeypatch.setattr(subprocess, "run", run)
+    if preflight_fails:
+        with pytest.raises(TPUCoordinatorError, match="optimization_preflight stage failed"):
+            _TPUCoordinator(worker).run(request)
+        assert len(commands) == 1
+    else:
+        result = _TPUCoordinator(worker).run(request)
+        assert result["completed_stages"] == ["optimization_preflight", "probe", "model_preflight", "train"]
+        assert commands[1][commands[1].index("--optimization-plan-id") + 1] == "verified"
+    assert "--optimization-preflight" in commands[0]

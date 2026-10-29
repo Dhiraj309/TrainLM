@@ -103,7 +103,8 @@ tensors, optimizer references, scheduler, and RNG. Call at optimizer boundaries;
 gradients are not checkpointed. The enclosing engine still owns trainer progress,
 runtime/distributed state, data cursors, and other RNG sources. This local codec
 is not the M7 distributed `ResumeManifest` or a new public trainer checkpoint
-format; M8-F6 must wire it into those lifecycle boundaries. Canonical model state
+format. [M8-F6 public integration](PUBLIC.md) now wires it into local facade and
+per-rank worker checkpoints and exports. Canonical model state
 can be imported independently, while exact optimizer continuation requires the
 same audited architecture, plan, mapping, optimizer, and scheduler configuration.
 

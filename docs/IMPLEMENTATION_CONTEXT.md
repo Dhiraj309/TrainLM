@@ -164,15 +164,12 @@ limits, canonical HF export/reload, and failed-export propagation.
 Implement one small commit/story at a time and update `docs/ROADMAP.md` and
 this file in every turn:
 
-1. **M8-F6 public plan integration:** connect inspection/planning/application and
-   canonical state I/O to trainer setup before optimizer creation and expose
-   selections/fallbacks. No providers are enabled by default.
-2. **M8-F0 integration gate:** align the public CLI/config entry point with the
+1. **M8-F0 integration gate:** align the public CLI/config entry point with the
    facade and validate the implemented TPU lifecycle on owner hardware without
-   blocking independent planner implementation.
-3. **M9 loss path:** add chunked/rematerialized causal loss and benchmark it
+   blocking independent loss/kernel implementation.
+2. **M9 loss path:** add chunked/rematerialized causal loss and benchmark it
    against the measured 319K baseline before enabling it by default.
-4. **M10+ kernels:** integrate TPU attention/projection/norm/optimizer/remat
+3. **M10+ kernels:** integrate TPU attention/projection/norm/optimizer/remat
    providers only after shape, dtype, mask, and backward correctness tests.
 
 ## Implemented adapter registry and planner (M8-F2/F3)
@@ -191,10 +188,9 @@ rejection, conflicting-transform blocking, and content-addressed plan IDs. Every
 transform description includes its existing inverse ID. See
 [planner contract](optimization/PLANNER.md) for policies and integration boundaries.
 
-No optimized provider is registered by default. Selection neither executes a
-kernel nor certifies an optimization. M8-F6 public explanation/runtime integration
-remains open;
-the public CPU/CUDA/TPU execution paths are unchanged by this slice.
+No optimized provider is registered by default. Selection alone neither executes
+a kernel nor certifies an optimization. M8-F6 now connects these contracts to
+explicit public profiles; default CPU/CUDA/TPU paths remain model-reference paths.
 
 The full CPU regression run for this slice executed 392 tests: 386 passed and
 the same 6 pre-existing onboarding failures remained. All 35 new adapter/planner
@@ -221,7 +217,7 @@ than losing live tensors. Call application before optimizer construction;
 external optimizer references cannot be discovered automatically. See the
 [application contract](optimization/APPLICATION.md) for the trusted-handler,
 single-writer, dense-state, and no-global-side-effect boundaries. Layout-changing
-transforms now require M8-F5 mappings; public trainer integration remains M8-F6.
+transforms require M8-F5 mappings and are wired into explicit public profiles by M8-F6.
 
 The full CPU regression run for application executed 410 tests: 404 passed and
 the same 6 pre-existing onboarding failures remained. All 18 new transaction
@@ -249,8 +245,8 @@ undo can convert an existing optimizer back to canonical parameters while
 preserving trained values and gradients. See [state conversion](optimization/LAYOUTS.md).
 
 This is a local conversion codec, not the M7 distributed ResumeManifest or an
-automatic public trainer checkpoint change. M8-F6 must wire the codec into
-public setup/checkpoint/export paths. No optimized providers are enabled, and
+automatic replacement for all trainer checkpoint formats. M8-F6 now wires the
+codec into transformed facade/per-rank worker checkpoints and exports. No providers are enabled by default, and
 GPU/TPU kernels or hardware are not certified by CPU fixture evidence.
 
 The full CPU regression run for state conversion executed 432 tests: 426 passed
@@ -259,6 +255,37 @@ passed, covering pack/split metadata, independent moment precision, exact next
 update after dropout/runtime-buffer resume, trained optimizer-aware undo, unsafe
 group/step/alias/dtype rejection, late restore rollback, and plain Transformers
 export/reload of a trained mapped projection. No accelerator hardware was used.
+
+## Implemented public optimization integration (M8-F6)
+
+`TrainLMTrainingArguments` exposes optimization policy/fallback intent, and
+`TrainLMTrainer(optimization=...)` accepts local `OptimizationOptions` or an
+importable profile factory. Source inspection, installed-version metadata,
+train/evaluation geometry checks, planning, and isolated host validation precede
+runtime placement. Placement occurs once; application precedes optimizer/scheduler
+construction. Explicit transforms require trainer-owned optimizer creation, and
+failed later setup reverts the graph. Default providers remain empty.
+
+Local transformed schema-two checkpoints use canonical state I/O alongside
+existing engine/loader state; reference schema-one behavior stays supported.
+Public model export uses a canonical copy, and transformed `save_state()` is
+resumable. `explain()` retains dictionary compatibility and adds JSON/text modes,
+source capabilities, plan/fallback/exclusion details, applied IDs, graph flags,
+and explicit uncertified status.
+
+TPU factory profiles run CPU host validation before the collective probe/XLA
+import and pass a verified plan ID to workers. Workers place/apply before their
+optimizers, use canonical conversion in rank checkpoints/export, and send actual
+reports back through structured summaries. Default TPU construction stays deferred.
+See [public optimization contract](optimization/PUBLIC.md) for host-safe factory,
+declared-shape/mask, extra CPU-copy, resume, and hardware-validation boundaries.
+
+The full CPU suite executed 446 tests: 440 passed and the same 6 pre-existing
+onboarding failures remained. All 14 new integration tests passed. Coverage includes exact mapped
+resume, canonical HF export, runtime/optimizer ordering, strict rejection before
+allocation, disabled/automatic fallbacks, evaluation eligibility, and controlled
+TPU preflight/worker/checkpoint/export, XLA seed preservation, and optional
+unimplemented inspection hooks on reference models. Real GPU/TPU validation remains open.
 
 ## Definition of done for the public surface
 

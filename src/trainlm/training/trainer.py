@@ -40,11 +40,12 @@ class Trainer:
         callbacks: Sequence[TrainerCallback] | None = None,
         checkpoint_saver: Callable[["Trainer", object | None], object] | None = None,
         checkpoint_loader: Callable[["Trainer", object], object] | None = None,
+        model_prepared: bool = False,
     ) -> None:
         self.config = config
 
         self.runtime = runtime
-        self.model = runtime.prepare_model(model)
+        self.model = model if model_prepared else runtime.prepare_model(model)
 
         self.optimizer = runtime.prepare_optimizer(optimizer)
         self.scheduler = scheduler

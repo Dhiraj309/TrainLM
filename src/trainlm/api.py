@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, replace
+import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 from uuid import uuid4
@@ -36,6 +37,10 @@ from trainlm.config import (
     TrainerConfig,
 )
 from trainlm.optimization import create_optimizer
+from trainlm.optimization.integration import (
+    OptimizationOptions, OptimizationError, OptimizationSession, load_optimization_options,
+    deferred_optimization_report, reject_unavailable_strict_options,
+)
 from trainlm.runtime import Runtime
 from trainlm.tasks import CausalLMTask
 from trainlm.training import Trainer as EngineTrainer
@@ -83,8 +88,16 @@ class TrainLMTrainingArguments:
     dataloader_pin_memory: bool = False
     seed: int = 42
     report_to: str | tuple[str, ...] = "none"
+    optimization_policy: Literal["auto", "required", "disabled"] = "auto"
+    allow_optimization_fallbacks: bool | None = None
 
     def __post_init__(self) -> None:
+        if self.optimization_policy not in {"auto", "required", "disabled"}:
+            raise ValueError("Unsupported optimization_policy.")
+        if self.allow_optimization_fallbacks is not None and not isinstance(self.allow_optimization_fallbacks, bool):
+            raise ValueError("allow_optimization_fallbacks must be boolean or None.")
+        if self.optimization_policy == "required" and self.allow_optimization_fallbacks is True:
+            raise ValueError("Required optimization policy cannot allow fallbacks.")
         if self.max_steps is None and self.max_tokens is None:
             raise ValueError("Set max_steps or max_tokens.")
         for name in (
@@ -163,6 +176,7 @@ class TrainLMTrainer:
         optimizer: Optimizer | None = None,
         scheduler: LRScheduler | None = None,
         runtime: Any | None = None,
+        optimization: OptimizationOptions | str | None = None,
     ) -> None:
         self.args = args or TrainLMTrainingArguments()
         if tokenizer is not None and processing_class is not None:
@@ -181,6 +195,11 @@ class TrainLMTrainer:
         self._train_loader_generator_initial_state: torch.Tensor | None = None
         self._tpu_coordinator = None
         self._tpu_checkpoint: Path | None = None
+        self._optimization_factory = optimization if isinstance(optimization, str) else None
+        self._optimization_options = load_optimization_options(optimization, policy=self.args.optimization_policy)
+        self._optimization_session = None
+        self._optimization_report = None
+        self._compatibility_snapshot = None
         if self.args.accelerator == "tpu":
             if any(value is not None for value in (optimizer, scheduler, runtime)):
                 raise ValueError(
@@ -190,6 +209,12 @@ class TrainLMTrainer:
             self._model_source = self._coerce_model_source(model)
             if self.args.fp16:
                 raise ValueError("TPU execution supports fp32 or bf16, not fp16.")
+            if isinstance(optimization, OptimizationOptions):
+                raise ValueError("TPU optimization profiles require an importable module:factory, not local callbacks.")
+            precision = "bf16" if self.args.bf16 else "fp32"
+            reject_unavailable_strict_options(self._optimization_options, policy=self.args.optimization_policy,
+                allow_fallbacks=self.args.allow_optimization_fallbacks, precision=precision)
+            self._optimization_report = deferred_optimization_report(self.args.optimization_policy, precision, self._optimization_factory)
             from trainlm._tpu_coordinator import _TPUCoordinator
 
             self._tpu_coordinator = _TPUCoordinator()
@@ -200,32 +225,67 @@ class TrainLMTrainer:
             self.engine = None
             return
         self.model = self._resolve_model(model)
+        backend = (runtime.device.type if runtime is not None else
+                   "cuda" if self.args.accelerator == "auto" and torch.cuda.is_available() else
+                   "cpu" if self.args.accelerator == "auto" else self.args.accelerator)
+        precision = (runtime.precision if runtime is not None else
+                     "bf16" if self.args.bf16 else "fp16" if self.args.fp16 else "fp32")
+        self._optimization_session = OptimizationSession(self.model, self._optimization_options,
+            backend=backend, precision=precision, batch_size=self.args.per_device_train_batch_size,
+            sequence_length=self.args.sequence_length, accumulation_steps=self.args.gradient_accumulation_steps,
+            policy=self.args.optimization_policy, allow_fallbacks=self.args.allow_optimization_fallbacks,
+            source_provider="huggingface" if self.loaded is not None else "external",
+            eval_batch_size=self.args.per_device_eval_batch_size if eval_dataset is not None else None,
+            world_size=runtime.world_size if runtime is not None else 1)
+        if optimizer is not None and self._optimization_session.plan.transformations:
+            raise OptimizationError("Selected transforms require trainer-owned optimizer construction.")
+        if self.loaded is not None and self._optimization_session.plan.transformations:
+            from trainlm.model import explain_huggingface_compatibility
+            self._compatibility_snapshot = explain_huggingface_compatibility(self.loaded).to_dict()
+        self._optimization_session.validate_before_placement(self.model)
         self.runtime = runtime or self._make_runtime()
-        self.optimizer = optimizer or self._make_optimizer()
-        self.scheduler = scheduler or self._make_scheduler()
-        self.engine = EngineTrainer(
-            config=self._make_config(),
-            model=self.model,
-            runtime=self.runtime,
-            optimizer=self.optimizer,
-            scheduler=self.scheduler,
-            task=CausalLMTask(loss_implementation="causal_lm"),
-            train_dataloader=self._make_loader(
-                train_dataset, self.args.per_device_train_batch_size, is_train=True
-            ),
-            eval_dataloader=(
-                self._make_loader(
-                    eval_dataset,
-                    self.args.per_device_eval_batch_size,
-                    is_train=False,
-                )
-                if eval_dataset is not None
-                else None
-            ),
-            callbacks=self.callbacks,
-            checkpoint_saver=self._save_training_checkpoint,
-            checkpoint_loader=self._load_training_checkpoint,
-        )
+        self._optimization_session.compile_requested = bool(getattr(self.runtime, "_compile_enabled", False))
+        if self._optimization_session.plan.transformations and getattr(self.runtime, "_compile_enabled", False):
+            raise OptimizationError("Apply model transforms before compilation; compiled supplied runtimes are unsupported.")
+        self.model = self.runtime.prepare_model(self.model)
+        self.optimizer = None
+        try:
+            self._optimization_session.apply(self.model, optimizer)
+            self.optimizer = optimizer or self._make_optimizer()
+            model_parameters = {id(parameter) for parameter in self.model.parameters()}
+            if any(id(parameter) not in model_parameters for group in self.optimizer.param_groups for parameter in group["params"]):
+                raise ValueError("Optimizer references parameters outside the prepared model.")
+            self.scheduler = scheduler or self._make_scheduler()
+            if self.scheduler.optimizer is not self.optimizer:
+                raise ValueError("Scheduler belongs to a different optimizer.")
+            self.engine = EngineTrainer(
+                config=self._make_config(),
+                model=self.model,
+                runtime=self.runtime,
+                optimizer=self.optimizer,
+                scheduler=self.scheduler,
+                task=CausalLMTask(loss_implementation="causal_lm"),
+                train_dataloader=self._make_loader(
+                    train_dataset, self.args.per_device_train_batch_size, is_train=True
+                ),
+                eval_dataloader=(
+                    self._make_loader(
+                        eval_dataset,
+                        self.args.per_device_eval_batch_size,
+                        is_train=False,
+                    )
+                    if eval_dataset is not None
+                    else None
+                ),
+                callbacks=self.callbacks,
+                checkpoint_saver=self._save_training_checkpoint,
+                checkpoint_loader=self._load_training_checkpoint,
+                model_prepared=True,
+            )
+        except BaseException:
+            if self._optimization_session.applied is not None:
+                self._optimization_session.applied.revert(self.optimizer)
+            raise
 
     def _resolve_model(self, model: nn.Module | str | Path | ModelSourceConfig) -> nn.Module:
         if isinstance(model, nn.Module):
@@ -346,7 +406,9 @@ class TrainLMTrainer:
             loss=LossConfig(implementation="causal_lm"),
             runtime=RuntimeConfig(device=runtime_name, precision=precision),
             parallelism=ParallelismConfig(data=1),
-            optimizations=OptimizationConfig(policy="auto", allow_fallbacks=True),
+            optimizations=OptimizationConfig(policy=self.args.optimization_policy,
+                allow_fallbacks=(self.args.optimization_policy != "required" if self.args.allow_optimization_fallbacks is None
+                                 else self.args.allow_optimization_fallbacks)),
             optimizer=OptimizerConfig(
                 learning_rate=self.args.learning_rate,
                 betas=self.args.betas,
@@ -400,6 +462,8 @@ class TrainLMTrainer:
         """Deliver worker artifacts through public state and callback contracts."""
 
         worker = result.get("worker_summary") or {}
+        if worker.get("optimization") is not None:
+            self._optimization_report = worker["optimization"]
         if worker.get("final_checkpoint") is not None:
             self._tpu_checkpoint = Path(worker["final_checkpoint"])
         state = TrainerState(
@@ -437,6 +501,14 @@ class TrainLMTrainer:
             "cuda_rng_state": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
             "loader_generator_initial_state": self._train_loader_generator_initial_state,
         }
+        applied = self._optimization_session.applied
+        if applied is not None:
+            payload["schema_version"] = 2
+            payload.pop("model")
+            payload.pop("optimizer")
+            payload.pop("scheduler")
+            payload["optimization"] = applied.training_state_dict(engine.optimizer, engine.scheduler)
+            payload["execution_plan"] = self._optimization_session.plan.to_dict()
         temporary = path / "trainer_state.pt.tmp"
         torch.save(payload, temporary)
         temporary.replace(path / "trainer_state.pt")
@@ -449,20 +521,26 @@ class TrainLMTrainer:
         if not path.is_file():
             raise FileNotFoundError(f"Training checkpoint does not exist: {path}")
         payload = torch.load(path, map_location="cpu", weights_only=False)
-        if payload.get("schema_version") != 1:
+        if payload.get("schema_version") not in {1, 2}:
             raise ValueError("Unsupported TrainLM training checkpoint schema.")
-        engine.model.load_state_dict(payload["model"])
-        engine.optimizer.load_state_dict(payload["optimizer"])
-        engine.scheduler.load_state_dict(payload["scheduler"])
-        engine.runtime.load_state_dict(payload["runtime"])
-        for key, value in payload["trainer"].items():
-            setattr(engine.state, key, value)
         initial_state = payload.get("loader_generator_initial_state")
         sampler = getattr(engine.train_dataloader, "sampler", None)
         if isinstance(sampler, RandomSampler) and initial_state is None:
-            raise ValueError(
-                "Exact resume requires a TrainLM-owned deterministic train loader."
-            )
+            raise ValueError("Exact resume requires a TrainLM-owned deterministic train loader.")
+        applied = self._optimization_session.applied
+        if payload["schema_version"] == 2:
+            if applied is None:
+                raise ValueError("Checkpoint requires its matching optimization profile.")
+            applied.load_training_state_dict(payload["optimization"], engine.optimizer, engine.scheduler)
+        else:
+            if applied is not None:
+                raise ValueError("Legacy checkpoints cannot restore a transformed optimizer; use a canonical optimization checkpoint.")
+            engine.model.load_state_dict(payload["model"])
+            engine.optimizer.load_state_dict(payload["optimizer"])
+            engine.scheduler.load_state_dict(payload["scheduler"])
+        engine.runtime.load_state_dict(payload["runtime"])
+        for key, value in payload["trainer"].items():
+            setattr(engine.state, key, value)
         if self._train_loader_generator is not None and initial_state is not None:
             self._train_loader_generator.set_state(initial_state)
         iterator = iter(engine.train_dataloader)
@@ -531,6 +609,9 @@ class TrainLMTrainer:
             ),
             max_tokens=self.args.max_tokens,
             final_checkpoint_dir=Path(self.args.output_dir) / ".trainlm_state" / uuid4().hex,
+            optimization_factory=self._optimization_factory,
+            optimization_policy=self.args.optimization_policy,
+            optimization_allow_fallbacks=self.args.allow_optimization_fallbacks,
         )
 
     def _run_tpu_operation(self, operation: str, output_dir=None):
@@ -574,7 +655,14 @@ class TrainLMTrainer:
             raise RuntimeError("Trainer model was not initialized.")
         destination = Path(output_dir or self.args.output_dir)
         destination.mkdir(parents=True, exist_ok=True)
-        if hasattr(self.model, "save_pretrained"):
+        applied = self._optimization_session.applied
+        if applied is not None:
+            canonical = applied.canonical_model()
+            if hasattr(canonical, "save_pretrained"):
+                canonical.save_pretrained(destination, safe_serialization=True)
+            else:
+                torch.save(canonical.state_dict(), destination / "pytorch_model.bin")
+        elif hasattr(self.model, "save_pretrained"):
             self.model.save_pretrained(destination, safe_serialization=True)
         else:
             torch.save(self.model.state_dict(), destination / "pytorch_model.bin")
@@ -586,6 +674,9 @@ class TrainLMTrainer:
             return Path(result["worker_summary"]["final_checkpoint"])
         if self.engine is None or self.optimizer is None or self.scheduler is None:
             raise RuntimeError("Trainer engine was not initialized.")
+        if self._optimization_session.applied is not None:
+            checkpoint = self._save_training_checkpoint(self.engine, Path(output_dir or self.args.output_dir).resolve())
+            return checkpoint / "trainer_state.pt"
         destination = Path(output_dir or self.args.output_dir)
         destination.mkdir(parents=True, exist_ok=True)
         state = {
@@ -597,9 +688,29 @@ class TrainLMTrainer:
         torch.save(state, path)
         return path
 
-    def explain(self) -> dict[str, Any]:
+    def explain(self, *, format: Literal["dict", "json", "text"] = "dict"):
+        report = self._explain_dict()
+        if format == "dict":
+            return report
+        if format == "json":
+            return json.dumps(report, sort_keys=True, indent=2)
+        if format == "text":
+            optimization = report["optimization"]
+            applied = ", ".join(optimization["applied_transform_ids"]) or "none"
+            graph, certification = optimization["graph"], optimization["certification"]
+            return (f"TrainLM path: {report.get('selected_path', 'huggingface')}\n"
+                    f"Backend: {optimization['backend']} ({optimization['precision']})\n"
+                    + optimization["explanation"] + f"\nApplied transforms: {applied}\n"
+                    f"Graph: compile_requested={graph['compile_requested']}; compile_verified={graph['compile_verified']}\n"
+                    f"Hardware validated: {certification['hardware_validated']}; support={certification['support_level']}")
+        raise ValueError("explain format must be dict, json, or text.")
+
+    def _explain_dict(self) -> dict[str, Any]:
+        optimization = (self._optimization_session.report() if self._optimization_session is not None
+                        else self._optimization_report)
         if self._tpu_coordinator is not None:
             return {
+                "optimization": optimization,
                 "support_level": "compatible",
                 "selected_path": "tpu_coordinator",
                 "model": asdict(self._model_source),
@@ -620,7 +731,8 @@ class TrainLMTrainer:
                 "selected_path": "external_model",
                 "model_class": type(self.model).__name__,
                 "backend": self.runtime.name,
-                "capabilities": inspect_dense_causal_lm(self.model).to_dict(),
+                "capabilities": optimization["capabilities"],
+                "optimization": optimization,
             }
         explanation = self.loaded
         from trainlm.model import explain_huggingface_compatibility
@@ -628,12 +740,11 @@ class TrainLMTrainer:
 
         return {
             "model": explanation.metadata.to_dict(),
-            "compatibility": explain_huggingface_compatibility(explanation).to_dict(),
+            "compatibility": self._compatibility_snapshot or explain_huggingface_compatibility(explanation).to_dict(),
             "backend": self.runtime.name,
             "precision": self.runtime.precision,
-            "capabilities": inspect_dense_causal_lm(
-                self.model, source_provider="huggingface"
-            ).to_dict(),
+            "capabilities": optimization["capabilities"],
+            "optimization": optimization,
         }
 
 
