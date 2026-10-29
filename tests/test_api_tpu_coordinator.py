@@ -207,3 +207,42 @@ def test_coordinator_rejects_malformed_metrics_artifact(tmp_path):
 
     with pytest.raises(TPUCoordinatorError, match="Invalid TPU metric snapshot"):
         _TPUCoordinator._read_metrics(path)
+
+
+def test_tpu_facade_passes_checkpoint_and_evaluation_options(tmp_path):
+    recorder = RecordingCoordinator()
+    trainer = TrainLMTrainer(
+        model="org/model", train_dataset=tmp_path / "training",
+        eval_dataset=tmp_path / "validation",
+        args=TrainLMTrainingArguments(
+            accelerator="tpu", output_dir=tmp_path / "run", max_steps=4,
+            save_steps=2, eval_steps=1, per_device_eval_batch_size=3,
+        ),
+    )
+    trainer._tpu_coordinator = recorder
+    source = tmp_path / "old-run" / "checkpoint-2"
+    trainer.train(resume_from_checkpoint=source)
+    request = recorder.requests[0]
+    assert request.resume_from_checkpoint == source
+    assert request.eval_manifest_dir == tmp_path / "validation"
+    assert (request.save_steps, request.eval_steps, request.eval_batch_size) == (2, 1, 3)
+    command = _TPUCoordinator()._command(request)
+    for flag, value in (("--resume-from-checkpoint", str(source)),
+                        ("--eval-manifest-dir", str(tmp_path / "validation")),
+                        ("--save-steps", "2"), ("--eval-steps", "1"),
+                        ("--eval-batch-size", "3")):
+        assert command[command.index(flag) + 1] == value
+    json.dumps(request.to_dict())
+
+
+def test_coordinator_rejects_stale_success_artifacts(tmp_path, monkeypatch):
+    worker = tmp_path / "worker.py"
+    worker.write_text("# worker\n")
+    request = _request(tmp_path)
+    request.output_dir.mkdir()
+    (request.output_dir / "summary.json").write_text('{"steps": 2}')
+    (request.output_dir / "metrics.jsonl").write_text('{"loss": 1}\n')
+    monkeypatch.setattr(subprocess, "run", lambda command, **kwargs:
+                        subprocess.CompletedProcess(command, 0, stdout=""))
+    with pytest.raises(TPUCoordinatorError, match="did not write summary"):
+        _TPUCoordinator(worker).run(request)

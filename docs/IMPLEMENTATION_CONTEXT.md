@@ -109,6 +109,11 @@ matched runs; planning ranges are not guarantees.
   versioned model/optimizer/scheduler/runtime/RNG/trainer-state restoration;
 - structured TPU metric artifacts that the coordinator validates and delivers
   to public callbacks together with a normalized trainer-state snapshot;
+- synchronous replicated-worker checkpoints at `save_steps`, with per-rank
+  model/optimizer/scheduler/runtime/RNG state, canonical optimizer names,
+  consumption-based packed-data cursors, and an all-rank commit gate;
+- TPU `train(resume_from_checkpoint=...)` and periodic packed-data evaluation,
+  including cross-rank token-weighted loss reduction and public metric delivery;
 - a family-neutral structural inspector used by `trainer.explain()` that
   reports only config/module/alias/signature-backed facts and leaves residual
   or custom semantics explicitly unknown.
@@ -117,17 +122,37 @@ This slice is intentionally not complete. `accelerator="tpu"` now reaches the
 private single-VM coordinator for reconstructible pretrained HF model sources
 and a validated `PackedBinDataset`. Local lifecycle cadence and resume now use
 the backend-neutral engine hooks. TPU callback metrics and return state no
-longer require stage-log parsing. TPU worker checkpoint/evaluation parity and
-capability-based optimization planning are next stories. Do not mark M8-F0
-complete until TPU lifecycle behavior is validated on target hardware.
+longer require stage-log parsing. The worker now honors save/evaluation cadence
+and resumes same-topology replicated checkpoints before starting prefetch. The
+private format is distinct from the M7 sharded manifest and cannot reshard or
+resume CPU/CUDA checkpoints. Incomplete/corrupt or incompatible checkpoints are
+rejected. See [worker lifecycle details](training/TPU_WORKER_LIFECYCLE.md).
+Standalone TPU `evaluate()`, `save_model()`, `save_state()`, max-tokens stopping,
+and target-hardware lifecycle validation remain outstanding. Do not mark M8-F0
+complete or claim CUDA/TPU certification from CPU tests.
+
+The CPU/CUDA public path remains supported, including explicit
+`accelerator="cuda"` and automatic CUDA selection when available. This is a
+single-process path; multi-GPU distributed training is not established here.
+
+Checkpoint lifecycle validation uses CPU doubles for the worker's XLA APIs,
+exact interrupted/uninterrupted dropout-training comparisons, mixed moment
+precision, corrupt/incompatible cursor rejection, and two-rank publication and
+failure coordination. Real TPU validation belongs to the owner's environment.
+The full CPU regression run for this story executed 341 tests: 335 passed and
+6 failed. The failures match onboarding: five Phi cases hit Transformers 5.0.0's
+missing `PhiConfig.pad_token_id`, and the existing TrainLM save/reload test
+reports changed embedding weights. These defects are tracked separately from
+the lifecycle implementation; no assertions were disabled or source patched.
 
 ## Required next sequence
 
 Implement one small commit/story at a time and update `docs/ROADMAP.md` and
 this file in every turn:
 
-1. **M8-F0 TPU checkpoint parity:** carry safe resume and save/evaluation
-   cadence through worker coordination.
+1. **M8-F0 remaining public lifecycle:** add standalone TPU evaluation/export
+   and state saving plus max-tokens stopping; retain an explicit hardware
+   validation gate for the implemented checkpoint/cadence path.
 2. **M8-F2/F3 planner:** add version-guarded adapter registry and a pure,
    reversible optimization plan. Every transform needs an eligibility reason,
    fallback reason, and rollback path.

@@ -197,10 +197,6 @@ class TrainLMTrainer:
                 )
             if self.args.fp16:
                 raise ValueError("TPU execution supports fp32 or bf16, not fp16.")
-            if self.args.save_steps is not None or self.args.eval_steps is not None:
-                raise NotImplementedError(
-                    "TPU save_steps and eval_steps will be added with lifecycle parity."
-                )
             from trainlm._tpu_coordinator import _TPUCoordinator
 
             self._tpu_coordinator = _TPUCoordinator()
@@ -398,12 +394,8 @@ class TrainLMTrainer:
         """Run training and return the TrainLM trainer state."""
 
         if self._tpu_coordinator is not None:
-            if resume_from_checkpoint is not None:
-                raise NotImplementedError(
-                    "TPU checkpoint resume will be added after worker checkpoint wiring."
-                )
             return self._consume_tpu_result(
-                self._tpu_coordinator.run(self._make_tpu_request())
+                self._tpu_coordinator.run(self._make_tpu_request(resume_from_checkpoint))
             )
         if self.engine is None:
             raise RuntimeError("Trainer engine was not initialized.")
@@ -495,20 +487,24 @@ class TrainLMTrainer:
             torch.cuda.set_rng_state_all(payload["cuda_rng_state"])
         return path
 
-    def _make_tpu_request(self):
+    def _make_tpu_request(self, resume_from_checkpoint=None):
         from trainlm._tpu_coordinator import _TPURunRequest
         from trainlm.data import PackedBinDataset
 
-        if isinstance(self.train_dataset, PackedBinDataset):
-            manifest_dir = self.train_dataset.coordinator_manifest_dir(
-                self.args.output_dir
-            )
-        elif isinstance(self.train_dataset, (str, Path)):
-            manifest_dir = Path(self.train_dataset)
-        else:
+        def manifest_directory(dataset, split):
+            if isinstance(dataset, PackedBinDataset):
+                return dataset.coordinator_manifest_dir(Path(self.args.output_dir) / split)
+            if isinstance(dataset, (str, Path)):
+                return Path(dataset)
             raise TypeError(
-                "TPU training requires a PackedBinDataset or local manifest directory."
+                f"TPU {split} requires a PackedBinDataset or local manifest directory."
             )
+
+        manifest_dir = manifest_directory(self.train_dataset, "train")
+        eval_manifest_dir = (
+            manifest_directory(self.eval_dataset, "evaluation")
+            if self.eval_dataset is not None else None
+        )
         if self._model_source is None or self.args.max_steps is None:
             raise RuntimeError("TPU request prerequisites were not initialized.")
         precision = (
@@ -531,6 +527,13 @@ class TrainLMTrainer:
             scheduler=self.args.lr_scheduler_type,
             warmup_steps=self.args.warmup_steps,
             precision=precision,
+            save_steps=self.args.save_steps,
+            eval_steps=self.args.eval_steps,
+            eval_manifest_dir=eval_manifest_dir,
+            eval_batch_size=self.args.per_device_eval_batch_size,
+            resume_from_checkpoint=(
+                Path(resume_from_checkpoint) if resume_from_checkpoint is not None else None
+            ),
         )
 
     def evaluate(self) -> dict[str, float]:

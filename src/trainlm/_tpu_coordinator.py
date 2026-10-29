@@ -35,11 +35,18 @@ class _TPURunRequest:
     warmup_steps: int
     precision: str
     expected_world_size: int = 8
+    save_steps: int | None = None
+    eval_steps: int | None = None
+    eval_manifest_dir: Path | None = None
+    eval_batch_size: int = 1
+    resume_from_checkpoint: Path | None = None
 
     def to_dict(self) -> dict[str, Any]:
         values = asdict(self)
         values["manifest_dir"] = str(self.manifest_dir)
         values["output_dir"] = str(self.output_dir)
+        for name in ("eval_manifest_dir", "resume_from_checkpoint"):
+            values[name] = str(getattr(self, name)) if getattr(self, name) is not None else None
         return values
 
 
@@ -68,6 +75,9 @@ class _TPUCoordinator:
 
         completed_stages: list[str] = []
         try:
+            # A successful subprocess must produce artifacts for this invocation.
+            for name in ("summary.json", "metrics.jsonl"):
+                (request.output_dir / name).unlink(missing_ok=True)
             self._run_stage("probe", request, "--probe-only")
             completed_stages.append("probe")
             self._run_stage("model_preflight", request, "--model-preflight")
@@ -204,6 +214,15 @@ class _TPUCoordinator:
             command.extend(("--model-revision", model.revision))
         if model.trust_remote_code:
             command.append("--trust-remote-code")
+        for option, value in (
+            ("--save-steps", request.save_steps),
+            ("--eval-steps", request.eval_steps),
+            ("--eval-batch-size", request.eval_batch_size),
+            ("--eval-manifest-dir", request.eval_manifest_dir),
+            ("--resume-from-checkpoint", request.resume_from_checkpoint),
+        ):
+            if value is not None:
+                command.extend((option, str(value.resolve() if isinstance(value, Path) else value)))
         return command
 
     @staticmethod

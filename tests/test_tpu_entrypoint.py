@@ -82,3 +82,18 @@ def test_raw_scan_rejects_bad_range_and_count(tmp_path):
     with pytest.raises(ValueError, match="Token count"):
         module._raw_shards(raw_args(path, expected_token_count=5))
 
+
+def test_lifecycle_cli_requires_evaluation_data_and_positive_cadence(monkeypatch):
+    module = load_script("trainlm_tpu_worker")
+    for options in (["--save-steps", "0"], ["--eval-steps", "1"],
+                    ["--eval-batch-size", "0"]):
+        monkeypatch.setattr(sys, "argv", ["worker", *options])
+        with pytest.raises(SystemExit):
+            module.parse_args()
+    monkeypatch.setattr(sys, "argv", ["worker", "--save-steps", "2",
+        "--eval-steps", "1", "--eval-manifest-dir", "validation",
+        "--resume-from-checkpoint", "checkpoint-2"])
+    args = module.parse_args()
+    assert args.resume_from_checkpoint == "checkpoint-2"
+    assert args.save_steps == 2 and args.eval_steps == 1
+

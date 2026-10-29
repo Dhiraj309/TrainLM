@@ -114,6 +114,11 @@ def parse_args():
     parser.add_argument("--model-revision", default="")
     parser.add_argument("--trust-remote-code", action="store_true")
     parser.add_argument("--export-hf", action="store_true")
+    parser.add_argument("--save-steps", type=int)
+    parser.add_argument("--eval-steps", type=int)
+    parser.add_argument("--eval-manifest-dir")
+    parser.add_argument("--eval-batch-size", type=int, default=1)
+    parser.add_argument("--resume-from-checkpoint")
     args = parser.parse_args()
     for name in ("max_steps", "gradient_accumulation_steps", "micro_batch_per_device",
                  "sequence_length", "log_every_steps", "shard_count", "token_vocab_size"):
@@ -140,6 +145,11 @@ def parse_args():
             parser.error("raw mode requires --bin-path and explicit nonnegative --header-bytes")
     if args.expected_token_count is not None and args.expected_token_count < 1:
         parser.error("--expected-token-count must be positive")
+    for name in ("save_steps", "eval_steps", "eval_batch_size"):
+        if getattr(args, name) is not None and getattr(args, name) < 1:
+            parser.error(f"--{name.replace('_', '-')} must be positive")
+    if args.eval_steps is not None and not args.eval_manifest_dir:
+        parser.error("--eval-steps requires --eval-manifest-dir")
     return args
 
 
@@ -163,8 +173,19 @@ def main() -> None:
         # workers. Never scan every multi-GB shard eight times simultaneously.
         from trainlm_tpu_data import _shards
         shards = _shards(args)
-        event("data_validated", shards=len(shards),
-              tokens=sum(s.manifest.token_count for s in shards))
+        if args.eval_manifest_dir:
+            from trainlm.data import PackedBinDataset
+            evaluation = PackedBinDataset.from_directory(
+                args.eval_manifest_dir, sequence_length=args.sequence_length,
+                split="validation",
+            )
+            try:
+                shards = {"train": shards, "evaluation": evaluation.shards}
+            finally:
+                evaluation.close()
+        training_shards = shards["train"] if isinstance(shards, dict) else shards
+        event("data_validated", shards=len(training_shards),
+              tokens=sum(s.manifest.token_count for s in training_shards))
     event("launch_dp8")
     torch_xla.launch(run_worker, args=(args, shards), start_method="spawn")
     event("all_workers_finished")

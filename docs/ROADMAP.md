@@ -162,7 +162,7 @@ Branch names describe repository work, not the tool or contributor:
 | [x] | PR1 | `milestone/m0-m2-foundation` | M0-M2 | 15 | Contracts and generic HF CPU conformance |
 | [~] | PR2 | `milestone/m3-m4-data-trainer` | M3-M4 | 18 | Merged; post-merge data/trainer validation remains tracked by validation gates |
 | [~] | PR3 | `milestone/m5-m7-xla-compatibility` | M5-M7 | 16 | Implementation merge-ready; DP8 launcher/data/attention/optimizer fixes landed; v5e-8 baseline is 319,302 tok/s after sparse-loss fix, performance work pending |
-| [~] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11+ | HF-like public trainer facade, reversible planner, and optimized loss |
+| [~] | PR4 | `milestone/m8-m9-optimization-core` | M8-M9 | 11+ | Public facade and replicated TPU checkpoint/cadence implemented; planner and optimized loss pending |
 | [ ] | PR5 | `milestone/m10-m12-kernels-parity` | M10-M12 | 19 | 850K and hard LaughLM parity |
 | [ ] | PR6 | `milestone/m13-m14-family-release` | M13-M14 | 12 | Cross-family certification and V1 release |
 
@@ -319,7 +319,7 @@ TPU runtime foundation`; branch `milestone/m5-m7-xla-compatibility`.
 | [~] | M5 | F1-F7 implemented; DP8 launch, host data preparation, timing, expected-world-size gates, and two-update v5e-8 smoke passed; certification remains pending |
 | [~] | M6 | F1-F4 positional, attention, block-layout, and TPU round-trip coverage implemented; Llama preflight passed, cross-family validation pending |
 | [~] | M7 | F1-F5 distributed resume, async lifecycle, canonical HF export, telemetry, and integrity gates implemented; v5e-8 smoke and measured baseline passed, reliability certification pending |
-| [~] | M8 | HF-like public trainer facade plus reversible capability optimization engine |
+| [~] | M8 | Public facade with replicated TPU checkpoint/cadence; standalone TPU lifecycle, hardware validation, and reversible planner pending |
 | [ ] | M9 | Memory-efficient causal loss |
 | [ ] | M10 | TPU attention and 850K gate |
 | [ ] | M11 | Projection, optimizer, remat, and HLO tuning |
@@ -711,8 +711,9 @@ trainer itself.
 ## M8 — Capability planner and reversible optimization
 
 **Status:** [~] In progress — the coordinator, packed-data adapter, local
-lifecycle facade, and TPU metric/state bridge are implemented; TPU checkpoint
-parity and planning remain.
+lifecycle facade, TPU metric/state bridge, and replicated-worker checkpoint/
+evaluation cadence are implemented; standalone TPU lifecycle, target-hardware
+validation, and planning remain.
 
 **Goal:** Provide a minimal Hugging Face-like trainer surface while transforming
 loaded HF models safely without family logic in core.
@@ -734,7 +735,15 @@ loaded HF models safely without family logic in core.
   examples by rank. CPU/CUDA runs honor save/evaluation cadence, forward
   callback metrics, and restore versioned training state. TPU worker summaries
   expose normalized public state and callback metrics without log parsing. TPU
-  checkpoint/evaluation parity and target-hardware validation remain.
+  workers now honor `save_steps`/`eval_steps`, evaluate deterministic packed
+  validation partitions with global token weighting, and restore per-rank
+  training/RNG state with an exact consumption-based data cursor before
+  prefetch starts. A checksum-validated commit gate rejects incomplete or
+  incompatible same-topology checkpoints. This synchronous replicated format
+  does not replace the M7 sharded manifest or certify TPU correctness.
+  Standalone TPU evaluation/export/state saving, max-tokens stopping, and
+  target-hardware validation remain. CPU/CUDA behavior remains supported;
+  CUDA hardware validation and multi-GPU support are not established here.
 
 - [~] **M8-F1 — Structural inspector**
   `feat(optimization): inspect dense causal LM capabilities`

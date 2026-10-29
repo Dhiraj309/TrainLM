@@ -8,6 +8,8 @@ XLA device and deterministic data partition.
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
+from dataclasses import asdict
 import json
 import math
 from pathlib import Path
@@ -19,11 +21,12 @@ import torch_xla
 import torch_xla.core.xla_model as xm
 import torch_xla.distributed.parallel_loader as pl
 import torch_xla.runtime as xr
-from torch.utils.data import DataLoader, IterableDataset
+from torch.utils.data import DataLoader
 
 from trainlm.config import (
     CheckpointConfig,
     DatasetConfig,
+    EvaluationConfig,
     LossConfig,
     LoggingConfig,
     MonitoringConfig,
@@ -45,22 +48,10 @@ from trainlm.model import load_huggingface_causal_lm
 from trainlm.model.outputs import normalize_causal_lm_output
 from trainlm.optimization import create_optimizer
 from trainlm.runtime import XlaRuntime
-from trainlm.tasks import CausalLMTask
 from trainlm.training import Trainer, TrainerCallback, create_scheduler
-
-
-class BatchIterable(IterableDataset):
-    def __init__(self, reader: PartitionedPackedBatchReader) -> None:
-        self.reader = reader
-
-    def __iter__(self):
-        for batch in self.reader:
-            # Packed streams contain no padding or document loss mask. Keep
-            # this payload flat so MpDeviceLoader can transfer it directly.
-            yield {"input_ids": batch["input_ids"], "labels": batch["labels"]}
-
-    def __len__(self) -> int:
-        return len(self.reader)
+from trainlm._tpu_lifecycle import (
+    _WorkerBatches, _WorkerCheckpointIO, _WorkerEvaluationTask,
+)
 
 
 class PrintMetrics(TrainerCallback):
@@ -77,9 +68,10 @@ class PrintMetrics(TrainerCallback):
         if self.runtime.is_primary_process:
             self.metrics_path.parent.mkdir(parents=True, exist_ok=True)
             self.metrics_path.unlink(missing_ok=True)
-        if self.args.warmup_steps == 0:
+        if state.step >= self.args.warmup_steps:
             torch_xla.sync(wait=True)
             self.start_time = time.perf_counter()
+            self.start_tokens = state.tokens_seen
 
     def on_step_end(self, state, control):
         if state.loss is not None and not math.isfinite(state.loss):
@@ -96,9 +88,25 @@ class PrintMetrics(TrainerCallback):
     def on_metrics(self, state, control, metrics) -> None:
         if self.runtime.is_primary_process:
             snapshot = dict(metrics)
+            snapshot.setdefault("step", float(state.step))
             with self.metrics_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(snapshot, sort_keys=True) + "\n")
             print(snapshot, flush=True)
+
+
+class EvaluationLoader:
+    """Each evaluation pass owns and closes its own XLA prefetch threads."""
+
+    def __init__(self, loader, device):
+        self.loader = loader
+        self.device = device
+
+    def __iter__(self):
+        parallel = pl.ParallelLoader(self.loader, [self.device])
+        try:
+            yield from parallel.per_device_loader(self.device)
+        finally:
+            parallel.close()
 
 
 def _source(args: argparse.Namespace) -> ModelSourceConfig:
@@ -243,6 +251,11 @@ def model_preflight(args: argparse.Namespace) -> None:
 
 
 def train_fn(index: int, args: argparse.Namespace, shards) -> None:
+    with ExitStack() as resources:
+        _train_fn(index, args, shards, resources)
+
+
+def _train_fn(index: int, args: argparse.Namespace, shards, resources) -> None:
     del index
     rank = int(xr.global_ordinal())
     world_size = int(xr.world_size())
@@ -262,16 +275,19 @@ def train_fn(index: int, args: argparse.Namespace, shards) -> None:
         compile_training=False,
         collect_diagnostics=True,
     )
-    task = CausalLMTask(
+    task = _WorkerEvaluationTask(
+        reduce_sum=lambda value: xm.all_reduce(xm.REDUCE_SUM, value),
         z_loss=args.z_loss, loss_implementation="causal_lm",
         assume_all_supervised=True,
     )
     print({"stage": "build_reader", "rank": rank}, flush=True)
-    reader = ContiguousPackedBatchReader(
+    eval_shards = shards.get("evaluation") if isinstance(shards, dict) else None
+    shards = shards["train"] if isinstance(shards, dict) else shards
+    reader = resources.enter_context(ContiguousPackedBatchReader(
         shards,
         batch_size=args.micro_batch_per_device,
         sequence_length=args.sequence_length,
-    )
+    ))
     partition = plan_packed_batch_partition(
         reader,
         split="train",
@@ -284,21 +300,42 @@ def train_fn(index: int, args: argparse.Namespace, shards) -> None:
     )
     partitioned = PartitionedPackedBatchReader(reader, partition)
     if len(partitioned) < args.max_steps * args.gradient_accumulation_steps:
-        reader.close()
         raise ValueError("Not enough complete rank-local batches for this run; add shards or reduce steps.")
+    batches = _WorkerBatches(partitioned)
     loader = DataLoader(
-        BatchIterable(partitioned),
+        batches,
         batch_size=None,
         num_workers=0,
         pin_memory=False,
+        generator=torch.Generator().manual_seed(args.seed),
     )
+    eval_reader = None
+    eval_loader = None
+    eval_partition = None
+    if eval_shards is not None:
+        eval_reader = resources.enter_context(ContiguousPackedBatchReader(
+            eval_shards, batch_size=args.eval_batch_size,
+            sequence_length=args.sequence_length,
+        ))
+        eval_partition = plan_packed_batch_partition(
+            eval_reader, split="validation", seed=0, epoch=0,
+            world_size=world_size, rank=rank,
+            cross_shard_remainder="drop", host_remainder="drop",
+        )
+        evaluation_batches = _WorkerBatches(PartitionedPackedBatchReader(eval_reader, eval_partition))
+        if len(evaluation_batches) == 0:
+            raise ValueError("Evaluation requires at least one complete batch per rank.")
+        eval_loader = EvaluationLoader(DataLoader(
+            evaluation_batches, batch_size=None, num_workers=0,
+            generator=torch.Generator().manual_seed(args.seed),
+        ), device)
     source = _source(args)
     print({"stage": "load_model", "rank": rank}, flush=True)
     loaded = load_huggingface_causal_lm(source)
     if hasattr(loaded.model.config, "use_cache"):
         loaded.model.config.use_cache = False
     input_vocab = loaded.model.get_input_embeddings().weight.shape[0]
-    if any(s.manifest.token_id_max >= input_vocab for s in shards):
+    if any(s.manifest.token_id_max >= input_vocab for s in (*shards, *(eval_shards or ()))):
         raise ValueError("Shard token IDs exceed the selected HF model vocabulary.")
     model = runtime.prepare_model(loaded.model)
     # Device conversion can replace Parameter objects and tied aliases.
@@ -358,7 +395,13 @@ def train_fn(index: int, args: argparse.Namespace, shards) -> None:
             max_grad_norm=1.0,
             seed=args.seed,
         ),
-        checkpoint=CheckpointConfig(output_dir=Path(args.output_dir)),
+        checkpoint=CheckpointConfig(
+            output_dir=Path(args.output_dir),
+            save_training_every_steps=args.save_steps,
+        ),
+        evaluation=EvaluationConfig(
+            enabled=eval_loader is not None, eval_every_steps=args.eval_steps,
+        ),
         logging=LoggingConfig(log_every_steps=args.log_every_steps),
         monitoring=MonitoringConfig(
             enabled=True,
@@ -374,12 +417,36 @@ def train_fn(index: int, args: argparse.Namespace, shards) -> None:
         raise RuntimeError("Optimizer references do not match the XLA model.")
     scheduler = create_scheduler(optimizer, config.scheduler)
     metrics = PrintMetrics(runtime, args)
-    # Start prefetch after setup succeeds, and close it before closing mappings.
-    parallel_loader = pl.ParallelLoader(
-        loader, [device], loader_prefetch_size=16, device_prefetch_size=8,
-        host_to_device_transfer_threads=1, batches_per_execution=1,
+    # Pin semantics that must remain unchanged for same-topology continuation.
+    # A constant schedule may extend max_steps; decaying schedules keep their
+    # original horizon rather than silently changing the next learning rate.
+    context = json.loads(json.dumps({
+        "model": asdict(source),
+        "model_config": loaded.config.to_dict(),
+        "resolved_model_revision": loaded.metadata.resolved_revision,
+        "dataset": partition.dataset_fingerprint,
+        "schedule": partition.schedule_fingerprint,
+        "evaluation_dataset": eval_partition.dataset_fingerprint if eval_partition else None,
+        "geometry": [args.sequence_length, args.micro_batch_per_device,
+                     args.gradient_accumulation_steps, args.eval_batch_size],
+        "precision": args.precision,
+        "optimizer": {"lr": args.learning_rate, "betas": [args.beta1, args.beta2],
+                      "eps": args.eps, "weight_decay": args.weight_decay},
+        "scheduler": {"name": args.scheduler, "warmup_steps": args.warmup_steps,
+                      "horizon": args.max_steps if args.scheduler in {"linear", "cosine"} else None},
+        "z_loss": args.z_loss,
+        "eval_steps": args.eval_steps,
+        "versions": {"torch": str(torch.__version__), "torch_xla": str(torch_xla.__version__)},
+    }))
+    checkpoint_io = _WorkerCheckpointIO(
+        args.output_dir, batches, context,
+        get_rng=lambda: xm.get_rng_state(device),
+        set_rng=lambda value: xm.set_rng_state(value, device),
+        exchange_error=lambda error: xm.mesh_reduce(
+            "trainlm-worker-checkpoint-errors", error,
+            lambda errors: next((item for item in errors if item is not None), None),
+        ),
     )
-    device_loader = parallel_loader.per_device_loader(device)
     trainer = Trainer(
         config=config,
         model=model,
@@ -387,8 +454,11 @@ def train_fn(index: int, args: argparse.Namespace, shards) -> None:
         optimizer=optimizer,
         scheduler=scheduler,
         task=task,
-        train_dataloader=device_loader,
+        train_dataloader=loader,
+        eval_dataloader=eval_loader,
         callbacks=[metrics],
+        checkpoint_saver=checkpoint_io.save,
+        checkpoint_loader=checkpoint_io.load,
     )
     print({"stage": "train_start", "rank": rank,
            "parameters": sum(p.numel() for p in model.parameters()),
@@ -396,12 +466,21 @@ def train_fn(index: int, args: argparse.Namespace, shards) -> None:
            "loss": "full_logits_causal_ce_z_loss",
            "materialize_loss_every_steps": args.log_every_steps,
            "max_steps": args.max_steps}, flush=True)
+    parallel_loader = None
     try:
+        if args.resume_from_checkpoint:
+            trainer.load_checkpoint(args.resume_from_checkpoint)
+        # Restore the committed cursor before starting any prefetch threads.
+        parallel_loader = pl.ParallelLoader(
+            loader, [device], loader_prefetch_size=16, device_prefetch_size=8,
+            host_to_device_transfer_threads=1, batches_per_execution=1,
+        )
+        trainer.train_dataloader = parallel_loader.per_device_loader(device)
         state = trainer.train()
         torch_xla.sync(wait=True)
     finally:
-        parallel_loader.close()
-        reader.close()
+        if parallel_loader is not None:
+            parallel_loader.close()
     # Rank-local timing alone can overstate DP throughput. Use the slowest
     # replica's synchronized window and report supervised and scheduled tokens.
     elapsed = None
@@ -443,6 +522,8 @@ def train_fn(index: int, args: argparse.Namespace, shards) -> None:
         "launcher_cache": str(Path(args.cache_dir) / f"rank-{rank}"),
         "versions": {"torch": torch.__version__, "torch_xla": torch_xla.__version__},
         "performance_certified": False,
+        "checkpoints": checkpoint_io.saved_paths,
+        "resumed_from_checkpoint": args.resume_from_checkpoint,
     }
     if runtime.is_primary_process:
         output = Path(args.output_dir)
