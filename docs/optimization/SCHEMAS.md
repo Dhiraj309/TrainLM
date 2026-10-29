@@ -66,6 +66,7 @@ Language-neutral JSON Schemas are versioned at
 Generic structural inspection and the [optional adapter registry and pure
 planner](PLANNER.md) now produce these contracts. Planning evaluates explicit
 provider declarations and emits deterministic decisions without applying them.
-The version-one JSON Schemas remain unchanged. Transactional application,
-inverse handlers, parameter-layout conversion, and public runtime integration
-remain separate M8 work; selection does not certify GPU/TPU execution.
+The version-one JSON Schemas remain unchanged. [Transactional application and
+inverse handlers](APPLICATION.md) now operate on these plans without changing
+canonical tensor ownership. Parameter-layout conversion and public runtime
+integration remain separate M8 work; selection does not certify GPU/TPU execution.
