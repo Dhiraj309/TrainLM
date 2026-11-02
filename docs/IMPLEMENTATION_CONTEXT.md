@@ -8,7 +8,7 @@
 
 ## Current project snapshot
 
-- PR #18, including PR #16, PR #20, and PRs #28–#37 are merged.
+- PR #18, including PR #16, PR #20, and PRs #28–#38 are merged.
   PR #28
   merged the native single-device foundation at
   `860bb289bf35444d8d435cf41caf51bcf77afaaf`; PR #29 rebase-merged streaming
@@ -25,12 +25,15 @@
   `063a8b9ff9b42733f8b9f4720ba3307c2b2f4cdf`; PR #36 rebase-merged pinned
   custom corpus selection at `d075987574fe471d1b9159315a0688416664f2ba` after
   passing CI; PR #37 rebase-merged opt-in BF16 and precision reporting at
-  `31aa3acd06bf89c9430615103ebd4dd0da46ae6c` after CI passed. This iteration
-  starts from that verified head on `feat/11-scratch-optimizer-config`.
-  The current changes expose scratch learning rate, weight decay, warmup, and
-  seed settings and add them to sanitized evidence. Ten dependency-free
-  launcher checks, ten evidence tests, compilation, notebook parsing, and diff
-  checks pass locally; branch CI and end-to-end training remain pending.
+  `31aa3acd06bf89c9430615103ebd4dd0da46ae6c`; PR #38 rebase-merged optimizer
+  schedule and seed controls at `357cac307bfaf94b4bcf4c55ed53c9fb99815cc8`
+  after CI passed. This iteration starts from that verified head on
+  `feat/12-scratch-gradient-checkpointing`.
+  The current changes add opt-in Hugging Face gradient checkpointing, disable
+  KV caching during training, and restore it in exported model configs. Eleven
+  dependency-free launcher checks, ten evidence tests, compilation, notebook
+  parsing, and diff checks pass locally. The real GPT-2 CPU backward check and
+  full suite await branch CI; Torch is absent locally.
 - T0.1 code inventory is recorded in `TORCHTPU_SALVAGE_INVENTORY.md`. The
   mapped legacy cards remain candidates, not an approved implementation queue.
 - Current implementation backend: PyTorch/XLA. Target: native TorchTPU on
@@ -214,7 +217,8 @@
   rejection; PR #33 passed active-notebook source checks; PR #34 passed the
   train-only BPE tokenizer tests; PR #35 passed explicit-config and evidence
   tests; PR #36 passed pinned custom-corpus tests; PR #37 passed BF16 option
-  and precision evidence tests. This container lacks
+  and precision evidence tests; PR #38 passed optimizer-config evidence tests.
+  This container lacks
   Torch/pytest, so full runtime tests are left to branch CI. No TPU run or
   convergence result is claimed.
 - `trainlm doctor` adds a one-command read-only package/runtime report to the

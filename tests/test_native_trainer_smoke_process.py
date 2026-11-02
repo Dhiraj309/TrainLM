@@ -47,6 +47,46 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         self.assertEqual(config.n_layer, 4)
         self.assertEqual(config.n_head, 8)
 
+    def test_gradient_checkpointing_helper_manages_cache_without_torch(self):
+        class FakeModel:
+            def __init__(self):
+                self.config = type("Config", (), {"use_cache": True})()
+                self.enabled = False
+
+            def gradient_checkpointing_enable(self):
+                self.enabled = True
+
+        namespace = runpy.run_path(str(SCRIPT))
+        model = FakeModel()
+        previous_use_cache = namespace["_enable_gradient_checkpointing"](model)
+        self.assertTrue(model.enabled)
+        self.assertFalse(model.config.use_cache)
+        namespace["_restore_generation_cache"](model, previous_use_cache)
+        self.assertTrue(model.config.use_cache)
+
+    def test_gradient_checkpointing_disables_cache_and_runs_backward(self):
+        import torch
+        from transformers import AutoModelForCausalLM
+
+        namespace = runpy.run_path(str(SCRIPT))
+        config = namespace["_scratch_gpt2_config"](
+            vocab_size=300, sequence_length=16, embedding_size=32,
+            layers=2, attention_heads=4, pad_token_id=1, bos_token_id=2,
+            eos_token_id=3,
+        )
+        model = AutoModelForCausalLM.from_config(config)
+        previous_use_cache = namespace["_enable_gradient_checkpointing"](model)
+
+        self.assertTrue(model.is_gradient_checkpointing)
+        self.assertFalse(model.config.use_cache)
+        input_ids = torch.randint(0, 300, (1, 8))
+        output = model(input_ids=input_ids, labels=input_ids)
+        self.assertTrue(torch.isfinite(output.loss))
+        output.loss.backward()
+        self.assertIsNotNone(model.transformer.wte.weight.grad)
+        namespace["_restore_generation_cache"](model, previous_use_cache)
+        self.assertTrue(model.config.use_cache)
+
     def test_from_scratch_tokenizer_preserves_eos_document_boundaries(self):
         class FakeTokenizer:
             eos_token_id = 99
@@ -96,6 +136,7 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         self.assertIn("--model-layers", result.stdout)
         self.assertIn("--model-attention-heads", result.stdout)
         self.assertIn("--bf16", result.stdout)
+        self.assertIn("--gradient-checkpointing", result.stdout)
         self.assertIn("--learning-rate", result.stdout)
         self.assertIn("--weight-decay", result.stdout)
         self.assertIn("--warmup-steps", result.stdout)
@@ -225,6 +266,8 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         self.assertIn("MODEL_ATTENTION_HEADS", source)
         self.assertIn("USE_BF16 = False", source)
         self.assertIn("command.append(\"--bf16\")", source)
+        self.assertIn("USE_GRADIENT_CHECKPOINTING = False", source)
+        self.assertIn("command.append(\"--gradient-checkpointing\")", source)
         self.assertIn("LEARNING_RATE = 3e-4", source)
         self.assertIn("WEIGHT_DECAY = 0.1", source)
         self.assertIn("WARMUP_STEPS = None", source)

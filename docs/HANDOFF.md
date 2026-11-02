@@ -5,8 +5,7 @@
 - **Direction:** native TorchTPU on Cloud TPU, with v5e-1 for single-device
   work and v5e-8 for collectives, DP8, sharding, and scaling. The public native
   path is experimental and is not hardware-certified.
-- **Current gate:** T3 configurable scratch optimizer settings and T5
-  continuity.
+- **Current gate:** T3 memory-aware scratch training and T5 continuity.
   PR #28 merged the native trainer foundation; PR #29 merged streaming TinyStories tokenization into
   validated uint32 packed shards; PR #30 merged packed causal-LM update parity;
   PR #31 merged the CPU random-init train/eval/checkpoint/export lifecycle;
@@ -14,20 +13,22 @@
   notebook source references; PR #34 added a corpus-trained tokenizer; PR #35
   added explicit GPT-2 configuration without a model-config download; PR #36
   added pinned custom corpus selection; PR #37 made BF16 autocast an explicit
-  opt-in and added precision reporting.
+  opt-in and added precision reporting; PR #38 exposed optimizer schedule and
+  seed settings in the scratch workflow.
 - **Verified base:** `main` at
-  `31aa3acd06bf89c9430615103ebd4dd0da46ae6c` after PR #37.
-- **Active branch:** `feat/11-scratch-optimizer-config` exposes learning rate,
-  weight decay, warmup, and seed controls and records them in run evidence.
+  `357cac307bfaf94b4bcf4c55ed53c9fb99815cc8` after PR #38.
+- **Active branch:** `feat/12-scratch-gradient-checkpointing` adds opt-in HF
+  activation checkpointing and disables KV cache during training.
 - **Probe:** [`T1 v5e-1 guide`](T1_V5E1_PROBE.md) and its
   [Kaggle/Colab notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb) test a tiny
   synthetic forward/backward and optimizer update, with optional `torch.compile`.
 - **Evidence:** the owner reported an eager native TPU allocation,
   forward/backward and AdamW pass on torch_tpu 0.2.0 with torch 2.14.1+cpu.
   Hardware generation and explicit compile remain unverified.
-- **Validation boundary:** PR #37 passed GitHub CI. The active optimizer
-  settings branch passes 10 dependency-free launcher checks, 10 evidence tests,
-  Python compilation, notebook parsing, and diff checks; branch CI is pending.
+- **Validation boundary:** PR #38 passed GitHub CI. The active memory-saving
+  change passes 11 dependency-free launcher checks, 10 evidence tests,
+  compilation, notebook parsing, and diff checks. The real GPT-2 CPU backward
+  check and full suite await branch CI because Torch is absent locally.
   No TPU trainer run or convergence result is claimed.
   This workspace has no PyTorch or pytest installation; no local training or
   accelerator test has run. Native TPU training, compilation and convergence

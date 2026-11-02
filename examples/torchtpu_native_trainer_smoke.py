@@ -174,6 +174,36 @@ def _scratch_gpt2_config(
     )
 
 
+def _enable_gradient_checkpointing(model) -> tuple[bool, bool | None]:
+    """Enable HF activation checkpointing and disable generation KV cache."""
+    enable = getattr(model, "gradient_checkpointing_enable", None)
+    if not callable(enable):
+        raise RuntimeError(
+            "The selected model does not expose gradient checkpointing."
+        )
+    config = getattr(model, "config", None)
+    had_cache_setting = config is not None and hasattr(config, "use_cache")
+    previous_use_cache = getattr(config, "use_cache", None)
+    if had_cache_setting:
+        config.use_cache = False
+    try:
+        enable()
+    except Exception:
+        if had_cache_setting:
+            config.use_cache = previous_use_cache
+        raise
+    return had_cache_setting, previous_use_cache
+
+
+def _restore_generation_cache(
+    model, cache_setting: tuple[bool, bool | None]
+) -> None:
+    config = getattr(model, "config", None)
+    had_cache_setting, previous_use_cache = cache_setting
+    if had_cache_setting and config is not None and hasattr(config, "use_cache"):
+        config.use_cache = previous_use_cache
+
+
 def run_smoke(
     output_dir: Path, *, compile_enabled: bool, resume: bool,
     from_scratch: bool = False, max_steps: int = 3, train_examples: int = 16,
@@ -183,6 +213,7 @@ def run_smoke(
     model_embedding_size: int = 768, model_layers: int = 6,
     model_attention_heads: int = 12,
     bf16: bool = False,
+    gradient_checkpointing: bool = False,
     learning_rate: float | None = None,
     weight_decay: float = 0.1,
     warmup_steps: int | None = None,
@@ -205,6 +236,8 @@ def run_smoke(
         raise ValueError("model embedding size must be divisible by attention heads.")
     if not isinstance(bf16, bool):
         raise ValueError("bf16 must be a boolean.")
+    if not isinstance(gradient_checkpointing, bool):
+        raise ValueError("gradient_checkpointing must be a boolean.")
     resolved_learning_rate = (
         learning_rate if learning_rate is not None
         else 3e-4 if from_scratch else 5e-5
@@ -385,6 +418,10 @@ def run_smoke(
                 "labels": labels,
             })
 
+    generation_cache_setting = (
+        _enable_gradient_checkpointing(model) if gradient_checkpointing else None
+    )
+
     args = TrainLMTrainingArguments(
         output_dir=output_dir,
         accelerator="native_tpu",
@@ -412,12 +449,14 @@ def run_smoke(
     state = trainer.train()
     if state.step != max_steps or state.loss is None or not math.isfinite(state.loss):
         raise RuntimeError("Training did not finish with finite loss at the requested step.")
-    export = trainer.save_model(output_dir / "baseline-export")
-    _check_export(export)
     evaluation = trainer.evaluate() if from_scratch else {}
     eval_loss = evaluation.get("eval_loss") if evaluation else None
     if from_scratch and (eval_loss is None or not math.isfinite(eval_loss)):
         raise RuntimeError("Scratch pretraining evaluation did not return finite loss.")
+    if gradient_checkpointing:
+        _restore_generation_cache(trainer.model, generation_cache_setting)
+    export = trainer.save_model(output_dir / "baseline-export")
+    _check_export(export)
     print("train=PASS", flush=True)
     print("export=PASS", flush=True)
     if compile_enabled:
@@ -438,6 +477,10 @@ def run_smoke(
                 model_id, revision=MODEL_REVISION,
             )
         resumed_model.config.pad_token_id = tokenizer.pad_token_id
+        resumed_cache_setting = (
+            _enable_gradient_checkpointing(resumed_model)
+            if gradient_checkpointing else None
+        )
         resumed_trainer = TrainLMTrainer(
             model=resumed_model, tokenizer=tokenizer, train_dataset=rows,
             eval_dataset=eval_rows,
@@ -447,6 +490,8 @@ def run_smoke(
         if (resumed_state.step != 4 or resumed_state.loss is None
                 or not math.isfinite(resumed_state.loss)):
             raise RuntimeError("Resume did not finish one finite step.")
+        if gradient_checkpointing:
+            _restore_generation_cache(resumed_trainer.model, resumed_cache_setting)
         _check_export(resumed_trainer.save_model(output_dir / "resumed-export"))
         resumed_weights = {
             name: tensor.detach().cpu().clone()
@@ -463,6 +508,8 @@ def run_smoke(
                 model_id, revision=MODEL_REVISION,
             )
         reference_model.config.pad_token_id = tokenizer.pad_token_id
+        if gradient_checkpointing:
+            _enable_gradient_checkpointing(reference_model)
         reference_trainer = TrainLMTrainer(
             model=reference_model, tokenizer=tokenizer, train_dataset=rows,
             eval_dataset=eval_rows,
@@ -526,6 +573,7 @@ def run_smoke(
             "lr_scheduler_type": "cosine" if from_scratch else "constant",
             "warmup_steps": resolved_warmup_steps,
             "gradient_accumulation_steps": gradient_accumulation_steps,
+            "gradient_checkpointing": gradient_checkpointing,
             "seed": seed,
         },
         "model": model_summary,
@@ -576,6 +624,10 @@ def main() -> int:
         "--bf16", action="store_true",
         help="opt into bfloat16 autocast (experimental; off by default)",
     )
+    parser.add_argument(
+        "--gradient-checkpointing", action="store_true",
+        help="trade extra compute for lower activation memory",
+    )
     parser.add_argument("--learning-rate", type=float)
     parser.add_argument("--weight-decay", type=float, default=0.1)
     parser.add_argument("--warmup-steps", type=int)
@@ -598,6 +650,7 @@ def main() -> int:
         model_layers=args.model_layers,
         model_attention_heads=args.model_attention_heads,
         bf16=args.bf16,
+        gradient_checkpointing=args.gradient_checkpointing,
         learning_rate=args.learning_rate,
         weight_decay=args.weight_decay,
         warmup_steps=args.warmup_steps,
