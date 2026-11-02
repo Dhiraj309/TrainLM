@@ -2,41 +2,36 @@
 
 ## Current roadmap state
 
-- **Direction:** native TorchTPU on Cloud TPU, with v5e-1 for single-device
-  work and v5e-8 for collectives, DP8, sharding, and scaling. The public native
-  path is experimental and is not hardware-certified.
-- **Current gate:** T3 memory-aware scratch training and T5 continuity.
-  PR #28 merged the native trainer foundation; PR #29 merged streaming TinyStories tokenization into
-  validated uint32 packed shards; PR #30 merged packed causal-LM update parity;
-  PR #31 merged the CPU random-init train/eval/checkpoint/export lifecycle;
-  PR #32 merged exact packed-data checkpoint recovery; PR #33 refreshed active
-  notebook source references; PR #34 added a corpus-trained tokenizer; PR #35
-  added explicit GPT-2 configuration without a model-config download; PR #36
-  added pinned custom corpus selection; PR #37 made BF16 autocast an explicit
-  opt-in and added precision reporting; PR #38 exposed optimizer schedule and
-  seed settings in the scratch workflow; PR #39 added opt-in gradient
-  checkpointing; PR #40 added per-device batch configuration and nominal token
-  reporting; PR #41 added supervised-token budgets and actual token counts.
-  PR #42 added sparse scratch logging and terminal loss snapshots.
-  PR #43 added a portable model/evidence ZIP for Colab and Kaggle.
-- PR #44 merged the CPU export reload and generation check into `main` at
-  `fad1df41278d4ea904b4d26968d75ee97ae17923`. This verifies an exported model
-  can be loaded and generate tokens on CPU; it is not TPU-generation or
-  convergence evidence.
+- **Direction:** native TorchTPU on Cloud TPU. Use v5e-1 for single-device
+  feasibility and v5e-8 for collectives, DP8, sharding, and scaling. The
+  explicit `accelerator="native_tpu"` path is experimental, not a production
+  support claim.
+- **Current gate:** T1 remains open. Owner-provided evidence confirms a
+  standalone eager allocation/forward/backward/AdamW smoke on v5e-1. Package
+  compatibility, TrainLM training on TPU, explicit compile, repeated lifecycle,
+  and v5e-8 collective results remain unverified. CPU-verifiable implementation
+  may continue behind explicit native selection while those hardware checks
+  wait; do not enable automatic TPU routing or change dependency bounds based
+  only on the eager smoke.
+- PR #28–#44 established the experimental single-device foundation and the
+  from-scratch CPU data/train/checkpoint/export workflow. PR #44's CPU reload
+  and generation check does not establish TPU generation or convergence.
+- PR #45 added agent-facing documentation and package metadata. It rebase-merged
+  at `d983408221b92d631aea817bee7539e07de1bbf5`; it adds no runtime behavior
+  or TPU evidence.
 - **Verified base:** `main` at
-  `fad1df41278d4ea904b4d26968d75ee97ae17923` after PR #44.
+  `d983408221b92d631aea817bee7539e07de1bbf5` after PR #45.
 - **Probe:** [`T1 v5e-1 guide`](T1_V5E1_PROBE.md) and its
   [Kaggle/Colab notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb) test a tiny
   synthetic forward/backward and optimizer update, with optional `torch.compile`.
 - **Evidence:** the owner reported an eager native TPU allocation,
   forward/backward and AdamW pass on torch_tpu 0.2.0 with torch 2.14.1+cpu.
   Hardware generation and explicit compile remain unverified.
-- **Validation boundary:** PR #43 passed GitHub pytest in 2m4s. PR #44 adds a
-  separate CPU export reload/generation phase to the evidence report. No TPU
-  generation or convergence result is claimed.
-  This workspace has no PyTorch or pytest installation; no local training or
-  accelerator test has run. Native TPU training, compilation and convergence
-  still require owner-run evidence.
+- **Validation boundary:** PR #45's GitHub pytest check passed. This workspace
+  has no PyTorch or pytest installation, so no local suite or training run was
+  performed during this handoff update. CPU tests, standalone device probes,
+  and complete TPU training are separate evidence; no TPU generation,
+  convergence, or performance result is claimed.
 - **History:** PR #18 (including PR #16) is merged. The old M0–M17 tables and
   P0/P1 XLA backlog below describe historical XLA implementation/evidence;
   use them for salvage, not as the current TorchTPU task list.
@@ -49,9 +44,10 @@ This handoff retains implementation and target-hardware notes from the legacy
 XLA work. Each feature status below refers to the backend named in its row; it
 does not transfer to native TorchTPU.
 
-## Verified baseline and known CPU failures
+## Historical CPU baseline (PR #18 snapshot)
 
-The available run is from the PR #18 snapshot, not a rerun on merged `main`:
+The available failure run is from the PR #18 snapshot, not a rerun on merged
+`main`:
 700 passed and 21 failed under Python 3.12.14, torch 2.9.0+cpu, Transformers
 5.0.0, huggingface-hub 1.3.5, and pytest 9.1.1. Failures: five Phi
 configuration cases, one checkpoint reload, twelve loss-layout parity cases,
