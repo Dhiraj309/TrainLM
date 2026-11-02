@@ -114,6 +114,11 @@ TorchTPU support. “Implemented” means present in that historical code path;
   comparable; every final model tensor must match exactly. The eight total
   optimizer steps are opt-in. No TPU result or full resume certification is
   claimed until an owner run supplies evidence.
+  A CPU regression now compares the same three-step save and one-step resume
+  against an uninterrupted four-step run with identical initial weights,
+  deterministic data order, and a constant learning rate. It checks that the
+  fourth step changes weights and that all final tensors match exactly; the
+  target TPU comparison remains owner-run.
   Continue only behind explicit experimental selection until CPU and owner-run
   TPU checks pass.
 

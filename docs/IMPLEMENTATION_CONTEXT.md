@@ -134,6 +134,11 @@
   count, without exporting tensor values. The eight total optimizer steps
   default off. Notebook syntax is checked locally, but an owner TPU run and
   broader state/data validation remain necessary for exact-resume claims.
+  A CPU regression test now mirrors the notebook's three-plus-one versus
+  uninterrupted-four comparison using a tiny causal model, the same initial
+  parameters and data, and a constant scheduler. It requires a real fourth
+  update and exact final tensor equality. This workspace lacks PyTorch and
+  pytest, so the new test awaits execution in a provisioned CPU environment.
 - `trainlm doctor` adds a one-command read-only package/runtime report to the
   CLI, reusing the T1 profile and hardware discovery contracts. From a source
   checkout it records the Git revision; an installed wheel uses its declared

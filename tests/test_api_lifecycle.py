@@ -1,5 +1,6 @@
 """HF-like facade lifecycle, cadence, metrics, and local resume."""
 
+from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
@@ -129,6 +130,48 @@ def test_manual_state_export_is_resumable(tmp_path):
 
     assert state.step == 2
     assert state.micro_step == 2
+
+
+def test_cpu_resumed_weights_match_uninterrupted_four_step_run(tmp_path):
+    initial_model = TinyModel()
+    rows = _dataset()
+
+    def make_trainer(model, max_steps, output_dir):
+        return TrainLMTrainer(
+            model=model,
+            train_dataset=rows,
+            args=TrainLMTrainingArguments(
+                output_dir=output_dir,
+                max_steps=max_steps,
+                sequence_length=4,
+                accelerator="cpu",
+                lr_scheduler_type="constant",
+                seed=42,
+            ),
+        )
+
+    first = make_trainer(deepcopy(initial_model), 3, tmp_path / "resumed")
+    assert first.train().step == 3
+    checkpoint = first.save_state(tmp_path / "resumed" / "checkpoint")
+    weights_after_three = {
+        name: value.detach().clone() for name, value in first.model.state_dict().items()
+    }
+
+    resumed = make_trainer(deepcopy(initial_model), 4, tmp_path / "resumed")
+    assert resumed.train(resume_from_checkpoint=checkpoint).step == 4
+
+    uninterrupted = make_trainer(deepcopy(initial_model), 4, tmp_path / "reference")
+    assert uninterrupted.train().step == 4
+
+    resumed_weights = resumed.model.state_dict()
+    reference_weights = uninterrupted.model.state_dict()
+    assert resumed_weights.keys() == reference_weights.keys()
+    assert any(
+        not torch.equal(weights_after_three[name], value)
+        for name, value in resumed_weights.items()
+    )
+    for name, value in resumed_weights.items():
+        torch.testing.assert_close(value, reference_weights[name], rtol=0, atol=0)
 
 
 class _IterableRows(torch.utils.data.IterableDataset):
