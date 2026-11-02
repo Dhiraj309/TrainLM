@@ -8,11 +8,12 @@ import json
 import os
 from pathlib import Path
 import shutil
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 import torch
 from torch.utils.data import IterableDataset, get_worker_info
 
+from .cursor import PackedDataCursor, PackedDataCursorState
 from .huggingface import HuggingFacePackedShardSource, HuggingFaceShardSourceConfig
 from .manifest import (
     PackedBinaryShardManifest,
@@ -67,6 +68,8 @@ class PackedBinDataset(IterableDataset):
             rank=rank,
         )
         self._partition = PartitionedPackedBatchReader(self._reader, plan)
+        self._cursor: PackedDataCursor | None = None
+        self._source_revision: str | None = None
 
     @classmethod
     def from_directory(
@@ -136,6 +139,7 @@ class PackedBinDataset(IterableDataset):
         dataset = cls(shards, sequence_length=sequence_length, **partition)
         dataset._manifest_root = None
         dataset.hub_revision = resolved_revision
+        dataset._source_revision = resolved_revision
         return dataset
 
     @classmethod
@@ -216,16 +220,46 @@ class PackedBinDataset(IterableDataset):
 
     def __iter__(self):
         worker = get_worker_info()
-        start = 0 if worker is None else worker.id
-        stride = 1 if worker is None else worker.num_workers
-        for index in range(start, len(self._partition), stride):
-            batch = self._partition.read_batch(index)
-            yield {
-                "input_ids": batch["input_ids"].squeeze(0),
-                "labels": batch["labels"].squeeze(0),
-                "attention_mask": batch["attention_mask"].squeeze(0),
-                "loss_mask": batch["loss_mask"].squeeze(0),
-            }
+        if worker is not None:
+            for index in range(worker.id, len(self._partition), worker.num_workers):
+                yield self._public_example(self._partition.read_batch(index))
+            return
+
+        if self._cursor is None or self._cursor.position >= len(self._partition):
+            self._cursor = PackedDataCursor(
+                self._partition,
+                source_revision=self._source_revision,
+            )
+        for batch in self._cursor:
+            yield self._public_example(batch)
+
+    @staticmethod
+    def _public_example(batch: Mapping[str, Any]) -> dict[str, torch.Tensor]:
+        return {
+            "input_ids": batch["input_ids"].squeeze(0),
+            "labels": batch["labels"].squeeze(0),
+            "attention_mask": batch["attention_mask"].squeeze(0),
+            "loss_mask": batch["loss_mask"].squeeze(0),
+        }
+
+    def state_dict(self) -> dict[str, Any]:
+        """Return the exact next-batch cursor for zero-worker iteration."""
+        cursor = self._cursor or PackedDataCursor(
+            self._partition,
+            source_revision=self._source_revision,
+        )
+        return {"schema_version": 1, "cursor": cursor.state.to_dict()}
+
+    def load_state_dict(self, state: Mapping[str, Any]) -> None:
+        """Restore a cursor after verifying its data and partition identity."""
+        if not isinstance(state, Mapping) or state.get("schema_version") != 1:
+            raise ValueError("Unsupported packed dataset state schema.")
+        cursor_state = PackedDataCursorState.from_dict(state.get("cursor", {}))
+        self._cursor = PackedDataCursor.from_state(
+            self._partition,
+            cursor_state,
+            source_revision=self._source_revision,
+        )
 
     def close(self) -> None:
         self._reader.close()

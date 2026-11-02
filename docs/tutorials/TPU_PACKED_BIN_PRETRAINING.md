@@ -88,6 +88,13 @@ file or an individual rank shard:
 trainer.train(resume_from_checkpoint="runs/secure-tpu/checkpoint-500")
 ```
 
+`PackedBinDataset` checkpoints include a fingerprinted cursor for the exact
+next packed batch, so a changed shard set or partition is rejected on restore.
+Keep `dataloader_num_workers=0` for exact cursor recovery; worker prefetch state
+is not checkpointed. The CPU continuation test covers this contract. Native TPU
+resume still requires a successful target-runtime validation before it can be
+treated as certified.
+
 The checkpoint manifest must be committed and its topology must match the TPU
 job. Keep checkpoint storage private because optimizer state and training data
 position can reveal information even when model weights are intended for

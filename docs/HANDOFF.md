@@ -5,14 +5,14 @@
 - **Direction:** native TorchTPU on Cloud TPU, with v5e-1 for single-device
   work and v5e-8 for collectives, DP8, sharding, and scaling. The public native
   path is experimental and is not hardware-certified.
-- **Current gate:** T3 single-device training/data. PR #28 merged the native
+- **Current gate:** T3/T5 training continuity. PR #28 merged the native
   trainer foundation; PR #29 merged streaming TinyStories tokenization into
-  validated uint32 packed shards; PR #30 merged packed causal-LM update parity.
+  validated uint32 packed shards; PR #30 merged packed causal-LM update parity;
+  PR #31 merged the CPU random-init train/eval/checkpoint/export lifecycle.
 - **Verified base:** `main` at
-  `2b5e0e9bef3b105d8ebeb40a0a9d04d1d4b7e748` after PR #30.
-- **Active branch:** `test/04-scratch-pretraining-cpu-smoke` checks the random
-  initialization, packed train/eval data, checkpoints and HF export path on
-  CPU before the next owner-run TPU smoke.
+  `a58a9e13d792c2468f4c20d6cdc7375f4bc63ffd` after PR #31.
+- **Active branch:** `feat/05-packed-dataset-resume-cursor` adds exact packed
+  iterable data position to trainer checkpoints and CPU continuation tests.
 - **Probe:** [`T1 v5e-1 guide`](T1_V5E1_PROBE.md) and its
   [Kaggle/Colab notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb) test a tiny
   synthetic forward/backward and optimizer update, with optional `torch.compile`.

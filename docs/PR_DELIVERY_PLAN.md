@@ -39,14 +39,14 @@ approvals. T2 integrates the report into backend selection and the public UX.
 
 ## PR-by-PR serial execution
 
-**Current sequence:** T0.2 is merged → PR #28 merged the native single-device
-foundation → PR #29 merged packed-data writing → PR #30 rebase-merged packed
-causal-LM one-update parity at verified `main` SHA
-`2b5e0e9bef3b105d8ebeb40a0a9d04d1d4b7e748`. The active branch
-`test/04-scratch-pretraining-cpu-smoke` checks a random-init GPT-2 through
-packed train/eval, optimizer steps, checkpoints and HF export on CPU. After CI,
+**Current sequence:** T0.2 is merged → PRs #28–#30 merged native training,
+packed-data writing and causal-LM parity → PR #31 rebase-merged the full tiny
+scratch lifecycle at verified `main` SHA
+`a58a9e13d792c2468f4c20d6cdc7375f4bc63ffd`. The active branch
+`feat/05-packed-dataset-resume-cursor` adds exact packed iterable progress to
+checkpoints so a long scratch run can resume at its next batch. After CI,
 merge using Rebase & Merge where available, verify remote `main`, then select
-the next T3/T4 dependency. The old numbered cards below do not set this order.
+the next T3/T5 dependency. The old numbered cards below do not set this order.
 
 - A **PR-plan number** is a planned delivery slot, not a GitHub PR number.
   GitHub assigns its own PR number on creation. Do not create the next branch
