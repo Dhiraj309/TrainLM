@@ -22,7 +22,13 @@ import torch
 from torch import nn
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
-from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler
+from torch.utils.data import (
+    DataLoader,
+    Dataset,
+    IterableDataset,
+    RandomSampler,
+    SequentialSampler,
+)
 
 from trainlm.config import (
     CheckpointConfig,
@@ -381,6 +387,8 @@ class TrainLMTrainer:
             checkpoint_saver=self._save_training_checkpoint,
             checkpoint_loader=self._load_training_checkpoint,
         )
+        if self.runtime.name == "torchtpu" and self.args.save_steps is not None:
+            self._validate_native_resume_data(self.engine)
 
     def _resolve_model(self, model: nn.Module | str | Path | ModelSourceConfig) -> nn.Module:
         if isinstance(model, nn.Module):
@@ -564,6 +572,7 @@ class TrainLMTrainer:
         if self.engine is None:
             raise RuntimeError("Trainer engine was not initialized.")
         if resume_from_checkpoint is not None:
+            self._validate_native_resume_data(self.engine)
             self.engine.load_checkpoint(Path(resume_from_checkpoint))
         return self.engine.train()
 
@@ -614,7 +623,41 @@ class TrainLMTrainer:
             "loader_generator_initial_state": self._train_loader_generator_initial_state,
         }
 
+    def _validate_native_resume_data(self, engine: EngineTrainer) -> None:
+        """Reject native checkpoints whose data position cannot be replayed."""
+        if getattr(self.runtime, "name", None) != "torchtpu":
+            return
+        loader = engine.train_dataloader
+        dataset = getattr(loader, "dataset", None)
+        sampler = getattr(loader, "sampler", None)
+        if isinstance(dataset, IterableDataset) or not (
+            hasattr(dataset, "__getitem__") and hasattr(dataset, "__len__")
+        ):
+            raise ValueError(
+                "Native TPU checkpoint/resume currently requires a deterministic "
+                "map-style dataset; iterable sources need a resumable cursor."
+            )
+        if getattr(loader, "num_workers", 0) != 0:
+            raise ValueError(
+                "Native TPU checkpoint/resume currently requires "
+                "dataloader_num_workers=0 so worker RNG and prefetch state are "
+                "not lost."
+            )
+        if isinstance(sampler, RandomSampler):
+            if self._train_loader_generator is None:
+                raise ValueError(
+                    "Native TPU resume with random sampling requires a "
+                    "TrainLM-owned deterministic data-loader generator."
+                )
+        elif not isinstance(sampler, SequentialSampler):
+            raise ValueError(
+                "Native TPU checkpoint/resume supports only TrainLM random "
+                "sampling or sequential sampling until custom sampler state is "
+                "serializable."
+            )
+
     def _save_training_checkpoint(self, engine: EngineTrainer, destination: object | None):
+        self._validate_native_resume_data(engine)
         root = Path(self.args.output_dir)
         path = root / str(destination or f"checkpoint-{engine.state.step}")
         path.mkdir(parents=True, exist_ok=True)
@@ -625,6 +668,7 @@ class TrainLMTrainer:
         return path
 
     def _load_training_checkpoint(self, engine: EngineTrainer, source: object):
+        self._validate_native_resume_data(engine)
         path = Path(source)
         if path.is_dir():
             path = path / "trainer_state.pt"
@@ -786,6 +830,7 @@ class TrainLMTrainer:
             )
         destination = Path(output_dir or self.args.output_dir)
         destination.mkdir(parents=True, exist_ok=True)
+        self._validate_native_resume_data(self.engine)
         path = destination / "trainer_state.pt"
         temporary = path.with_suffix(".pt.tmp")
         self.runtime.before_checkpoint("manual-state")

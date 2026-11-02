@@ -2,7 +2,9 @@
 
 from types import SimpleNamespace
 
+import pytest
 import torch
+from torch.utils.data import RandomSampler, SequentialSampler
 
 from trainlm import TrainLMTrainer, TrainLMTrainingArguments
 from trainlm.training import TrainerCallback
@@ -127,3 +129,60 @@ def test_manual_state_export_is_resumable(tmp_path):
 
     assert state.step == 2
     assert state.micro_step == 2
+
+
+class _IterableRows(torch.utils.data.IterableDataset):
+    def __iter__(self):
+        return iter(_dataset())
+
+
+def _native_resume_validator(dataset, sampler, *, workers=0, generator=True):
+    trainer = object.__new__(TrainLMTrainer)
+    trainer.runtime = SimpleNamespace(name="torchtpu")
+    trainer._train_loader_generator = object() if generator else None
+    loader = SimpleNamespace(dataset=dataset, sampler=sampler, num_workers=workers)
+    engine = SimpleNamespace(train_dataloader=loader)
+    return trainer, engine
+
+
+def test_native_resume_allows_owned_random_or_sequential_map_loaders():
+    rows = _dataset()
+    random_trainer, random_engine = _native_resume_validator(
+        rows, RandomSampler(rows), generator=True
+    )
+    random_trainer._validate_native_resume_data(random_engine)
+
+    sequential_trainer, sequential_engine = _native_resume_validator(
+        rows, SequentialSampler(rows), generator=False
+    )
+    sequential_trainer._validate_native_resume_data(sequential_engine)
+
+
+def test_native_resume_rejects_iterable_sources_workers_and_unknown_samplers():
+    iterable = _IterableRows()
+    trainer, engine = _native_resume_validator(
+        iterable, SequentialSampler(_dataset()), generator=False
+    )
+    with pytest.raises(ValueError, match="map-style dataset"):
+        trainer._validate_native_resume_data(engine)
+
+    rows = _dataset()
+    trainer, engine = _native_resume_validator(
+        rows, SequentialSampler(rows), workers=1, generator=False
+    )
+    with pytest.raises(ValueError, match="dataloader_num_workers=0"):
+        trainer._validate_native_resume_data(engine)
+
+    trainer, engine = _native_resume_validator(rows, object())
+    with pytest.raises(ValueError, match="custom sampler state"):
+        trainer._validate_native_resume_data(engine)
+
+
+def test_native_random_resume_requires_trainlm_owned_generator():
+    rows = _dataset()
+    trainer, engine = _native_resume_validator(
+        rows, RandomSampler(rows), generator=False
+    )
+
+    with pytest.raises(ValueError, match="TrainLM-owned deterministic"):
+        trainer._validate_native_resume_data(engine)

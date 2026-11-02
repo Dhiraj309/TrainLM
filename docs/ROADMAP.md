@@ -90,8 +90,9 @@ TorchTPU support. “Implemented” means present in that historical code path;
   trainer execution, compile and multi-device support remain open. Native
   checkpoint state now includes an optional device RNG capture/restore contract;
   runtimes missing those APIs fail checkpoint/resume rather than implying
-  exact continuation. Continue only behind explicit experimental selection
-  until CPU and owner-run TPU checks pass.
+  exact continuation. Native resume also rejects iterable/custom sources and
+  loader-worker state that cannot yet be replayed exactly. Continue only behind
+  explicit experimental selection until CPU and owner-run TPU checks pass.
 
 ## Historical native-backend transition note
 

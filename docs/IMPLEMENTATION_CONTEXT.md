@@ -107,7 +107,10 @@
   compile, multi-device, package compatibility, CPU conformance, and target
   performance remain unverified. The runtime now captures/restores accelerator
   RNG state through guarded generic APIs; an absent API rejects checkpointing
-  or resume. This contract has not been run against TorchTPU hardware. T1 evidence gates
+  or resume. Native resume is currently guarded to deterministic map-style
+  data, zero loader workers, and a TrainLM-owned random sampler or sequential
+  order; iterable sources need an explicit cursor first. This has not been run
+  against TorchTPU hardware. T1 evidence gates
   still apply before widening the package range or enabling automatic routing.
 - `trainlm doctor` adds a one-command read-only package/runtime report to the
   CLI, reusing the T1 profile and hardware discovery contracts. From a source
