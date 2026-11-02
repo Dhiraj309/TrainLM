@@ -107,6 +107,10 @@ TorchTPU support. “Implemented” means present in that historical code path;
   compile check succeeds; each fresh child must emit compile evidence, and the
   normalized report records the selected mode. This harness extension has only
   source-level validation so far.
+  The native training notebook now offers an optional four-step lifecycle
+  smoke: save state after three steps, construct a fresh trainer, resume one
+  step, and verify model/tokenizer export files. It does not claim exact
+  continuation or TPU validation until an owner run supplies evidence.
   Continue only behind explicit experimental selection until CPU and owner-run
   TPU checks pass.
 

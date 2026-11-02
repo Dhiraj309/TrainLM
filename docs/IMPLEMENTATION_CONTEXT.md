@@ -126,6 +126,12 @@
   source-level coverage only; no v5e-1 compile result is claimed. T1 evidence
   gates still apply before widening the package range or enabling automatic
   routing.
+  The native training notebook has an optional continuation smoke using the
+  public API: save state after three steps, rebuild the model/trainer, resume
+  to step four, require finite loss, then check model and tokenizer exports.
+  It is bounded by four optimizer steps and defaults off. The notebook source
+  is statically checked here; a target TPU run and a matched uninterrupted
+  comparison are still needed for exact-resume evidence.
 - `trainlm doctor` adds a one-command read-only package/runtime report to the
   CLI, reusing the T1 profile and hardware discovery contracts. From a source
   checkout it records the Git revision; an installed wheel uses its declared
