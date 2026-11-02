@@ -87,11 +87,14 @@
   under Python 3.13.18/Torch 2.14.1. Two facade tests incorrectly used auto
   device selection on the attached TPU; the wheel smoke assumed `venv` was
   available; and a roadmap test referenced a renamed historical heading.
-  Those causes are corrected locally. Twelve loss-layout parity cases and the
-  scalar-materialization assertion also failed in the older Torch 2.9 baseline,
-  so this run does not identify them as Torch 2.14 regressions. The full suite
-  must be rerun before changing the dependency range. PyTorch and pytest remain
-  unavailable in this workspace.
+  Those causes are corrected locally. The 12 loss-layout failures came from
+  dividing by all shifted labels instead of excluding `ignore_index` targets;
+  the loss now counts supervised targets even without an explicit mask. The
+  scalar-materialization assertion expected one extraction although the
+  logged loss and gradient norm are separately materialized; it now checks for
+  exactly those two snapshots at the configured cadence. These fixes are not
+  yet rerun on the owner runtime. PyTorch and pytest remain unavailable here,
+  so rerun the full suite before changing the dependency range.
 - `trainlm doctor` adds a one-command read-only package/runtime report to the
   CLI, reusing the T1 profile and hardware discovery contracts. From a source
   checkout it records the Git revision; an installed wheel uses its declared

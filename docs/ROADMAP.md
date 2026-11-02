@@ -48,8 +48,10 @@ TorchTPU support. “Implemented” means present in that historical code path;
   owner run at source `08f02fb` had 746 passes and 17 failures. Two facade tests
   selected auto on a TPU host, the wheel smoke required `venv`, and a roadmap
   check used a stale heading; these harness failures are corrected locally.
-  Twelve loss-layout parity cases and a scalar-materialization assertion also
-  failed in the old Torch 2.9 baseline, so re-run before deciding on Torch 2.14.
+  Twelve loss-layout cases were caused by ignored labels in the mean-loss
+  denominator; that is fixed locally. The scalar test now counts both loss and
+  gradient-norm snapshots at the logging cadence. Rerun before deciding on
+  Torch 2.14.
   Process
   cleanup and fatal teardown checks
   are covered on CPU; the export preserves skipped checks and package

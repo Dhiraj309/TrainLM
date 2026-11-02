@@ -45,10 +45,12 @@ from TPU discovery and eager execution, and it does not install packages. The
 owner run at source `08f02fb` produced 746 passes and 17 failures. Two facade
 tests had left `accelerator="auto"` on a TPU host, the wheel smoke required
 `venv`/`ensurepip`, and the roadmap contract used an obsolete heading; these
-test-harness issues were corrected locally. Twelve loss-layout parity cases
-and one scalar-materialization failure are also present in the older Torch 2.9
-baseline. Rerun CPU conformance before deciding whether to expand the Torch
-range; the current evidence is not sufficient to do so.
+test-harness issues were corrected locally. The 12 loss-layout failures came
+from counting ignored targets in the mean denominator, now fixed in the
+chunked loss. The scalar-count assertion expected one snapshot but the trainer
+records both loss and gradient norm at the configured cadence; the test now
+checks those two snapshots. Rerun CPU conformance before deciding whether to
+expand the Torch range; the current evidence is not sufficient to do so.
 
 ### Read-only native install-profile check
 
