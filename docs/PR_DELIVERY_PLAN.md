@@ -40,13 +40,13 @@ approvals. T2 integrates the report into backend selection and the public UX.
 ## PR-by-PR serial execution
 
 **Current sequence:** T0.2 is merged → PR #28 merged the native single-device
-foundation → PR #29 rebase-merged the streaming packed-data path at verified
-`main` SHA `f3df754ea98156b083801447b41540670134bf2e`. The active branch
-`test/03-packed-causal-lm-reference-parity` adds a one-update CPU comparison
-between the packed-data public trainer and direct PyTorch causal-LM reference
-math. After CI and review, merge using Rebase & Merge where available, verify
-remote `main`, then select the next T3/T4 dependency. The old numbered cards
-below do not set this order.
+foundation → PR #29 merged packed-data writing → PR #30 rebase-merged packed
+causal-LM one-update parity at verified `main` SHA
+`2b5e0e9bef3b105d8ebeb40a0a9d04d1d4b7e748`. The active branch
+`test/04-scratch-pretraining-cpu-smoke` checks a random-init GPT-2 through
+packed train/eval, optimizer steps, checkpoints and HF export on CPU. After CI,
+merge using Rebase & Merge where available, verify remote `main`, then select
+the next T3/T4 dependency. The old numbered cards below do not set this order.
 
 - A **PR-plan number** is a planned delivery slot, not a GitHub PR number.
   GitHub assigns its own PR number on creation. Do not create the next branch

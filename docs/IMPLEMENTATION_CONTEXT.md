@@ -8,12 +8,15 @@
 
 ## Current project snapshot
 
-- PR #18, including PR #16, PR #20, PR #28, and PR #29 are merged. PR #28
+- PR #18, including PR #16, PR #20, PR #28, PR #29, and PR #30 are merged.
+  PR #28
   merged the native single-device foundation at
   `860bb289bf35444d8d435cf41caf51bcf77afaaf`; PR #29 rebase-merged streaming
   packed-data support at verified `main`
-  `f3df754ea98156b083801447b41540670134bf2e`. This iteration starts from that
-  verified head on `test/03-packed-causal-lm-reference-parity`.
+  `f3df754ea98156b083801447b41540670134bf2e`; PR #30 rebase-merged packed
+  causal-LM update parity at `2b5e0e9bef3b105d8ebeb40a0a9d04d1d4b7e748`.
+  This iteration starts from that verified head on
+  `test/04-scratch-pretraining-cpu-smoke`.
 - T0.1 code inventory is recorded in `TORCHTPU_SALVAGE_INVENTORY.md`. The
   mapped legacy cards remain candidates, not an approved implementation queue.
 - Current implementation backend: PyTorch/XLA. Target: native TorchTPU on
@@ -186,9 +189,12 @@
   manifests, uint64 document offsets, and a from-scratch path that feeds the
   pinned TinyStories stream through `PackedBinDataset`. The notebook report
   records source revision, token/document counts, and packed-shard hashes.
-  The active `test/03-packed-causal-lm-reference-parity` branch adds a CPU
-  reference test for one packed-data causal-LM optimizer update. No TPU run or
-  convergence result is claimed.
+- PR #30's CI passed its packed-data reference test and it was rebase-merged.
+  The active `test/04-scratch-pretraining-cpu-smoke` branch exercises random
+  GPT-2 initialization, packed train/eval data, optimizer updates, checkpoints
+  and HF model export on CPU. The local container lacks Torch/pytest, so this
+  branch relies on GitHub CI for execution. No TPU run or convergence result
+  is claimed.
 - `trainlm doctor` adds a one-command read-only package/runtime report to the
   CLI, reusing the T1 profile and hardware discovery contracts. From a source
   checkout it records the Git revision; an installed wheel uses its declared
