@@ -2,24 +2,27 @@
 
 ## Current roadmap state
 
-- **Direction:** native TorchTPU on Kaggle TPU v5e-8. The code currently uses
-  PyTorch/XLA; TorchTPU is not implemented or certified.
-- **Current gate:** T1 native-runtime feasibility. PR #20 merged the accepted
-  T0.2 mapping. Start with v5e-1 single-device checks; use v5e-8 for
-  multi-device collectives, DP8, sharding, distributed checkpoints, and scaling.
-- **Verified base:** `main` at `e575bf6f6681dc9a6883d73bf51bda7aed9a6353`
-  after PR #20.
+- **Direction:** native TorchTPU on Cloud TPU, with v5e-1 for single-device
+  work and v5e-8 for collectives, DP8, sharding, and scaling. The public native
+  path is experimental and is not hardware-certified.
+- **Current gate:** T3 single-device training/data. PR #28 merged the native
+  trainer foundation; PR #29 merged streaming TinyStories tokenization into
+  validated uint32 packed shards; PR #30 merged packed causal-LM update parity.
+- **Verified base:** `main` at
+  `2b5e0e9bef3b105d8ebeb40a0a9d04d1d4b7e748` after PR #30.
+- **Active branch:** `test/04-scratch-pretraining-cpu-smoke` checks the random
+  initialization, packed train/eval data, checkpoints and HF export path on
+  CPU before the next owner-run TPU smoke.
 - **Probe:** [`T1 v5e-1 guide`](T1_V5E1_PROBE.md) and its
   [Kaggle/Colab notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb) test a tiny
   synthetic forward/backward and optimizer update, with optional `torch.compile`.
 - **Evidence:** the owner reported an eager native TPU allocation,
   forward/backward and AdamW pass on torch_tpu 0.2.0 with torch 2.14.1+cpu.
   Hardware generation and explicit compile remain unverified.
-- **Next:** implement shared discovery/reporting from the
-  [utility inventory](TORCHTPU_UTILITIES.md), then verify the dependency and
-  process-lifecycle profile. Collect device properties internally; never infer
-  hardware from a Colab/Kaggle label. Prefer v5e-1 when available, and use
-  v5e-8 for multi-device evidence. Local accelerator tests have not run.
+- **Validation boundary:** the last two implementation PRs passed GitHub CI.
+  This workspace has no PyTorch or pytest installation; no local training or
+  accelerator test has run. Native TPU training, compilation and convergence
+  still require owner-run evidence.
 - **History:** PR #18 (including PR #16) is merged. The old M0–M17 tables and
   P0/P1 XLA backlog below describe historical XLA implementation/evidence;
   use them for salvage, not as the current TorchTPU task list.
