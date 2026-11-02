@@ -116,12 +116,40 @@ def _train_byte_level_tokenizer(dataset, *, max_examples: int, vocab_size: int):
     return tokenizer, seen
 
 
+def _scratch_gpt2_config(
+    *, vocab_size: int, sequence_length: int, embedding_size: int,
+    layers: int, attention_heads: int, pad_token_id: int,
+    bos_token_id: int, eos_token_id: int,
+):
+    """Build GPT-2 architecture locally, without downloading a model config."""
+    if min(vocab_size, sequence_length, embedding_size, layers, attention_heads) < 1:
+        raise ValueError("Scratch GPT-2 dimensions and vocabulary must be positive.")
+    if embedding_size % attention_heads:
+        raise ValueError("model embedding size must be divisible by attention heads.")
+
+    from transformers import GPT2Config
+
+    return GPT2Config(
+        vocab_size=vocab_size,
+        n_positions=sequence_length,
+        n_ctx=sequence_length,
+        n_embd=embedding_size,
+        n_layer=layers,
+        n_head=attention_heads,
+        pad_token_id=pad_token_id,
+        bos_token_id=bos_token_id,
+        eos_token_id=eos_token_id,
+    )
+
+
 def run_smoke(
     output_dir: Path, *, compile_enabled: bool, resume: bool,
     from_scratch: bool = False, max_steps: int = 3, train_examples: int = 16,
     sequence_length: int = 64, save_steps: int | None = None,
     eval_examples: int = 128, max_eval_batches: int = 20,
     gradient_accumulation_steps: int = 1, tokenizer_vocab_size: int = 16000,
+    model_embedding_size: int = 768, model_layers: int = 6,
+    model_attention_heads: int = 12,
 ) -> None:
     if max_steps < 1 or sequence_length < 1 or gradient_accumulation_steps < 1:
         raise ValueError("Training steps, sequence length, and accumulation must be positive.")
@@ -129,6 +157,12 @@ def run_smoke(
         raise ValueError("Scratch training/evaluation dataset sizes must be positive.")
     if from_scratch and tokenizer_vocab_size < 260:
         raise ValueError("Byte-level BPE vocab_size must be at least 260.")
+    if from_scratch and min(
+        model_embedding_size, model_layers, model_attention_heads
+    ) < 1:
+        raise ValueError("Scratch GPT-2 model dimensions must be positive.")
+    if from_scratch and model_embedding_size % model_attention_heads:
+        raise ValueError("model embedding size must be divisible by attention heads.")
     if save_steps is not None and save_steps < 1:
         raise ValueError("save_steps must be positive when configured.")
     if resume and compile_enabled:
@@ -141,7 +175,7 @@ def run_smoke(
 
     import torch_tpu  # noqa: F401 - registers the native PyTorch TPU device
     import torch
-    from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
+    from transformers import AutoModelForCausalLM, AutoTokenizer
 
     from trainlm import PackedBinDataset, TrainLMTrainer, TrainLMTrainingArguments
     from trainlm.data.writer import write_packed_binary_shard
@@ -204,16 +238,16 @@ def run_smoke(
                 f"Packed train split has {available_train_batches} sequences; "
                 f"{required_train_batches} are required for the requested run."
             )
-        model_config = AutoConfig.from_pretrained(
-            model_id, revision=MODEL_REVISION,
+        model_config = _scratch_gpt2_config(
+            vocab_size=len(tokenizer),
+            sequence_length=sequence_length,
+            embedding_size=model_embedding_size,
+            layers=model_layers,
+            attention_heads=model_attention_heads,
+            pad_token_id=tokenizer.pad_token_id,
+            bos_token_id=tokenizer.bos_token_id,
+            eos_token_id=tokenizer.eos_token_id,
         )
-        model_config.n_positions = sequence_length
-        if hasattr(model_config, "n_ctx"):
-            model_config.n_ctx = sequence_length
-        model_config.vocab_size = len(tokenizer)
-        model_config.pad_token_id = tokenizer.pad_token_id
-        model_config.bos_token_id = tokenizer.bos_token_id
-        model_config.eos_token_id = tokenizer.eos_token_id
         torch.manual_seed(42)
         model = AutoModelForCausalLM.from_config(model_config)
         dataset_info = {
@@ -376,12 +410,27 @@ def run_smoke(
             packages[name] = metadata.version(name)
         except metadata.PackageNotFoundError:
             packages[name] = None
-    model_summary = {
-        "id": model_id, "revision": MODEL_REVISION,
-        "initialization": "random_from_config" if from_scratch else "pretrained",
-    }
     if from_scratch:
-        model_summary["parameter_count"] = parameter_count
+        model_summary = {
+            "id": "gpt2",
+            "revision": None,
+            "initialization": "random_from_config",
+            "model_type": "gpt2",
+            "config_source": "explicit_gpt2_config",
+            "config": {
+                "vocab_size": len(tokenizer),
+                "n_positions": sequence_length,
+                "n_embd": model_embedding_size,
+                "n_layer": model_layers,
+                "n_head": model_attention_heads,
+            },
+            "parameter_count": parameter_count,
+        }
+    else:
+        model_summary = {
+            "id": model_id, "revision": MODEL_REVISION,
+            "initialization": "pretrained",
+        }
     print("trainer_summary=" + json.dumps({
         "schema_version": 1,
         "model": model_summary,
@@ -425,6 +474,9 @@ def main() -> int:
     parser.add_argument("--max-eval-batches", type=int, default=20)
     parser.add_argument("--gradient-accumulation-steps", type=int, default=1)
     parser.add_argument("--tokenizer-vocab-size", type=int, default=16000)
+    parser.add_argument("--model-embedding-size", type=int, default=768)
+    parser.add_argument("--model-layers", type=int, default=6)
+    parser.add_argument("--model-attention-heads", type=int, default=12)
     args = parser.parse_args()
     run_smoke(
         args.output_dir, compile_enabled=args.compile, resume=args.resume,
@@ -434,6 +486,9 @@ def main() -> int:
         max_eval_batches=args.max_eval_batches,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         tokenizer_vocab_size=args.tokenizer_vocab_size,
+        model_embedding_size=args.model_embedding_size,
+        model_layers=args.model_layers,
+        model_attention_heads=args.model_attention_heads,
     )
     return 0
 
