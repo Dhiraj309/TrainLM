@@ -1,10 +1,10 @@
 # T1 single-device probe on v5e-1
 
-[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/docs/01-t1-v5e1-probe/notebooks/TorchTPU_T1_v5e1_Probe.ipynb)
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TorchTPU_T1_v5e1_Probe.ipynb)
 
 Open the notebook in Colab to run or copy cells directly, which avoids selecting code from this guide on a mobile device.
 
-The setup cell clones a fresh snapshot of the T1 branch, records its full
+The setup cell clones a fresh snapshot of merged `main`, records its full
 commit SHA, and preserves existing checkouts. Later cells reject changed
 source so results cannot silently come from an older or edited checkout.
 The last cell downloads `trainlm_t1_evidence.json` in Colab or provides a

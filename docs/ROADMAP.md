@@ -23,14 +23,16 @@ TorchTPU support. “Implemented” means present in that historical code path;
   packed causal-LM reference parity at
   `2b5e0e9bef3b105d8ebeb40a0a9d04d1d4b7e748`; PR #31 rebase-merged the
   random-init packed train/eval/checkpoint/export CPU lifecycle at
-  `a58a9e13d792c2468f4c20d6cdc7375f4bc63ffd`. The active
-  `feat/05-packed-dataset-resume-cursor` branch adds exact packed-data cursor
-  checkpointing; CI is pending. T1 source-level
+  `a58a9e13d792c2468f4c20d6cdc7375f4bc63ffd`; PR #32 rebase-merged exact
+  packed-data checkpoint recovery at verified `main`
+  `82ead5b72991fc154738bcd8334e477d563d7ea3` after passing CI. The active
+  `fix/06-colab-notebooks-track-main` branch updates notebook source refs to
+  merged `main`. T1 source-level
   probes and the explicit `native_tpu` path are implemented; owner-run compile,
   lifecycle and v5e-8 collective evidence remain pending. Hosted Kaggle currently documents
   v5e-8 and hosted Colab TPU v2, so neither is the v5e-1 target; use a
   one-chip Cloud TPU v5e VM. Use v5e-8 for multi-device checks.
-  The [v5e-1 probe notebook (open in Colab)](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/docs/01-t1-v5e1-probe/notebooks/TorchTPU_T1_v5e1_Probe.ipynb) and
+  The [v5e-1 probe notebook (open in Colab)](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TorchTPU_T1_v5e1_Probe.ipynb) and
   [run guide](T1_V5E1_PROBE.md) have an owner-reported eager TPU pass:
   allocation, forward, backward and AdamW update succeeded. Hardware generation
   and explicit compile remain unverified. The current [utility inventory](TORCHTPU_UTILITIES.md)
@@ -110,9 +112,9 @@ TorchTPU support. “Implemented” means present in that historical code path;
   trainer execution, compile and multi-device support remain open. Native
   checkpoint state now includes an optional device RNG capture/restore contract;
   runtimes missing those APIs fail checkpoint/resume rather than implying
-  exact continuation. Current native resume rejects iterable/custom sources
-  and loader-worker state that cannot yet be replayed exactly. The active
-  packed-cursor branch adds exact zero-worker packed-source recovery. Native model
+  exact continuation. PR #32 adds exact zero-worker packed-source recovery
+  using a fingerprinted dataset cursor; worker prefetch state remains
+  unsupported. Native model
   compilation is exposed as `torch_compile=True`; it has no eager fallback,
   is checkpoint-mode guarded, and remains disabled pending a v5e-1 owner run.
   The lifecycle harness also supports a compiled repeat pass after the one-shot
@@ -162,9 +164,8 @@ TorchTPU support. “Implemented” means present in that historical code path;
   `PackedBinDataset`. PR #30's GitHub CI verified one public-trainer update
   against direct causal-LM reference loss, clipping, gradients and parameter
   updates. PR #31's CI verified the random-init train/eval/checkpoint/export
-  path. The active checkpoint gate stores and restores the next packed batch
-  for exact iterable-data continuation. Owner-run TPU validation and training
-  convergence remain pending.
+  path, and PR #32's CI verified exact packed-data continuation and stale-data
+  rejection. Owner-run TPU validation and training convergence remain pending.
   Continue only behind explicit experimental selection until CPU and owner-run
   TPU checks pass.
 

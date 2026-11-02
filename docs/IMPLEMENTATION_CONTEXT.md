@@ -8,7 +8,7 @@
 
 ## Current project snapshot
 
-- PR #18, including PR #16, PR #20, PR #28, PR #29, PR #30, and PR #31 are merged.
+- PR #18, including PR #16, PR #20, and PRs #28–#32 are merged.
   PR #28
   merged the native single-device foundation at
   `860bb289bf35444d8d435cf41caf51bcf77afaaf`; PR #29 rebase-merged streaming
@@ -16,8 +16,10 @@
   `f3df754ea98156b083801447b41540670134bf2e`; PR #30 rebase-merged packed
   causal-LM update parity at `2b5e0e9bef3b105d8ebeb40a0a9d04d1d4b7e748`;
   PR #31 rebase-merged the CPU scratch lifecycle at
-  `a58a9e13d792c2468f4c20d6cdc7375f4bc63ffd`. This iteration starts from that
-  verified head on `feat/05-packed-dataset-resume-cursor`.
+  `a58a9e13d792c2468f4c20d6cdc7375f4bc63ffd`; PR #32 rebase-merged exact
+  packed-data checkpoint recovery at `82ead5b72991fc154738bcd8334e477d563d7ea3`
+  after passing CI. This iteration starts from that verified head on
+  `fix/06-colab-notebooks-track-main`.
 - T0.1 code inventory is recorded in `TORCHTPU_SALVAGE_INVENTORY.md`. The
   mapped legacy cards remain candidates, not an approved implementation queue.
 - Current implementation backend: PyTorch/XLA. Target: native TorchTPU on
@@ -34,7 +36,7 @@
   collective, DP8, sharding, distributed-checkpoint, or scaling requirements.
   An owner-run eager TPU smoke passed; this workspace has no PyTorch installed.
 - [T1 v5e-1 probe guide](T1_V5E1_PROBE.md) and the
-  [Colab-openable Kaggle/Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/docs/01-t1-v5e1-probe/notebooks/TorchTPU_T1_v5e1_Probe.ipynb) describe
+  [Colab-openable Kaggle/Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TorchTPU_T1_v5e1_Probe.ipynb) describe
   synthetic smoke. The latest owner run at source `d3dea896` passed allocation,
   forward, autograd and AdamW update on Python 3.13.18, torch 2.14.1+cpu,
   torch_tpu 0.2.0 and libtpu 0.0.50. Runtime properties reported device name
@@ -126,9 +128,9 @@
   RNG state through guarded generic APIs; an absent API rejects checkpointing
   or resume. Native resume is currently guarded to deterministic map-style
   data, zero loader workers, and a TrainLM-owned random sampler or sequential
-  order. The active `feat/05-packed-dataset-resume-cursor` branch adds an exact
-  cursor contract for packed iterable data and wires it into trainer
-  checkpoints; CPU resume parity and native TPU validation are pending.
+  order. PR #32 adds a fingerprinted cursor for packed iterable data and wires
+  it into trainer checkpoints; exact CPU resume parity passed CI. Native TPU
+  validation remains pending.
   `torch_compile=True` opts into `torch.compile` for
   this native path and is rejected for other accelerators or injected runtimes.
   Eager remains the default; compile failures surface without fallback, and
@@ -194,11 +196,11 @@
   records source revision, token/document counts, and packed-shard hashes.
 - PR #30's CI passed its packed-data reference test and it was rebase-merged.
   PR #31's GitHub CI passed the random-init GPT-2 train/eval/checkpoint/export
-  smoke and it was rebase-merged. The active
-  `feat/05-packed-dataset-resume-cursor` branch saves validated packed data's
-  exact next-batch position with training checkpoints. Local runtime tests are
-  unavailable because this container lacks Torch/pytest. No TPU run or
-  convergence result is claimed.
+  smoke, and PR #32's CI passed exact packed-data checkpoint continuation and
+  stale-data rejection. Active notebooks are being switched to clone merged
+  `main`, so Colab runs use current code. Local runtime tests are unavailable
+  because this container lacks Torch/pytest. No TPU run or convergence result
+  is claimed.
 - `trainlm doctor` adds a one-command read-only package/runtime report to the
   CLI, reusing the T1 profile and hardware discovery contracts. From a source
   checkout it records the Git revision; an installed wheel uses its declared

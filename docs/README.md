@@ -10,9 +10,11 @@ established backend is PyTorch/XLA. An experimental, explicitly selected
 single-device native TorchTPU path and a from-scratch starter workflow are
 implemented in PR #28. PR #29 merged the streamed uint32 packed-data path into
 the scratch workflow. PR #30 added passing CI coverage for packed-data update
-parity, and PR #31 added the random-init GPT-2 train/eval/checkpoint/export CPU
-smoke. The active branch adds resumable packed-data cursors. None of these
-checks certify TPU support or end-to-end convergence. PR #20 closed T0.2.
+parity, PR #31 added the random-init GPT-2 train/eval/checkpoint/export CPU
+smoke, and PR #32 added exact packed-data checkpoint recovery with passing CI.
+The native from-scratch notebook is runnable from `main`; it uses random model
+weights with a pinned pretrained tokenizer. These checks do not certify TPU
+support or end-to-end convergence. PR #20 closed T0.2.
 T1 software probes cover shared hardware and capability discovery, dependency
 metadata and process lifecycle, and a distributed entry check; owner-run
 compile, lifecycle and v5e-8 collective evidence remain pending. Use v5e-1 for
@@ -29,8 +31,8 @@ snapshot; `accelerator="native_tpu"` is the opt-in single-device prototype.
 - [Current handoff and verified baseline](HANDOFF.md)
 - [Current implementation context](IMPLEMENTATION_CONTEXT.md)
 - [T1 v5e-1 single-device probe](T1_V5E1_PROBE.md)
-- [Open T1 single-device probe directly in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/docs/01-t1-v5e1-probe/notebooks/TorchTPU_T1_v5e1_Probe.ipynb) · [view notebook source](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb)
-- [Open optional v5e-8 distributed probe directly in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/docs/01-t1-v5e1-probe/notebooks/TorchTPU_T1_v5e8_Distributed_Probe.ipynb) · [view notebook source](../notebooks/TorchTPU_T1_v5e8_Distributed_Probe.ipynb)
+- [Open T1 single-device probe directly in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TorchTPU_T1_v5e1_Probe.ipynb) · [view notebook source](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb)
+- [Open optional v5e-8 distributed probe directly in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TorchTPU_T1_v5e8_Distributed_Probe.ipynb) · [view notebook source](../notebooks/TorchTPU_T1_v5e8_Distributed_Probe.ipynb)
 - [Open experimental single-device training directly in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Native_TorchTPU_Single_Device_Training.ipynb) · [view notebook source](../notebooks/TrainLM_Native_TorchTPU_Single_Device_Training.ipynb)
 - [Open native TorchTPU pretraining from scratch directly in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) · [view notebook source](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb)
 

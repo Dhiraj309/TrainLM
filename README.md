@@ -19,6 +19,7 @@ replacement, or preservation as an optional backend.
 - [T1 v5e-1 probe and run guide](docs/T1_V5E1_PROBE.md)
 - [Kaggle/Colab-style T1 probe notebook](notebooks/TorchTPU_T1_v5e1_Probe.ipynb)
 - [Experimental native single-device training notebook](notebooks/TrainLM_Native_TorchTPU_Single_Device_Training.ipynb)
+- [Native TorchTPU from-scratch pretraining notebook](notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb)
 
 The M0–M17 material below and in the detailed roadmap records the earlier
 PyTorch/XLA development. Treat its completed, partial, and deferred labels as
@@ -106,8 +107,10 @@ Packed reads can overlap training through the bounded, backend-aware
 [asynchronous prefetch contract](docs/data/ASYNC_PREFETCH.md).
 Exact next-batch restart state follows the
 [resumable cursor contract](docs/data/RESUMABLE_CURSOR.md).
-The [public TPU validation notebook](notebooks/TrainLM_TPU_Validation.ipynb)
-shows the proposed end-user workflow: construct familiar arguments and call
+The [historical PyTorch/XLA validation notebook](notebooks/TrainLM_TPU_Validation.ipynb)
+records an earlier proposed end-user workflow. For the current native
+TorchTPU direction, use the linked native notebooks above. TrainLM's target
+workflow is to construct familiar arguments and call
 `trainer.train()`. TrainLM keeps topology discovery, worker orchestration,
 preflight, evaluation cadence, checkpointing, and resume behind that call. The
 [secure packed-bin TPU guide](docs/tutorials/TPU_PACKED_BIN_PRETRAINING.md)
