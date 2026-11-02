@@ -17,7 +17,11 @@ TorchTPU support. “Implemented” means present in that historical code path;
 - **Current target:** Native TorchTPU on Cloud TPU; not yet verified
 - **Current gate:** T0 is closed; PR #20 merged the T0.2 mapping. PR #28 merged
   the native single-device software foundation and starter pretraining notebook
-  with merge commit `860bb289bf35444d8d435cf41caf51bcf77afaaf`. T1 source-level
+  with merge commit `860bb289bf35444d8d435cf41caf51bcf77afaaf`. PR #29
+  rebase-merged streaming packed data at
+  `f3df754ea98156b083801447b41540670134bf2e`. The active branch
+  `test/03-packed-causal-lm-reference-parity` adds a one-update CPU reference
+  comparison; CI is pending. T1 source-level
   probes and the explicit `native_tpu` path are implemented; owner-run compile,
   lifecycle and v5e-8 collective evidence remain pending. Hosted Kaggle currently documents
   v5e-8 and hosted Colab TPU v2, so neither is the v5e-1 target; use a
@@ -148,10 +152,11 @@ TorchTPU support. “Implemented” means present in that historical code path;
   pretraining implementation; native TPU execution and convergence remain
   unverified. PR #28's final CI run passed all 804 tests after a follow-up
   corrected two native-runtime test fixtures; the PR was merged with the SHA
-  above. The current `feat/02-packed-pretraining-data` T3 iteration writes
-  pinned streaming text to validated uint32 packed shards and trains through
-  the existing `PackedBinDataset` reader; CI and owner-run TPU validation are
-  pending.
+  above. PR #29's CI passed and its T3 data implementation is merged: pinned
+  streaming text is written to validated uint32 packed shards and fed through
+  `PackedBinDataset`. The next CPU gate compares one public-trainer update
+  against direct causal-LM reference loss, clipping and parameter updates.
+  Owner-run TPU validation and training convergence remain pending.
   Continue only behind explicit experimental selection until CPU and owner-run
   TPU checks pass.
 

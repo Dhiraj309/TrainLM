@@ -8,10 +8,12 @@
 
 ## Current project snapshot
 
-- PR #18, including PR #16, and PR #20 are merged. PR #28 merged the native
-  single-device foundation with merge commit
-  `860bb289bf35444d8d435cf41caf51bcf77afaaf`; this iteration starts from that
-  verified `origin/main` on `feat/02-packed-pretraining-data`.
+- PR #18, including PR #16, PR #20, PR #28, and PR #29 are merged. PR #28
+  merged the native single-device foundation at
+  `860bb289bf35444d8d435cf41caf51bcf77afaaf`; PR #29 rebase-merged streaming
+  packed-data support at verified `main`
+  `f3df754ea98156b083801447b41540670134bf2e`. This iteration starts from that
+  verified head on `test/03-packed-causal-lm-reference-parity`.
 - T0.1 code inventory is recorded in `TORCHTPU_SALVAGE_INVENTORY.md`. The
   mapped legacy cards remain candidates, not an approved implementation queue.
 - Current implementation backend: PyTorch/XLA. Target: native TorchTPU on
@@ -179,12 +181,14 @@
   test fixtures. The PR merged with merge commit
   `860bb289bf35444d8d435cf41caf51bcf77afaaf`; TPU execution and convergence
   remain owner-run validation.
-- The active `feat/02-packed-pretraining-data` branch starts from that verified
-  `main`. It adds a streaming writer for explicit uint32 token shards, SHA-256
+- PR #29's GitHub CI passed and the branch was merged with Rebase & Merge.
+  It adds a streaming writer for explicit uint32 token shards, SHA-256
   manifests, uint64 document offsets, and a from-scratch path that feeds the
   pinned TinyStories stream through `PackedBinDataset`. The notebook report
   records source revision, token/document counts, and packed-shard hashes.
-  CPU and CI validation are pending; no TPU or convergence result is claimed.
+  The active `test/03-packed-causal-lm-reference-parity` branch adds a CPU
+  reference test for one packed-data causal-LM optimizer update. No TPU run or
+  convergence result is claimed.
 - `trainlm doctor` adds a one-command read-only package/runtime report to the
   CLI, reusing the T1 profile and hardware discovery contracts. From a source
   checkout it records the Git revision; an installed wheel uses its declared
