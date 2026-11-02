@@ -32,8 +32,9 @@
   torch_tpu 0.2.0 and libtpu 0.0.50. Runtime properties reported device name
   `TPU v5e` and one visible device; the owner confirmed this was v5e-1. The
   shared notebook output did not show the VM image or topology; Colab may have
-  hidden those details. Explicit compile, lifecycle and production integration
-  remain unverified. The package profile was
+  hidden those details. Lifecycle and production integration remain
+  unverified. Native `torch.compile` is now an opt-in on the one-device trainer
+  path but remains unverified on TPU hardware. The package profile was
   incompatible: the notebook correctly ran in `source_checkout` mode, torch
   2.14.1+cpu exceeds TrainLM's `<2.14` constraint, and `pip check` found that
   IPython 7.34.0 requires missing `jedi`. Jedi is not a TrainLM dependency.
@@ -110,8 +111,13 @@
   or resume. Native resume is currently guarded to deterministic map-style
   data, zero loader workers, and a TrainLM-owned random sampler or sequential
   order; iterable sources need an explicit cursor first. This has not been run
-  against TorchTPU hardware. T1 evidence gates
-  still apply before widening the package range or enabling automatic routing.
+  against TorchTPU hardware. `torch_compile=True` opts into `torch.compile` for
+  this native path and is rejected for other accelerators or injected runtimes.
+  Eager remains the default; compile failures surface without fallback, and
+  saved runtime state rejects resume if the compile setting changed. This has
+  source-level coverage only; no v5e-1 compile result is claimed. T1 evidence
+  gates still apply before widening the package range or enabling automatic
+  routing.
 - `trainlm doctor` adds a one-command read-only package/runtime report to the
   CLI, reusing the T1 profile and hardware discovery contracts. From a source
   checkout it records the Git revision; an installed wheel uses its declared

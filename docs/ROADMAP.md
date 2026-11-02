@@ -64,8 +64,11 @@ TorchTPU support. “Implemented” means present in that historical code path;
   output did not show image or topology details. The package profile correctly
   reports `source_checkout`; torch 2.14.1+cpu remains outside `<2.14`, and
   `pip check` found that IPython 7.34.0 requires missing `jedi`. The latter is
-  unrelated to TrainLM's declared dependencies. Explicit compile, lifecycle
-  and T1.4 collective remain unrun. Keep the native dependency profile
+  unrelated to TrainLM's declared dependencies. An opt-in `torch_compile=True`
+  argument now routes the native runtime through `torch.compile`; it defaults
+  off, is limited to `accelerator="native_tpu"`, and resume rejects a changed
+  compile mode. This software path has not been validated on TPU hardware.
+  Lifecycle and T1.4 collective remain unrun. Keep the native dependency profile
   unresolved pending CPU conformance and native runtime evidence.
   Software follow-up adds `trainlm doctor` as one read-only report for package
   compatibility and native TPU discovery. It does not install packages or
@@ -91,8 +94,11 @@ TorchTPU support. “Implemented” means present in that historical code path;
   checkpoint state now includes an optional device RNG capture/restore contract;
   runtimes missing those APIs fail checkpoint/resume rather than implying
   exact continuation. Native resume also rejects iterable/custom sources and
-  loader-worker state that cannot yet be replayed exactly. Continue only behind
-  explicit experimental selection until CPU and owner-run TPU checks pass.
+  loader-worker state that cannot yet be replayed exactly. Native model
+  compilation is exposed as `torch_compile=True`; it has no eager fallback,
+  is checkpoint-mode guarded, and remains disabled pending a v5e-1 owner run.
+  Continue only behind explicit experimental selection until CPU and owner-run
+  TPU checks pass.
 
 ## Historical native-backend transition note
 

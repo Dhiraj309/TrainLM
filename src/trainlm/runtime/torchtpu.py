@@ -25,11 +25,19 @@ class TorchTPURuntime(TorchRuntime):
     produces a bounded diagnostic instead of a silent CPU fallback.
     """
 
-    def __init__(self, *, precision: Precision = "fp32", seed: int = 42) -> None:
+    def __init__(
+        self,
+        *,
+        precision: Precision = "fp32",
+        seed: int = 42,
+        compile_enabled: bool = False,
+    ) -> None:
         if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
             raise ValueError("seed must be a non-negative integer.")
         # Explicit native_tpu selection is the opt-in allocation boundary.
-        super().__init__(device="cpu", precision=precision)
+        super().__init__(
+            device="cpu", precision=precision, compile_enabled=compile_enabled
+        )
         self._seed = seed
         self._native_report = discover_tpu(
             torch, verify_allocation=True, include_properties=False
@@ -89,6 +97,7 @@ class TorchTPURuntime(TorchRuntime):
             "precision": self.precision,
             "world_size": self.world_size,
             "seed": self._seed,
+            "compile_enabled": self._compile_enabled,
             "device_rng_state": get_rng_state(),
         }
 
@@ -102,6 +111,8 @@ class TorchTPURuntime(TorchRuntime):
             raise ValueError("Native single-device resume requires world_size=1.")
         if state_dict.get("precision") != self.precision:
             raise ValueError("Native TPU resume precision does not match the checkpoint.")
+        if state_dict.get("compile_enabled", False) != self._compile_enabled:
+            raise ValueError("Native TPU resume compile mode does not match the checkpoint.")
         if "device_rng_state" not in state_dict:
             raise ValueError("Native TPU checkpoint is missing device RNG state.")
         accelerator = getattr(torch, "accelerator", None)

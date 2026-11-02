@@ -141,6 +141,7 @@ class TrainLMTrainingArguments:
     bf16: bool = False
     fp16: bool = False
     accelerator: Literal["auto", "cpu", "cuda", "tpu", "native_tpu"] = "auto"
+    torch_compile: bool = False
     logging_steps: int = 10
     save_steps: int | None = None
     eval_steps: int | None = None
@@ -184,10 +185,17 @@ class TrainLMTrainingArguments:
             raise ValueError("dataloader_num_workers must be non-negative.")
         if not isinstance(self.dataloader_pin_memory, bool):
             raise ValueError("dataloader_pin_memory must be boolean.")
+        if not isinstance(self.torch_compile, bool):
+            raise ValueError("torch_compile must be boolean.")
         if self.bf16 and self.fp16:
             raise ValueError("bf16 and fp16 cannot both be enabled.")
         if self.accelerator not in {"auto", "cpu", "cuda", "tpu", "native_tpu"}:
             raise ValueError(f"Unsupported accelerator: {self.accelerator}")
+        if self.torch_compile and self.accelerator != "native_tpu":
+            raise ValueError(
+                "torch_compile is currently supported only with "
+                "accelerator='native_tpu'."
+            )
         if self.lr_scheduler_type not in {"constant", "linear", "cosine", "wsd"}:
             raise ValueError(f"Unsupported scheduler: {self.lr_scheduler_type}")
         if isinstance(self.warmup_steps, bool) or not isinstance(self.warmup_steps, int) or self.warmup_steps < 0:
@@ -360,6 +368,11 @@ class TrainLMTrainer:
                 "chunked_linear loss is currently available through the TPU worker; "
                 "use the TPU accelerator or the lower-level training view on CPU/CUDA."
             )
+        if self.args.torch_compile and runtime is not None:
+            raise ValueError(
+                "torch_compile cannot be combined with an injected runtime; "
+                "select accelerator='native_tpu' so TrainLM can configure it."
+            )
         self.model = self._resolve_model(model)
         self.runtime = runtime or self._make_runtime()
         self.optimizer = optimizer or self._make_optimizer()
@@ -439,7 +452,11 @@ class TrainLMTrainer:
             from trainlm.runtime.torchtpu import TorchTPURuntime
 
             precision = "bf16" if self.args.bf16 else "fp16" if self.args.fp16 else "fp32"
-            return TorchTPURuntime(precision=precision, seed=self.args.seed)
+            return TorchTPURuntime(
+                precision=precision,
+                seed=self.args.seed,
+                compile_enabled=self.args.torch_compile,
+            )
         if accelerator == "cuda" and not torch.cuda.is_available():
             raise RuntimeError("accelerator='cuda' requested but CUDA is unavailable.")
         precision = "bf16" if self.args.bf16 else "fp16" if self.args.fp16 else "fp32"
@@ -903,8 +920,14 @@ class TrainLMTrainer:
                 limitations=(
                     (
                         "Native TorchTPU training is experimental and limited to "
-                        "one visible device; distributed training, compilation, "
-                        "and exact TPU resume are not integrated."
+                        "one visible device; distributed training and exact TPU "
+                        "resume are not integrated. "
+                        + (
+                            "torch.compile was requested but remains unvalidated "
+                            "on target hardware."
+                            if self.args.torch_compile
+                            else "torch.compile is disabled."
+                        )
                     )
                     if native_tpu
                     else "No optimized provider execution plan has been selected.",

@@ -19,6 +19,40 @@ def _report(*, status="ready", count=1, error_type=None):
 def test_native_tpu_is_an_explicit_training_argument():
     args = TrainLMTrainingArguments(accelerator="native_tpu", max_steps=1)
     assert args.accelerator == "native_tpu"
+    assert args.torch_compile is False
+
+
+def test_torch_compile_is_opt_in_for_native_tpu_only():
+    args = TrainLMTrainingArguments(
+        accelerator="native_tpu", torch_compile=True, max_steps=1
+    )
+    assert args.torch_compile is True
+
+    with pytest.raises(ValueError, match="only with accelerator='native_tpu'"):
+        TrainLMTrainingArguments(accelerator="cpu", torch_compile=True, max_steps=1)
+
+    with pytest.raises(ValueError, match="torch_compile must be boolean"):
+        TrainLMTrainingArguments(
+            accelerator="native_tpu", torch_compile="yes", max_steps=1
+        )
+
+
+def test_native_runtime_compiles_only_when_explicitly_enabled(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        native_runtime,
+        "torch",
+        SimpleNamespace(compile=lambda model: calls.append(model) or model),
+    )
+    model = object()
+    disabled = object.__new__(native_runtime.TorchTPURuntime)
+    disabled._compile_enabled = False
+    enabled = object.__new__(native_runtime.TorchTPURuntime)
+    enabled._compile_enabled = True
+
+    assert disabled.compile_model(model) is model
+    assert enabled.compile_model(model) is model
+    assert calls == [model]
 
 
 def test_native_runtime_requires_a_ready_single_device(monkeypatch):
@@ -87,6 +121,7 @@ def test_native_runtime_checkpoints_and_restores_device_rng(monkeypatch):
     runtime = object.__new__(native_runtime.TorchTPURuntime)
     runtime._precision = "fp32"
     runtime._seed = 42
+    runtime._compile_enabled = False
 
     payload = runtime.state_dict()
     runtime.load_state_dict(payload)
@@ -94,8 +129,26 @@ def test_native_runtime_checkpoints_and_restores_device_rng(monkeypatch):
     assert payload["backend"] == "torchtpu"
     assert payload["world_size"] == 1
     assert payload["seed"] == 42
+    assert payload["compile_enabled"] is False
     assert payload["device_rng_state"] is state
     assert restored == [state]
+
+
+def test_native_runtime_rejects_resume_with_changed_compile_mode():
+    runtime = object.__new__(native_runtime.TorchTPURuntime)
+    runtime._precision = "fp32"
+    runtime._compile_enabled = True
+
+    with pytest.raises(ValueError, match="compile mode does not match"):
+        runtime.load_state_dict(
+            {
+                "backend": "torchtpu",
+                "world_size": 1,
+                "precision": "fp32",
+                "compile_enabled": False,
+                "device_rng_state": object(),
+            }
+        )
 
 
 def test_native_runtime_seeds_active_torch_backend(monkeypatch):
@@ -122,7 +175,9 @@ def test_native_runtime_rejects_incompatible_or_incomplete_rng_state(monkeypatch
     with pytest.raises(ValueError, match="created by the native"):
         runtime.load_state_dict({"backend": "cpu"})
     with pytest.raises(ValueError, match="missing device RNG"):
-        runtime.load_state_dict({"backend": "torchtpu", "world_size": 1})
+        runtime.load_state_dict(
+            {"backend": "torchtpu", "world_size": 1, "precision": "fp32"}
+        )
 
 
 def test_native_runtime_refuses_checkpoint_without_rng_capture_api(monkeypatch):
