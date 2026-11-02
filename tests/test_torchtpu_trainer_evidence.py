@@ -34,6 +34,7 @@ def successful_process(*, compile_requested=False, resume_requested=False):
         "precision": "fp32",
         "training": {
             "max_steps": 1000, "learning_rate": 0.0003,
+            "logging_steps": 10,
             "weight_decay": 0.1, "lr_scheduler_type": "cosine",
             "warmup_steps": 100, "gradient_accumulation_steps": 8,
             "per_device_train_batch_size": 1,
@@ -183,6 +184,7 @@ class TrainerEvidenceTests(unittest.TestCase):
         self.assertEqual(report["status"], "passed")
         self.assertEqual(report["precision"], "bf16")
         self.assertEqual(report["training"]["max_steps"], 1000)
+        self.assertEqual(report["training"]["logging_steps"], 10)
         self.assertEqual(report["training"]["lr_scheduler_type"], "cosine")
         self.assertTrue(report["training"]["gradient_checkpointing"])
         self.assertEqual(report["training"]["nominal_tokens_per_update"], 1024)
@@ -224,6 +226,7 @@ class TrainerEvidenceTests(unittest.TestCase):
                           {"per_device_train_batch_size": 0},
                           {"nominal_tokens_per_update": 999},
                           {"nominal_supervised_tokens_per_update": 999},
+                          {"logging_steps": 0},
                           {"gradient_checkpointing": "true"},
                           {"seed": True}):
             with self.subTest(overrides=overrides):

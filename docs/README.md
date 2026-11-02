@@ -17,9 +17,9 @@ from the training split; PR #35 builds GPT-2 from an explicit local config;
 PR #36 adds a pinned user-selected HF corpus and split/text-column settings.
 PR #37 adds opt-in BF16 autocast and precision reporting; PR #38 adds learning
 rate, weight decay, warmup, and seed controls; PR #39 adds opt-in gradient
-checkpointing; PR #40 adds per-device batch sizes and nominal token reporting.
-This iteration lets scratch runs target supervised next-token counts and
-reports actual tokens consumed.
+checkpointing; PR #40 adds per-device batch sizes; PR #41 adds supervised-token
+budgets and actual token counts. This iteration makes loss logging cadence
+configurable while retaining a final loss snapshot.
 These checks do not certify TPU support or end-to-end convergence. PR #20
 closed T0.2.
 T1 software probes cover shared hardware and capability discovery, dependency

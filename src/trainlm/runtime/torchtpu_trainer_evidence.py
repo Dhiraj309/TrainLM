@@ -115,6 +115,14 @@ def build_trainer_report(
                 batch_fields_present = [name in raw_training for name in batch_fields]
             else:
                 batch_fields_present = []
+            logging_steps_present = (
+                isinstance(raw_training, dict) and "logging_steps" in raw_training
+            )
+            logging_steps_valid = (
+                not logging_steps_present
+                or (type(raw_training.get("logging_steps")) is int
+                    and raw_training["logging_steps"] > 0)
+            )
             batch_fields_valid = (
                 not any(batch_fields_present)
                 or (
@@ -200,6 +208,7 @@ def build_trainer_report(
                     batch_fields_valid = False
             if (not integers_valid or not numbers_valid
                     or not batch_fields_valid
+                    or not logging_steps_valid
                     or not isinstance(schedule, str)
                     or schedule not in {"constant", "cosine"}
                     or type(gradient_checkpointing) is not bool):
@@ -224,6 +233,8 @@ def build_trainer_report(
                     training["supervised_tokens_seen"] = supervised_tokens_seen
                 if target_supervised_tokens is not None:
                     training["target_supervised_tokens"] = target_supervised_tokens
+                if logging_steps_present:
+                    training["logging_steps"] = raw_training["logging_steps"]
         normalize = runpy.run_path(str(Path(__file__).with_name(
             "torchtpu_discovery.py")))["normalize_worker_report"]
         device = normalize(summary.get("device"))

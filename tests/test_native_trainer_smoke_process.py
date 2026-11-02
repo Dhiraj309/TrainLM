@@ -141,6 +141,7 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         self.assertIn("--per-device-train-batch-size", result.stdout)
         self.assertIn("--per-device-eval-batch-size", result.stdout)
         self.assertIn("--learning-rate", result.stdout)
+        self.assertIn("--logging-steps", result.stdout)
         self.assertIn("--weight-decay", result.stdout)
         self.assertIn("--warmup-steps", result.stdout)
         self.assertIn("--seed", result.stdout)
@@ -205,6 +206,7 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         cases = (
             ("--learning-rate", "-1", "learning_rate must be finite and positive"),
             ("--weight-decay", "-0.1", "weight_decay must be finite and non-negative"),
+            ("--logging-steps", "0", "logging_steps must be a positive integer"),
             ("--warmup-steps", "-1", "warmup_steps must be a non-negative integer"),
             ("--warmup-steps", "4", "warmup_steps must not exceed max_steps"),
             ("--seed", "-1", "seed must be a non-negative integer"),
@@ -343,6 +345,8 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         self.assertIn("--target-supervised-tokens", source)
         self.assertIn("--per-device-train-batch-size", source)
         self.assertIn("--per-device-eval-batch-size", source)
+        self.assertIn("LOGGING_STEPS = 10", source)
+        self.assertIn("--logging-steps", source)
         self.assertIn("supervised next-token targets", markdown)
         self.assertIn("LEARNING_RATE = 3e-4", source)
         self.assertIn("WEIGHT_DECAY = 0.1", source)

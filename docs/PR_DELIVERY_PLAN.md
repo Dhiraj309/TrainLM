@@ -39,12 +39,12 @@ approvals. T2 integrates the report into backend selection and the public UX.
 
 ## PR-by-PR serial execution
 
-**Current sequence:** PR #39 added opt-in gradient checkpointing → PR #40
-rebase-merged per-device batch controls and nominal token reporting at verified
-`main` SHA `d7359bc20d5fa2af800c113b2e85779b6987f2f4`, with CI passing. The
-active `feat/14-token-budgeted-pretraining` branch lets users specify a
-supervised next-token target and records actual tokens consumed. The old
-numbered cards below do not set this order.
+**Current sequence:** PR #40 added per-device batch controls → PR #41
+rebase-merged supervised-token budgets at verified `main` SHA
+`a24514a7693e918c1c10c8a84c705399fa3b3bcf`, with CI passing. The active
+`perf/15-sparse-training-logging` branch exposes the loss logging cadence and
+keeps a final loss snapshot at the stop boundary. The old numbered cards below
+do not set this order.
 
 - A **PR-plan number** is a planned delivery slot, not a GitHub PR number.
   GitHub assigns its own PR number on creation. Do not create the next branch

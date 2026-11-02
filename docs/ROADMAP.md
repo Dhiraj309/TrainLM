@@ -36,13 +36,14 @@ TorchTPU support. “Implemented” means present in that historical code path;
   `31aa3acd06bf89c9430615103ebd4dd0da46ae6c`; PR #38 added optimizer settings
   at `357cac307bfaf94b4bcf4c55ed53c9fb99815cc8`; PR #39 added activation
   checkpointing at `df0a9ff562e48b67ae4ea48dbe10abe565137f4b`. PR #40 merged
-  per-device batch sizes and nominal token reporting at
-  `d7359bc20d5fa2af800c113b2e85779b6987f2f4`; its GitHub pytest workflow
-  passed. The active `feat/14-token-budgeted-pretraining` branch adds a
-  supervised-token target for scratch training and reports actual consumption.
-  Sixteen dependency-free launcher/notebook checks, 11 evidence tests,
-  compilation and notebook parsing pass locally; the CPU training integration
-  test awaits branch CI. BF16 and checkpointing remain unvalidated on TPU. T1 source-level
+  per-device batch sizes at `d7359bc20d5fa2af800c113b2e85779b6987f2f4`; PR #41
+  merged supervised-token budgets at
+  `a24514a7693e918c1c10c8a84c705399fa3b3bcf`, with CI passing. The active
+  `perf/15-sparse-training-logging` branch makes scratch loss logging
+  configurable and preserves a final loss snapshot. Sixteen dependency-free
+  launcher/notebook checks, 11 evidence tests, compilation and notebook parsing
+  pass locally; the trainer pytest regression awaits branch CI. BF16 and
+  checkpointing remain unvalidated on TPU. T1 source-level
   probes and the explicit `native_tpu` path are implemented; owner-run compile,
   lifecycle and v5e-8 collective evidence remain pending. Hosted Kaggle currently documents
   v5e-8 and hosted Colab TPU v2, so neither is the v5e-1 target; use a
@@ -171,10 +172,10 @@ TorchTPU support. “Implemented” means present in that historical code path;
   separate validation split. PR #35 builds its GPT-2 config locally from
   explicit dimensions; PR #36 allows other pinned HF text datasets; PR #37
   exposes opt-in BF16; PR #38 adds optimizer schedule and seed controls; PR #39
-  adds opt-in activation checkpointing; PR #40 adds per-device batch sizes. The
-  active branch supports a supervised next-token target or explicit optimizer
-  step count and reports actual supervised tokens consumed. The default recipe
-  targets 1,000,000 next-token targets, with gradient
+  adds opt-in activation checkpointing; PR #40 adds per-device batch sizes; PR
+  #41 adds supervised-token targets and reports actual consumption. The active
+  branch exposes logging cadence and preserves the final loss snapshot. The
+  default recipe targets 1,000,000 next-token targets, with gradient
   accumulation, periodic checkpoints, evaluation, and HF export. It checks for
   the optional `datasets` package before fetching data. This is a small-scale
   pretraining implementation; native TPU execution and convergence remain

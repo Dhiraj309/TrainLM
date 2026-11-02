@@ -292,7 +292,9 @@ class Trainer:
             "materialize_loss_every_steps",
             1,
         )
-        return self.state.step % interval == 0
+        # Always retain a final loss/gradient snapshot, even when the run ends
+        # between logging intervals or a token budget stops mid-accumulation.
+        return self.state.step % interval == 0 or self._should_stop()
 
     def _update_accumulated_state(
         self,

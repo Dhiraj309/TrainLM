@@ -379,16 +379,16 @@ def test_training_emits_sparse_materialized_metrics():
     assert isinstance(callback.metrics[0]["loss"], float)
 
 
-def test_callbacks_do_not_extract_live_scalars_between_logging_steps(monkeypatch):
-    class ThreeStepTrainerConfig(DummyTrainerConfig):
-        max_steps = 3
+def test_sparse_logging_materializes_at_cadence_and_on_the_terminal_step(monkeypatch):
+    class FourStepTrainerConfig(DummyTrainerConfig):
+        max_steps = 4
         materialize_loss_every_steps = 3
 
     class SparseLoggingConfig:
         log_every_steps = 3
 
     class SparseConfig:
-        trainer = ThreeStepTrainerConfig()
+        trainer = FourStepTrainerConfig()
         logging = SparseLoggingConfig()
 
     class StateRecordingCallback(TrainerCallback):
@@ -418,7 +418,7 @@ def test_callbacks_do_not_extract_live_scalars_between_logging_steps(monkeypatch
         # trainer scalar snapshots, not DataLoader's iterator seed extraction.
         train_dataloader=[
             {"input_ids": torch.randn(2, 4)}
-            for _ in range(ThreeStepTrainerConfig.max_steps)
+            for _ in range(FourStepTrainerConfig.max_steps)
         ],
         callbacks=(callback,),
     )
@@ -434,11 +434,12 @@ def test_callbacks_do_not_extract_live_scalars_between_logging_steps(monkeypatch
 
     trainer.train()
 
-    # The logged loss and gradient norm are each materialized once, together
-    # at the configured cadence; no scalar is extracted on earlier steps.
-    assert item_calls == 2
+    # The logged loss and gradient norm are materialized at step three and
+    # once more at the terminal step; intermediate steps stay asynchronous.
+    assert item_calls == 4
     assert callback.step_losses[:2] == [None, None]
     assert isinstance(callback.step_losses[2], float)
+    assert isinstance(callback.step_losses[3], float)
     assert len(callback.metrics) == 1
     assert all(isinstance(value, float) for value in callback.metrics[0].values())
     assert callback.metrics[0]["step"] == 3.0

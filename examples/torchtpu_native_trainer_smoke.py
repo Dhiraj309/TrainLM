@@ -256,6 +256,7 @@ def run_smoke(
     target_supervised_tokens: int | None = None, train_examples: int = 16,
     sequence_length: int = 64, save_steps: int | None = None,
     eval_examples: int = 128, max_eval_batches: int = 20,
+    logging_steps: int = 10,
     gradient_accumulation_steps: int = 1, tokenizer_vocab_size: int = 16000,
     model_embedding_size: int = 768, model_layers: int = 6,
     model_attention_heads: int = 12,
@@ -275,6 +276,12 @@ def run_smoke(
         raise ValueError(
             "Sequence length must be at least two and accumulation positive."
         )
+    if (
+        isinstance(logging_steps, bool)
+        or not isinstance(logging_steps, int)
+        or logging_steps < 1
+    ):
+        raise ValueError("logging_steps must be a positive integer.")
     if from_scratch and min(train_examples, eval_examples, max_eval_batches) < 1:
         raise ValueError("Scratch training/evaluation dataset sizes must be positive.")
     for name, value in (
@@ -504,7 +511,7 @@ def run_smoke(
         learning_rate=resolved_learning_rate,
         lr_scheduler_type="cosine" if from_scratch else "constant",
         warmup_steps=resolved_warmup_steps,
-        logging_steps=1,
+        logging_steps=logging_steps,
         gradient_accumulation_steps=gradient_accumulation_steps,
         save_steps=save_steps,
         eval_steps=max(1, max_steps // 10) if from_scratch else None,
@@ -648,6 +655,7 @@ def run_smoke(
         "precision": "bf16" if bf16 else "fp32",
         "training": {
             "max_steps": max_steps,
+            "logging_steps": logging_steps,
             **({"target_supervised_tokens": target_supervised_tokens}
                if target_supervised_tokens is not None else {}),
             "supervised_tokens_seen": int(state.tokens_seen),
@@ -706,6 +714,7 @@ def main() -> int:
     parser.add_argument("--save-steps", type=int)
     parser.add_argument("--eval-examples", type=int, default=128)
     parser.add_argument("--max-eval-batches", type=int, default=20)
+    parser.add_argument("--logging-steps", type=int, default=10)
     parser.add_argument("--gradient-accumulation-steps", type=int, default=1)
     parser.add_argument("--per-device-train-batch-size", type=int, default=1)
     parser.add_argument("--per-device-eval-batch-size", type=int, default=1)
@@ -738,6 +747,7 @@ def main() -> int:
         train_examples=args.train_examples, sequence_length=args.sequence_length,
         save_steps=args.save_steps, eval_examples=args.eval_examples,
         max_eval_batches=args.max_eval_batches,
+        logging_steps=args.logging_steps,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         train_batch_size=args.per_device_train_batch_size,
         eval_batch_size=args.per_device_eval_batch_size,
