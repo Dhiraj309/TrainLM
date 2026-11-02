@@ -15,8 +15,11 @@ TorchTPU support. “Implemented” means present in that historical code path;
 - **Historical product:** Hugging Face-native dense autoregressive training
 - **Historical TPU backend:** PyTorch/XLA
 - **Current target:** Native TorchTPU on Cloud TPU; not yet verified
-- **Current gate:** T0 is closed; PR #20 merged the T0.2 mapping. T1 begins
-  with v5e-1 single-device feasibility. Hosted Kaggle currently documents
+- **Current gate:** T0 is closed; PR #20 merged the T0.2 mapping. PR #28 merged
+  the native single-device software foundation and starter pretraining notebook
+  with merge commit `860bb289bf35444d8d435cf41caf51bcf77afaaf`. T1 source-level
+  probes and the explicit `native_tpu` path are implemented; owner-run compile,
+  lifecycle and v5e-8 collective evidence remain pending. Hosted Kaggle currently documents
   v5e-8 and hosted Colab TPU v2, so neither is the v5e-1 target; use a
   one-chip Cloud TPU v5e VM. Use v5e-8 for multi-device checks.
   The [v5e-1 probe notebook (open in Colab)](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/docs/01-t1-v5e1-probe/notebooks/TorchTPU_T1_v5e1_Probe.ipynb) and
@@ -143,10 +146,12 @@ TorchTPU support. “Implemented” means present in that historical code path;
   accumulation, periodic checkpoints, evaluation, and HF export. It checks for
   the optional `datasets` package before fetching data. This is a small-scale
   pretraining implementation; native TPU execution and convergence remain
-  unverified.
-  The first PR CI run executed 804 tests (802 passed, two failed on native
-  runtime test-fixture assumptions). A follow-up repairs the mock target and
-  runtime setup; merging remains gated on the complete rerun.
+  unverified. PR #28's final CI run passed all 804 tests after a follow-up
+  corrected two native-runtime test fixtures; the PR was merged with the SHA
+  above. The current `feat/02-packed-pretraining-data` T3 iteration writes
+  pinned streaming text to validated uint32 packed shards and trains through
+  the existing `PackedBinDataset` reader; CI and owner-run TPU validation are
+  pending.
   Continue only behind explicit experimental selection until CPU and owner-run
   TPU checks pass.
 

@@ -39,11 +39,14 @@ approvals. T2 integrates the report into backend selection and the public UX.
 
 ## PR-by-PR serial execution
 
-**Current sequence:** T0.2 is merged → establish T1 feasibility on v5e-1 for
-single-device behavior, using v5e-8 for checks that require multiple devices
-→ approve the first code deliverable from
-verified `main` → review/test/merge → verify `main` → then activate the next
-approved deliverable. The old numbered cards below do not set this order.
+**Current sequence:** T0.2 is merged → PR #28 merged the source-level native
+single-device foundation from verified `main`; hardware evidence still gates
+T1 closure. The owner authorized T3 data implementation while TPU slots are
+scarce. Plan 02's packed pretraining-data scope starts from verified `main` at
+`860bb289bf35444d8d435cf41caf51bcf77afaaf` and is active on
+`feat/02-packed-pretraining-data`; GitHub assigns its PR number when opened.
+Review/test/merge → verify updated `main` → then activate the next approved
+deliverable. The old numbered cards below do not set this order.
 
 - A **PR-plan number** is a planned delivery slot, not a GitHub PR number.
   GitHub assigns its own PR number on creation. Do not create the next branch

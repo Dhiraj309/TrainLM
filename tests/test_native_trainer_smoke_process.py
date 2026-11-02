@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+import runpy
 import subprocess
 import sys
 import unittest
@@ -13,6 +14,26 @@ NOTEBOOK = ROOT / "notebooks/TrainLM_Native_TorchTPU_Single_Device_Training.ipyn
 
 
 class NativeTrainerSmokeProcessTests(unittest.TestCase):
+    def test_from_scratch_tokenizer_preserves_eos_document_boundaries(self):
+        class FakeTokenizer:
+            eos_token_id = 99
+
+            def __call__(self, texts, *, add_special_tokens, truncation):
+                self.assert_options = (add_special_tokens, truncation)
+                return {"input_ids": [[ord(text[0])] for text in texts]}
+
+        tokenizer = FakeTokenizer()
+        token_documents = runpy.run_path(str(SCRIPT))["_token_documents"]
+        rows = list(token_documents(
+            [{"text": "a"}, {"text": "b"}, {"text": "c"}],
+            tokenizer,
+            max_examples=2,
+            batch_size=1,
+        ))
+
+        self.assertEqual(rows, [[ord("a"), 99], [ord("b"), 99]])
+        self.assertEqual(tokenizer.assert_options, (False, False))
+
     def test_help_does_not_initialize_torch(self):
         result = subprocess.run(
             [sys.executable, str(SCRIPT), "--help"],
