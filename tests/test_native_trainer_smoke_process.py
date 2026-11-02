@@ -137,6 +137,8 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         self.assertIn("--model-attention-heads", result.stdout)
         self.assertIn("--bf16", result.stdout)
         self.assertIn("--gradient-checkpointing", result.stdout)
+        self.assertIn("--per-device-train-batch-size", result.stdout)
+        self.assertIn("--per-device-eval-batch-size", result.stdout)
         self.assertIn("--learning-rate", result.stdout)
         self.assertIn("--weight-decay", result.stdout)
         self.assertIn("--warmup-steps", result.stdout)
@@ -217,6 +219,18 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
                 self.assertIn(message, result.stderr)
                 self.assertNotIn("No module named 'torch_tpu'", result.stderr)
 
+    def test_invalid_batch_sizes_fail_before_torch_import(self):
+        for flag in ("--per-device-train-batch-size", "--per-device-eval-batch-size"):
+            with self.subTest(flag=flag):
+                result = subprocess.run(
+                    [sys.executable, str(SCRIPT), "--output-dir", "/tmp/unused",
+                     "--from-scratch", flag, "0"],
+                    capture_output=True, text=True,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("must be a positive integer", result.stderr)
+                self.assertNotIn("No module named 'torch_tpu'", result.stderr)
+
     def test_scratch_dataset_source_accepts_custom_column_and_distinct_splits(self):
         validate = runpy.run_path(str(SCRIPT))["_validate_scratch_dataset_source"]
         validate(
@@ -268,6 +282,11 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         self.assertIn("command.append(\"--bf16\")", source)
         self.assertIn("USE_GRADIENT_CHECKPOINTING = False", source)
         self.assertIn("command.append(\"--gradient-checkpointing\")", source)
+        self.assertIn("TRAIN_BATCH_SIZE = 1", source)
+        self.assertIn("EVAL_BATCH_SIZE = 1", source)
+        self.assertIn("--per-device-train-batch-size", source)
+        self.assertIn("--per-device-eval-batch-size", source)
+        self.assertIn("nominal tokens per update", markdown)
         self.assertIn("LEARNING_RATE = 3e-4", source)
         self.assertIn("WEIGHT_DECAY = 0.1", source)
         self.assertIn("WARMUP_STEPS = None", source)

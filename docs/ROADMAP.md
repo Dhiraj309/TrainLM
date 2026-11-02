@@ -34,9 +34,12 @@ TorchTPU support. “Implemented” means present in that historical code path;
   config; PR #36 added pinned custom corpus selection at verified `main`
   `d075987574fe471d1b9159315a0688416664f2ba`; PR #37 added opt-in BF16 at
   `31aa3acd06bf89c9430615103ebd4dd0da46ae6c`; PR #38 added optimizer settings
-  at `357cac307bfaf94b4bcf4c55ed53c9fb99815cc8`. The active
-  `feat/12-scratch-gradient-checkpointing` branch adds opt-in activation
-  checkpointing. BF16 and checkpointing remain unvalidated on TPU. T1 source-level
+  at `357cac307bfaf94b4bcf4c55ed53c9fb99815cc8`; PR #39 added activation
+  checkpointing at `df0a9ff562e48b67ae4ea48dbe10abe565137f4b`. The active
+  `feat/13-scratch-batch-config` branch exposes batch sizes and nominal tokens
+  per update; 14 dependency-free launcher/notebook checks, 10 evidence tests,
+  compilation and notebook parsing pass locally, with branch CI pending. BF16
+  and checkpointing remain unvalidated on TPU. T1 source-level
   probes and the explicit `native_tpu` path are implemented; owner-run compile,
   lifecycle and v5e-8 collective evidence remain pending. Hosted Kaggle currently documents
   v5e-8 and hosted Colab TPU v2, so neither is the v5e-1 target; use a
@@ -164,8 +167,9 @@ TorchTPU support. “Implemented” means present in that historical code path;
   tokenizer from the pinned TinyStories training split, then evaluates on the
   separate validation split. PR #35 builds its GPT-2 config locally from
   explicit dimensions; PR #36 allows other pinned HF text datasets; PR #37
-  exposes opt-in BF16; PR #38 adds optimizer schedule and seed controls. The
-  active branch exposes gradient checkpointing for memory experiments.
+  exposes opt-in BF16; PR #38 adds optimizer schedule and seed controls; PR #39
+  adds opt-in activation checkpointing. The active branch exposes batch-size
+  controls for token-volume experiments.
   The default recipe uses 1,000 steps, gradient
   accumulation, periodic checkpoints, evaluation, and HF export. It checks for
   the optional `datasets` package before fetching data. This is a small-scale

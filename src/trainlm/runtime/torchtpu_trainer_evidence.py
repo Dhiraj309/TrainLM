@@ -107,6 +107,25 @@ def build_trainer_report(
             integer_fields = (
                 "max_steps", "warmup_steps", "gradient_accumulation_steps", "seed"
             )
+            batch_fields = (
+                "per_device_train_batch_size", "per_device_eval_batch_size",
+                "sequence_length",
+            )
+            if isinstance(raw_training, dict):
+                batch_fields_present = [name in raw_training for name in batch_fields]
+            else:
+                batch_fields_present = []
+            batch_fields_valid = (
+                not any(batch_fields_present)
+                or (
+                    all(batch_fields_present)
+                    and all(
+                        type(raw_training.get(name)) is int
+                        and raw_training[name] > 0
+                        for name in batch_fields
+                    )
+                )
+            )
             integers_valid = isinstance(raw_training, dict) and all(
                 type(raw_training.get(name)) is int
                 and raw_training[name] >= (
@@ -128,7 +147,20 @@ def build_trainer_report(
             except (OverflowError, TypeError, ValueError):
                 safe_lr = safe_decay = 0.0
                 numbers_valid = False
+            nominal_tokens_per_update = None
+            if batch_fields_valid and integers_valid and all(batch_fields_present):
+                nominal_tokens_per_update = (
+                    raw_training["sequence_length"]
+                    * raw_training["per_device_train_batch_size"]
+                    * raw_training["gradient_accumulation_steps"]
+                )
+                reported_nominal = raw_training.get("nominal_tokens_per_update")
+                if (reported_nominal is not None
+                        and (type(reported_nominal) is not int
+                             or reported_nominal != nominal_tokens_per_update)):
+                    batch_fields_valid = False
             if (not integers_valid or not numbers_valid
+                    or not batch_fields_valid
                     or not isinstance(schedule, str)
                     or schedule not in {"constant", "cosine"}
                     or type(gradient_checkpointing) is not bool):
@@ -141,6 +173,11 @@ def build_trainer_report(
                     "lr_scheduler_type": schedule,
                     "gradient_checkpointing": gradient_checkpointing,
                 })
+                if nominal_tokens_per_update is not None:
+                    training.update({
+                        name: raw_training[name] for name in batch_fields
+                    })
+                    training["nominal_tokens_per_update"] = nominal_tokens_per_update
         normalize = runpy.run_path(str(Path(__file__).with_name(
             "torchtpu_discovery.py")))["normalize_worker_report"]
         device = normalize(summary.get("device"))
