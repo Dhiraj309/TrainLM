@@ -119,6 +119,11 @@ TorchTPU support. “Implemented” means present in that historical code path;
   deterministic data order, and a constant learning rate. It checks that the
   fourth step changes weights and that all final tensors match exactly; the
   target TPU comparison remains owner-run.
+  The notebook now launches its native trainer smoke in a child process with
+  a 900-second eager or 1800-second compile/resume limit. The existing process
+  harness reaps the process group on timeout or interruption, rejects fatal
+  teardown markers, and keeps raw logs in a local session directory. The
+  parent notebook does not initialize TorchTPU.
   Continue only behind explicit experimental selection until CPU and owner-run
   TPU checks pass.
 

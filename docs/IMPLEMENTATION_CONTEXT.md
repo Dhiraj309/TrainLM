@@ -139,6 +139,14 @@
   parameters and data, and a constant scheduler. It requires a real fourth
   update and exact final tensor equality. This workspace lacks PyTorch and
   pytest, so the new test awaits execution in a provisioned CPU environment.
+  The native training notebook now delegates discovery, HF model loading,
+  training, optional compile/resume, and export to
+  `examples/torchtpu_native_trainer_smoke.py` in a bounded child process.
+  The parent reuses the T1 process-group timeout/cleanup helper (900 seconds
+  for eager, 1800 seconds for compile or resume), writes raw logs only to a
+  local session directory, and prints bounded status fields. Source-level
+  tests verify the parent does not import TorchTPU and that incompatible modes
+  fail before hardware initialization. No owner TPU run has been reported.
 - `trainlm doctor` adds a one-command read-only package/runtime report to the
   CLI, reusing the T1 profile and hardware discovery contracts. From a source
   checkout it records the Git revision; an installed wheel uses its declared
