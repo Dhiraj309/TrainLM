@@ -104,6 +104,30 @@ class TrainerEvidenceTests(unittest.TestCase):
         self.assertIsNone(report["device"])
         self.assertNotIn("private", json.dumps(report))
 
+    def test_scratch_model_dataset_and_metrics_are_sanitized(self):
+        process = successful_process()
+        lines = process["stdout"].splitlines()
+        index = next(i for i, line in enumerate(lines)
+                     if line.startswith("trainer_summary="))
+        summary = json.loads(lines[index].split("=", 1)[1])
+        summary["model"] = {
+            "id": "distilbert/distilgpt2", "revision": "b" * 40,
+            "initialization": "random_from_config", "parameter_count": 82000000,
+        }
+        summary["dataset"] = {
+            "id": "roneneldan/TinyStories", "revision": "c" * 40,
+            "train_examples": 10000, "validation_examples": 1000,
+        }
+        summary["metrics"] = {"final_train_loss": 4.2, "eval_loss": 3.8,
+                              "eval_perplexity": 44.7, "secret": "omit"}
+        lines[index] = "trainer_summary=" + json.dumps(summary)
+        report = self.report({**process, "stdout": "\n".join(lines)})
+        self.assertEqual(report["status"], "passed")
+        self.assertEqual(report["model"]["initialization"], "random_from_config")
+        self.assertEqual(report["dataset"]["validation_examples"], 1000)
+        self.assertEqual(report["metrics"]["eval_loss"], 3.8)
+        self.assertNotIn("secret", json.dumps(report))
+
 
 if __name__ == "__main__":
     unittest.main()

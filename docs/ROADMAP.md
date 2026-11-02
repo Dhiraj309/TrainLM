@@ -137,6 +137,13 @@ TorchTPU support. “Implemented” means present in that historical code path;
   The trainer smoke pins `distilbert/distilgpt2` and its tokenizer to Hub commit
   `2290a62682d06624634c1f46a6ad5be0f47f38aa`; the downloadable evidence records
   that model revision for repeatable runs. No TPU trainer result is claimed.
+  A separate Colab notebook now builds random model weights from that pinned
+  architecture config and trains them on pinned TinyStories train and
+  validation splits. The default recipe uses 1,000 steps, gradient
+  accumulation, periodic checkpoints, evaluation, and HF export. It checks for
+  the optional `datasets` package before fetching data. This is a small-scale
+  pretraining implementation; native TPU execution and convergence remain
+  unverified.
   Continue only behind explicit experimental selection until CPU and owner-run
   TPU checks pass.
 

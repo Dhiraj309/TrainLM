@@ -165,6 +165,14 @@
   tokenizer loads to Hub commit `2290a62682d06624634c1f46a6ad5be0f47f38aa`.
   Its bounded evidence report records the model ID and full revision SHA, so
   resumed and reference runs use the same source snapshot.
+  A separate [Colab notebook](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb)
+  constructs that GPT-2 architecture through `from_config`, so weights start
+  random, then tokenizes pinned TinyStories train/validation splits, evaluates,
+  saves periodic checkpoints, and exports through TrainLM. The dataset commit
+  is `f54c09fd23315a6f9c86f9dc80f725de7d8f9c64`; the package gate requires the
+  optional `datasets` distribution before download. This source-level path has
+  not run on TPU and does not establish convergence, throughput, or a
+  production-scale recipe.
 - `trainlm doctor` adds a one-command read-only package/runtime report to the
   CLI, reusing the T1 profile and hardware discovery contracts. From a source
   checkout it records the Git revision; an installed wheel uses its declared

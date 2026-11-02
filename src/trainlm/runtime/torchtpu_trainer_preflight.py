@@ -12,7 +12,7 @@ from typing import Any, Mapping
 
 _VERSION = re.compile(r"[A-Za-z0-9._+\-]{1,96}\Z")
 _PACKAGES = ("torch", "torch-tpu", "libtpu", "transformers",
-             "huggingface-hub", "pyyaml")
+             "huggingface-hub", "pyyaml", "datasets")
 _TRAINING_STACK = set(_PACKAGES) | {"trainlm"}
 _KNOWN_ISSUES = {
     "source_python_mismatch", "torch_tpu_python_mismatch",
@@ -21,7 +21,9 @@ _KNOWN_ISSUES = {
 }
 
 
-def assess_trainer_profile(profile: Mapping[str, Any]) -> dict[str, Any]:
+def assess_trainer_profile(
+    profile: Mapping[str, Any], *, require_datasets: bool = False,
+) -> dict[str, Any]:
     """Allow only a narrow, explicit source-Torch mismatch experiment.
 
     An unrelated, fully parsed pip conflict may coexist with that experiment;
@@ -29,6 +31,7 @@ def assess_trainer_profile(profile: Mapping[str, Any]) -> dict[str, Any]:
     """
     issues = profile.get("issues")
     versions = profile.get("installed_versions")
+    optional_versions = profile.get("optional_versions")
     source_checks = profile.get("source_requirements")
     upstream_checks = profile.get("torch_tpu_requirements")
     pip_check = profile.get("pip_check")
@@ -42,20 +45,26 @@ def assess_trainer_profile(profile: Mapping[str, Any]) -> dict[str, Any]:
             or not isinstance(issues, list)
             or any(issue not in _KNOWN_ISSUES for issue in issues)
             or not isinstance(versions, dict)
+            or not isinstance(optional_versions, dict)
             or not isinstance(source_checks, list)
             or not isinstance(upstream_checks, list)
             or not isinstance(pip_check, dict)):
         reasons.append("invalid_profile")
         issues = []
         versions = {}
+        optional_versions = {}
         source_checks = []
         upstream_checks = []
         pip_check = {}
 
     installed_versions = {}
     for name in _PACKAGES:
-        version = versions.get(name)
+        version = (optional_versions.get(name)
+                   if name == "datasets" else versions.get(name))
         if not isinstance(version, str) or not _VERSION.fullmatch(version):
+            if name == "datasets" and not require_datasets:
+                installed_versions[name] = None
+                continue
             reasons.append("missing_or_invalid_package")
             installed_versions[name] = None
         else:
@@ -115,6 +124,8 @@ def assess_trainer_profile(profile: Mapping[str, Any]) -> dict[str, Any]:
     if profile.get("status") == "incompatible" and not issues:
         reasons.append("invalid_profile")
 
+    if type(require_datasets) is not bool:
+        reasons.append("invalid_preflight_options")
     status = ("blocked" if reasons else
               "experimental_mismatch" if source_torch_mismatch or pip_status == "conflicts"
               else "metadata_compatible")

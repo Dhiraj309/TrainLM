@@ -20,6 +20,8 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         )
         self.assertIn("--resume", result.stdout)
         self.assertIn("--compile", result.stdout)
+        self.assertIn("--from-scratch", result.stdout)
+        self.assertIn("--train-examples", result.stdout)
 
     def test_incompatible_modes_fail_before_torch_import(self):
         result = subprocess.run(
@@ -29,6 +31,16 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Run checkpoint/resume after the eager baseline", result.stderr)
+        self.assertNotIn("No module named 'torch_tpu'", result.stderr)
+
+    def test_invalid_scratch_step_count_fails_before_torch_import(self):
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--output-dir", "/tmp/unused",
+             "--from-scratch", "--max-steps", "0"],
+            capture_output=True, text=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("must be positive", result.stderr)
         self.assertNotIn("No module named 'torch_tpu'", result.stderr)
 
     def test_notebook_keeps_device_import_inside_bounded_child(self):

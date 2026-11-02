@@ -27,6 +27,7 @@ snapshot; `accelerator="native_tpu"` is the opt-in single-device prototype.
 - [Open T1 single-device probe directly in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/docs/01-t1-v5e1-probe/notebooks/TorchTPU_T1_v5e1_Probe.ipynb) · [view notebook source](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb)
 - [Open optional v5e-8 distributed probe directly in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/docs/01-t1-v5e1-probe/notebooks/TorchTPU_T1_v5e8_Distributed_Probe.ipynb) · [view notebook source](../notebooks/TorchTPU_T1_v5e8_Distributed_Probe.ipynb)
 - [Open experimental single-device training directly in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/feat/01-native-torchtpu-single-device-training/notebooks/TrainLM_Native_TorchTPU_Single_Device_Training.ipynb) · [view notebook source](../notebooks/TrainLM_Native_TorchTPU_Single_Device_Training.ipynb)
+- [Open native TorchTPU pretraining from scratch directly in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/feat/01-native-torchtpu-single-device-training/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) · [view notebook source](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb)
 
 ## Status meanings
 

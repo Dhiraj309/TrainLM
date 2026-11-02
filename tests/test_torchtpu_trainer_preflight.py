@@ -65,6 +65,14 @@ class TrainerPreflightTests(unittest.TestCase):
         upstream = self.profile(upstream=["torch<2.13", "libtpu>=0.0.50"])
         self.assertEqual(ASSESS(upstream)["status"], "blocked")
 
+    def test_scratch_mode_requires_optional_datasets_distribution(self):
+        missing = ASSESS(self.profile(), require_datasets=True)
+        self.assertEqual(missing["status"], "blocked")
+        supplied = self.profile({**self.versions, "datasets": "3.3.2"})
+        ready = ASSESS(supplied, require_datasets=True)
+        self.assertTrue(ready["proceed"])
+        self.assertEqual(ready["installed_versions"]["datasets"], "3.3.2")
+
     def test_training_stack_and_unparsed_pip_conflicts_block(self):
         def training_conflict(*args, **kwargs):
             return SimpleNamespace(

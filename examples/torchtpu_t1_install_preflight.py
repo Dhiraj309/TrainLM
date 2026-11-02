@@ -29,7 +29,7 @@ from packaging.version import InvalidVersion, Version
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGES = ("trainlm", "torch", "torch_tpu", "libtpu", "transformers", "huggingface-hub")
-OPTIONAL_PACKAGES = ("tpu-info", "torch-xla", "jax", "jaxlib")
+OPTIONAL_PACKAGES = ("datasets", "tpu-info", "torch-xla", "jax", "jaxlib")
 
 
 def _version(name: str, provider: object) -> str | None:

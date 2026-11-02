@@ -7,6 +7,7 @@ initialization. Raw child logs are deliberately excluded from its result.
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 import re
 import runpy
@@ -16,6 +17,7 @@ from typing import Any, Mapping
 _SHA = re.compile(r"[0-9a-f]{40}\Z")
 _SAFE_TEXT = re.compile(r"[A-Za-z0-9._+\-]{1,96}\Z")
 _MODEL_ID = re.compile(r"[A-Za-z0-9._-]{1,96}/[A-Za-z0-9._-]{1,96}\Z")
+_REPO_ID = re.compile(r"[A-Za-z0-9._-]{1,96}/[A-Za-z0-9._-]{1,96}\Z")
 _CHECKS = ("train", "export", "compile", "resume", "exact_weight_match")
 _MARKERS = {
     "train": "train=PASS", "export": "export=PASS",
@@ -77,6 +79,8 @@ def build_trainer_report(
     checks = {name: "unknown" for name in _CHECKS}
     device = None
     model = None
+    dataset = None
+    metrics = None
     packages = {name: None for name in _PACKAGES}
     if (isinstance(summary, dict)
             and type(summary.get("schema_version")) is int
@@ -99,6 +103,61 @@ def build_trainer_report(
                 issues.append("invalid_model_revision")
             else:
                 model = {"id": raw_model["id"], "revision": raw_model["revision"]}
+                initialization = raw_model.get("initialization")
+                if initialization is not None:
+                    if initialization not in {"pretrained", "random_from_config"}:
+                        issues.append("invalid_model_initialization")
+                        model = None
+                    else:
+                        model["initialization"] = initialization
+                parameter_count = raw_model.get("parameter_count")
+                if parameter_count is not None:
+                    if type(parameter_count) is not int or parameter_count < 1:
+                        issues.append("invalid_model_parameter_count")
+                        model = None
+                    else:
+                        model["parameter_count"] = parameter_count
+        raw_dataset = summary.get("dataset")
+        if raw_dataset is not None:
+            if (not isinstance(raw_dataset, dict)
+                    or not isinstance(raw_dataset.get("id"), str)
+                    or not _REPO_ID.fullmatch(raw_dataset["id"])
+                    or not isinstance(raw_dataset.get("revision"), str)
+                    or not _SHA.fullmatch(raw_dataset["revision"])
+                    or type(raw_dataset.get("train_examples")) is not int
+                    or raw_dataset["train_examples"] < 1):
+                issues.append("invalid_dataset_provenance")
+            else:
+                dataset = {
+                    "id": raw_dataset["id"],
+                    "revision": raw_dataset["revision"],
+                    "train_examples": raw_dataset["train_examples"],
+                }
+                validation_examples = raw_dataset.get("validation_examples")
+                if validation_examples is not None:
+                    if type(validation_examples) is not int or validation_examples < 1:
+                        issues.append("invalid_dataset_provenance")
+                        dataset = None
+                    else:
+                        dataset["validation_examples"] = validation_examples
+        raw_metrics = summary.get("metrics")
+        if raw_metrics is not None:
+            if not isinstance(raw_metrics, dict):
+                issues.append("invalid_metrics")
+            else:
+                safe_metrics = {}
+                for name in ("final_train_loss", "eval_loss", "eval_perplexity"):
+                    value = raw_metrics.get(name)
+                    if value is None:
+                        continue
+                    if (type(value) not in {int, float}
+                            or not math.isfinite(value)):
+                        issues.append("invalid_metrics")
+                        safe_metrics = {}
+                        break
+                    safe_metrics[name] = float(value)
+                if safe_metrics or not raw_metrics:
+                    metrics = safe_metrics
         raw_packages = summary.get("packages")
         if not isinstance(raw_packages, dict):
             issues.append("invalid_packages")
@@ -149,6 +208,8 @@ def build_trainer_report(
                     "cleanup_completed": cleanup_completed},
         "device": device,
         "model": model,
+        "dataset": dataset,
+        "metrics": metrics,
         "packages": packages,
         "checks": checks,
         "issues": sorted(set(issues)),
