@@ -128,6 +128,12 @@ TorchTPU support. “Implemented” means present in that historical code path;
   and phase outcomes; process exit, child summary, and phase markers must agree
   before the report passes. Raw logs remain local. This reporting path has
   source-level validation only; the owner has not run the native trainer smoke.
+  The notebook now runs the read-only T1 package checker before downloading
+  `distilgpt2`. It blocks missing or conflicting training-stack dependencies
+  and preserves a downloadable blocked report. The observed Colab Torch 2.14
+  source-range mismatch plus unrelated IPython/Jedi conflict is explicitly
+  labeled experimental, allowing the opt-in smoke without changing pins or
+  implying package support. This gate has source-level tests only.
   Continue only behind explicit experimental selection until CPU and owner-run
   TPU checks pass.
 

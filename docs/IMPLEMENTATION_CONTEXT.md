@@ -152,6 +152,15 @@
   A missing, malformed or duplicate summary cannot produce a pass. Raw logs
   and artifact paths stay local. This reporting path has source-level tests;
   no owner native trainer run has been reported.
+  Before the HF model download, the notebook reuses the read-only T1 installed
+  metadata checker and a trainer-specific classifier. Missing distributions,
+  TorchTPU requirement mismatches, training-stack `pip check` conflicts and
+  unclassified conflicts block the run and produce a shareable blocked report.
+  The owner-observed Torch 2.14 source-range mismatch and unrelated
+  IPython/Jedi conflict are marked `experimental_mismatch` and may proceed
+  through the explicit smoke; this does not approve the dependency profile.
+  No package installation or pin change is performed. The gate awaits an
+  owner Colab run; local validation is source-level only.
 - `trainlm doctor` adds a one-command read-only package/runtime report to the
   CLI, reusing the T1 profile and hardware discovery contracts. From a source
   checkout it records the Git revision; an installed wheel uses its declared
