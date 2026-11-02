@@ -79,6 +79,7 @@ def build_trainer_report(
 
     checks = {name: "unknown" for name in _CHECKS}
     device = None
+    precision = None
     model = None
     dataset = None
     metrics = None
@@ -86,6 +87,11 @@ def build_trainer_report(
     if (isinstance(summary, dict)
             and type(summary.get("schema_version")) is int
             and summary["schema_version"] == 1):
+        raw_precision = summary.get("precision", "fp32")
+        if isinstance(raw_precision, str) and raw_precision in {"fp32", "bf16"}:
+            precision = raw_precision
+        else:
+            issues.append("invalid_precision")
         normalize = runpy.run_path(str(Path(__file__).with_name(
             "torchtpu_discovery.py")))["normalize_worker_report"]
         device = normalize(summary.get("device"))
@@ -299,6 +305,7 @@ def build_trainer_report(
                     "error_type": error_type, "fatal_markers": fatal_markers,
                     "cleanup_completed": cleanup_completed},
         "device": device,
+        "precision": precision,
         "model": model,
         "dataset": dataset,
         "metrics": metrics,

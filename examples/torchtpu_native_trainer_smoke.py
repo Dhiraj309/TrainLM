@@ -182,6 +182,7 @@ def run_smoke(
     gradient_accumulation_steps: int = 1, tokenizer_vocab_size: int = 16000,
     model_embedding_size: int = 768, model_layers: int = 6,
     model_attention_heads: int = 12,
+    bf16: bool = False,
     dataset_id: str = DATASET_ID, dataset_revision: str = DATASET_REVISION,
     train_split: str = "train", validation_split: str = "validation",
     text_field: str = "text",
@@ -198,6 +199,8 @@ def run_smoke(
         raise ValueError("Scratch GPT-2 model dimensions must be positive.")
     if from_scratch and model_embedding_size % model_attention_heads:
         raise ValueError("model embedding size must be divisible by attention heads.")
+    if not isinstance(bf16, bool):
+        raise ValueError("bf16 must be a boolean.")
     if from_scratch:
         _validate_scratch_dataset_source(
             dataset_id=dataset_id,
@@ -367,7 +370,7 @@ def run_smoke(
         save_steps=save_steps,
         eval_steps=max(1, max_steps // 10) if from_scratch else None,
         max_eval_batches=max_eval_batches if from_scratch else None,
-        bf16=False,
+        bf16=bf16,
         torch_compile=compile_enabled,
     )
     parameter_count = sum(parameter.numel() for parameter in model.parameters())
@@ -484,6 +487,7 @@ def run_smoke(
         }
     print("trainer_summary=" + json.dumps({
         "schema_version": 1,
+        "precision": "bf16" if bf16 else "fp32",
         "model": model_summary,
         "dataset": dataset_info,
         "metrics": {
@@ -528,6 +532,10 @@ def main() -> int:
     parser.add_argument("--model-embedding-size", type=int, default=768)
     parser.add_argument("--model-layers", type=int, default=6)
     parser.add_argument("--model-attention-heads", type=int, default=12)
+    parser.add_argument(
+        "--bf16", action="store_true",
+        help="opt into bfloat16 autocast (experimental; off by default)",
+    )
     parser.add_argument("--dataset-id", default=DATASET_ID)
     parser.add_argument("--dataset-revision", default=DATASET_REVISION)
     parser.add_argument("--train-split", default="train")
@@ -545,6 +553,7 @@ def main() -> int:
         model_embedding_size=args.model_embedding_size,
         model_layers=args.model_layers,
         model_attention_heads=args.model_attention_heads,
+        bf16=args.bf16,
         dataset_id=args.dataset_id,
         dataset_revision=args.dataset_revision,
         train_split=args.train_split,
