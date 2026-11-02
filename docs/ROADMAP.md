@@ -123,7 +123,11 @@ TorchTPU support. “Implemented” means present in that historical code path;
   a 900-second eager or 1800-second compile/resume limit. The existing process
   harness reaps the process group on timeout or interruption, rejects fatal
   teardown markers, and keeps raw logs in a local session directory. The
-  parent notebook does not initialize TorchTPU.
+  parent notebook does not initialize TorchTPU. It now writes a downloadable
+  JSON report with source revision, package versions, normalized device facts,
+  and phase outcomes; process exit, child summary, and phase markers must agree
+  before the report passes. Raw logs remain local. This reporting path has
+  source-level validation only; the owner has not run the native trainer smoke.
   Continue only behind explicit experimental selection until CPU and owner-run
   TPU checks pass.
 

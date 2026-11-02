@@ -146,7 +146,12 @@
   for eager, 1800 seconds for compile or resume), writes raw logs only to a
   local session directory, and prints bounded status fields. Source-level
   tests verify the parent does not import TorchTPU and that incompatible modes
-  fail before hardware initialization. No owner TPU run has been reported.
+  fail before hardware initialization. The child now emits a bounded summary;
+  the parent validates its device, package versions, requested phases and pass
+  markers against process completion before writing a shareable JSON report.
+  A missing, malformed or duplicate summary cannot produce a pass. Raw logs
+  and artifact paths stay local. This reporting path has source-level tests;
+  no owner native trainer run has been reported.
 - `trainlm doctor` adds a one-command read-only package/runtime report to the
   CLI, reusing the T1 profile and hardware discovery contracts. From a source
   checkout it records the Git revision; an installed wheel uses its declared

@@ -6,6 +6,8 @@ from __future__ import annotations
 import argparse
 from dataclasses import replace
 import gc
+from importlib import metadata
+import json
 import math
 from pathlib import Path
 import sys
@@ -24,7 +26,7 @@ def run_smoke(output_dir: Path, *, compile_enabled: bool, resume: bool) -> None:
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
     from trainlm import TrainLMTrainer, TrainLMTrainingArguments
-    from trainlm.runtime.torchtpu_discovery import discover_tpu
+    from trainlm.runtime.torchtpu_discovery import discover_tpu, normalize_worker_report
 
     discovery = discover_tpu(torch, verify_allocation=True, include_properties=True)
     if discovery["status"] != "ready" or discovery["device_count_visible"] != 1:
@@ -130,6 +132,23 @@ def run_smoke(output_dir: Path, *, compile_enabled: bool, resume: bool) -> None:
         print("resume=PASS", flush=True)
         print("exact_weight_match=PASS", flush=True)
 
+    packages = {}
+    for name in ("torch", "torch_tpu", "libtpu", "transformers"):
+        try:
+            packages[name] = metadata.version(name)
+        except metadata.PackageNotFoundError:
+            packages[name] = None
+    print("trainer_summary=" + json.dumps({
+        "schema_version": 1,
+        "device": normalize_worker_report(discovery),
+        "packages": packages,
+        "checks": {
+            "train": "passed", "export": "passed",
+            "compile": "passed" if compile_enabled else "not_run",
+            "resume": "passed" if resume else "not_run",
+            "exact_weight_match": "passed" if resume else "not_run",
+        },
+    }, sort_keys=True), flush=True)
     print("result=trainer_smoke_passed", flush=True)
 
 
