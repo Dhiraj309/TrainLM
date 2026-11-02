@@ -11,10 +11,11 @@ single-device native TorchTPU path and a from-scratch starter workflow are
 implemented in PR #28. PR #29 merged the streamed uint32 packed-data path into
 the scratch workflow. PR #30 added passing CI coverage for packed-data update
 parity, PR #31 added the random-init GPT-2 train/eval/checkpoint/export CPU
-smoke, and PR #32 added exact packed-data checkpoint recovery with passing CI.
-The native from-scratch notebook is runnable from `main`; it uses random model
-weights with a pinned pretrained tokenizer. These checks do not certify TPU
-support or end-to-end convergence. PR #20 closed T0.2.
+smoke, PR #32 added exact packed-data checkpoint recovery, and PR #33 fixed
+active notebooks to load merged `main`. The active from-scratch notebook uses
+random model weights; this iteration adds a tokenizer trained from its training
+split. These checks do not certify TPU support or end-to-end convergence. PR
+#20 closed T0.2.
 T1 software probes cover shared hardware and capability discovery, dependency
 metadata and process lifecycle, and a distributed entry check; owner-run
 compile, lifecycle and v5e-8 collective evidence remain pending. Use v5e-1 for
