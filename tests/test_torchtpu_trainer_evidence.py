@@ -117,6 +117,10 @@ class TrainerEvidenceTests(unittest.TestCase):
         summary["dataset"] = {
             "id": "roneneldan/TinyStories", "revision": "c" * 40,
             "train_examples": 10000, "validation_examples": 1000,
+            "train_tokens": 1200000, "validation_tokens": 120000,
+            "train_documents": 10000, "validation_documents": 1000,
+            "train_shard_sha256": "d" * 64,
+            "validation_shard_sha256": "e" * 64,
         }
         summary["metrics"] = {"final_train_loss": 4.2, "eval_loss": 3.8,
                               "eval_perplexity": 44.7, "secret": "omit"}
@@ -125,6 +129,8 @@ class TrainerEvidenceTests(unittest.TestCase):
         self.assertEqual(report["status"], "passed")
         self.assertEqual(report["model"]["initialization"], "random_from_config")
         self.assertEqual(report["dataset"]["validation_examples"], 1000)
+        self.assertEqual(report["dataset"]["train_tokens"], 1200000)
+        self.assertEqual(report["dataset"]["train_shard_sha256"], "d" * 64)
         self.assertEqual(report["metrics"]["eval_loss"], 3.8)
         self.assertNotIn("secret", json.dumps(report))
 

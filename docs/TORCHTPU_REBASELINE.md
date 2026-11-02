@@ -10,8 +10,10 @@
 starts on v5e-1 for single-device feasibility; use v5e-8 for tests that need
 multiple devices. The owner reported a successful eager native TPU smoke;
 hardware generation, explicit compilation and TrainLM integration remain
-unverified. Follow the [utility inventory and delivery order](TORCHTPU_UTILITIES.md)
-for the T1.1–T1.4 work packages.
+unverified. PR #28 merged the source-level T1 probes and explicit one-device
+trainer foundation; hardware compile, lifecycle and collective evidence still
+gate T1 closure. Follow the [utility inventory and delivery order](TORCHTPU_UTILITIES.md)
+for the remaining T1.1–T1.4 evidence.
 
 Owner direction allows CPU-verifiable implementation to proceed while scarce
 TPU slots are pending. A provisional, explicit `accelerator="native_tpu"`
@@ -135,7 +137,7 @@ attention, loss, optimizer, data, checkpoint, tests and documentation.
 | T0 | Architecture rebaseline and salvage | PR #16/#18 inventory; reusable/XLA-specific/uncertain classification; approved boundaries and PR mapping |
 | T1 | Native TorchTPU utilities and environment | T1.1 inventory → T1.2 shared hardware/capability report → T1.3 verified dependency and process lifecycle → T1.4 multi-device entry probe. Record actual device properties, eager/compile results and reproducible setup; prefer v5e-1 for single-device and v5e-8 for collective evidence. |
 | T2 | Python-first configs/API | Integrate shared discovery into auto backend selection, preflight and explain; verify HF contracts, CPU/CUDA compatibility and actionable errors without manual runtime setup. An explicit single-device prototype exists; automatic routing waits for T1/package and CPU evidence. |
-| T3 | Single-device training/data | TPU reference causal LM step, packed data manifest, uint32/legacy uint16 validation and loss parity. The generic engine adapter and an experimental random-init GPT-2/TinyStories notebook are implementation-started; owner TPU validation is pending. |
+| T3 | Single-device training/data | TPU reference causal LM step, packed data manifest, uint32/legacy uint16 validation and loss parity. PR #28 merged the generic engine adapter and random-init GPT-2/TinyStories starter; the current `feat/02-packed-pretraining-data` iteration streams that pinned text into validated uint32 shards with document offsets and trains through `PackedBinDataset`. CPU/CI and owner TPU validation are pending. |
 | T4 | Eight-device data parallelism | Global valid-token-weighted gradients, unequal masks, accumulation and reference-parity proof |
 | T5 | Checkpoint/resume and HF export | Model/tokenizer `save_pretrained` export is wired into the prototype; generic accelerator RNG capture/restore is implemented with fail-closed API checks. Native replay is currently limited to deterministic map-style data, zero loader workers, and a TrainLM-owned random sampler or sequential order. Clean-process resume equivalence, serialized source cursor, and HF round trip remain unverified. |
 | T6 | Compilation foundations | Per-block compile parity, eager fallback, graph stability and debug/recompile evidence |

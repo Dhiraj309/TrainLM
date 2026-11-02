@@ -8,19 +8,21 @@
 
 ## Current project snapshot
 
-- PR #18, including PR #16, is merged. PR #20 merged the accepted T0.2 mapping;
-  fetched `origin/main` on 2026-10-28 is
-  `06fbea314f26edf02526a2ca250559041aefdc23` after the first T1 notebook
-  commits were rebase-merged. The active T1 branch continues separately.
+- PR #18, including PR #16, and PR #20 are merged. PR #28 merged the native
+  single-device foundation with merge commit
+  `860bb289bf35444d8d435cf41caf51bcf77afaaf`; this iteration starts from that
+  verified `origin/main` on `feat/02-packed-pretraining-data`.
 - T0.1 code inventory is recorded in `TORCHTPU_SALVAGE_INVENTORY.md`. The
   mapped legacy cards remain candidates, not an approved implementation queue.
 - Current implementation backend: PyTorch/XLA. Target: native TorchTPU on
   Cloud TPU. No TorchTPU install profile or hardware certification is
   established. Hosted Kaggle documents v5e-8 and hosted Colab TPU v2; use a
   one-chip Cloud TPU v5e VM for the planned v5e-1 single-device evidence.
-- The known PR #18 CPU snapshot result is 700 passed / 21 failed under Python
-  3.12.14, torch 2.9.0+cpu, Transformers 5.0.0, Hub 1.3.5, pytest 9.1.1. It
-  has not been rerun on current `main`.
+- PR #28's final GitHub CI run passed all 804 tests under its Python 3.11
+  environment. The earlier 802-pass/2-fail run exposed two test-fixture
+  assumptions that were corrected before merge. The older PR #18 result (700
+  passed / 21 failed under Python 3.12.14, torch 2.9.0+cpu, Transformers 5.0.0,
+  Hub 1.3.5, pytest 9.1.1) is historical, not the current baseline.
 - T1 policy: use a one-chip Cloud TPU v5e VM first for single-device import,
   device operations, autograd, optimizer, and compile checks. Use v5e-8 for
   collective, DP8, sharding, distributed-checkpoint, or scaling requirements.
@@ -173,10 +175,16 @@
   optional `datasets` distribution before download. This source-level path has
   not run on TPU and does not establish convergence, throughput, or a
   production-scale recipe.
-  PR #28's first CI run executed 804 tests: 802 passed and two native-runtime
-  tests failed because their mocks patched the wrong `torch.compile` namespace
-  and omitted initialized runtime fields. The follow-up corrects those test
-  fixtures; a full CI rerun remains the merge gate.
+  PR #28's CI passed all 804 tests after a follow-up corrected two native-runtime
+  test fixtures. The PR merged with merge commit
+  `860bb289bf35444d8d435cf41caf51bcf77afaaf`; TPU execution and convergence
+  remain owner-run validation.
+- The active `feat/02-packed-pretraining-data` branch starts from that verified
+  `main`. It adds a streaming writer for explicit uint32 token shards, SHA-256
+  manifests, uint64 document offsets, and a from-scratch path that feeds the
+  pinned TinyStories stream through `PackedBinDataset`. The notebook report
+  records source revision, token/document counts, and packed-shard hashes.
+  CPU and CI validation are pending; no TPU or convergence result is claimed.
 - `trainlm doctor` adds a one-command read-only package/runtime report to the
   CLI, reusing the T1 profile and hardware discovery contracts. From a source
   checkout it records the Git revision; an installed wheel uses its declared

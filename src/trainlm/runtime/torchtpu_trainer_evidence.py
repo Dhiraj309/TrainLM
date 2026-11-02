@@ -15,6 +15,7 @@ from typing import Any, Mapping
 
 
 _SHA = re.compile(r"[0-9a-f]{40}\Z")
+_SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _SAFE_TEXT = re.compile(r"[A-Za-z0-9._+\-]{1,96}\Z")
 _MODEL_ID = re.compile(r"[A-Za-z0-9._-]{1,96}/[A-Za-z0-9._-]{1,96}\Z")
 _REPO_ID = re.compile(r"[A-Za-z0-9._-]{1,96}/[A-Za-z0-9._-]{1,96}\Z")
@@ -140,6 +141,25 @@ def build_trainer_report(
                         dataset = None
                     else:
                         dataset["validation_examples"] = validation_examples
+                for name in (
+                    "train_tokens", "validation_tokens",
+                    "train_documents", "validation_documents",
+                ):
+                    value = raw_dataset.get(name)
+                    if value is not None:
+                        if type(value) is not int or value < 1:
+                            issues.append("invalid_dataset_provenance")
+                            dataset = None
+                        elif dataset is not None:
+                            dataset[name] = value
+                for name in ("train_shard_sha256", "validation_shard_sha256"):
+                    value = raw_dataset.get(name)
+                    if value is not None:
+                        if not isinstance(value, str) or not _SHA256.fullmatch(value):
+                            issues.append("invalid_dataset_provenance")
+                            dataset = None
+                        elif dataset is not None:
+                            dataset[name] = value
         raw_metrics = summary.get("metrics")
         if raw_metrics is not None:
             if not isinstance(raw_metrics, dict):

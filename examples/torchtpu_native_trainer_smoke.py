@@ -21,6 +21,43 @@ DATASET_REVISION = "f54c09fd23315a6f9c86f9dc80f725de7d8f9c64"
 sys.path.insert(0, str(ROOT / "src"))
 
 
+def _token_documents(
+    dataset, tokenizer, *, max_examples: int, batch_size: int = 64
+):
+    """Yield EOS-separated tokenized documents without materializing a split."""
+    eos_token_id = tokenizer.eos_token_id
+    if isinstance(eos_token_id, bool) or not isinstance(eos_token_id, int):
+        raise RuntimeError(
+            "The selected tokenizer must define an integer EOS token."
+        )
+
+    pending: list[str] = []
+    seen = 0
+
+    def encode(texts: list[str]):
+        encoded = tokenizer(texts, add_special_tokens=False, truncation=False)
+        for token_ids in encoded["input_ids"]:
+            yield [int(token) for token in token_ids] + [eos_token_id]
+
+    for row in dataset:
+        if seen >= max_examples:
+            break
+        text = row.get("text") if isinstance(row, dict) else None
+        if not isinstance(text, str):
+            raise ValueError(
+                "TinyStories rows must contain a string 'text' field."
+            )
+        pending.append(text)
+        seen += 1
+        if len(pending) == batch_size:
+            yield from encode(pending)
+            pending.clear()
+    if pending:
+        yield from encode(pending)
+    if seen == 0:
+        raise ValueError("The selected dataset split contains no text examples.")
+
+
 def run_smoke(
     output_dir: Path, *, compile_enabled: bool, resume: bool,
     from_scratch: bool = False, max_steps: int = 3, train_examples: int = 16,
@@ -46,7 +83,8 @@ def run_smoke(
     import torch
     from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
-    from trainlm import TrainLMTrainer, TrainLMTrainingArguments
+    from trainlm import PackedBinDataset, TrainLMTrainer, TrainLMTrainingArguments
+    from trainlm.data.writer import write_packed_binary_shard
     from trainlm.runtime.torchtpu_discovery import discover_tpu, normalize_worker_report
 
     discovery = discover_tpu(torch, verify_allocation=True, include_properties=True)
@@ -60,44 +98,44 @@ def run_smoke(
         tokenizer.pad_token = tokenizer.eos_token
     dataset_info = None
     if from_scratch:
-        raw_dataset = load_dataset(
+        data_root = output_dir / "packed-data"
+        train_source = load_dataset(
             DATASET_ID, revision=DATASET_REVISION,
-            split=f"train[:{train_examples}]",
+            split="train", streaming=True,
         )
-
-        def encode_batch(batch):
-            encoded = tokenizer(
-                batch["text"], max_length=sequence_length, truncation=True,
-                padding="max_length",
+        validation_source = load_dataset(
+            DATASET_ID, revision=DATASET_REVISION,
+            split="validation", streaming=True,
+        )
+        train_manifest_path = write_packed_binary_shard(
+            _token_documents(train_source, tokenizer, max_examples=train_examples),
+            data_root / "train", shard_id="tinystories-train",
+            vocab_size=len(tokenizer),
+        )
+        validation_manifest_path = write_packed_binary_shard(
+            _token_documents(
+                validation_source, tokenizer, max_examples=eval_examples,
+            ),
+            data_root / "validation", shard_id="tinystories-validation",
+            vocab_size=len(tokenizer),
+        )
+        rows = PackedBinDataset.from_directory(
+            data_root / "train", sequence_length=sequence_length,
+            split="train", seed=42,
+        )
+        eval_rows = PackedBinDataset.from_directory(
+            data_root / "validation", sequence_length=sequence_length,
+            split="validation",
+        )
+        required_train_batches = max_steps * gradient_accumulation_steps
+        if len(rows) < required_train_batches:
+            available_train_batches = len(rows)
+            rows.close()
+            eval_rows.close()
+            raise ValueError(
+                f"Packed train split has {available_train_batches} sequences; "
+                f"{required_train_batches} are required for the requested run."
             )
-            encoded["labels"] = [
-                [token if mask else -100 for token, mask in zip(ids, attention)]
-                for ids, attention in zip(
-                    encoded["input_ids"], encoded["attention_mask"]
-                )
-            ]
-            return encoded
-
-        rows = raw_dataset.map(
-            encode_batch, batched=True,
-            remove_columns=raw_dataset.column_names,
-            desc="Tokenizing pinned TinyStories training examples",
-        )
-        rows.set_format(type="torch", columns=[
-            "input_ids", "attention_mask", "labels",
-        ])
-        raw_eval = load_dataset(
-            DATASET_ID, revision=DATASET_REVISION,
-            split=f"validation[:{eval_examples}]",
-        )
-        eval_rows = raw_eval.map(
-            encode_batch, batched=True,
-            remove_columns=raw_eval.column_names,
-            desc="Tokenizing pinned TinyStories validation examples",
-        )
-        eval_rows.set_format(type="torch", columns=[
-            "input_ids", "attention_mask", "labels",
-        ])
         model_config = AutoConfig.from_pretrained(
             model_id, revision=MODEL_REVISION,
         )
@@ -112,6 +150,18 @@ def run_smoke(
             "id": DATASET_ID, "revision": DATASET_REVISION,
             "train_examples": len(rows), "validation_examples": len(eval_rows),
         }
+        train_manifest = json.loads(train_manifest_path.read_text(encoding="utf-8"))
+        validation_manifest = json.loads(
+            validation_manifest_path.read_text(encoding="utf-8")
+        )
+        dataset_info.update({
+            "train_tokens": train_manifest["token_count"],
+            "validation_tokens": validation_manifest["token_count"],
+            "train_documents": train_manifest["documents"]["document_count"],
+            "validation_documents": validation_manifest["documents"]["document_count"],
+            "train_shard_sha256": train_manifest["sha256"],
+            "validation_shard_sha256": validation_manifest["sha256"],
+        })
     else:
         model = AutoModelForCausalLM.from_pretrained(
             model_id, revision=MODEL_REVISION,
@@ -235,6 +285,10 @@ def run_smoke(
             raise RuntimeError("Resumed weights differ from uninterrupted weights.")
         print("resume=PASS", flush=True)
         print("exact_weight_match=PASS", flush=True)
+
+    if from_scratch:
+        rows.close()
+        eval_rows.close()
 
     packages = {}
     for name in ("torch", "torch_tpu", "libtpu", "transformers"):
