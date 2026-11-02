@@ -148,9 +148,15 @@ def build_trainer_report(
                 safe_lr = safe_decay = 0.0
                 numbers_valid = False
             nominal_tokens_per_update = None
+            nominal_supervised_tokens_per_update = None
             if batch_fields_valid and integers_valid and all(batch_fields_present):
                 nominal_tokens_per_update = (
                     raw_training["sequence_length"]
+                    * raw_training["per_device_train_batch_size"]
+                    * raw_training["gradient_accumulation_steps"]
+                )
+                nominal_supervised_tokens_per_update = (
+                    (raw_training["sequence_length"] - 1)
                     * raw_training["per_device_train_batch_size"]
                     * raw_training["gradient_accumulation_steps"]
                 )
@@ -158,6 +164,39 @@ def build_trainer_report(
                 if (reported_nominal is not None
                         and (type(reported_nominal) is not int
                              or reported_nominal != nominal_tokens_per_update)):
+                    batch_fields_valid = False
+                reported_supervised_nominal = raw_training.get(
+                    "nominal_supervised_tokens_per_update"
+                )
+                if (reported_supervised_nominal is not None
+                        and (type(reported_supervised_nominal) is not int
+                             or reported_supervised_nominal
+                             != nominal_supervised_tokens_per_update)):
+                    batch_fields_valid = False
+            if isinstance(raw_training, dict):
+                supervised_tokens_seen = raw_training.get("supervised_tokens_seen")
+                target_supervised_tokens = raw_training.get(
+                    "target_supervised_tokens"
+                )
+            else:
+                supervised_tokens_seen = target_supervised_tokens = None
+            if (supervised_tokens_seen is not None
+                    and (type(supervised_tokens_seen) is not int
+                         or supervised_tokens_seen < 1)):
+                batch_fields_valid = False
+            if target_supervised_tokens is not None:
+                microbatch_tokens = (
+                    (raw_training["sequence_length"] - 1)
+                    * raw_training["per_device_train_batch_size"]
+                    if all(batch_fields_present) and batch_fields_valid else 0
+                )
+                if (type(target_supervised_tokens) is not int
+                        or target_supervised_tokens < 1
+                        or type(supervised_tokens_seen) is not int
+                        or supervised_tokens_seen < target_supervised_tokens
+                        or microbatch_tokens < 1
+                        or supervised_tokens_seen - target_supervised_tokens
+                        >= microbatch_tokens):
                     batch_fields_valid = False
             if (not integers_valid or not numbers_valid
                     or not batch_fields_valid
@@ -178,6 +217,13 @@ def build_trainer_report(
                         name: raw_training[name] for name in batch_fields
                     })
                     training["nominal_tokens_per_update"] = nominal_tokens_per_update
+                    training["nominal_supervised_tokens_per_update"] = (
+                        nominal_supervised_tokens_per_update
+                    )
+                if supervised_tokens_seen is not None:
+                    training["supervised_tokens_seen"] = supervised_tokens_seen
+                if target_supervised_tokens is not None:
+                    training["target_supervised_tokens"] = target_supervised_tokens
         normalize = runpy.run_path(str(Path(__file__).with_name(
             "torchtpu_discovery.py")))["normalize_worker_report"]
         device = normalize(summary.get("device"))

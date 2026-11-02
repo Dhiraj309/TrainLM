@@ -15,24 +15,23 @@
   added pinned custom corpus selection; PR #37 made BF16 autocast an explicit
   opt-in and added precision reporting; PR #38 exposed optimizer schedule and
   seed settings in the scratch workflow; PR #39 added opt-in gradient
-  checkpointing.
+  checkpointing; PR #40 added per-device batch configuration and nominal token
+  reporting.
 - **Verified base:** `main` at
-  `df0a9ff562e48b67ae4ea48dbe10abe565137f4b` after PR #39.
-- **Active branch:** `feat/13-scratch-batch-config` exposes train/eval batch
-  sizes and reports nominal tokens per optimizer update.
+  `d7359bc20d5fa2af800c113b2e85779b6987f2f4` after PR #40.
+- **Active branch:** `feat/14-token-budgeted-pretraining` lets the scratch
+  workflow target supervised next-token counts and records actual consumption.
 - **Probe:** [`T1 v5e-1 guide`](T1_V5E1_PROBE.md) and its
   [Kaggle/Colab notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb) test a tiny
   synthetic forward/backward and optimizer update, with optional `torch.compile`.
 - **Evidence:** the owner reported an eager native TPU allocation,
   forward/backward and AdamW pass on torch_tpu 0.2.0 with torch 2.14.1+cpu.
   Hardware generation and explicit compile remain unverified.
-- **Validation boundary:** PR #39 passed GitHub CI, including the GPT-2 CPU
-  checkpointed backward test. The active batch-size change passes 14
-  dependency-free launcher/notebook contract tests, 10 evidence tests, Python
-  compilation, notebook parsing, and diff checks. Three dependency-backed
-  launcher tests need `torch`, `transformers`, and `tokenizers`, which are not
-  installed here; branch CI remains pending. No TPU trainer run or convergence
-  result is claimed.
+- **Validation boundary:** PR #40 passed its GitHub pytest workflow in 1m45s.
+  The active token-budget change passes 16 dependency-free launcher/notebook
+  contract tests, 11 evidence tests, Python compilation, and notebook parsing.
+  Its packed-training CPU regression needs Torch and Transformers, absent here;
+  branch CI is pending. No TPU trainer run or convergence result is claimed.
   This workspace has no PyTorch or pytest installation; no local training or
   accelerator test has run. Native TPU training, compilation and convergence
   still require owner-run evidence.

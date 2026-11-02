@@ -39,6 +39,8 @@ def successful_process(*, compile_requested=False, resume_requested=False):
             "per_device_train_batch_size": 1,
             "per_device_eval_batch_size": 1, "sequence_length": 128,
             "nominal_tokens_per_update": 1024,
+            "nominal_supervised_tokens_per_update": 1016,
+            "supervised_tokens_seen": 1_016_000,
             "gradient_checkpointing": False,
             "seed": 42,
         },
@@ -184,6 +186,10 @@ class TrainerEvidenceTests(unittest.TestCase):
         self.assertEqual(report["training"]["lr_scheduler_type"], "cosine")
         self.assertTrue(report["training"]["gradient_checkpointing"])
         self.assertEqual(report["training"]["nominal_tokens_per_update"], 1024)
+        self.assertEqual(
+            report["training"]["nominal_supervised_tokens_per_update"], 1016
+        )
+        self.assertEqual(report["training"]["supervised_tokens_seen"], 1_016_000)
         self.assertEqual(report["model"]["revision"], None)
         self.assertEqual(report["model"]["config"]["n_layer"], 6)
         self.assertEqual(
@@ -217,6 +223,7 @@ class TrainerEvidenceTests(unittest.TestCase):
                           {"lr_scheduler_type": "secret/path"},
                           {"per_device_train_batch_size": 0},
                           {"nominal_tokens_per_update": 999},
+                          {"nominal_supervised_tokens_per_update": 999},
                           {"gradient_checkpointing": "true"},
                           {"seed": True}):
             with self.subTest(overrides=overrides):
@@ -232,6 +239,36 @@ class TrainerEvidenceTests(unittest.TestCase):
 
                 self.assertEqual(report["status"], "failed")
                 self.assertIn("invalid_training_config", report["issues"])
+
+    def test_supervised_token_budget_is_reported_and_bounded(self):
+        process = successful_process()
+        lines = process["stdout"].splitlines()
+        index = next(i for i, line in enumerate(lines)
+                     if line.startswith("trainer_summary="))
+        summary = json.loads(lines[index].split("=", 1)[1])
+        summary["training"].update({
+            "max_steps": 984,
+            "target_supervised_tokens": 1_000_000,
+            "supervised_tokens_seen": 1_000_125,
+        })
+        lines[index] = "trainer_summary=" + json.dumps(summary)
+
+        report = self.report({**process, "stdout": "\n".join(lines)})
+        self.assertEqual(report["status"], "passed")
+        self.assertEqual(report["training"]["target_supervised_tokens"], 1_000_000)
+        self.assertEqual(report["training"]["supervised_tokens_seen"], 1_000_125)
+
+        for invalid_seen in (999_999, 1_000_127):
+            invalid_summary = json.loads(lines[index].split("=", 1)[1])
+            invalid_summary["training"]["supervised_tokens_seen"] = invalid_seen
+            invalid_line = "trainer_summary=" + json.dumps(invalid_summary)
+            invalid_stdout = "\n".join(
+                lines[:index] + [invalid_line] + lines[index + 1:]
+            )
+            with self.subTest(invalid_seen=invalid_seen):
+                invalid_report = self.report({**process, "stdout": invalid_stdout})
+                self.assertEqual(invalid_report["status"], "failed")
+                self.assertIn("invalid_training_config", invalid_report["issues"])
 
     def test_invalid_scratch_selector_metadata_fails_closed(self):
         process = successful_process()
