@@ -39,12 +39,12 @@ approvals. T2 integrates the report into backend selection and the public UX.
 
 ## PR-by-PR serial execution
 
-**Current sequence:** PR #40 added per-device batch controls → PR #41
-rebase-merged supervised-token budgets at verified `main` SHA
-`a24514a7693e918c1c10c8a84c705399fa3b3bcf`, with CI passing. The active
-`perf/15-sparse-training-logging` branch exposes the loss logging cadence and
-keeps a final loss snapshot at the stop boundary. The old numbered cards below
-do not set this order.
+**Current sequence:** PR #40 added per-device batch controls → PR #41 added
+supervised-token budgets → PR #42 added configurable sparse logging and final
+loss snapshots; all are rebase-merged and CI-passing. Verified `main` is
+`2e90537371aa03c98f4fc395edb2b231727eaebb`. Active branch
+`feat/16-colab-model-artifact` packages the Hugging Face export and run report
+for Colab/Kaggle download. The old numbered cards below do not set this order.
 
 - A **PR-plan number** is a planned delivery slot, not a GitHub PR number.
   GitHub assigns its own PR number on creation. Do not create the next branch
