@@ -8,7 +8,7 @@
 
 ## Current project snapshot
 
-- PR #18, including PR #16, PR #20, and PRs #28–#33 are merged.
+- PR #18, including PR #16, PR #20, and PRs #28–#34 are merged.
   PR #28
   merged the native single-device foundation at
   `860bb289bf35444d8d435cf41caf51bcf77afaaf`; PR #29 rebase-merged streaming
@@ -19,8 +19,10 @@
   `a58a9e13d792c2468f4c20d6cdc7375f4bc63ffd`; PR #32 rebase-merged exact
   packed-data checkpoint recovery at `82ead5b72991fc154738bcd8334e477d563d7ea3`
   after passing CI; PR #33 rebase-merged current Colab source references at
-  `83d4b08dd9c510a6edf6ae0a5dc7e2b739343eb6`. This iteration starts from that
-  verified head on `feat/07-train-tokenizer-from-corpus`.
+  `83d4b08dd9c510a6edf6ae0a5dc7e2b739343eb6`; PR #34 rebase-merged the
+  training-split BPE tokenizer at `7c75f6d0aa8ff75299328847e9fa7dcfcdf791e1`.
+  This iteration starts from that verified head on
+  `feat/08-explicit-scratch-gpt2-config`.
 - T0.1 code inventory is recorded in `TORCHTPU_SALVAGE_INVENTORY.md`. The
   mapped legacy cards remain candidates, not an approved implementation queue.
 - Current implementation backend: PyTorch/XLA. Target: native TorchTPU on
@@ -174,10 +176,12 @@
   through the explicit smoke; this does not approve the dependency profile.
   No package installation or pin change is performed. The gate awaits an
   owner Colab run; local validation is source-level only.
-  The native trainer example now pins all `distilbert/distilgpt2` model and
-  tokenizer loads to Hub commit `2290a62682d06624634c1f46a6ad5be0f47f38aa`.
-  Its bounded evidence report records the model ID and full revision SHA, so
-  resumed and reference runs use the same source snapshot.
+  The native fine-tuning smoke pins its `distilbert/distilgpt2` model and
+  tokenizer to Hub commit `2290a62682d06624634c1f46a6ad5be0f47f38aa`. The
+  separate scratch path now trains a byte-level BPE tokenizer only on pinned
+  training documents. This branch replaces its remaining pretrained GPT-2
+  config lookup with explicit local dimensions and records that config in
+  evidence.
   A separate [Colab notebook](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb)
   constructs that GPT-2 architecture through `from_config`, so weights start
   random, then fits a byte-level BPE tokenizer on bounded TinyStories training
@@ -199,11 +203,10 @@
 - PR #30's CI passed its packed-data reference test and it was rebase-merged.
   PR #31's GitHub CI passed the random-init GPT-2 train/eval/checkpoint/export
   smoke; PR #32 passed exact packed-data checkpoint continuation and stale-data
-  rejection; PR #33 passed active-notebook source checks. The current scratch
-  path still uses a pinned pretrained tokenizer. This branch trains a byte-level
-  BPE tokenizer from the training split only. Local runtime tests are unavailable
-  because this container lacks Torch/pytest. No TPU run or convergence result
-  is claimed.
+  rejection; PR #33 passed active-notebook source checks; PR #34 passed the
+  train-only BPE tokenizer and evidence tests. Local runtime tests are
+  unavailable because this container lacks Torch/pytest. No TPU run or
+  convergence result is claimed.
 - `trainlm doctor` adds a one-command read-only package/runtime report to the
   CLI, reusing the T1 profile and hardware discovery contracts. From a source
   checkout it records the Git revision; an installed wheel uses its declared

@@ -32,6 +32,21 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         self.assertIsInstance(tokenizer.pad_token_id, int)
         self.assertNotEqual(tokenizer.eos_token_id, tokenizer.pad_token_id)
 
+    def test_scratch_gpt2_architecture_is_built_from_explicit_dimensions(self):
+        build_config = runpy.run_path(str(SCRIPT))["_scratch_gpt2_config"]
+        config = build_config(
+            vocab_size=300, sequence_length=128, embedding_size=256,
+            layers=4, attention_heads=8, pad_token_id=0, bos_token_id=2,
+            eos_token_id=3,
+        )
+
+        self.assertEqual(config.model_type, "gpt2")
+        self.assertEqual(config.vocab_size, 300)
+        self.assertEqual(config.n_positions, 128)
+        self.assertEqual(config.n_embd, 256)
+        self.assertEqual(config.n_layer, 4)
+        self.assertEqual(config.n_head, 8)
+
     def test_from_scratch_tokenizer_preserves_eos_document_boundaries(self):
         class FakeTokenizer:
             eos_token_id = 99
@@ -62,6 +77,9 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         self.assertIn("--from-scratch", result.stdout)
         self.assertIn("--train-examples", result.stdout)
         self.assertIn("--tokenizer-vocab-size", result.stdout)
+        self.assertIn("--model-embedding-size", result.stdout)
+        self.assertIn("--model-layers", result.stdout)
+        self.assertIn("--model-attention-heads", result.stdout)
 
     def test_incompatible_modes_fail_before_torch_import(self):
         result = subprocess.run(
@@ -93,6 +111,17 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         self.assertIn("vocab_size must be at least 260", result.stderr)
         self.assertNotIn("No module named 'torch_tpu'", result.stderr)
 
+    def test_invalid_gpt2_dimensions_fail_before_torch_import(self):
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--output-dir", "/tmp/unused",
+             "--from-scratch", "--model-embedding-size", "768",
+             "--model-attention-heads", "10"],
+            capture_output=True, text=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("divisible by attention heads", result.stderr)
+        self.assertNotIn("No module named 'torch_tpu'", result.stderr)
+
     def test_notebook_keeps_device_import_inside_bounded_child(self):
         notebook = json.loads(NOTEBOOK.read_text())
         cells = ["".join(cell["source"]) for cell in notebook["cells"]
@@ -119,11 +148,12 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         )
         self.assertIn("TOKENIZER_VOCAB_SIZE", source)
         self.assertIn("--tokenizer-vocab-size", source)
+        self.assertIn("MODEL_EMBEDDING_SIZE", source)
+        self.assertIn("MODEL_LAYERS", source)
+        self.assertIn("MODEL_ATTENTION_HEADS", source)
         self.assertIn("trains a byte-level BPE tokenizer", markdown)
-        self.assertIn(
-            "pretrained model weights and tokenizer are never downloaded",
-            markdown,
-        )
+        self.assertIn("builds the GPT-2 config locally", markdown)
+        self.assertIn("no pretrained model config, weights, or tokenizer are downloaded", markdown)
 
 
 if __name__ == "__main__":

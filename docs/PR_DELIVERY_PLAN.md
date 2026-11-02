@@ -39,11 +39,11 @@ approvals. T2 integrates the report into backend selection and the public UX.
 
 ## PR-by-PR serial execution
 
-**Current sequence:** PR #32 merged exact packed iterable checkpoint recovery
-→ PR #33 rebase-merged active notebook updates at verified `main` SHA
-`83d4b08dd9c510a6edf6ae0a5dc7e2b739343eb6`, with CI passing. The active
-`feat/07-train-tokenizer-from-corpus` branch removes the pretrained tokenizer
-dependency from the random-init corpus recipe by fitting BPE on training text.
+**Current sequence:** PR #33 refreshed active Colab notebooks → PR #34
+rebase-merged a train-only BPE tokenizer at verified `main` SHA
+`7c75f6d0aa8ff75299328847e9fa7dcfcdf791e1`, with CI passing. The active
+`feat/08-explicit-scratch-gpt2-config` branch removes the last model Hub config
+lookup from the random-init recipe and makes architecture dimensions explicit.
 After CI, merge using Rebase & Merge, verify remote `main`, then select the next
 T3/T5 dependency. The old numbered cards below do not set this order.
 

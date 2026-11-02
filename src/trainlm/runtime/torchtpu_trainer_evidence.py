@@ -25,7 +25,7 @@ _MARKERS = {
     "compile": "compile=PASS", "resume": "resume=PASS",
     "exact_weight_match": "exact_weight_match=PASS",
 }
-_PACKAGES = ("torch", "torch_tpu", "libtpu", "transformers")
+_PACKAGES = ("torch", "torch_tpu", "libtpu", "transformers", "tokenizers")
 _FATAL_MARKERS = {"core_dump", "shutdown_hang", "python_fatal"}
 
 
@@ -96,27 +96,73 @@ def build_trainer_report(
             device = None
         raw_model = summary.get("model")
         if raw_model is not None:
-            if (not isinstance(raw_model, dict)
-                    or not isinstance(raw_model.get("id"), str)
-                    or not _MODEL_ID.fullmatch(raw_model["id"])
-                    or not isinstance(raw_model.get("revision"), str)
-                    or not _SHA.fullmatch(raw_model["revision"])):
+            if not isinstance(raw_model, dict):
                 issues.append("invalid_model_revision")
             else:
-                model = {"id": raw_model["id"], "revision": raw_model["revision"]}
                 initialization = raw_model.get("initialization")
-                if initialization is not None:
-                    if initialization not in {"pretrained", "random_from_config"}:
-                        issues.append("invalid_model_initialization")
+                model_type = raw_model.get("model_type")
+                config_only = (
+                    initialization == "random_from_config"
+                    and raw_model.get("revision") is None
+                    and isinstance(model_type, str)
+                    and _SAFE_TEXT.fullmatch(model_type)
+                    and raw_model.get("id") == model_type
+                )
+                if config_only:
+                    model = {
+                        "id": model_type,
+                        "revision": None,
+                        "initialization": initialization,
+                        "model_type": model_type,
+                    }
+                    config = raw_model.get("config")
+                    config_fields = (
+                        "vocab_size", "n_positions", "n_embd", "n_layer", "n_head"
+                    )
+                    if (
+                        not isinstance(config, dict)
+                        or any(
+                            type(config.get(name)) is not int or config[name] < 1
+                            for name in config_fields
+                        )
+                        or config["n_embd"] % config["n_head"]
+                    ):
+                        issues.append("invalid_model_config")
                         model = None
                     else:
-                        model["initialization"] = initialization
+                        model["config"] = {
+                            name: config[name] for name in config_fields
+                        }
+                        source = raw_model.get("config_source")
+                        if isinstance(source, str) and _SAFE_TEXT.fullmatch(source):
+                            model["config_source"] = source
+                        else:
+                            issues.append("invalid_model_config")
+                            model = None
+                elif (
+                    not isinstance(raw_model.get("id"), str)
+                    or not _MODEL_ID.fullmatch(raw_model["id"])
+                    or not isinstance(raw_model.get("revision"), str)
+                    or not _SHA.fullmatch(raw_model["revision"])
+                ):
+                    issues.append("invalid_model_revision")
+                else:
+                    model = {
+                        "id": raw_model["id"],
+                        "revision": raw_model["revision"],
+                    }
+                    if initialization is not None:
+                        if initialization not in {"pretrained", "random_from_config"}:
+                            issues.append("invalid_model_initialization")
+                            model = None
+                        else:
+                            model["initialization"] = initialization
                 parameter_count = raw_model.get("parameter_count")
                 if parameter_count is not None:
                     if type(parameter_count) is not int or parameter_count < 1:
                         issues.append("invalid_model_parameter_count")
                         model = None
-                    else:
+                    elif model is not None:
                         model["parameter_count"] = parameter_count
         raw_dataset = summary.get("dataset")
         if raw_dataset is not None:
@@ -160,6 +206,24 @@ def build_trainer_report(
                             dataset = None
                         elif dataset is not None:
                             dataset[name] = value
+                tokenizer = raw_dataset.get("tokenizer")
+                if tokenizer is not None:
+                    if (
+                        not isinstance(tokenizer, dict)
+                        or tokenizer.get("kind") != "byte_level_bpe_from_training_split"
+                        or type(tokenizer.get("training_documents")) is not int
+                        or tokenizer["training_documents"] < 1
+                        or type(tokenizer.get("vocab_size")) is not int
+                        or tokenizer["vocab_size"] < 260
+                    ):
+                        issues.append("invalid_dataset_provenance")
+                        dataset = None
+                    elif dataset is not None:
+                        dataset["tokenizer"] = {
+                            "kind": tokenizer["kind"],
+                            "training_documents": tokenizer["training_documents"],
+                            "vocab_size": tokenizer["vocab_size"],
+                        }
         raw_metrics = summary.get("metrics")
         if raw_metrics is not None:
             if not isinstance(raw_metrics, dict):

@@ -27,9 +27,11 @@ TorchTPU support. “Implemented” means present in that historical code path;
   packed-data checkpoint recovery at verified `main`
   `82ead5b72991fc154738bcd8334e477d563d7ea3` after passing CI; PR #33
   rebase-merged Colab notebook source fixes at verified `main`
-  `83d4b08dd9c510a6edf6ae0a5dc7e2b739343eb6`. The active
-  `feat/07-train-tokenizer-from-corpus` branch fits a byte-level BPE tokenizer
-  on training text for the random-init recipe. T1 source-level
+  `83d4b08dd9c510a6edf6ae0a5dc7e2b739343eb6`; PR #34 rebase-merged the
+  training-split BPE tokenizer at verified `main`
+  `7c75f6d0aa8ff75299328847e9fa7dcfcdf791e1`. The active
+  `feat/08-explicit-scratch-gpt2-config` branch removes the remaining model
+  config Hub lookup and exposes the GPT-2 architecture dimensions. T1 source-level
   probes and the explicit `native_tpu` path are implemented; owner-run compile,
   lifecycle and v5e-8 collective evidence remain pending. Hosted Kaggle currently documents
   v5e-8 and hosted Colab TPU v2, so neither is the v5e-1 target; use a
@@ -153,11 +155,11 @@ TorchTPU support. “Implemented” means present in that historical code path;
   The trainer smoke pins `distilbert/distilgpt2` and its tokenizer to Hub commit
   `2290a62682d06624634c1f46a6ad5be0f47f38aa`; the downloadable evidence records
   that model revision for repeatable runs. No TPU trainer result is claimed.
-  A separate Colab notebook builds random model weights from a pinned
-  architecture config and trains them on pinned TinyStories train and
-  validation splits. It currently uses the pinned pretrained tokenizer; the
-  active branch replaces that with a tokenizer fitted only on the training
-  split. The default recipe uses 1,000 steps, gradient
+  A separate Colab notebook trains random model weights and a byte-level BPE
+  tokenizer from the pinned TinyStories training split, then evaluates on the
+  separate validation split. It still fetches its GPT-2 architecture config;
+  the active branch replaces that with explicit local dimensions. The default
+  recipe uses 1,000 steps, gradient
   accumulation, periodic checkpoints, evaluation, and HF export. It checks for
   the optional `datasets` package before fetching data. This is a small-scale
   pretraining implementation; native TPU execution and convergence remain
@@ -169,8 +171,9 @@ TorchTPU support. “Implemented” means present in that historical code path;
   against direct causal-LM reference loss, clipping, gradients and parameter
   updates. PR #31's CI verified the random-init train/eval/checkpoint/export
   path; PR #32 verified exact packed-data continuation and stale-data rejection;
-  PR #33's CI verified that active notebooks load merged `main`. Owner-run TPU
-  validation and training convergence remain pending.
+  PR #33 verified notebook source freshness; PR #34 verified train-only BPE
+  fitting and reporting. Owner-run TPU validation and training convergence
+  remain pending.
   Continue only behind explicit experimental selection until CPU and owner-run
   TPU checks pass.
 
