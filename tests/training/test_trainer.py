@@ -414,9 +414,8 @@ def test_callbacks_do_not_extract_live_scalars_between_logging_steps(monkeypatch
         optimizer=optimizer,
         scheduler=LambdaLR(optimizer, lr_lambda=lambda _: 1.0),
         loss_fn=ConstantLoss(),
-        # Use an already materialized iterable so this assertion measures
-        # trainer loss materialization rather than DataLoader's internal
-        # iterator seed extraction, which also calls Tensor.item().
+        # Use an already materialized iterable so the assertion counts only
+        # trainer scalar snapshots, not DataLoader's iterator seed extraction.
         train_dataloader=[
             {"input_ids": torch.randn(2, 4)}
             for _ in range(ThreeStepTrainerConfig.max_steps)
@@ -435,7 +434,9 @@ def test_callbacks_do_not_extract_live_scalars_between_logging_steps(monkeypatch
 
     trainer.train()
 
-    assert item_calls == 1
+    # The logged loss and gradient norm are each materialized once, together
+    # at the configured cadence; no scalar is extracted on earlier steps.
+    assert item_calls == 2
     assert callback.step_losses[:2] == [None, None]
     assert isinstance(callback.step_losses[2], float)
     assert len(callback.metrics) == 1

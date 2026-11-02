@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Single-device PyTorch smoke probe for the owner-provided TorchTPU runtime.
 
-This script intentionally does not guess a TorchTPU package or device API.
-Pass the device string documented by the installed Kaggle runtime. The probe
-checks eager tensor/model execution, autograd, and an optimizer update. Pass
+The default device mode detects a real TPU tensor allocation and runs the
+probe in the same process, avoiding a second TPU runtime initialization.
+Explicit device strings are also supported. The probe checks model execution,
+autograd, and an optimizer update. Pass
 ``--compile`` separately to probe the runtime's ``torch.compile`` support.
 
 It does not test collectives, sharding, distributed checkpoints, or scaling.
@@ -13,18 +14,23 @@ Those checks require v5e-8 and remain separate acceptance evidence.
 from __future__ import annotations
 
 import argparse
+from copy import deepcopy
+import json
+from pathlib import Path
+import runpy
 from importlib import metadata
 import platform
 import re
 import sys
+import tempfile
 
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--device",
-        required=True,
-        help="Device string from the installed runtime's public documentation.",
+        default="auto",
+        help="Device to use (default: auto detects TPU, then labels CPU fallback).",
     )
     parser.add_argument(
         "--steps",
@@ -41,6 +47,11 @@ def _parse_args() -> argparse.Namespace:
         "--allow-cpu",
         action="store_true",
         help="Allow CPU for a local script check; this is not TPU evidence.",
+    )
+    parser.add_argument(
+        "--report-json",
+        type=Path,
+        help="Write the bounded device-owning discovery report as JSON.",
     )
     args = parser.parse_args()
     if args.steps < 1:
@@ -67,22 +78,62 @@ def _print_environment(torch: object) -> None:
         print("  (none found)")
 
 
+def _select_device(torch: object, args: argparse.Namespace) -> None:
+    if args.device not in {"auto", "tpu"}:
+        return
+
+    source = Path(__file__).resolve().parents[1] / (
+        "src/trainlm/runtime/torchtpu_discovery.py"
+    )
+    contract = runpy.run_path(str(source))
+    discover = contract["discover_tpu"]
+    report = discover(torch)
+    normalized = contract["normalize_worker_report"](report)
+    print("tpu_report=" + json.dumps(normalized, sort_keys=True))
+    if args.report_json is not None:
+        destination = args.report_json
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=destination.parent,
+            prefix=destination.name + ".", suffix=".tmp", delete=False,
+        ) as handle:
+            json.dump(normalized, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+            temporary = Path(handle.name)
+        temporary.replace(destination)
+        print("report_json=written")
+    if report["status"] == "ready":
+        print("tpu_detection=PASS (native PyTorch TPU tensor allocation)")
+        if args.device == "auto":
+            args.device = "tpu"
+        return
+
+    print(f"tpu_detection=FAIL ({report['status']})")
+    if args.device == "tpu":
+        raise SystemExit("Explicit TPU requested but native TPU discovery failed.")
+    args.device = "cpu"
+    args.allow_cpu = True
+    print("scope=CPU-only smoke; no TPU evidence")
+
+
 def _run(torch: object, args: argparse.Namespace) -> None:
     device = torch.device(args.device)
     if device.type == "cpu" and not args.allow_cpu:
         raise SystemExit(
             "Refusing CPU: pass --allow-cpu only for a local script check. "
-            "For T1, use the device string documented by the Kaggle runtime."
+            "For T1, use an owner-approved native TorchTPU runtime."
         )
     if device.type == "cpu":
-        print("scope=CPU script check only; this is not TPU evidence")
+        print("scope=CPU-only smoke; this is not TPU evidence")
 
     print(f"device={device}")
     model = torch.nn.Sequential(
         torch.nn.Linear(4, 16),
         torch.nn.GELU(),
         torch.nn.Linear(16, 2),
-    ).to(device)
+    )
+    reference = deepcopy(model).to(device) if args.compile else None
+    model = model.to(device)
     if args.compile:
         model = torch.compile(model)
         print("compile=torch.compile enabled")
@@ -90,6 +141,10 @@ def _run(torch: object, args: argparse.Namespace) -> None:
         print("compile=eager")
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+    reference_optimizer = (
+        torch.optim.AdamW(reference.parameters(), lr=1e-3)
+        if reference is not None else None
+    )
     initial_parameters = [p.detach().clone() for p in model.parameters()]
 
     for step in range(1, args.steps + 1):
@@ -108,7 +163,34 @@ def _run(torch: object, args: argparse.Namespace) -> None:
         if any(not bool(torch.isfinite(grad).all().item()) for grad in gradients):
             raise RuntimeError(f"step {step}: one or more gradients are not finite")
 
+        if reference is not None:
+            reference_optimizer.zero_grad(set_to_none=True)
+            expected = reference(inputs)
+            expected_loss = torch.nn.functional.mse_loss(expected, targets)
+            expected_loss.backward()
+            if not torch.allclose(predictions, expected, rtol=1e-2, atol=1e-3):
+                raise RuntimeError(f"step {step}: compiled forward differs from eager")
+            if not torch.allclose(loss, expected_loss, rtol=1e-2, atol=1e-3):
+                raise RuntimeError(f"step {step}: compiled loss differs from eager")
+            if any(
+                expected_param.grad is None
+                or not torch.allclose(grad, expected_param.grad, rtol=1e-2, atol=1e-3)
+                for grad, expected_param in zip(
+                    gradients, reference.parameters(), strict=True
+                )
+            ):
+                raise RuntimeError(f"step {step}: compiled gradients differ from eager")
+
         optimizer.step()
+        if reference_optimizer is not None:
+            reference_optimizer.step()
+            if any(
+                not torch.allclose(actual, expected, rtol=1e-2, atol=1e-3)
+                for actual, expected in zip(
+                    model.parameters(), reference.parameters(), strict=True
+                )
+            ):
+                raise RuntimeError(f"step {step}: compiled update differs from eager")
         print(f"step={step} loss={loss.detach().cpu().item():.6f}")
 
     changed = any(
@@ -122,6 +204,7 @@ def _run(torch: object, args: argparse.Namespace) -> None:
     print("autograd=PASS")
     print("optimizer_update=PASS")
     if args.compile:
+        print("parity=PASS")
         print("compile=PASS")
     print("result=single-device smoke passed; no distributed or performance claim")
 
@@ -135,6 +218,7 @@ def main() -> int:
         return 2
 
     _print_environment(torch)
+    _select_device(torch, args)
     _run(torch, args)
     return 0
 

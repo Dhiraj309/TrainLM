@@ -1,5 +1,6 @@
 from .base import BackendDiagnostics, ExecutionBackend, LogicalMesh, Precision
 from .runtime import Runtime, TorchRuntime
+from .torchtpu import TorchTPURuntime
 from .xla import XlaMesh, XlaRuntime
 from .accumulation import (
     AccumulationEvidence,
@@ -29,6 +30,7 @@ __all__ = [
     "Precision",
     "Runtime",
     "TorchRuntime",
+    "TorchTPURuntime",
     "XlaRuntime",
     "XlaMesh",
     "AccumulationEvidence",

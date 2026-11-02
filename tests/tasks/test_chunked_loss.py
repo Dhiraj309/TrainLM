@@ -58,6 +58,23 @@ def test_chunking_never_projects_more_than_requested(monkeypatch):
     assert sizes == [3, 3, 3, 1]
 
 
+def test_unmasked_ignore_index_uses_only_supervised_targets_in_mean():
+    hidden = torch.tensor([[[0.2, -0.1], [0.4, 0.3], [-0.2, 0.5], [0.1, 0.6]]])
+    weight = torch.tensor([[0.2, 0.3], [-0.4, 0.5], [0.1, -0.2]])
+    labels = torch.tensor([[0, -100, 1, 2]])
+    logits = F.linear(hidden[..., :-1, :].float(), weight.float())
+    expected = F.cross_entropy(
+        logits.reshape(-1, logits.shape[-1]), labels[..., 1:].reshape(-1),
+        ignore_index=-100,
+    )
+
+    actual, _ = chunked_linear_causal_cross_entropy(
+        hidden, weight, labels, chunk_size=2,
+    )
+
+    torch.testing.assert_close(actual, expected)
+
+
 def test_per_chunk_rematerialization_matches_loss_and_gradients():
     torch.manual_seed(11)
     source = (

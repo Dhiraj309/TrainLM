@@ -83,7 +83,7 @@ def test_milestone_overview_matches_detailed_statuses():
 
 def test_pr_overview_matches_covered_milestones():
     text = _roadmap_text()
-    pr_table = text.split("### Dense-AR V1 PR sequence", 1)[1].split(
+    pr_table = text.split("### Historical Dense-AR V1 milestone PR overview", 1)[1].split(
         "Future tracks:", 1
     )[0]
     milestone_statuses = _detailed_statuses(text)

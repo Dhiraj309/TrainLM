@@ -23,6 +23,54 @@ Python compatibility, device discovery, autograd, distributed operations
 and compilation on Kaggle v5e-8 before adding extras or claiming support.
 Do not guess package versions or assume Pallas/Helion/Tokamax compatibility.
 
+## Owner-reported native probe profile
+
+The owner supplied repeated passing standalone eager smokes with Python 3.13.18,
+torch 2.14.1+cpu, torch_tpu 0.2.0 and libtpu 0.0.50; tpu-info 0.14.2 was
+installed. The latest report correctly identifies a source checkout (TrainLM
+need not be installed as a distribution for the notebook to import it). It
+also reports that `torch>=2.9,<2.14` excludes 2.14.1 and that IPython 7.34.0
+requires missing `jedi`; Jedi is unrelated to TrainLM's declared dependencies.
+The TorchTPU package's own Torch range accepts 2.14.1, but that is not proof of
+TrainLM CPU or trainer compatibility. Keep the range unchanged until CPU
+conformance is run. Explicit compile, lifecycle and distributed evidence are
+pending.
+
+The [utility inventory](TORCHTPU_UTILITIES.md) distinguishes versioned API
+documentation from the current public API policy. Experimental utilities
+need guarded adapters; monitoring, profiling and kernel extras remain optional.
+An experimental `accelerator="native_tpu"` single-device adapter is being
+implemented behind explicit opt-in. It does not create a supported TorchTPU
+install profile or relax the `torch<2.14` core range; the owner's Torch 2.14.1
+runtime remains outside TrainLM's declared compatibility contract.
+The v5e-1 notebook also runs the repository CPU test suite against the runtime's
+already installed Python/PyTorch versions. Its result is recorded separately
+from TPU discovery and eager execution, and it does not install packages. The
+owner run at source `08f02fb` produced 746 passes and 17 failures. Two facade
+tests had left `accelerator="auto"` on a TPU host, the wheel smoke required
+`venv`/`ensurepip`, and the roadmap contract used an obsolete heading; these
+test-harness issues were corrected locally. The 12 loss-layout failures came
+from counting ignored targets in the mean denominator, now fixed in the
+chunked loss. The scalar-count assertion expected one snapshot but the trainer
+records both loss and gradient norm at the configured cadence; the test now
+checks those two snapshots. Rerun CPU conformance before deciding whether to
+expand the Torch range; the current evidence is not sufficient to do so.
+
+### Read-only native install-profile check
+
+Run `python examples/torchtpu_t1_install_preflight.py` from a TrainLM checkout,
+or use the package-preflight cell in the
+[T1 notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb). The command reads
+installed distribution metadata, the checkout's `pyproject.toml`, and the
+result of `pip check`. It does not import torch, initialize a TPU, install
+packages or change the declared dependency range. Its JSON result distinguishes
+`metadata_compatible`, `incomplete`, `incompatible` and `check_failed`.
+The command exits zero only for `metadata_compatible`; that status validates
+package metadata, not device behavior or native trainer support. The observed
+torch 2.14.1+cpu probe profile conflicts with the current source requirement
+`torch<2.14`, so the range remains unresolved pending clean-install and CPU/
+TPU evidence.
+
 ## Existing support profiles (CPU/CUDA and historical XLA)
 
 | Profile | Python | PyTorch | Transformers | Accelerator packages | Status |

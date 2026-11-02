@@ -14,12 +14,141 @@ TorchTPU support. “Implemented” means present in that historical code path;
 
 - **Historical product:** Hugging Face-native dense autoregressive training
 - **Historical TPU backend:** PyTorch/XLA
-- **Current target:** Native TorchTPU on Kaggle TPU v5e-8; not yet verified
+- **Current target:** Native TorchTPU on Cloud TPU; not yet verified
 - **Current gate:** T0 is closed; PR #20 merged the T0.2 mapping. T1 begins
-  with v5e-1 single-device feasibility, using v5e-8 for multi-device checks.
-  The [v5e-1 probe notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb) and
-  [run guide](T1_V5E1_PROBE.md) are prepared but have not been hardware-run.
+  with v5e-1 single-device feasibility. Hosted Kaggle currently documents
+  v5e-8 and hosted Colab TPU v2, so neither is the v5e-1 target; use a
+  one-chip Cloud TPU v5e VM. Use v5e-8 for multi-device checks.
+  The [v5e-1 probe notebook (open in Colab)](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/docs/01-t1-v5e1-probe/notebooks/TorchTPU_T1_v5e1_Probe.ipynb) and
+  [run guide](T1_V5E1_PROBE.md) have an owner-reported eager TPU pass:
+  allocation, forward, backward and AdamW update succeeded. Hardware generation
+  and explicit compile remain unverified. The current [utility inventory](TORCHTPU_UTILITIES.md)
+  adds shared discovery/reporting, dependency/lifecycle verification and
+  distributed entry checks as T1.1–T1.4. T1.2 now has a source-level report
+  for TPU availability and properties, used by the standalone probe. A
+  provisional single-device runtime is available only through explicit
+  `native_tpu`; production validation and auto-routing remain pending. T1.3 now has a
+  read-only metadata/profile check (source and TorchTPU requirements plus
+  `pip check`), bounded probe execution, and an opt-in repeat-process lifecycle
+  harness in the notebook; clean-install and accelerator lifecycle results
+  remain owner-run work.
+  T1.4 now has an opt-in single-host v5e-8 launch/collective probe with
+  topology and rank reconciliation; only its CPU-side contracts have run.
+  The actual multi-device result remains owner-run evidence.
+  A guarded trainer preflight now exposes non-allocating native TPU discovery
+  through `preflight()` and opt-in `explain(include_hardware=True)`. `auto`
+  rejects a detected native TPU rather than silently selecting CPU while the
+  native training route is unverified; explicit `tpu` remains the XLA path.
+  The native single-device probe can now persist a bounded device-owned report;
+  trainer diagnostics accept such a report from a future native worker result.
+  The current XLA worker does not emit native evidence.
+  Both T1 notebooks now offer direct Colab entry and a downloadable evidence
+  JSON tied to a fresh source SHA. The v5e-1 notebook runs the repository CPU
+  suite before the TPU probe and records it as a separate conformance result;
+  it installs no packages and a CPU pass does not certify TPU support. The
+  owner run at source `08f02fb` had 746 passes and 17 failures. Two facade tests
+  selected auto on a TPU host, the wheel smoke required `venv`, and a roadmap
+  check used a stale heading; these harness failures are corrected locally.
+  Twelve loss-layout cases were caused by ignored labels in the mean-loss
+  denominator; that is fixed locally. The scalar test now counts both loss and
+  gradient-norm snapshots at the logging cadence. Rerun before deciding on
+  Torch 2.14.
+  Process
+  cleanup and fatal teardown checks
+  are covered on CPU; the export preserves skipped checks and package
+  mismatches. Owner-run hardware evidence still gates the dependency profile
+  decision and T2 integration scope.
+  The latest owner eager run at source `d3dea896` passed allocation, forward,
+  autograd and AdamW update with a runtime-reported `TPU v5e` device and one
+  visible device. The owner confirmed the hardware was v5e-1; the shared Colab
+  output did not show image or topology details. The package profile correctly
+  reports `source_checkout`; torch 2.14.1+cpu remains outside `<2.14`, and
+  `pip check` found that IPython 7.34.0 requires missing `jedi`. The latter is
+  unrelated to TrainLM's declared dependencies. An opt-in `torch_compile=True`
+  argument now routes the native runtime through `torch.compile`; it defaults
+  off, is limited to `accelerator="native_tpu"`, and resume rejects a changed
+  compile mode. This software path has not been validated on TPU hardware.
+  The opt-in compile probe now compares each step's output, loss, gradients,
+  and AdamW update against an eager copy of the same tiny model, using the
+  same inputs. A compiled pass requires this numerical check; hardware evidence
+  remains pending.
+  The bounded lifecycle harness can now repeat either eager or compiled smoke
+  processes, and the notebook records which mode it ran. Eager/compiled
+  lifecycle and T1.4 collective remain unrun. Keep the native dependency profile
+  unresolved pending CPU conformance and native runtime evidence.
+  Software follow-up adds `trainlm doctor` as one read-only report for package
+  compatibility and native TPU discovery. It does not install packages or
+  train; dependency and hardware support remain evidence-gated.
+  Installed wheels use their declared package requirements; editable/source
+  installs compare against the checked-out project files. The v5e-1 notebook
+  invokes it directly from its source snapshot, without an installation step;
+  a missing installed `trainlm` distribution is identified as source-checkout
+  mode rather than a dependency gap. Other package incompatibilities remain
+  visible. Pip conflict details are parsed from both common `pip check` output
+  forms; the latest owner report identifies the IPython-to-Jedi conflict.
   The 18 old PR cards are candidates, not the active queue.
+
+- **Current implementation continuation (experimental):** the owner asked to
+  advance software while TPU hardware slots are delayed. The public API now
+  has an explicit `accelerator="native_tpu"` path for one visible TPU device,
+  backed by the existing backend-neutral PyTorch trainer. The legacy
+  `accelerator="tpu"` XLA coordinator is preserved; `auto` still refuses a
+  detected TPU. A Colab-openable, copyable notebook exercises a tiny real HF
+  causal LM fine-tune and export. This is an implementation checkpoint, not a
+  validated training result: package compatibility, CPU conformance, eager
+  trainer execution, compile and multi-device support remain open. Native
+  checkpoint state now includes an optional device RNG capture/restore contract;
+  runtimes missing those APIs fail checkpoint/resume rather than implying
+  exact continuation. Native resume also rejects iterable/custom sources and
+  loader-worker state that cannot yet be replayed exactly. Native model
+  compilation is exposed as `torch_compile=True`; it has no eager fallback,
+  is checkpoint-mode guarded, and remains disabled pending a v5e-1 owner run.
+  The lifecycle harness also supports a compiled repeat pass after the one-shot
+  compile check succeeds; each fresh child must emit compile evidence, and the
+  normalized report records the selected mode. This harness extension has only
+  source-level validation so far.
+  The native training notebook now offers an optional resume comparison:
+  save after three steps, resume a fresh trainer for step four, verify
+  model/tokenizer export, then train an uninterrupted four-step reference.
+  A constant learning-rate schedule and deterministic data keep the paths
+  comparable; every final model tensor must match exactly. The eight total
+  optimizer steps are opt-in. No TPU result or full resume certification is
+  claimed until an owner run supplies evidence.
+  A CPU regression now compares the same three-step save and one-step resume
+  against an uninterrupted four-step run with identical initial weights,
+  deterministic data order, and a constant learning rate. It checks that the
+  fourth step changes weights and that all final tensors match exactly; the
+  target TPU comparison remains owner-run.
+  The notebook now launches its native trainer smoke in a child process with
+  a 900-second eager or 1800-second compile/resume limit. The existing process
+  harness reaps the process group on timeout or interruption, rejects fatal
+  teardown markers, and keeps raw logs in a local session directory. The
+  parent notebook does not initialize TorchTPU. It now writes a downloadable
+  JSON report with source revision, package versions, normalized device facts,
+  and phase outcomes; process exit, child summary, and phase markers must agree
+  before the report passes. Raw logs remain local. This reporting path has
+  source-level validation only; the owner has not run the native trainer smoke.
+  The notebook now runs the read-only T1 package checker before downloading
+  `distilgpt2`. It blocks missing or conflicting training-stack dependencies
+  and preserves a downloadable blocked report. The observed Colab Torch 2.14
+  source-range mismatch plus unrelated IPython/Jedi conflict is explicitly
+  labeled experimental, allowing the opt-in smoke without changing pins or
+  implying package support. This gate has source-level tests only.
+  The trainer smoke pins `distilbert/distilgpt2` and its tokenizer to Hub commit
+  `2290a62682d06624634c1f46a6ad5be0f47f38aa`; the downloadable evidence records
+  that model revision for repeatable runs. No TPU trainer result is claimed.
+  A separate Colab notebook now builds random model weights from that pinned
+  architecture config and trains them on pinned TinyStories train and
+  validation splits. The default recipe uses 1,000 steps, gradient
+  accumulation, periodic checkpoints, evaluation, and HF export. It checks for
+  the optional `datasets` package before fetching data. This is a small-scale
+  pretraining implementation; native TPU execution and convergence remain
+  unverified.
+  The first PR CI run executed 804 tests (802 passed, two failed on native
+  runtime test-fixture assumptions). A follow-up repairs the mock target and
+  runtime setup; merging remains gated on the complete rerun.
+  Continue only behind explicit experimental selection until CPU and owner-run
+  TPU checks pass.
 
 ## Historical native-backend transition note
 

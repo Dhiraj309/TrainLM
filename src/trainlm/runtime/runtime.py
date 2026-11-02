@@ -25,6 +25,8 @@ class TorchRuntime:
     ) -> None:
         if precision not in {"fp32", "fp16", "bf16"}:
             raise ValueError(f"Unsupported runtime precision: {precision}")
+        if not isinstance(compile_enabled, bool):
+            raise ValueError("compile_enabled must be boolean.")
         self._device = torch.device(device)
         self._precision = precision
         self._compile_enabled = compile_enabled
