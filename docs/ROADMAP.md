@@ -68,6 +68,10 @@ TorchTPU support. “Implemented” means present in that historical code path;
   argument now routes the native runtime through `torch.compile`; it defaults
   off, is limited to `accelerator="native_tpu"`, and resume rejects a changed
   compile mode. This software path has not been validated on TPU hardware.
+  The opt-in compile probe now compares each step's output, loss, gradients,
+  and AdamW update against an eager copy of the same tiny model, using the
+  same inputs. A compiled pass requires this numerical check; hardware evidence
+  remains pending.
   The bounded lifecycle harness can now repeat either eager or compiled smoke
   processes, and the notebook records which mode it ran. Eager/compiled
   lifecycle and T1.4 collective remain unrun. Keep the native dependency profile

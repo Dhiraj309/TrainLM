@@ -57,6 +57,11 @@
   marker from every child and stay disabled until the standalone compile check
   passes. Source-level tests cover the mode guard; no compiled TPU
   repeat-run/teardown result exists.
+  The opt-in compile probe now runs an eager reference beside the compiled tiny
+  model on identical batches and checks forward, loss, gradients, and AdamW
+  updates at each step (`rtol=1e-2`, `atol=1e-3`). Its pass marker is required
+  by the evidence and lifecycle reports. This is synthetic numerical parity,
+  not causal-LM training validation; no owner compiled run has been reported.
   `accelerator="auto"` selects CUDA/CPU only when native TPU is not detected;
   it now raises on detected TPU or broken TorchTPU discovery rather than
   silently falling back. Explicit `tpu` still uses the XLA coordinator.

@@ -74,7 +74,8 @@ class LifecycleTests(unittest.TestCase):
             commands.append(command)
             destination = Path(command[command.index("--report-json") + 1])
             destination.write_text(json.dumps(ready_report()))
-            return FinishedProcess(400 + len(commands), (*MARKERS, "compile=PASS"))
+            return FinishedProcess(400 + len(commands),
+                                   (*MARKERS, "parity=PASS", "compile=PASS"))
 
         with TemporaryDirectory() as directory:
             report = RUN(Path(directory), repeats=2, timeout=12, compiled=True,
@@ -99,6 +100,7 @@ class LifecycleTests(unittest.TestCase):
 
         self.assertEqual(report["status"], "failed")
         self.assertIn("compile", report["attempts"][0]["missing_markers"])
+        self.assertIn("parity", report["attempts"][0]["missing_markers"])
 
     def test_compile_mode_must_be_boolean(self):
         with TemporaryDirectory() as directory:

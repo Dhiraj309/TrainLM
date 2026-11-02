@@ -27,7 +27,7 @@ def process(stdout="", **overrides):
 def smoke(device="tpu", compiled=False):
     lines = list(MODULE["_SMOKE_MARKERS"])
     lines += [f"device={device}"]
-    lines += ["compile=torch.compile enabled", "compile=PASS"] if compiled else ["compile=eager"]
+    lines += ["compile=torch.compile enabled", "parity=PASS", "compile=PASS"] if compiled else ["compile=eager"]
     if device == "tpu":
         lines += ["tpu_report=" + json.dumps(discovery())]
     return process("\n".join(lines))
@@ -87,6 +87,10 @@ class EvidenceTests(unittest.TestCase):
         self.assertEqual(build(compile_process=smoke())["checks"]["compile"]["status"], "failed")
         self.assertEqual(build(compile_process=smoke(compiled=True))[
             "checks"]["compile"]["status"], "passed")
+        missing_parity = smoke(compiled=True)
+        missing_parity["stdout"] = missing_parity["stdout"].replace("parity=PASS\n", "")
+        self.assertEqual(build(compile_process=missing_parity)[
+            "checks"]["compile"]["status"], "failed")
 
     def test_duplicate_discovery_cannot_be_mixed_into_one_run(self):
         result = smoke()

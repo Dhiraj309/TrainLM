@@ -14,6 +14,7 @@ Those checks require v5e-8 and remain separate acceptance evidence.
 from __future__ import annotations
 
 import argparse
+from copy import deepcopy
 import json
 from pathlib import Path
 import runpy
@@ -130,7 +131,9 @@ def _run(torch: object, args: argparse.Namespace) -> None:
         torch.nn.Linear(4, 16),
         torch.nn.GELU(),
         torch.nn.Linear(16, 2),
-    ).to(device)
+    )
+    reference = deepcopy(model).to(device) if args.compile else None
+    model = model.to(device)
     if args.compile:
         model = torch.compile(model)
         print("compile=torch.compile enabled")
@@ -138,6 +141,10 @@ def _run(torch: object, args: argparse.Namespace) -> None:
         print("compile=eager")
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+    reference_optimizer = (
+        torch.optim.AdamW(reference.parameters(), lr=1e-3)
+        if reference is not None else None
+    )
     initial_parameters = [p.detach().clone() for p in model.parameters()]
 
     for step in range(1, args.steps + 1):
@@ -156,7 +163,34 @@ def _run(torch: object, args: argparse.Namespace) -> None:
         if any(not bool(torch.isfinite(grad).all().item()) for grad in gradients):
             raise RuntimeError(f"step {step}: one or more gradients are not finite")
 
+        if reference is not None:
+            reference_optimizer.zero_grad(set_to_none=True)
+            expected = reference(inputs)
+            expected_loss = torch.nn.functional.mse_loss(expected, targets)
+            expected_loss.backward()
+            if not torch.allclose(predictions, expected, rtol=1e-2, atol=1e-3):
+                raise RuntimeError(f"step {step}: compiled forward differs from eager")
+            if not torch.allclose(loss, expected_loss, rtol=1e-2, atol=1e-3):
+                raise RuntimeError(f"step {step}: compiled loss differs from eager")
+            if any(
+                expected_param.grad is None
+                or not torch.allclose(grad, expected_param.grad, rtol=1e-2, atol=1e-3)
+                for grad, expected_param in zip(
+                    gradients, reference.parameters(), strict=True
+                )
+            ):
+                raise RuntimeError(f"step {step}: compiled gradients differ from eager")
+
         optimizer.step()
+        if reference_optimizer is not None:
+            reference_optimizer.step()
+            if any(
+                not torch.allclose(actual, expected, rtol=1e-2, atol=1e-3)
+                for actual, expected in zip(
+                    model.parameters(), reference.parameters(), strict=True
+                )
+            ):
+                raise RuntimeError(f"step {step}: compiled update differs from eager")
         print(f"step={step} loss={loss.detach().cpu().item():.6f}")
 
     changed = any(
@@ -170,6 +204,7 @@ def _run(torch: object, args: argparse.Namespace) -> None:
     print("autograd=PASS")
     print("optimizer_update=PASS")
     if args.compile:
+        print("parity=PASS")
         print("compile=PASS")
     print("result=single-device smoke passed; no distributed or performance claim")
 

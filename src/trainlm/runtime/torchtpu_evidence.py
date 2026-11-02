@@ -75,7 +75,7 @@ def smoke_evidence(process: dict | None, *, compiled: bool = False) -> dict:
     device = device if device in {"tpu", "cpu", "cuda"} else None
     record = _json_record(process.get("stdout", ""), "tpu_report=")
     report = NORMALIZE(record) if record is not None else None
-    markers = (*_SMOKE_MARKERS, "compile=PASS", "compile=torch.compile enabled") \
+    markers = (*_SMOKE_MARKERS, "parity=PASS", "compile=PASS", "compile=torch.compile enabled") \
         if compiled else (*_SMOKE_MARKERS, "compile=eager")
     missing = [marker.split("=", 1)[0] for marker in markers if marker not in lines]
     passed = (process.get("status") == "completed" and result["exit_code"] == 0

@@ -64,9 +64,12 @@ python examples/torchtpu_t1_v5e1_probe.py \
   --compile
 ```
 
-The notebook reports installed versions and read-only pip dependency conflicts
-before the smoke; it bounds eager runs to 300 seconds and compile runs to 900
-seconds. A timeout is a failure, not TPU support evidence.
+The compiled probe also compares each step's forward, loss, gradients, and
+AdamW update with an eager copy on the same input (`rtol=1e-2`, `atol=1e-3`).
+Its result must include `parity=PASS` as well as `compile=PASS`. The notebook
+reports installed versions and read-only pip dependency conflicts before the
+smoke; it bounds eager runs to 300 seconds and compile runs to 900 seconds.
+A timeout is a failure, not TPU support evidence.
 
 ### Latest owner result (2026-10-28)
 

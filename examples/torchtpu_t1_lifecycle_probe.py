@@ -32,7 +32,7 @@ PASS_MARKERS = (
     "forward=PASS", "autograd=PASS", "optimizer_update=PASS",
     "result=single-device smoke passed; no distributed or performance claim",
 )
-COMPILE_MARKER = "compile=PASS"
+COMPILE_MARKERS = ("parity=PASS", "compile=PASS")
 
 
 def run_once(
@@ -64,7 +64,7 @@ def run_once(
         except (OSError, ValueError):
             report = {"schema_version": 1, "status": "invalid_report"}
     lines = set(process["stdout"].splitlines())
-    required_markers = PASS_MARKERS + ((COMPILE_MARKER,) if compiled else ())
+    required_markers = PASS_MARKERS + (COMPILE_MARKERS if compiled else ())
     passed = (
         process["status"] == "completed"
         and report is not None and report["status"] == "ready"

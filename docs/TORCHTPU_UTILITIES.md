@@ -174,7 +174,7 @@ These are T1 work packages, not new branches or renumbered GitHub PRs:
    not native runtime certification. An opt-in
    [single-device lifecycle probe](../examples/torchtpu_t1_lifecycle_probe.py)
    performs bounded sequential restarts and records normalized observations.
-   Its optional `--compile` mode requires a compile-pass marker from every
+   Its optional `--compile` mode requires compile and eager-parity markers from every
    fresh child; the notebook keeps compiled repeats off until the standalone
    compile check passes. Only CPU contracts have run. Resolve the native
    dependency profile and verify clean install/import, eager and compiled
