@@ -16,6 +16,7 @@ SHA = "a" * 40
 def successful_process(*, compile_requested=False, resume_requested=False):
     checks = {
         "train": "passed", "export": "passed",
+        "reload_generate": "passed",
         "compile": "passed" if compile_requested else "not_run",
         "resume": "passed" if resume_requested else "not_run",
         "exact_weight_match": "passed" if resume_requested else "not_run",
@@ -47,7 +48,7 @@ def successful_process(*, compile_requested=False, resume_requested=False):
         },
         "checks": checks,
     }
-    markers = ["train=PASS", "export=PASS"]
+    markers = ["train=PASS", "export=PASS", "reload_generate=PASS"]
     if compile_requested:
         markers.append("compile=PASS")
     if resume_requested:
@@ -71,6 +72,7 @@ class TrainerEvidenceTests(unittest.TestCase):
                 process = successful_process(**modes)
                 report = self.report(process, **modes)
                 self.assertEqual(report["status"], "passed")
+                self.assertEqual(report["checks"]["reload_generate"], "passed")
                 self.assertEqual(report["device"]["device_name"], "TPU v5e")
                 self.assertEqual(report["packages"]["torch"], "2.14.1+cpu")
                 self.assertEqual(report["packages"]["tokenizers"], "0.22.1")
@@ -92,6 +94,8 @@ class TrainerEvidenceTests(unittest.TestCase):
         process = successful_process()
         self.assertEqual(self.report({**process, "stdout": process["stdout"].replace(
             "export=PASS", "")})["status"], "failed")
+        self.assertEqual(self.report({**process, "stdout": process["stdout"].replace(
+            "reload_generate=PASS", "")})["status"], "failed")
         self.assertEqual(self.report(process, compile_requested=True)["status"], "failed")
 
     def test_timeout_and_fatal_exit_never_pass_or_leak_logs(self):

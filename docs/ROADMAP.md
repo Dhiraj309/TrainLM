@@ -41,12 +41,12 @@ TorchTPU support. “Implemented” means present in that historical code path;
   `a24514a7693e918c1c10c8a84c705399fa3b3bcf`, with CI passing. PR #42
   rebase-merged configurable sparse logging and terminal loss snapshots at
   `2e90537371aa03c98f4fc395edb2b231727eaebb`, with GitHub pytest passing in
-  2m0s. Active branch `feat/16-colab-model-artifact` packages the exported
-  Hugging Face model/tokenizer and evidence report for Colab/Kaggle download.
-  Sixteen dependency-free notebook/launcher checks, 11 evidence tests,
-  notebook parsing and synthetic ZIP inclusion/fallback checks pass locally.
-  Three smoke tests require packages absent from this workspace; full pytest
-  awaits branch CI. BF16 and
+  2m0s. PR #43 packages the exported Hugging Face model/tokenizer and evidence
+  report for Colab/Kaggle download at `73952a9724456390c6def5b74a474d4274dc7544`;
+  GitHub pytest passed in 2m4s. The current branch adds a CPU reload/generation
+  check to verify artifact usability; the report records that phase separately
+  from TPU validation. Sixteen dependency-free tests and 11 evidence tests pass
+  locally; the Transformers-backed generation test awaits branch CI. BF16 and
   checkpointing remain unvalidated on TPU. T1 source-level
   probes and the explicit `native_tpu` path are implemented; owner-run compile,
   lifecycle and v5e-8 collective evidence remain pending. Hosted Kaggle currently documents
@@ -178,9 +178,10 @@ TorchTPU support. “Implemented” means present in that historical code path;
   exposes opt-in BF16; PR #38 adds optimizer schedule and seed controls; PR #39
   adds opt-in activation checkpointing; PR #40 adds per-device batch sizes; PR
   #41 adds supervised-token targets and reports actual consumption; PR #42
-  exposes logging cadence and preserves the final loss snapshot. The active
-  notebook iteration bundles the exported model and evidence report for
-  download. The
+  exposes logging cadence and preserves the final loss snapshot; PR #43 bundles
+  the model export and evidence report for download. The current notebook
+  iteration verifies that export reloads and generates tokens on CPU. This is
+  not a TPU generation or convergence result. The
   default recipe targets 1,000,000 next-token targets, with gradient
   accumulation, periodic checkpoints, evaluation, and HF export. It checks for
   the optional `datasets` package before fetching data. This is a small-scale

@@ -5,6 +5,7 @@ from pathlib import Path
 import runpy
 import subprocess
 import sys
+import tempfile
 import unittest
 
 
@@ -46,6 +47,32 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         self.assertEqual(config.n_embd, 256)
         self.assertEqual(config.n_layer, 4)
         self.assertEqual(config.n_head, 8)
+
+    def test_exported_scratch_model_reloads_and_generates_on_cpu(self):
+        from transformers import AutoModelForCausalLM
+
+        namespace = runpy.run_path(str(SCRIPT))
+        tokenizer, _ = namespace["_train_byte_level_tokenizer"](
+            iter([{"text": "TrainLM checks a local language model."}]),
+            max_examples=1, vocab_size=300,
+        )
+        config = namespace["_scratch_gpt2_config"](
+            vocab_size=len(tokenizer), sequence_length=12, embedding_size=16,
+            layers=1, attention_heads=2, pad_token_id=tokenizer.pad_token_id,
+            bos_token_id=tokenizer.bos_token_id,
+            eos_token_id=tokenizer.eos_token_id,
+        )
+        model = AutoModelForCausalLM.from_config(config)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            export_dir = Path(tmp)
+            model.save_pretrained(export_dir, safe_serialization=True)
+            tokenizer.save_pretrained(export_dir)
+            generated_tokens = namespace["_check_export_generation"](
+                export_dir, sequence_length=12,
+            )
+
+        self.assertGreaterEqual(generated_tokens, 1)
 
     def test_gradient_checkpointing_helper_manages_cache_without_torch(self):
         class FakeModel:
@@ -354,6 +381,7 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         self.assertIn("model_export=not_included", source)
         self.assertIn("/kaggle/working", source)
         self.assertIn("files.download", source)
+        self.assertIn("reloads that export on CPU", markdown)
         self.assertIn("supervised next-token targets", markdown)
         self.assertIn("LEARNING_RATE = 3e-4", source)
         self.assertIn("WEIGHT_DECAY = 0.1", source)
