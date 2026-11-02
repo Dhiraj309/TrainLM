@@ -79,9 +79,9 @@ ecosystem references, not prerequisites for the basic trainer.
 
 | Repository area | Observed state | Disposition |
 |---|---|---|
-| `src/trainlm/api.py` | `auto` selects CUDA or CPU; explicit TPU enters the existing coordinator | Add native discovery/routing behind the public API after compatibility tests; preserve intentional CPU/CUDA selection. |
+| `src/trainlm/api.py` | `auto` selects CUDA or CPU; explicit `tpu` enters the XLA coordinator; explicit `native_tpu` selects an experimental one-device route | Keep auto-selection gated until T1 package/CPU evidence; preserve intentional CPU/CUDA and XLA behavior. |
 | `src/trainlm/runtime/base.py` | ExecutionBackend, LogicalMesh, BackendDiagnostics already exist | Extend portable contracts only where needed; implement a native adapter. |
-| `src/trainlm/runtime/runtime.py` | Portable TorchRuntime targets CPU/CUDA | Reuse lifecycle/batch-transfer design; native TPU still needs its own validated behavior. |
+| `src/trainlm/runtime/runtime.py` | Portable TorchRuntime targets CPU/CUDA; `TorchTPURuntime` now reuses its lifecycle/batch-transfer behavior for explicit single-device experiments | Validate on the owner TPU; add distributed collectives and checkpoint RNG only behind their later gates. |
 | `src/trainlm/runtime/diagnostics.py`, `runtime/xla.py` | XLA collectors/runtime | Preserve for XLA; replace collectors behind the adapter for native TPU. |
 | `src/trainlm/_tpu_coordinator.py`, `_tpu_checkpoint.py` | Private launch and checkpoint infrastructure | Retain error/lifecycle contracts; audit XLA-specific worker assumptions before reuse. |
 | `src/trainlm/checkpoint/`, `training/` | Resume, export, trainer and metric contracts | Reuse and re-prove device RNG, distributed state and clean-process resume. |
@@ -126,8 +126,9 @@ with the selected existing backend; `trainer.explain(include_hardware=True)`
 adds it to text, JSON or dict output. Neither method initializes a native
 training worker, checks device properties or certifies hardware. `auto` blocks
 on detected TPU until the native route is validated; explicit `tpu` still
-means the historical XLA coordinator. A CLI diagnostic command and notebook
-integration with the trainer remain planned.
+means the historical XLA coordinator, while explicit `native_tpu` opts into
+the experimental one-device prototype. A CLI diagnostic command remains
+planned.
 The T1 single-device probe can save a bounded discovery JSON from its owning
 process. Trainer result handling can consume that schema from a future native
 worker summary and show its status beside parent preflight. Today's XLA worker
@@ -145,9 +146,13 @@ teardown output and cleans surviving children after parent exit. Raw logs stay
 local; package incompatibilities, skipped checks and CPU-only runs remain
 distinct in the exported report.
 
-Use the same report contract for the planned CLI diagnostic surface during
-T2, after the native install profile is reviewed. New kernel, optimizer or
-parallelism features remain behind their existing later acceptance gates.
+Use the same report contract for the planned CLI diagnostic surface during T2.
+The experimental single-device trainer route is being built before the native
+install profile is resolved so CPU-verifiable seams and user workflow can be
+reviewed while hardware is queued. It remains explicit; do not enable `auto`,
+change dependency bounds, or claim support until the required T1 and CPU gates
+pass. New kernel, optimizer or parallelism features remain behind their
+existing later acceptance gates.
 
 These are T1 work packages, not new branches or renumbered GitHub PRs:
 

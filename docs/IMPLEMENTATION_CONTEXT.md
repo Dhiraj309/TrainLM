@@ -43,8 +43,9 @@
   APIs to T1–T11 and reusable repository contracts. A source-level
   report now observes native TPU availability, device properties, versions and
   allocation in the probe process; CPU-only contract tests pass. The public
-  trainer now uses a non-allocating view for `preflight()` and optional
-  `explain(include_hardware=True)`, but native worker routing is not integrated.
+  trainer uses a non-allocating view for `preflight()` and optional
+  `explain(include_hardware=True)`. A separate explicit native path is now
+  described below; automatic TPU routing remains gated.
   The notebook runs a read-only metadata/profile check against TrainLM's
   source requirements, TorchTPU's installed requirements and `pip check`,
   then bounds eager/compile child processes. It does not alter packages;
@@ -95,6 +96,19 @@
   exactly those two snapshots at the configured cadence. These fixes are not
   yet rerun on the owner runtime. PyTorch and pytest remain unavailable here,
   so rerun the full suite before changing the dependency range.
+- The owner requested implementation to continue while hardware queues are
+  long. An opt-in `accelerator="native_tpu"` backend now reuses the existing
+  PyTorch engine for one visible TPU device; it checks native allocation and
+  synchronizes through PyTorch's generic accelerator API. Existing
+  `accelerator="tpu"` continues to mean the XLA coordinator, while `auto`
+  still blocks on TPU. The copyable Colab notebook fine-tunes a small pretrained
+  causal LM for three steps and exports its model and tokenizer. This is
+  experimental code only: no native trainer run has been observed, and
+  compile, multi-device, package compatibility, CPU conformance, and target
+  performance remain unverified. The runtime now captures/restores accelerator
+  RNG state through guarded generic APIs; an absent API rejects checkpointing
+  or resume. This contract has not been run against TorchTPU hardware. T1 evidence gates
+  still apply before widening the package range or enabling automatic routing.
 - `trainlm doctor` adds a one-command read-only package/runtime report to the
   CLI, reusing the T1 profile and hardware discovery contracts. From a source
   checkout it records the Git revision; an installed wheel uses its declared

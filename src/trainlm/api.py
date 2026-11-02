@@ -134,7 +134,7 @@ class TrainLMTrainingArguments:
     warmup_steps: int = 0
     bf16: bool = False
     fp16: bool = False
-    accelerator: Literal["auto", "cpu", "cuda", "tpu"] = "auto"
+    accelerator: Literal["auto", "cpu", "cuda", "tpu", "native_tpu"] = "auto"
     logging_steps: int = 10
     save_steps: int | None = None
     eval_steps: int | None = None
@@ -180,7 +180,7 @@ class TrainLMTrainingArguments:
             raise ValueError("dataloader_pin_memory must be boolean.")
         if self.bf16 and self.fp16:
             raise ValueError("bf16 and fp16 cannot both be enabled.")
-        if self.accelerator not in {"auto", "cpu", "cuda", "tpu"}:
+        if self.accelerator not in {"auto", "cpu", "cuda", "tpu", "native_tpu"}:
             raise ValueError(f"Unsupported accelerator: {self.accelerator}")
         if self.lr_scheduler_type not in {"constant", "linear", "cosine", "wsd"}:
             raise ValueError(f"Unsupported scheduler: {self.lr_scheduler_type}")
@@ -427,6 +427,11 @@ class TrainLMTrainer:
             accelerator = select_auto_backend(
                 report, cuda_available=torch.cuda.is_available()
             )
+        if accelerator == "native_tpu":
+            from trainlm.runtime.torchtpu import TorchTPURuntime
+
+            precision = "bf16" if self.args.bf16 else "fp16" if self.args.fp16 else "fp32"
+            return TorchTPURuntime(precision=precision, seed=self.args.seed)
         if accelerator == "cuda" and not torch.cuda.is_available():
             raise RuntimeError("accelerator='cuda' requested but CUDA is unavailable.")
         precision = "bf16" if self.args.bf16 else "fp16" if self.args.fp16 else "fp32"
@@ -492,7 +497,7 @@ class TrainLMTrainer:
 
     def _make_config(self) -> TrainConfig:
         runtime_name = self.runtime.device.type
-        if runtime_name not in {"cpu", "cuda", "xla"}:
+        if runtime_name not in {"cpu", "cuda", "xla", "tpu"}:
             runtime_name = "xla" if self.runtime.name == "xla" else "cpu"
         precision = self.runtime.precision
         source = self._model_source or ModelSourceConfig()
@@ -504,7 +509,10 @@ class TrainLMTrainer:
                 pin_memory=self.args.dataloader_pin_memory,
             ),
             loss=LossConfig(implementation="causal_lm"),
-            runtime=RuntimeConfig(device=runtime_name, precision=precision),
+            runtime=RuntimeConfig(
+                device="native_tpu" if runtime_name == "tpu" else runtime_name,
+                precision=precision,
+            ),
             parallelism=ParallelismConfig(data=1),
             optimizations=OptimizationConfig(policy="auto", allow_fallbacks=True),
             optimizer=OptimizerConfig(
@@ -589,11 +597,8 @@ class TrainLMTrainer:
                 callback.on_metrics(state, control, metrics)
         return {**result, "trainer_state": asdict(state)}
 
-    def _save_training_checkpoint(self, engine: EngineTrainer, destination: object | None):
-        root = Path(self.args.output_dir)
-        path = root / str(destination or f"checkpoint-{engine.state.step}")
-        path.mkdir(parents=True, exist_ok=True)
-        payload = {
+    def _training_checkpoint_payload(self, engine: EngineTrainer) -> dict[str, Any]:
+        return {
             "schema_version": 1,
             "model": engine.model.state_dict(),
             "optimizer": engine.optimizer.state_dict(),
@@ -608,6 +613,12 @@ class TrainLMTrainer:
             "cuda_rng_state": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
             "loader_generator_initial_state": self._train_loader_generator_initial_state,
         }
+
+    def _save_training_checkpoint(self, engine: EngineTrainer, destination: object | None):
+        root = Path(self.args.output_dir)
+        path = root / str(destination or f"checkpoint-{engine.state.step}")
+        path.mkdir(parents=True, exist_ok=True)
+        payload = self._training_checkpoint_payload(engine)
         temporary = path / "trainer_state.pt.tmp"
         torch.save(payload, temporary)
         temporary.replace(path / "trainer_state.pt")
@@ -625,7 +636,6 @@ class TrainLMTrainer:
         engine.model.load_state_dict(payload["model"])
         engine.optimizer.load_state_dict(payload["optimizer"])
         engine.scheduler.load_state_dict(payload["scheduler"])
-        engine.runtime.load_state_dict(payload["runtime"])
         for key, value in payload["trainer"].items():
             setattr(engine.state, key, value)
         initial_state = payload.get("loader_generator_initial_state")
@@ -651,6 +661,9 @@ class TrainLMTrainer:
         torch.set_rng_state(payload["cpu_rng_state"])
         if torch.cuda.is_available() and payload["cuda_rng_state"] is not None:
             torch.cuda.set_rng_state_all(payload["cuda_rng_state"])
+        # Restore accelerator state after rebuilding the data iterator so any
+        # host-side iterator setup cannot advance the checkpointed device RNG.
+        engine.runtime.load_state_dict(payload["runtime"])
         return path
 
     def _make_tpu_request(
@@ -761,6 +774,9 @@ class TrainLMTrainer:
             self.model.save_pretrained(destination, safe_serialization=True)
         else:
             torch.save(self.model.state_dict(), destination / "pytorch_model.bin")
+        save_processing = getattr(self.processing_class, "save_pretrained", None)
+        if callable(save_processing):
+            save_processing(destination)
         return destination
 
     def save_state(self, output_dir: str | Path | None = None) -> Path:
@@ -770,14 +786,17 @@ class TrainLMTrainer:
             )
         destination = Path(output_dir or self.args.output_dir)
         destination.mkdir(parents=True, exist_ok=True)
-        state = {
-            "trainer": asdict(self.engine.state),
-            "optimizer": self.optimizer.state_dict(),
-            "scheduler": self.scheduler.state_dict(),
-        }
         path = destination / "trainer_state.pt"
-        torch.save(state, path)
-        return path
+        temporary = path.with_suffix(".pt.tmp")
+        self.runtime.before_checkpoint("manual-state")
+        success = False
+        try:
+            torch.save(self._training_checkpoint_payload(self.engine), temporary)
+            temporary.replace(path)
+            success = True
+            return path
+        finally:
+            self.runtime.after_checkpoint("manual-state", success=success)
 
     def preflight(self) -> dict[str, Any]:
         """Inspect native TPU availability without allocating or launching workers.
@@ -792,7 +811,11 @@ class TrainLMTrainer:
             "selected_backend": (
                 "xla" if self._tpu_coordinator is not None else self.runtime.name
             ),
-            "native_tpu_training": "not_integrated",
+            "native_tpu_training": (
+                "experimental_single_device"
+                if self.runtime is not None and self.runtime.name == "torchtpu"
+                else "not_integrated"
+            ),
             "native_tpu": report,
             "native_tpu_worker": deepcopy(self._native_tpu_worker_report),
         }
@@ -822,16 +845,25 @@ class TrainLMTrainer:
                 ),
             )
         else:
+            native_tpu = self.runtime.name == "torchtpu"
             report = OptimizationExplanation(
                 backend=self.runtime.name,
                 precision=self.runtime.precision,
                 selected_path=("external_model" if self.loaded is None else "huggingface_model"),
-                certification="compatible",
+                certification="unverified" if native_tpu else "compatible",
                 capabilities=inspect_dense_causal_lm(
                     self.model,
                     source_provider=("unknown" if self.loaded is None else "huggingface"),
                 ),
-                limitations=("No optimized provider execution plan has been selected.",),
+                limitations=(
+                    (
+                        "Native TorchTPU training is experimental and limited to "
+                        "one visible device; distributed training, compilation, "
+                        "and exact TPU resume are not integrated."
+                    )
+                    if native_tpu
+                    else "No optimized provider execution plan has been selected.",
+                ),
             )
         if strict:
             report.require_supported()

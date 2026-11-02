@@ -39,6 +39,10 @@ pending.
 The [utility inventory](TORCHTPU_UTILITIES.md) distinguishes versioned API
 documentation from the current public API policy. Experimental utilities
 need guarded adapters; monitoring, profiling and kernel extras remain optional.
+An experimental `accelerator="native_tpu"` single-device adapter is being
+implemented behind explicit opt-in. It does not create a supported TorchTPU
+install profile or relax the `torch<2.14` core range; the owner's Torch 2.14.1
+runtime remains outside TrainLM's declared compatibility contract.
 The v5e-1 notebook also runs the repository CPU test suite against the runtime's
 already installed Python/PyTorch versions. Its result is recorded separately
 from TPU discovery and eager execution, and it does not install packages. The

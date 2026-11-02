@@ -24,9 +24,10 @@ TorchTPU support. “Implemented” means present in that historical code path;
   allocation, forward, backward and AdamW update succeeded. Hardware generation
   and explicit compile remain unverified. The current [utility inventory](TORCHTPU_UTILITIES.md)
   adds shared discovery/reporting, dependency/lifecycle verification and
-  distributed entry checks as T1.1–T1.4 before public integration. T1.2 now
-  has a source-level report for TPU availability and properties, used by the
-  standalone probe; native trainer routing remains pending. T1.3 now has a
+  distributed entry checks as T1.1–T1.4. T1.2 now has a source-level report
+  for TPU availability and properties, used by the standalone probe. A
+  provisional single-device runtime is available only through explicit
+  `native_tpu`; production validation and auto-routing remain pending. T1.3 now has a
   read-only metadata/profile check (source and TorchTPU requirements plus
   `pip check`), bounded probe execution, and an opt-in repeat-process lifecycle
   harness in the notebook; clean-install and accelerator lifecycle results
@@ -77,6 +78,20 @@ TorchTPU support. “Implemented” means present in that historical code path;
   visible. Pip conflict details are parsed from both common `pip check` output
   forms; the latest owner report identifies the IPython-to-Jedi conflict.
   The 18 old PR cards are candidates, not the active queue.
+
+- **Current implementation continuation (experimental):** the owner asked to
+  advance software while TPU hardware slots are delayed. The public API now
+  has an explicit `accelerator="native_tpu"` path for one visible TPU device,
+  backed by the existing backend-neutral PyTorch trainer. The legacy
+  `accelerator="tpu"` XLA coordinator is preserved; `auto` still refuses a
+  detected TPU. A Colab-openable, copyable notebook exercises a tiny real HF
+  causal LM fine-tune and export. This is an implementation checkpoint, not a
+  validated training result: package compatibility, CPU conformance, eager
+  trainer execution, compile and multi-device support remain open. Native
+  checkpoint state now includes an optional device RNG capture/restore contract;
+  runtimes missing those APIs fail checkpoint/resume rather than implying
+  exact continuation. Continue only behind explicit experimental selection
+  until CPU and owner-run TPU checks pass.
 
 ## Historical native-backend transition note
 

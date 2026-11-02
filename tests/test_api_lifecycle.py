@@ -94,3 +94,36 @@ def test_facade_resumes_local_training_state(tmp_path):
 
     assert state.step == 2
     assert state.micro_step == 2
+
+
+def test_manual_state_export_is_resumable(tmp_path):
+    first = TrainLMTrainer(
+        model=TinyModel(),
+        train_dataset=_dataset(),
+        args=TrainLMTrainingArguments(
+            output_dir=tmp_path,
+            max_steps=1,
+            sequence_length=4,
+            accelerator="cpu",
+        ),
+    )
+    first.train()
+    state_path = first.save_state(tmp_path / "manual-state")
+    payload = torch.load(state_path, map_location="cpu", weights_only=False)
+    assert payload["schema_version"] == 1
+    assert {"model", "optimizer", "scheduler", "runtime", "trainer"} <= payload.keys()
+
+    resumed = TrainLMTrainer(
+        model=TinyModel(),
+        train_dataset=_dataset(),
+        args=TrainLMTrainingArguments(
+            output_dir=tmp_path,
+            max_steps=2,
+            sequence_length=4,
+            accelerator="cpu",
+        ),
+    )
+    state = resumed.train(resume_from_checkpoint=state_path)
+
+    assert state.step == 2
+    assert state.micro_step == 2

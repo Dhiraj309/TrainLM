@@ -6,15 +6,16 @@ PyTorch/XLA work. Read the status labels before treating an item as current.
 ## Current direction
 
 TrainLM is rebaselining toward native TorchTPU on Kaggle TPU v5e-8. The
-current backend in the code is PyTorch/XLA; native TorchTPU is a target, not an
-implemented or certified backend. PR #20 closed T0.2. T1 feasibility starts on
+established backend is PyTorch/XLA. An experimental, explicitly selected
+single-device native TorchTPU path is being implemented, but is not validated
+or certified. PR #20 closed T0.2. T1 feasibility starts on
 v5e-1 for single-device checks; use v5e-8 when testing multi-device collectives,
 DP8, sharding, distributed checkpoints, or scaling. The owner reported a
 passing standalone eager TPU smoke. T1 now prioritizes shared hardware and
 capability discovery, a verified install profile and process lifecycle, then
-distributed entry checks; native trainer integration remains planned.
-Trainer preflight now exposes a non-allocating discovery snapshot; native TPU
-training and automatic TPU routing remain unverified and disabled.
+distributed entry checks. Automatic native TPU routing remains disabled until
+those gates pass. Trainer preflight exposes a non-allocating discovery
+snapshot; `accelerator="native_tpu"` is the opt-in single-device prototype.
 
 - [TorchTPU utility inventory, automatic discovery and UX](TORCHTPU_UTILITIES.md)
 - [T0–T11 roadmap and gates](TORCHTPU_REBASELINE.md)
@@ -25,6 +26,7 @@ training and automatic TPU routing remain unverified and disabled.
 - [T1 v5e-1 single-device probe](T1_V5E1_PROBE.md)
 - [Open T1 single-device probe directly in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/docs/01-t1-v5e1-probe/notebooks/TorchTPU_T1_v5e1_Probe.ipynb) · [view notebook source](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb)
 - [Open optional v5e-8 distributed probe directly in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/docs/01-t1-v5e1-probe/notebooks/TorchTPU_T1_v5e8_Distributed_Probe.ipynb) · [view notebook source](../notebooks/TorchTPU_T1_v5e8_Distributed_Probe.ipynb)
+- [Open experimental single-device training directly in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/feat/01-native-torchtpu-single-device-training/notebooks/TrainLM_Native_TorchTPU_Single_Device_Training.ipynb) · [view notebook source](../notebooks/TrainLM_Native_TorchTPU_Single_Device_Training.ipynb)
 
 ## Status meanings
 

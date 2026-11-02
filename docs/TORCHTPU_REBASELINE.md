@@ -13,6 +13,13 @@ hardware generation, explicit compilation and TrainLM integration remain
 unverified. Follow the [utility inventory and delivery order](TORCHTPU_UTILITIES.md)
 for the T1.1–T1.4 work packages.
 
+Owner direction allows CPU-verifiable implementation to proceed while scarce
+TPU slots are pending. A provisional, explicit `accelerator="native_tpu"`
+single-device path now reuses the portable engine; this does not close T1 or
+change the dependency profile. `accelerator="auto"` remains guarded, and the
+legacy `accelerator="tpu"` continues to select XLA. Checkpoint/resume,
+compilation and distributed training remain later gates.
+
 ## Project vision and desired developer experience
 
 TrainLM is an open-source, Python-first language-model training framework
@@ -127,10 +134,10 @@ attention, loss, optimizer, data, checkpoint, tests and documentation.
 |---|---|---|
 | T0 | Architecture rebaseline and salvage | PR #16/#18 inventory; reusable/XLA-specific/uncertain classification; approved boundaries and PR mapping |
 | T1 | Native TorchTPU utilities and environment | T1.1 inventory → T1.2 shared hardware/capability report → T1.3 verified dependency and process lifecycle → T1.4 multi-device entry probe. Record actual device properties, eager/compile results and reproducible setup; prefer v5e-1 for single-device and v5e-8 for collective evidence. |
-| T2 | Python-first configs/API | Integrate shared discovery into auto backend selection, preflight and explain; verify HF contracts, CPU/CUDA compatibility and actionable errors without manual runtime setup. |
-| T3 | Single-device training/data | TPU reference causal LM step, packed data manifest, uint32/legacy uint16 validation and loss parity |
+| T2 | Python-first configs/API | Integrate shared discovery into auto backend selection, preflight and explain; verify HF contracts, CPU/CUDA compatibility and actionable errors without manual runtime setup. An explicit single-device prototype exists; automatic routing waits for T1/package and CPU evidence. |
+| T3 | Single-device training/data | TPU reference causal LM step, packed data manifest, uint32/legacy uint16 validation and loss parity. The generic engine adapter and end-to-end notebook are implementation-started; owner TPU validation is pending. |
 | T4 | Eight-device data parallelism | Global valid-token-weighted gradients, unequal masks, accumulation and reference-parity proof |
-| T5 | Checkpoint/resume and HF export | Clean-process resume equivalence and `save_pretrained` round trip |
+| T5 | Checkpoint/resume and HF export | Model/tokenizer `save_pretrained` export is wired into the prototype; generic accelerator RNG capture/restore is implemented with fail-closed API checks. Clean-process resume equivalence, exact data cursor, and HF round trip remain unverified. |
 | T6 | Compilation foundations | Per-block compile parity, eager fallback, graph stability and debug/recompile evidence |
 | T7 | Optimized kernels | Guarded attention/fused CE, gradient/mask tests, explicit fallback and real TPU benchmarks |
 | T8 | Functional optimizers | Native AdamW parity and resume; opt-in Muon only after numerical/quality/TPU evidence |

@@ -7,9 +7,10 @@ kernel backends.
 ## Project status and roadmap
 
 The current development direction is native TorchTPU on Kaggle TPU v5e-8.
-The project is in the T0 architecture rebaseline: existing PyTorch/XLA code is
-being classified for reuse, replacement, or preservation as an optional XLA
-backend. Native TorchTPU support is not implemented or certified yet.
+The established backend is PyTorch/XLA; an experimental, explicitly selected
+single-device native TorchTPU path is now being implemented. It is not yet
+validated or certified. Existing XLA code is being classified for reuse,
+replacement, or preservation as an optional backend.
 
 - [Current roadmap and documentation guide](docs/README.md)
 - [T0–T11 native TorchTPU roadmap](docs/TORCHTPU_REBASELINE.md)
@@ -17,6 +18,7 @@ backend. Native TorchTPU support is not implemented or certified yet.
 - [Accepted T0.2 work mapping](docs/PR_DELIVERY_PLAN.md#t02-accepted-mapping-to-native-torchtpu-gates)
 - [T1 v5e-1 probe and run guide](docs/T1_V5E1_PROBE.md)
 - [Kaggle/Colab-style T1 probe notebook](notebooks/TorchTPU_T1_v5e1_Probe.ipynb)
+- [Experimental native single-device training notebook](notebooks/TrainLM_Native_TorchTPU_Single_Device_Training.ipynb)
 
 The M0–M17 material below and in the detailed roadmap records the earlier
 PyTorch/XLA development. Treat its completed, partial, and deferred labels as

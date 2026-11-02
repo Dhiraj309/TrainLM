@@ -24,7 +24,7 @@ class RuntimeConfig:
     logging cadence, or evaluation scheduling.
     """
 
-    device: Literal["auto", "cpu", "cuda", "xla"] = "auto"
+    device: Literal["auto", "cpu", "cuda", "xla", "native_tpu"] = "auto"
 
     precision: Literal[
         "fp32",
