@@ -14,6 +14,24 @@ NOTEBOOK = ROOT / "notebooks/TrainLM_Native_TorchTPU_Single_Device_Training.ipyn
 
 
 class NativeTrainerSmokeProcessTests(unittest.TestCase):
+    def test_scratch_tokenizer_is_trained_from_bounded_training_text(self):
+        train_tokenizer = runpy.run_path(str(SCRIPT))["_train_byte_level_tokenizer"]
+        rows = [
+            {"text": "Tiny stories teach language."},
+            {"text": "Café characters stay readable."},
+            {"text": "Training text defines the vocabulary."},
+            {"text": "This row must not enter tokenizer fitting."},
+        ]
+        tokenizer, document_count = train_tokenizer(
+            iter(rows), max_examples=3, vocab_size=300,
+        )
+
+        self.assertEqual(document_count, 3)
+        self.assertEqual(tokenizer.decode(tokenizer.encode("Café stories")), "Café stories")
+        self.assertIsInstance(tokenizer.eos_token_id, int)
+        self.assertIsInstance(tokenizer.pad_token_id, int)
+        self.assertNotEqual(tokenizer.eos_token_id, tokenizer.pad_token_id)
+
     def test_from_scratch_tokenizer_preserves_eos_document_boundaries(self):
         class FakeTokenizer:
             eos_token_id = 99
@@ -43,6 +61,7 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         self.assertIn("--compile", result.stdout)
         self.assertIn("--from-scratch", result.stdout)
         self.assertIn("--train-examples", result.stdout)
+        self.assertIn("--tokenizer-vocab-size", result.stdout)
 
     def test_incompatible_modes_fail_before_torch_import(self):
         result = subprocess.run(
@@ -64,6 +83,16 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         self.assertIn("must be positive", result.stderr)
         self.assertNotIn("No module named 'torch_tpu'", result.stderr)
 
+    def test_invalid_tokenizer_size_fails_before_torch_import(self):
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--output-dir", "/tmp/unused",
+             "--from-scratch", "--tokenizer-vocab-size", "259"],
+            capture_output=True, text=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("vocab_size must be at least 260", result.stderr)
+        self.assertNotIn("No module named 'torch_tpu'", result.stderr)
+
     def test_notebook_keeps_device_import_inside_bounded_child(self):
         notebook = json.loads(NOTEBOOK.read_text())
         cells = ["".join(cell["source"]) for cell in notebook["cells"]
@@ -73,6 +102,28 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         self.assertNotIn("TrainLMTrainer(", source)
         self.assertIn("run_probe_process", source)
         self.assertIn("torchtpu_native_trainer_smoke.py", source)
+
+    def test_scratch_notebook_trains_tokenizer_on_the_train_split(self):
+        notebook = json.loads(
+            (ROOT / "notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb").read_text()
+        )
+        source = "\n".join(
+            "".join(cell["source"])
+            for cell in notebook["cells"]
+            if cell["cell_type"] == "code"
+        )
+        markdown = "\n".join(
+            "".join(cell["source"])
+            for cell in notebook["cells"]
+            if cell["cell_type"] == "markdown"
+        )
+        self.assertIn("TOKENIZER_VOCAB_SIZE", source)
+        self.assertIn("--tokenizer-vocab-size", source)
+        self.assertIn("trains a byte-level BPE tokenizer", markdown)
+        self.assertIn(
+            "pretrained model weights and tokenizer are never downloaded",
+            markdown,
+        )
 
 
 if __name__ == "__main__":

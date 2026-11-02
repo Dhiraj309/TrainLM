@@ -39,13 +39,13 @@ approvals. T2 integrates the report into backend selection and the public UX.
 
 ## PR-by-PR serial execution
 
-**Current sequence:** T0.2 is merged → PR #31 merged the tiny scratch lifecycle
-→ PR #32 rebase-merged exact packed iterable checkpoint recovery at verified
-`main` SHA `82ead5b72991fc154738bcd8334e477d563d7ea3`, with CI passing. The
-active `fix/06-colab-notebooks-track-main` branch switches current notebooks
-from stale feature refs to merged `main`. After CI, merge using Rebase & Merge,
-verify remote `main`, then select the next T3/T5 dependency. The old numbered
-cards below do not set this order.
+**Current sequence:** PR #32 merged exact packed iterable checkpoint recovery
+→ PR #33 rebase-merged active notebook updates at verified `main` SHA
+`83d4b08dd9c510a6edf6ae0a5dc7e2b739343eb6`, with CI passing. The active
+`feat/07-train-tokenizer-from-corpus` branch removes the pretrained tokenizer
+dependency from the random-init corpus recipe by fitting BPE on training text.
+After CI, merge using Rebase & Merge, verify remote `main`, then select the next
+T3/T5 dependency. The old numbered cards below do not set this order.
 
 - A **PR-plan number** is a planned delivery slot, not a GitHub PR number.
   GitHub assigns its own PR number on creation. Do not create the next branch

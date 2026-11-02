@@ -8,7 +8,7 @@
 
 ## Current project snapshot
 
-- PR #18, including PR #16, PR #20, and PRs #28–#32 are merged.
+- PR #18, including PR #16, PR #20, and PRs #28–#33 are merged.
   PR #28
   merged the native single-device foundation at
   `860bb289bf35444d8d435cf41caf51bcf77afaaf`; PR #29 rebase-merged streaming
@@ -18,8 +18,9 @@
   PR #31 rebase-merged the CPU scratch lifecycle at
   `a58a9e13d792c2468f4c20d6cdc7375f4bc63ffd`; PR #32 rebase-merged exact
   packed-data checkpoint recovery at `82ead5b72991fc154738bcd8334e477d563d7ea3`
-  after passing CI. This iteration starts from that verified head on
-  `fix/06-colab-notebooks-track-main`.
+  after passing CI; PR #33 rebase-merged current Colab source references at
+  `83d4b08dd9c510a6edf6ae0a5dc7e2b739343eb6`. This iteration starts from that
+  verified head on `feat/07-train-tokenizer-from-corpus`.
 - T0.1 code inventory is recorded in `TORCHTPU_SALVAGE_INVENTORY.md`. The
   mapped legacy cards remain candidates, not an approved implementation queue.
 - Current implementation backend: PyTorch/XLA. Target: native TorchTPU on
@@ -179,12 +180,13 @@
   resumed and reference runs use the same source snapshot.
   A separate [Colab notebook](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb)
   constructs that GPT-2 architecture through `from_config`, so weights start
-  random, then tokenizes pinned TinyStories train/validation splits, evaluates,
-  saves periodic checkpoints, and exports through TrainLM. The dataset commit
-  is `f54c09fd23315a6f9c86f9dc80f725de7d8f9c64`; the package gate requires the
-  optional `datasets` distribution before download. This source-level path has
-  not run on TPU and does not establish convergence, throughput, or a
-  production-scale recipe.
+  random, then fits a byte-level BPE tokenizer on bounded TinyStories training
+  text only. It reopens the pinned train/validation streams, writes packed
+  shards, evaluates, saves periodic checkpoints, and exports through TrainLM.
+  The dataset commit is `f54c09fd23315a6f9c86f9dc80f725de7d8f9c64`; the
+  package gate requires the optional `datasets` distribution before download.
+  This source-level path has not run on TPU and does not establish convergence,
+  throughput, or a production-scale recipe.
   PR #28's CI passed all 804 tests after a follow-up corrected two native-runtime
   test fixtures. The PR merged with merge commit
   `860bb289bf35444d8d435cf41caf51bcf77afaaf`; TPU execution and convergence
@@ -196,9 +198,10 @@
   records source revision, token/document counts, and packed-shard hashes.
 - PR #30's CI passed its packed-data reference test and it was rebase-merged.
   PR #31's GitHub CI passed the random-init GPT-2 train/eval/checkpoint/export
-  smoke, and PR #32's CI passed exact packed-data checkpoint continuation and
-  stale-data rejection. Active notebooks are being switched to clone merged
-  `main`, so Colab runs use current code. Local runtime tests are unavailable
+  smoke; PR #32 passed exact packed-data checkpoint continuation and stale-data
+  rejection; PR #33 passed active-notebook source checks. The current scratch
+  path still uses a pinned pretrained tokenizer. This branch trains a byte-level
+  BPE tokenizer from the training split only. Local runtime tests are unavailable
   because this container lacks Torch/pytest. No TPU run or convergence result
   is claimed.
 - `trainlm doctor` adds a one-command read-only package/runtime report to the

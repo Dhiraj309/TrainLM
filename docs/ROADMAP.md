@@ -25,9 +25,11 @@ TorchTPU support. “Implemented” means present in that historical code path;
   random-init packed train/eval/checkpoint/export CPU lifecycle at
   `a58a9e13d792c2468f4c20d6cdc7375f4bc63ffd`; PR #32 rebase-merged exact
   packed-data checkpoint recovery at verified `main`
-  `82ead5b72991fc154738bcd8334e477d563d7ea3` after passing CI. The active
-  `fix/06-colab-notebooks-track-main` branch updates notebook source refs to
-  merged `main`. T1 source-level
+  `82ead5b72991fc154738bcd8334e477d563d7ea3` after passing CI; PR #33
+  rebase-merged Colab notebook source fixes at verified `main`
+  `83d4b08dd9c510a6edf6ae0a5dc7e2b739343eb6`. The active
+  `feat/07-train-tokenizer-from-corpus` branch fits a byte-level BPE tokenizer
+  on training text for the random-init recipe. T1 source-level
   probes and the explicit `native_tpu` path are implemented; owner-run compile,
   lifecycle and v5e-8 collective evidence remain pending. Hosted Kaggle currently documents
   v5e-8 and hosted Colab TPU v2, so neither is the v5e-1 target; use a
@@ -151,9 +153,11 @@ TorchTPU support. “Implemented” means present in that historical code path;
   The trainer smoke pins `distilbert/distilgpt2` and its tokenizer to Hub commit
   `2290a62682d06624634c1f46a6ad5be0f47f38aa`; the downloadable evidence records
   that model revision for repeatable runs. No TPU trainer result is claimed.
-  A separate Colab notebook now builds random model weights from that pinned
+  A separate Colab notebook builds random model weights from a pinned
   architecture config and trains them on pinned TinyStories train and
-  validation splits. The default recipe uses 1,000 steps, gradient
+  validation splits. It currently uses the pinned pretrained tokenizer; the
+  active branch replaces that with a tokenizer fitted only on the training
+  split. The default recipe uses 1,000 steps, gradient
   accumulation, periodic checkpoints, evaluation, and HF export. It checks for
   the optional `datasets` package before fetching data. This is a small-scale
   pretraining implementation; native TPU execution and convergence remain
@@ -164,8 +168,9 @@ TorchTPU support. “Implemented” means present in that historical code path;
   `PackedBinDataset`. PR #30's GitHub CI verified one public-trainer update
   against direct causal-LM reference loss, clipping, gradients and parameter
   updates. PR #31's CI verified the random-init train/eval/checkpoint/export
-  path, and PR #32's CI verified exact packed-data continuation and stale-data
-  rejection. Owner-run TPU validation and training convergence remain pending.
+  path; PR #32 verified exact packed-data continuation and stale-data rejection;
+  PR #33's CI verified that active notebooks load merged `main`. Owner-run TPU
+  validation and training convergence remain pending.
   Continue only behind explicit experimental selection until CPU and owner-run
   TPU checks pass.
 

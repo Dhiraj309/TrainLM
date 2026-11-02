@@ -58,17 +58,77 @@ def _token_documents(
         raise ValueError("The selected dataset split contains no text examples.")
 
 
+def _train_byte_level_tokenizer(dataset, *, max_examples: int, vocab_size: int):
+    """Train a compact tokenizer from the training text without caching it."""
+    if max_examples < 1:
+        raise ValueError("Tokenizer training examples must be positive.")
+    if vocab_size < 260:
+        raise ValueError("Byte-level BPE vocab_size must be at least 260.")
+
+    from tokenizers import Tokenizer, decoders, models, pre_tokenizers, trainers
+    from transformers import PreTrainedTokenizerFast
+
+    seen = 0
+
+    def text_documents():
+        nonlocal seen
+        for row in dataset:
+            if seen >= max_examples:
+                break
+            text = row.get("text") if isinstance(row, dict) else None
+            if not isinstance(text, str):
+                raise ValueError(
+                    "Tokenizer training rows must contain a string 'text' field."
+                )
+            seen += 1
+            yield text
+        if seen == 0:
+            raise ValueError("The tokenizer training split contains no text examples.")
+
+    core = Tokenizer(models.BPE(unk_token="[UNK]"))
+    core.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
+    core.train_from_iterator(
+        text_documents(),
+        trainer=trainers.BpeTrainer(
+            vocab_size=vocab_size,
+            special_tokens=["[UNK]", "<|pad|>", "<|bos|>", "<|eos|>"],
+            initial_alphabet=pre_tokenizers.ByteLevel.alphabet(),
+        ),
+    )
+    core.decoder = decoders.ByteLevel()
+    tokenizer = PreTrainedTokenizerFast(
+        tokenizer_object=core,
+        unk_token="[UNK]",
+        pad_token="<|pad|>",
+        bos_token="<|bos|>",
+        eos_token="<|eos|>",
+    )
+    if not all(
+        isinstance(token_id, int)
+        for token_id in (
+            tokenizer.unk_token_id,
+            tokenizer.pad_token_id,
+            tokenizer.bos_token_id,
+            tokenizer.eos_token_id,
+        )
+    ):
+        raise RuntimeError("The trained tokenizer is missing a special token ID.")
+    return tokenizer, seen
+
+
 def run_smoke(
     output_dir: Path, *, compile_enabled: bool, resume: bool,
     from_scratch: bool = False, max_steps: int = 3, train_examples: int = 16,
     sequence_length: int = 64, save_steps: int | None = None,
     eval_examples: int = 128, max_eval_batches: int = 20,
-    gradient_accumulation_steps: int = 1,
+    gradient_accumulation_steps: int = 1, tokenizer_vocab_size: int = 16000,
 ) -> None:
     if max_steps < 1 or sequence_length < 1 or gradient_accumulation_steps < 1:
         raise ValueError("Training steps, sequence length, and accumulation must be positive.")
     if from_scratch and min(train_examples, eval_examples, max_eval_batches) < 1:
         raise ValueError("Scratch training/evaluation dataset sizes must be positive.")
+    if from_scratch and tokenizer_vocab_size < 260:
+        raise ValueError("Byte-level BPE vocab_size must be at least 260.")
     if save_steps is not None and save_steps < 1:
         raise ValueError("save_steps must be positive when configured.")
     if resume and compile_enabled:
@@ -93,12 +153,20 @@ def run_smoke(
     print(f"device={discovery['device_name'] or 'tpu'}", flush=True)
 
     model_id = MODEL_ID
-    tokenizer = AutoTokenizer.from_pretrained(model_id, revision=MODEL_REVISION)
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
     dataset_info = None
     if from_scratch:
         data_root = output_dir / "packed-data"
+        train_source = load_dataset(
+            DATASET_ID, revision=DATASET_REVISION,
+            split="train", streaming=True,
+        )
+        tokenizer, tokenizer_training_documents = _train_byte_level_tokenizer(
+            train_source,
+            max_examples=train_examples,
+            vocab_size=tokenizer_vocab_size,
+        )
+        tokenizer.save_pretrained(output_dir / "trained-tokenizer")
+        # Re-open the deterministic stream after consuming it for tokenizer fit.
         train_source = load_dataset(
             DATASET_ID, revision=DATASET_REVISION,
             split="train", streaming=True,
@@ -144,11 +212,18 @@ def run_smoke(
             model_config.n_ctx = sequence_length
         model_config.vocab_size = len(tokenizer)
         model_config.pad_token_id = tokenizer.pad_token_id
+        model_config.bos_token_id = tokenizer.bos_token_id
+        model_config.eos_token_id = tokenizer.eos_token_id
         torch.manual_seed(42)
         model = AutoModelForCausalLM.from_config(model_config)
         dataset_info = {
             "id": DATASET_ID, "revision": DATASET_REVISION,
             "train_examples": len(rows), "validation_examples": len(eval_rows),
+            "tokenizer": {
+                "kind": "byte_level_bpe_from_training_split",
+                "training_documents": tokenizer_training_documents,
+                "vocab_size": len(tokenizer),
+            },
         }
         train_manifest = json.loads(train_manifest_path.read_text(encoding="utf-8"))
         validation_manifest = json.loads(
@@ -163,6 +238,11 @@ def run_smoke(
             "validation_shard_sha256": validation_manifest["sha256"],
         })
     else:
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_id, revision=MODEL_REVISION,
+        )
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
         model = AutoModelForCausalLM.from_pretrained(
             model_id, revision=MODEL_REVISION,
         )
@@ -291,7 +371,7 @@ def run_smoke(
         eval_rows.close()
 
     packages = {}
-    for name in ("torch", "torch_tpu", "libtpu", "transformers"):
+    for name in ("torch", "torch_tpu", "libtpu", "transformers", "tokenizers"):
         try:
             packages[name] = metadata.version(name)
         except metadata.PackageNotFoundError:
@@ -344,6 +424,7 @@ def main() -> int:
     parser.add_argument("--eval-examples", type=int, default=128)
     parser.add_argument("--max-eval-batches", type=int, default=20)
     parser.add_argument("--gradient-accumulation-steps", type=int, default=1)
+    parser.add_argument("--tokenizer-vocab-size", type=int, default=16000)
     args = parser.parse_args()
     run_smoke(
         args.output_dir, compile_enabled=args.compile, resume=args.resume,
@@ -352,6 +433,7 @@ def main() -> int:
         save_steps=args.save_steps, eval_examples=args.eval_examples,
         max_eval_batches=args.max_eval_batches,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
+        tokenizer_vocab_size=args.tokenizer_vocab_size,
     )
     return 0
 
