@@ -16,22 +16,23 @@
   opt-in and added precision reporting; PR #38 exposed optimizer schedule and
   seed settings in the scratch workflow; PR #39 added opt-in gradient
   checkpointing; PR #40 added per-device batch configuration and nominal token
-  reporting.
+  reporting; PR #41 added supervised-token budgets and actual token counts.
 - **Verified base:** `main` at
-  `d7359bc20d5fa2af800c113b2e85779b6987f2f4` after PR #40.
-- **Active branch:** `feat/14-token-budgeted-pretraining` lets the scratch
-  workflow target supervised next-token counts and records actual consumption.
+  `a24514a7693e918c1c10c8a84c705399fa3b3bcf` after PR #41.
+- **Active branch:** `perf/15-sparse-training-logging` makes scratch loss
+  logging configurable and preserves a final loss snapshot between intervals.
 - **Probe:** [`T1 v5e-1 guide`](T1_V5E1_PROBE.md) and its
   [Kaggle/Colab notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb) test a tiny
   synthetic forward/backward and optimizer update, with optional `torch.compile`.
 - **Evidence:** the owner reported an eager native TPU allocation,
   forward/backward and AdamW pass on torch_tpu 0.2.0 with torch 2.14.1+cpu.
   Hardware generation and explicit compile remain unverified.
-- **Validation boundary:** PR #40 passed its GitHub pytest workflow in 1m45s.
-  The active token-budget change passes 16 dependency-free launcher/notebook
-  contract tests, 11 evidence tests, Python compilation, and notebook parsing.
-  Its packed-training CPU regression needs Torch and Transformers, absent here;
-  branch CI is pending. No TPU trainer run or convergence result is claimed.
+- **Validation boundary:** PR #41 passed its GitHub pytest workflow in 2m10s,
+  including the packed-training token-budget regression. The active sparse-log
+  change passes 16 dependency-free launcher/notebook tests, 11 evidence tests,
+  Python compilation, and notebook parsing. Its trainer pytest regression
+  awaits branch CI because Torch and pytest are absent here. No TPU trainer run
+  or convergence result is claimed.
   This workspace has no PyTorch or pytest installation; no local training or
   accelerator test has run. Native TPU training, compilation and convergence
   still require owner-run evidence.

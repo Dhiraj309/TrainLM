@@ -151,7 +151,7 @@ def test_random_init_training_stops_at_supervised_token_budget(tmp_path):
                 learning_rate=1e-3,
                 weight_decay=0.0,
                 lr_scheduler_type="constant",
-                logging_steps=1,
+                logging_steps=10,
             ),
         )
 
