@@ -130,6 +130,7 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         self.assertIn("--resume", result.stdout)
         self.assertIn("--compile", result.stdout)
         self.assertIn("--from-scratch", result.stdout)
+        self.assertIn("--target-supervised-tokens", result.stdout)
         self.assertIn("--train-examples", result.stdout)
         self.assertIn("--tokenizer-vocab-size", result.stdout)
         self.assertIn("--model-embedding-size", result.stdout)
@@ -166,7 +167,7 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
             capture_output=True, text=True,
         )
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("must be positive", result.stderr)
+        self.assertIn("max_steps must be a positive integer", result.stderr)
         self.assertNotIn("No module named 'torch_tpu'", result.stderr)
 
     def test_invalid_tokenizer_size_fails_before_torch_import(self):
@@ -231,6 +232,60 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
                 self.assertIn("must be a positive integer", result.stderr)
                 self.assertNotIn("No module named 'torch_tpu'", result.stderr)
 
+    def test_token_budget_resolves_to_complete_optimizer_updates(self):
+        resolve = runpy.run_path(str(SCRIPT))["_resolve_training_steps"]
+        resolved_steps, tokens_per_update = resolve(
+            max_steps=None, target_supervised_tokens=763, from_scratch=True,
+            sequence_length=128, train_batch_size=2,
+            gradient_accumulation_steps=3,
+        )
+        self.assertEqual(tokens_per_update, (128 - 1) * 2 * 3)
+        self.assertEqual(resolved_steps, 2)
+
+        fixed_steps, fixed_tokens_per_update = resolve(
+            max_steps=5, target_supervised_tokens=None, from_scratch=True,
+            sequence_length=128, train_batch_size=2,
+            gradient_accumulation_steps=3,
+        )
+        self.assertEqual((fixed_steps, fixed_tokens_per_update), (5, 762))
+
+        for options, message in (
+            ({"target_supervised_tokens": 0}, "must be a positive integer"),
+            ({"target_supervised_tokens": 763, "max_steps": 5}, "Set either"),
+            ({"target_supervised_tokens": 763, "from_scratch": False},
+             "packed scratch"),
+        ):
+            arguments = {
+                "max_steps": None,
+                "target_supervised_tokens": None,
+                "from_scratch": True,
+                "sequence_length": 128,
+                "train_batch_size": 2,
+                "gradient_accumulation_steps": 3,
+            }
+            arguments.update(options)
+            with self.subTest(options=options):
+                with self.assertRaisesRegex(ValueError, message):
+                    resolve(**arguments)
+
+    def test_invalid_token_budget_fails_before_torch_import(self):
+        for arguments, message in (
+            (["--from-scratch", "--target-supervised-tokens", "0"],
+             "must be a positive integer"),
+            (["--from-scratch", "--target-supervised-tokens", "1000",
+              "--max-steps", "3"], "Set either"),
+            (["--target-supervised-tokens", "1000"], "packed scratch"),
+        ):
+            with self.subTest(arguments=arguments):
+                result = subprocess.run(
+                    [sys.executable, str(SCRIPT), "--output-dir", "/tmp/unused",
+                     *arguments],
+                    capture_output=True, text=True,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(message, result.stderr)
+                self.assertNotIn("No module named 'torch_tpu'", result.stderr)
+
     def test_scratch_dataset_source_accepts_custom_column_and_distinct_splits(self):
         validate = runpy.run_path(str(SCRIPT))["_validate_scratch_dataset_source"]
         validate(
@@ -284,9 +339,11 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         self.assertIn("command.append(\"--gradient-checkpointing\")", source)
         self.assertIn("TRAIN_BATCH_SIZE = 1", source)
         self.assertIn("EVAL_BATCH_SIZE = 1", source)
+        self.assertIn("TARGET_SUPERVISED_TOKENS = 1_000_000", source)
+        self.assertIn("--target-supervised-tokens", source)
         self.assertIn("--per-device-train-batch-size", source)
         self.assertIn("--per-device-eval-batch-size", source)
-        self.assertIn("nominal tokens per update", markdown)
+        self.assertIn("supervised next-token targets", markdown)
         self.assertIn("LEARNING_RATE = 3e-4", source)
         self.assertIn("WEIGHT_DECAY = 0.1", source)
         self.assertIn("WARMUP_STEPS = None", source)

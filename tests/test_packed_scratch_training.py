@@ -108,3 +108,57 @@ def test_random_init_model_trains_evaluates_checkpoints_and_exports_on_packed_da
     finally:
         train_data.close()
         eval_data.close()
+
+
+def test_random_init_training_stops_at_supervised_token_budget(tmp_path):
+    data_root = tmp_path / "packed"
+    write_packed_binary_shard(
+        [[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 1]],
+        data_root / "train",
+        shard_id="train",
+        vocab_size=16,
+    )
+    train_data = PackedBinDataset.from_directory(
+        data_root / "train", sequence_length=4, split="train", seed=17
+    )
+    try:
+        config = GPT2Config(
+            vocab_size=16,
+            n_positions=4,
+            n_ctx=4,
+            n_embd=8,
+            n_layer=1,
+            n_head=2,
+            resid_pdrop=0.0,
+            embd_pdrop=0.0,
+            attn_pdrop=0.0,
+            bos_token_id=0,
+            eos_token_id=15,
+            pad_token_id=15,
+            use_cache=False,
+        )
+        trainer = TrainLMTrainer(
+            model=GPT2LMHeadModel(config),
+            train_dataset=train_data,
+            args=TrainLMTrainingArguments(
+                output_dir=tmp_path / "token-budget-run",
+                max_steps=1,
+                max_tokens=4,
+                per_device_train_batch_size=1,
+                sequence_length=4,
+                gradient_accumulation_steps=2,
+                accelerator="cpu",
+                learning_rate=1e-3,
+                weight_decay=0.0,
+                lr_scheduler_type="constant",
+                logging_steps=1,
+            ),
+        )
+
+        state = trainer.train()
+
+        assert state.step == 1
+        assert state.tokens_seen == 6
+        assert state.loss is not None and torch.isfinite(torch.tensor(state.loss))
+    finally:
+        train_data.close()

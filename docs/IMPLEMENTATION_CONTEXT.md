@@ -8,7 +8,7 @@
 
 ## Current project snapshot
 
-- PR #18, including PR #16, PR #20, and PRs #28–#39 are merged.
+- PR #18, including PR #16, PR #20, and PRs #28–#40 are merged.
   PR #28
   merged the native single-device foundation at
   `860bb289bf35444d8d435cf41caf51bcf77afaaf`; PR #29 rebase-merged streaming
@@ -29,14 +29,18 @@
   schedule and seed controls at `357cac307bfaf94b4bcf4c55ed53c9fb99815cc8`;
   PR #39 rebase-merged opt-in gradient checkpointing at
   `df0a9ff562e48b67ae4ea48dbe10abe565137f4b` after CI passed, including a real
-  GPT-2 CPU backward test. This iteration starts from that verified head on
-  `feat/13-scratch-batch-config`.
-  The current changes expose per-device train/eval batch sizes and report
-  nominal tokens per optimizer update. Fourteen dependency-free launcher and
-  notebook contract tests plus ten evidence tests pass locally, as do Python
-  compilation, notebook parsing, and diff checks. Three dependency-backed
-  launcher checks require packages absent from this workspace; branch CI is
-  pending.
+  GPT-2 CPU backward test. PR #40 rebase-merged per-device batch controls and
+  nominal token reporting at verified `main` SHA
+  `d7359bc20d5fa2af800c113b2e85779b6987f2f4`; its GitHub pytest workflow
+  passed in 1m45s. This iteration starts from that head on
+  `feat/14-token-budgeted-pretraining`.
+  The current changes add a supervised next-token target to the scratch
+  notebook/launcher, derive the step horizon from packed-update token capacity,
+  pass the target to the trainer stop condition, and record actual consumed
+  tokens. Sixteen
+  dependency-free launcher/notebook tests and eleven evidence tests pass, as do
+  Python compilation and notebook parsing. The real packed-training CPU
+  regression awaits branch CI because Torch and Transformers are absent here.
 - T0.1 code inventory is recorded in `TORCHTPU_SALVAGE_INVENTORY.md`. The
   mapped legacy cards remain candidates, not an approved implementation queue.
 - Current implementation backend: PyTorch/XLA. Target: native TorchTPU on
@@ -221,7 +225,9 @@
   train-only BPE tokenizer tests; PR #35 passed explicit-config and evidence
   tests; PR #36 passed pinned custom-corpus tests; PR #37 passed BF16 option
   and precision evidence tests; PR #38 passed optimizer-config evidence tests;
-  PR #39 passed checkpointed GPT-2 CPU forward/backward and full CI.
+  PR #39 passed checkpointed GPT-2 CPU forward/backward and full CI; PR #40
+  passed the full GitHub pytest workflow after adding batch controls. The
+  token-budget CPU integration regression is pending branch CI.
   This container lacks
   Torch/pytest, so full runtime tests are left to branch CI. No TPU run or
   convergence result is claimed.

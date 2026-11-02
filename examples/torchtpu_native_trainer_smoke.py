@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bounded-by-steps native TrainLM trainer smoke; run in an isolated child."""
+"""Bounded native TrainLM trainer smoke; run in an isolated child."""
 
 from __future__ import annotations
 
@@ -174,6 +174,52 @@ def _scratch_gpt2_config(
     )
 
 
+def _resolve_training_steps(
+    *, max_steps: int | None,
+    target_supervised_tokens: int | None,
+    from_scratch: bool,
+    sequence_length: int,
+    train_batch_size: int,
+    gradient_accumulation_steps: int,
+) -> tuple[int, int]:
+    """Derive a safe step horizon from packed supervised-token geometry."""
+    if max_steps is not None and (
+        isinstance(max_steps, bool) or not isinstance(max_steps, int) or max_steps < 1
+    ):
+        raise ValueError("max_steps must be a positive integer when configured.")
+    if target_supervised_tokens is not None:
+        if (isinstance(target_supervised_tokens, bool)
+                or not isinstance(target_supervised_tokens, int)
+                or target_supervised_tokens < 1):
+            raise ValueError("target_supervised_tokens must be a positive integer.")
+        if not from_scratch:
+            raise ValueError(
+                "target_supervised_tokens is supported for packed scratch runs."
+            )
+        if max_steps is not None:
+            raise ValueError(
+                "Set either max_steps or target_supervised_tokens, not both."
+            )
+        if sequence_length < 2:
+            raise ValueError(
+                "Token-budgeted causal training needs sequence_length >= 2."
+            )
+        supervised_tokens_per_update = (
+            (sequence_length - 1) * train_batch_size * gradient_accumulation_steps
+        )
+        resolved_steps = math.ceil(
+            target_supervised_tokens / supervised_tokens_per_update
+        )
+        return resolved_steps, supervised_tokens_per_update
+
+    resolved_steps = 3 if max_steps is None else max_steps
+    supervised_tokens_per_update = (
+        (sequence_length - 1) * train_batch_size * gradient_accumulation_steps
+        if sequence_length >= 2 else 0
+    )
+    return resolved_steps, supervised_tokens_per_update
+
+
 def _enable_gradient_checkpointing(model) -> tuple[bool, bool | None]:
     """Enable HF activation checkpointing and disable generation KV cache."""
     enable = getattr(model, "gradient_checkpointing_enable", None)
@@ -206,7 +252,8 @@ def _restore_generation_cache(
 
 def run_smoke(
     output_dir: Path, *, compile_enabled: bool, resume: bool,
-    from_scratch: bool = False, max_steps: int = 3, train_examples: int = 16,
+    from_scratch: bool = False, max_steps: int | None = None,
+    target_supervised_tokens: int | None = None, train_examples: int = 16,
     sequence_length: int = 64, save_steps: int | None = None,
     eval_examples: int = 128, max_eval_batches: int = 20,
     gradient_accumulation_steps: int = 1, tokenizer_vocab_size: int = 16000,
@@ -224,8 +271,10 @@ def run_smoke(
     train_batch_size: int = 1,
     eval_batch_size: int = 1,
 ) -> None:
-    if max_steps < 1 or sequence_length < 1 or gradient_accumulation_steps < 1:
-        raise ValueError("Training steps, sequence length, and accumulation must be positive.")
+    if sequence_length < 2 or gradient_accumulation_steps < 1:
+        raise ValueError(
+            "Sequence length must be at least two and accumulation positive."
+        )
     if from_scratch and min(train_examples, eval_examples, max_eval_batches) < 1:
         raise ValueError("Scratch training/evaluation dataset sizes must be positive.")
     for name, value in (
@@ -234,6 +283,14 @@ def run_smoke(
     ):
         if isinstance(value, bool) or not isinstance(value, int) or value < 1:
             raise ValueError(f"{name} must be a positive integer.")
+    max_steps, supervised_tokens_per_update = _resolve_training_steps(
+        max_steps=max_steps,
+        target_supervised_tokens=target_supervised_tokens,
+        from_scratch=from_scratch,
+        sequence_length=sequence_length,
+        train_batch_size=train_batch_size,
+        gradient_accumulation_steps=gradient_accumulation_steps,
+    )
     if from_scratch and tokenizer_vocab_size < 260:
         raise ValueError("Byte-level BPE vocab_size must be at least 260.")
     if from_scratch and min(
@@ -283,6 +340,8 @@ def run_smoke(
         raise ValueError("save_steps must be positive when configured.")
     if resume and compile_enabled:
         raise ValueError("Run checkpoint/resume after the eager baseline.")
+    if resume and target_supervised_tokens is not None:
+        raise ValueError("The resume comparison uses a fixed three-step baseline.")
     if resume and max_steps != 3:
         raise ValueError("The resume comparison requires a three-step baseline.")
 
@@ -351,7 +410,9 @@ def run_smoke(
             split="validation",
         )
         required_train_sequences = (
-            max_steps * gradient_accumulation_steps * train_batch_size
+            math.ceil(target_supervised_tokens / (sequence_length - 1))
+            if target_supervised_tokens is not None
+            else max_steps * gradient_accumulation_steps * train_batch_size
         )
         if len(rows) < required_train_sequences:
             available_train_sequences = len(rows)
@@ -436,6 +497,7 @@ def run_smoke(
         output_dir=output_dir,
         accelerator="native_tpu",
         max_steps=max_steps,
+        max_tokens=target_supervised_tokens,
         per_device_train_batch_size=train_batch_size,
         per_device_eval_batch_size=eval_batch_size,
         sequence_length=sequence_length,
@@ -459,7 +521,14 @@ def run_smoke(
     )
     state = trainer.train()
     if state.step != max_steps or state.loss is None or not math.isfinite(state.loss):
-        raise RuntimeError("Training did not finish with finite loss at the requested step.")
+        raise RuntimeError(
+            "Training did not finish with finite loss at the requested step."
+        )
+    if target_supervised_tokens is not None:
+        microbatch_tokens = (sequence_length - 1) * train_batch_size
+        if (state.tokens_seen < target_supervised_tokens
+                or state.tokens_seen - target_supervised_tokens >= microbatch_tokens):
+            raise RuntimeError("Training did not honor the supervised-token budget.")
     evaluation = trainer.evaluate() if from_scratch else {}
     eval_loss = evaluation.get("eval_loss") if evaluation else None
     if from_scratch and (eval_loss is None or not math.isfinite(eval_loss)):
@@ -579,6 +648,9 @@ def run_smoke(
         "precision": "bf16" if bf16 else "fp32",
         "training": {
             "max_steps": max_steps,
+            **({"target_supervised_tokens": target_supervised_tokens}
+               if target_supervised_tokens is not None else {}),
+            "supervised_tokens_seen": int(state.tokens_seen),
             "learning_rate": resolved_learning_rate,
             "weight_decay": weight_decay,
             "lr_scheduler_type": "cosine" if from_scratch else "constant",
@@ -590,6 +662,7 @@ def run_smoke(
             "nominal_tokens_per_update": (
                 sequence_length * train_batch_size * gradient_accumulation_steps
             ),
+            "nominal_supervised_tokens_per_update": supervised_tokens_per_update,
             "gradient_checkpointing": gradient_checkpointing,
             "seed": seed,
         },
@@ -626,7 +699,8 @@ def main() -> int:
     parser.add_argument("--compile", action="store_true")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--from-scratch", action="store_true")
-    parser.add_argument("--max-steps", type=int, default=3)
+    parser.add_argument("--max-steps", type=int)
+    parser.add_argument("--target-supervised-tokens", type=int)
     parser.add_argument("--train-examples", type=int, default=16)
     parser.add_argument("--sequence-length", type=int, default=64)
     parser.add_argument("--save-steps", type=int)
@@ -660,6 +734,7 @@ def main() -> int:
     run_smoke(
         args.output_dir, compile_enabled=args.compile, resume=args.resume,
         from_scratch=args.from_scratch, max_steps=args.max_steps,
+        target_supervised_tokens=args.target_supervised_tokens,
         train_examples=args.train_examples, sequence_length=args.sequence_length,
         save_steps=args.save_steps, eval_examples=args.eval_examples,
         max_eval_batches=args.max_eval_batches,

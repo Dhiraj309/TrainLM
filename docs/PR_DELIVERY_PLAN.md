@@ -39,12 +39,12 @@ approvals. T2 integrates the report into backend selection and the public UX.
 
 ## PR-by-PR serial execution
 
-**Current sequence:** PR #38 added scratch optimizer settings → PR #39
-rebase-merged opt-in gradient checkpointing at verified `main` SHA
-`df0a9ff562e48b67ae4ea48dbe10abe565137f4b`, with CI passing. The active
-`feat/13-scratch-batch-config` branch exposes per-device train/eval batch sizes
-and nominal tokens per update. The old numbered cards below do not set this
-order.
+**Current sequence:** PR #39 added opt-in gradient checkpointing → PR #40
+rebase-merged per-device batch controls and nominal token reporting at verified
+`main` SHA `d7359bc20d5fa2af800c113b2e85779b6987f2f4`, with CI passing. The
+active `feat/14-token-budgeted-pretraining` branch lets users specify a
+supervised next-token target and records actual tokens consumed. The old
+numbered cards below do not set this order.
 
 - A **PR-plan number** is a planned delivery slot, not a GitHub PR number.
   GitHub assigns its own PR number on creation. Do not create the next branch
