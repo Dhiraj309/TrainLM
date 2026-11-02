@@ -15,6 +15,11 @@ trainer foundation; hardware compile, lifecycle and collective evidence still
 gate T1 closure. Follow the [utility inventory and delivery order](TORCHTPU_UTILITIES.md)
 for the remaining T1.1–T1.4 evidence.
 
+PR #45 rebase-merged agent-discoverability documentation at verified `main`
+SHA `d983408221b92d631aea817bee7539e07de1bbf5`. It did not close a T0–T11
+gate or add runtime/accelerator evidence. The active implementation path
+remains experimental and explicit while owner-run T1 evidence is pending.
+
 Owner direction allows CPU-verifiable implementation to proceed while scarce
 TPU slots are pending. A provisional, explicit `accelerator="native_tpu"`
 single-device path now reuses the portable engine; this does not close T1 or
@@ -69,10 +74,11 @@ reversible.
 | Item | Verified/recorded context | Required next action |
 |---|---|---|
 | Repository | `Dhiraj309/TrainLM` | Verify checkout, branch, origin, permissions |
-| Legacy integration | PR #18 merged into `main` on 2026-10-28; merge commit `23959d29434fd2ae3f78b20469e1d61c6b1e18c9` | T0.1 inventory is complete; no new code PR is active |
+| Current base | PR #45 rebase-merged; verified `main` SHA `d983408221b92d631aea817bee7539e07de1bbf5` | Select a scoped deliverable from current T1/T2/T3 evidence before opening the next implementation PR |
+| Legacy integration | PR #18 merged into `main` on 2026-10-28; merge commit `23959d29434fd2ae3f78b20469e1d61c6b1e18c9` | T0.1 inventory is complete; XLA-era PR cards are not the active queue |
 | Earlier salvage | PR #16 was merged into PR #18, which is now merged into `main` | Inventory its code as part of the merged tree; do not merge it again |
 | Existing TPU backend | Primarily PyTorch/XLA with historical measurements | Classify reusable vs XLA-specific components |
-| Native TorchTPU | Owner-reported standalone eager smoke passed; production adapter and v5e certification pending | Discover hardware internally; prove explicit compile, installation and distributed support |
+| Native TorchTPU | Explicit single-device software path exists; owner-reported standalone eager v5e-1 smoke passed; package compatibility and production training remain unverified | Continue only with explicit selection; verify compile/lifecycle on v5e-1 and collectives on v5e-8 before changing support claims |
 | GitHub access | Previous authenticated collaborator `Dignity045` branch push succeeded | Recheck actual identity each task; owner account not assumed |
 | CPU tests | PR #18 snapshot: 700 passed / 21 failed under Python 3.12.14, torch 2.9.0+cpu, Transformers 5.0.0, Hub 1.3.5, pytest 9.1.1 | Re-run on merged `main` before the next code PR; failure groups are recorded in `HANDOFF.md` |
 | CPU profiles | `core-minimum` Python 3.12/torch 2.9; `core-current` Python 3.13/torch 2.13 | Inspect actual environment and constraints |

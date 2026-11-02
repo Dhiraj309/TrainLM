@@ -47,7 +47,10 @@ for file discovery; this document remains the detailed implementation record.
   PR #44 merged the CPU export reload/generation check into `main` at
   `fad1df41278d4ea904b4d26968d75ee97ae17923`. Its evidence report records
   `reload_generate`; this checks export usability on CPU and is not TPU
-  generation, training, or convergence evidence.
+  generation, training, or convergence evidence. PR #45 rebase-merged
+  agent-facing documentation and package metadata at verified `main` SHA
+  `d983408221b92d631aea817bee7539e07de1bbf5`; it adds no runtime or TPU
+  evidence.
 - T0.1 code inventory is recorded in `TORCHTPU_SALVAGE_INVENTORY.md`. The
   mapped legacy cards remain candidates, not an approved implementation queue.
 - Current implementation backend: PyTorch/XLA. Target: native TorchTPU on
