@@ -27,9 +27,10 @@ evidence into one download for Colab or Kaggle. The current notebook check
 reloads that saved artifact on CPU and confirms it generates tokens. It does
 not certify TPU generation or training quality. PR #44 merged this check at
 `fad1df41278d4ea904b4d26968d75ee97ae17923`; it adds no TPU-generation or
-convergence evidence.
-These checks do not certify TPU support or end-to-end convergence. PR #20
-closed T0.2.
+convergence evidence. PR #45 rebase-merged at
+`d983408221b92d631aea817bee7539e07de1bbf5`; it adds agent-facing documentation
+and package metadata, not runtime support or new TPU evidence. These checks do
+not certify TPU support or end-to-end convergence. PR #20 closed T0.2.
 T1 software probes cover shared hardware and capability discovery, dependency
 metadata and process lifecycle, and a distributed entry check; owner-run
 compile, lifecycle and v5e-8 collective evidence remain pending. Use v5e-1 for

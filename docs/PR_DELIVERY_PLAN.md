@@ -39,13 +39,15 @@ approvals. T2 integrates the report into backend selection and the public UX.
 
 ## PR-by-PR serial execution
 
-**Current sequence:** PR #40 added per-device batch controls → PR #41 added
-supervised-token budgets → PR #42 added sparse logging → PR #43 bundled model
-exports and evidence for Colab/Kaggle; all are rebase-merged and CI-passing.
-Verified `main` is `73952a9724456390c6def5b74a474d4274dc7544`. Active branch
-`feat/17-reload-exported-model` verifies the saved model/tokenizer can reload
-on CPU and generate tokens; this is not a TPU generation claim. The old
-numbered cards below do not set this order.
+**Status snapshot (2026-11-02):** PR #45 rebase-merged at verified `main` SHA
+`d983408221b92d631aea817bee7539e07de1bbf5`. It adds agent-discoverability
+documentation and package metadata; it is not a T0–T11 implementation gate.
+PRs #28–#44 established the experimental native single-device foundation and
+the from-scratch CPU workflow; owner-run TorchTPU compile, lifecycle, and
+multi-device evidence remain pending. The old numbered cards below do not set
+the current work order; use [the T0–T11 rebaseline](TORCHTPU_REBASELINE.md),
+[the handoff](HANDOFF.md), and owner-reviewed evidence to select the next
+scoped deliverable.
 
 - A **PR-plan number** is a planned delivery slot, not a GitHub PR number.
   GitHub assigns its own PR number on creation. Do not create the next branch

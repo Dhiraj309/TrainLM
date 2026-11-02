@@ -46,8 +46,10 @@ TorchTPU support. “Implemented” means present in that historical code path;
   report for Colab/Kaggle download at `73952a9724456390c6def5b74a474d4274dc7544`;
   GitHub pytest passed in 2m4s. PR #44 merged a CPU reload/generation check at
   `fad1df41278d4ea904b4d26968d75ee97ae17923`; the report records that phase
-  separately from TPU validation. BF16 and checkpointing remain unvalidated on
-  TPU. T1 source-level
+  separately from TPU validation. PR #45 rebase-merged agent-discoverability
+  documentation at verified `main` SHA
+  `d983408221b92d631aea817bee7539e07de1bbf5`; it adds no accelerator
+  evidence. BF16 and checkpointing remain unvalidated on TPU. T1 source-level
   probes and the explicit `native_tpu` path are implemented; owner-run compile,
   lifecycle and v5e-8 collective evidence remain pending. Hosted Kaggle currently documents
   v5e-8 and hosted Colab TPU v2, so neither is the v5e-1 target; use a
