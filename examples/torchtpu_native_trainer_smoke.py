@@ -183,6 +183,10 @@ def run_smoke(
     model_embedding_size: int = 768, model_layers: int = 6,
     model_attention_heads: int = 12,
     bf16: bool = False,
+    learning_rate: float | None = None,
+    weight_decay: float = 0.1,
+    warmup_steps: int | None = None,
+    seed: int = 42,
     dataset_id: str = DATASET_ID, dataset_revision: str = DATASET_REVISION,
     train_split: str = "train", validation_split: str = "validation",
     text_field: str = "text",
@@ -201,6 +205,31 @@ def run_smoke(
         raise ValueError("model embedding size must be divisible by attention heads.")
     if not isinstance(bf16, bool):
         raise ValueError("bf16 must be a boolean.")
+    resolved_learning_rate = (
+        learning_rate if learning_rate is not None
+        else 3e-4 if from_scratch else 5e-5
+    )
+    if (isinstance(resolved_learning_rate, bool)
+            or not isinstance(resolved_learning_rate, (int, float))
+            or not math.isfinite(resolved_learning_rate)
+            or resolved_learning_rate <= 0):
+        raise ValueError("learning_rate must be finite and positive.")
+    if (isinstance(weight_decay, bool)
+            or not isinstance(weight_decay, (int, float))
+            or not math.isfinite(weight_decay) or weight_decay < 0):
+        raise ValueError("weight_decay must be finite and non-negative.")
+    resolved_warmup_steps = (
+        warmup_steps if warmup_steps is not None
+        else min(max_steps // 10, 100) if from_scratch else 0
+    )
+    if (isinstance(resolved_warmup_steps, bool)
+            or not isinstance(resolved_warmup_steps, int)
+            or resolved_warmup_steps < 0):
+        raise ValueError("warmup_steps must be a non-negative integer.")
+    if resolved_warmup_steps > max_steps:
+        raise ValueError("warmup_steps must not exceed max_steps.")
+    if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
+        raise ValueError("seed must be a non-negative integer.")
     if from_scratch:
         _validate_scratch_dataset_source(
             dataset_id=dataset_id,
@@ -274,7 +303,7 @@ def run_smoke(
         )
         rows = PackedBinDataset.from_directory(
             data_root / "train", sequence_length=sequence_length,
-            split="train", seed=42,
+            split="train", seed=seed,
         )
         eval_rows = PackedBinDataset.from_directory(
             data_root / "validation", sequence_length=sequence_length,
@@ -299,7 +328,7 @@ def run_smoke(
             bos_token_id=tokenizer.bos_token_id,
             eos_token_id=tokenizer.eos_token_id,
         )
-        torch.manual_seed(42)
+        torch.manual_seed(seed)
         model = AutoModelForCausalLM.from_config(model_config)
         dataset_info = {
             "id": dataset_id, "revision": dataset_revision,
@@ -362,15 +391,17 @@ def run_smoke(
         max_steps=max_steps,
         per_device_train_batch_size=1,
         sequence_length=sequence_length,
-        learning_rate=3e-4 if from_scratch else 5e-5,
+        learning_rate=resolved_learning_rate,
         lr_scheduler_type="cosine" if from_scratch else "constant",
-        warmup_steps=min(max_steps // 10, 100) if from_scratch else 0,
+        warmup_steps=resolved_warmup_steps,
         logging_steps=1,
         gradient_accumulation_steps=gradient_accumulation_steps,
         save_steps=save_steps,
         eval_steps=max(1, max_steps // 10) if from_scratch else None,
         max_eval_batches=max_eval_batches if from_scratch else None,
         bf16=bf16,
+        weight_decay=weight_decay,
+        seed=seed,
         torch_compile=compile_enabled,
     )
     parameter_count = sum(parameter.numel() for parameter in model.parameters())
@@ -400,7 +431,7 @@ def run_smoke(
         gc.collect()
 
         if from_scratch:
-            torch.manual_seed(42)
+            torch.manual_seed(seed)
             resumed_model = AutoModelForCausalLM.from_config(model_config)
         else:
             resumed_model = AutoModelForCausalLM.from_pretrained(
@@ -425,7 +456,7 @@ def run_smoke(
         gc.collect()
 
         if from_scratch:
-            torch.manual_seed(42)
+            torch.manual_seed(seed)
             reference_model = AutoModelForCausalLM.from_config(model_config)
         else:
             reference_model = AutoModelForCausalLM.from_pretrained(
@@ -488,6 +519,15 @@ def run_smoke(
     print("trainer_summary=" + json.dumps({
         "schema_version": 1,
         "precision": "bf16" if bf16 else "fp32",
+        "training": {
+            "max_steps": max_steps,
+            "learning_rate": resolved_learning_rate,
+            "weight_decay": weight_decay,
+            "lr_scheduler_type": "cosine" if from_scratch else "constant",
+            "warmup_steps": resolved_warmup_steps,
+            "gradient_accumulation_steps": gradient_accumulation_steps,
+            "seed": seed,
+        },
         "model": model_summary,
         "dataset": dataset_info,
         "metrics": {
@@ -536,6 +576,10 @@ def main() -> int:
         "--bf16", action="store_true",
         help="opt into bfloat16 autocast (experimental; off by default)",
     )
+    parser.add_argument("--learning-rate", type=float)
+    parser.add_argument("--weight-decay", type=float, default=0.1)
+    parser.add_argument("--warmup-steps", type=int)
+    parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--dataset-id", default=DATASET_ID)
     parser.add_argument("--dataset-revision", default=DATASET_REVISION)
     parser.add_argument("--train-split", default="train")
@@ -554,6 +598,10 @@ def main() -> int:
         model_layers=args.model_layers,
         model_attention_heads=args.model_attention_heads,
         bf16=args.bf16,
+        learning_rate=args.learning_rate,
+        weight_decay=args.weight_decay,
+        warmup_steps=args.warmup_steps,
+        seed=args.seed,
         dataset_id=args.dataset_id,
         dataset_revision=args.dataset_revision,
         train_split=args.train_split,

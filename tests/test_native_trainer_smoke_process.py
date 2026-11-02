@@ -96,6 +96,10 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         self.assertIn("--model-layers", result.stdout)
         self.assertIn("--model-attention-heads", result.stdout)
         self.assertIn("--bf16", result.stdout)
+        self.assertIn("--learning-rate", result.stdout)
+        self.assertIn("--weight-decay", result.stdout)
+        self.assertIn("--warmup-steps", result.stdout)
+        self.assertIn("--seed", result.stdout)
         self.assertIn("--dataset-id", result.stdout)
         self.assertIn("--dataset-revision", result.stdout)
         self.assertIn("--train-split", result.stdout)
@@ -153,6 +157,25 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         self.assertIn("immutable 40-character commit SHA", result.stderr)
         self.assertNotIn("No module named 'torch_tpu'", result.stderr)
 
+    def test_invalid_optimizer_settings_fail_before_torch_import(self):
+        cases = (
+            ("--learning-rate", "-1", "learning_rate must be finite and positive"),
+            ("--weight-decay", "-0.1", "weight_decay must be finite and non-negative"),
+            ("--warmup-steps", "-1", "warmup_steps must be a non-negative integer"),
+            ("--warmup-steps", "4", "warmup_steps must not exceed max_steps"),
+            ("--seed", "-1", "seed must be a non-negative integer"),
+        )
+        for flag, value, message in cases:
+            with self.subTest(flag=flag):
+                result = subprocess.run(
+                    [sys.executable, str(SCRIPT), "--output-dir", "/tmp/unused",
+                     "--from-scratch", flag, value],
+                    capture_output=True, text=True,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(message, result.stderr)
+                self.assertNotIn("No module named 'torch_tpu'", result.stderr)
+
     def test_scratch_dataset_source_accepts_custom_column_and_distinct_splits(self):
         validate = runpy.run_path(str(SCRIPT))["_validate_scratch_dataset_source"]
         validate(
@@ -202,6 +225,14 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         self.assertIn("MODEL_ATTENTION_HEADS", source)
         self.assertIn("USE_BF16 = False", source)
         self.assertIn("command.append(\"--bf16\")", source)
+        self.assertIn("LEARNING_RATE = 3e-4", source)
+        self.assertIn("WEIGHT_DECAY = 0.1", source)
+        self.assertIn("WARMUP_STEPS = None", source)
+        self.assertIn("SEED = 42", source)
+        self.assertIn("--learning-rate", source)
+        self.assertIn("--weight-decay", source)
+        self.assertIn("--warmup-steps", source)
+        self.assertIn("--seed", source)
         self.assertIn("DATASET_ID", source)
         self.assertIn("DATASET_REVISION", source)
         self.assertIn("TEXT_FIELD", source)

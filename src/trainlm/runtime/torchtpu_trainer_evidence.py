@@ -80,6 +80,7 @@ def build_trainer_report(
     checks = {name: "unknown" for name in _CHECKS}
     device = None
     precision = None
+    training = None
     model = None
     dataset = None
     metrics = None
@@ -92,6 +93,49 @@ def build_trainer_report(
             precision = raw_precision
         else:
             issues.append("invalid_precision")
+        raw_training = summary.get("training")
+        if raw_training is not None:
+            if isinstance(raw_training, dict):
+                lr = raw_training.get("learning_rate")
+                decay = raw_training.get("weight_decay")
+                schedule = raw_training.get("lr_scheduler_type")
+            else:
+                lr = decay = schedule = None
+            integer_fields = (
+                "max_steps", "warmup_steps", "gradient_accumulation_steps", "seed"
+            )
+            integers_valid = isinstance(raw_training, dict) and all(
+                type(raw_training.get(name)) is int
+                and raw_training[name] >= (
+                    0 if name in {"warmup_steps", "seed"} else 1
+                )
+                for name in integer_fields
+            )
+            try:
+                safe_lr = float(lr)
+                safe_decay = float(decay)
+                numbers_valid = (
+                    type(lr) in {int, float}
+                    and math.isfinite(safe_lr)
+                    and safe_lr > 0
+                    and type(decay) in {int, float}
+                    and math.isfinite(safe_decay)
+                    and safe_decay >= 0
+                )
+            except (OverflowError, TypeError, ValueError):
+                safe_lr = safe_decay = 0.0
+                numbers_valid = False
+            if (not integers_valid or not numbers_valid
+                    or not isinstance(schedule, str)
+                    or schedule not in {"constant", "cosine"}):
+                issues.append("invalid_training_config")
+            else:
+                training = {name: raw_training[name] for name in integer_fields}
+                training.update({
+                    "learning_rate": safe_lr,
+                    "weight_decay": safe_decay,
+                    "lr_scheduler_type": schedule,
+                })
         normalize = runpy.run_path(str(Path(__file__).with_name(
             "torchtpu_discovery.py")))["normalize_worker_report"]
         device = normalize(summary.get("device"))
@@ -306,6 +350,7 @@ def build_trainer_report(
                     "cleanup_completed": cleanup_completed},
         "device": device,
         "precision": precision,
+        "training": training,
         "model": model,
         "dataset": dataset,
         "metrics": metrics,

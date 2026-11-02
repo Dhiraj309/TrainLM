@@ -32,9 +32,10 @@ TorchTPU support. “Implemented” means present in that historical code path;
   `7c75f6d0aa8ff75299328847e9fa7dcfcdf791e1`. The active
   `063a8b9ff9b42733f8b9f4720ba3307c2b2f4cdf` after PR #35 added a local GPT-2
   config; PR #36 added pinned custom corpus selection at verified `main`
-  `d075987574fe471d1b9159315a0688416664f2ba`. The active
-  `feat/10-configurable-bf16-pretraining` branch adds opt-in BF16 autocast and
-  sanitized precision reporting; BF16 remains unvalidated on TPU. T1 source-level
+  `d075987574fe471d1b9159315a0688416664f2ba`; PR #37 added opt-in BF16 and
+  precision reporting at `31aa3acd06bf89c9430615103ebd4dd0da46ae6c`. The active
+  `feat/11-scratch-optimizer-config` branch exposes learning rate, weight decay,
+  warmup, and seed. BF16 remains unvalidated on TPU. T1 source-level
   probes and the explicit `native_tpu` path are implemented; owner-run compile,
   lifecycle and v5e-8 collective evidence remain pending. Hosted Kaggle currently documents
   v5e-8 and hosted Colab TPU v2, so neither is the v5e-1 target; use a
@@ -161,8 +162,9 @@ TorchTPU support. “Implemented” means present in that historical code path;
   A separate Colab notebook trains random model weights and a byte-level BPE
   tokenizer from the pinned TinyStories training split, then evaluates on the
   separate validation split. PR #35 builds its GPT-2 config locally from
-  explicit dimensions; PR #36 allows other pinned HF text datasets. The active
-  branch exposes opt-in BF16 autocast for owner-run validation.
+  explicit dimensions; PR #36 allows other pinned HF text datasets; PR #37
+  exposes opt-in BF16 autocast for owner-run validation. The active branch
+  exposes optimizer schedule and seed controls.
   The default recipe uses 1,000 steps, gradient
   accumulation, periodic checkpoints, evaluation, and HF export. It checks for
   the optional `datasets` package before fetching data. This is a small-scale
