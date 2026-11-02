@@ -32,18 +32,24 @@ PASS_MARKERS = (
     "forward=PASS", "autograd=PASS", "optimizer_update=PASS",
     "result=single-device smoke passed; no distributed or performance claim",
 )
+COMPILE_MARKER = "compile=PASS"
 
 
 def run_once(
     index: int, output_dir: Path, timeout: int, *,
+    compiled: bool = False,
     process_factory: object = subprocess.Popen, kill_group: object = os.killpg,
 ) -> dict:
     """Launch exactly one device-owning child and retain only bounded facts."""
+    if not isinstance(compiled, bool):
+        raise ValueError("compiled must be boolean")
     report_path = output_dir / f"attempt-{index:02d}.json"
     command = [
         sys.executable, str(PROBE), "--device", "tpu", "--steps", "1",
         "--report-json", str(report_path),
     ]
+    if compiled:
+        command.append("--compile")
     process = RUN_PROCESS(command, cwd=ROOT, timeout=timeout,
                           process_factory=process_factory, kill_group=kill_group)
     if process["status"] in {"timeout", "interrupted"}:
@@ -58,17 +64,19 @@ def run_once(
         except (OSError, ValueError):
             report = {"schema_version": 1, "status": "invalid_report"}
     lines = set(process["stdout"].splitlines())
+    required_markers = PASS_MARKERS + ((COMPILE_MARKER,) if compiled else ())
     passed = (
         process["status"] == "completed"
         and report is not None and report["status"] == "ready"
-        and all(marker in lines for marker in PASS_MARKERS)
+        and all(marker in lines for marker in required_markers)
     )
     return {
         "attempt": index,
+        "compile_enabled": compiled,
         "status": "passed" if passed else "failed",
         "exit_code": process["exit_code"],
         "report": report,
-        "missing_markers": [marker.split("=", 1)[0] for marker in PASS_MARKERS
+        "missing_markers": [marker.split("=", 1)[0] for marker in required_markers
                             if marker not in lines],
         "error_type": process["error_type"],
         "fatal_markers": process["fatal_markers"],
@@ -78,9 +86,12 @@ def run_once(
 
 def run_lifecycle(
     output_dir: Path, *, repeats: int = 2, timeout: int = 300,
+    compiled: bool = False,
     process_factory: object = subprocess.Popen, kill_group: object = os.killpg,
 ) -> dict:
     """Run sequentially; stop at the first failure and compare observations."""
+    if not isinstance(compiled, bool):
+        raise ValueError("compiled must be boolean")
     if not 2 <= repeats <= 3 or not 1 <= timeout <= 900:
         raise ValueError("repeats must be 2–3 and timeout must be 1–900 seconds")
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -89,10 +100,12 @@ def run_lifecycle(
     for index in range(1, repeats + 1):
         try:
             attempt = run_once(index, session_dir, timeout,
+                               compiled=compiled,
                                process_factory=process_factory,
                                kill_group=kill_group)
         except KeyboardInterrupt:
-            attempt = {"attempt": index, "status": "interrupted", "report": None,
+            attempt = {"attempt": index, "compile_enabled": compiled,
+                       "status": "interrupted", "report": None,
                        "error_type": "KeyboardInterrupt"}
         attempts.append(attempt)
         if attempt["status"] != "passed":
@@ -110,6 +123,7 @@ def run_lifecycle(
         "schema_version": 1,
         "status": "passed" if passed else "failed",
         "scope": "single_device_process_restart",
+        "compile_enabled": compiled,
         "artifact_dir": str(session_dir),
         "requested_attempts": repeats,
         "completed_attempts": len(attempts),
@@ -137,6 +151,8 @@ def main() -> int:
     parser.add_argument("--run", action="store_true", help="Run on a TPU host.")
     parser.add_argument("--repeats", type=int, default=2)
     parser.add_argument("--timeout", type=int, default=300)
+    parser.add_argument("--compile", action="store_true",
+                        help="Repeat the native torch.compile smoke instead of eager.")
     parser.add_argument("--output-dir", type=Path, default=Path("t1_lifecycle_reports"))
     args = parser.parse_args()
     if not 2 <= args.repeats <= 3 or not 1 <= args.timeout <= 900:
@@ -151,7 +167,7 @@ def main() -> int:
     previous_handler = signal.signal(signal.SIGTERM, _interrupt_on_term)
     try:
         report = run_lifecycle(args.output_dir, repeats=args.repeats,
-                               timeout=args.timeout)
+                               timeout=args.timeout, compiled=args.compile)
     finally:
         signal.signal(signal.SIGTERM, previous_handler)
     print(json.dumps(report, indent=2, sort_keys=True))

@@ -137,6 +137,20 @@ class EvidenceTests(unittest.TestCase):
         attempts[1]["report"]["device_name"] = "TPU v6e"
         self.assertEqual(build(lifecycle_report=report)["checks"]["lifecycle"]["status"], "failed")
 
+    def test_lifecycle_evidence_preserves_compiled_mode_and_rejects_mixed_attempts(self):
+        attempts = [{"attempt": i, "status": "passed", "exit_code": 0,
+                     "compile_enabled": True, "report": discovery()}
+                    for i in (1, 2)]
+        report = {"schema_version": 1, "status": "passed", "requested_attempts": 2,
+                  "completed_attempts": 2, "observations_consistent": True,
+                  "compile_enabled": True, "attempts": attempts}
+        check = build(lifecycle_report=report)["checks"]["lifecycle"]
+        self.assertEqual(check["status"], "passed")
+        self.assertTrue(check["compile_enabled"])
+        attempts[1]["compile_enabled"] = False
+        self.assertEqual(build(lifecycle_report=report)["checks"]["lifecycle"]["status"],
+                         "invalid_report")
+
     def test_malformed_profile_and_missing_stdout_cannot_pass(self):
         self.assertEqual(build(package_process=process())["checks"]["package_profile"]["status"], "failed")
         report = {"schema_version": 1, "status": "metadata_compatible",

@@ -173,10 +173,12 @@ These are T1 work packages, not new branches or renumbered GitHub PRs:
    have timeouts and surface partial output. A metadata-compatible result is
    not native runtime certification. An opt-in
    [single-device lifecycle probe](../examples/torchtpu_t1_lifecycle_probe.py)
-   performs bounded sequential restarts and records normalized observations;
-   only its CPU contracts have run. Resolve the native dependency profile and
-   verify clean install/import, repeated runs, cleanup and CPU regression
-   gates on the chosen profile.
+   performs bounded sequential restarts and records normalized observations.
+   Its optional `--compile` mode requires a compile-pass marker from every
+   fresh child; the notebook keeps compiled repeats off until the standalone
+   compile check passes. Only CPU contracts have run. Resolve the native
+   dependency profile and verify clean install/import, eager and compiled
+   repeated runs, cleanup and CPU regression gates on the chosen profile.
 4. **T1.4 — distributed entry feasibility (partial):** the opt-in
    [single-host v5e-8 notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/docs/01-t1-v5e1-probe/notebooks/TorchTPU_T1_v5e8_Distributed_Probe.ipynb)
    uses the [probe script](../examples/torchtpu_t1_distributed_probe.py).

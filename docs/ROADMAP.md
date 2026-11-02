@@ -68,7 +68,9 @@ TorchTPU support. “Implemented” means present in that historical code path;
   argument now routes the native runtime through `torch.compile`; it defaults
   off, is limited to `accelerator="native_tpu"`, and resume rejects a changed
   compile mode. This software path has not been validated on TPU hardware.
-  Lifecycle and T1.4 collective remain unrun. Keep the native dependency profile
+  The bounded lifecycle harness can now repeat either eager or compiled smoke
+  processes, and the notebook records which mode it ran. Eager/compiled
+  lifecycle and T1.4 collective remain unrun. Keep the native dependency profile
   unresolved pending CPU conformance and native runtime evidence.
   Software follow-up adds `trainlm doctor` as one read-only report for package
   compatibility and native TPU discovery. It does not install packages or
@@ -97,6 +99,10 @@ TorchTPU support. “Implemented” means present in that historical code path;
   loader-worker state that cannot yet be replayed exactly. Native model
   compilation is exposed as `torch_compile=True`; it has no eager fallback,
   is checkpoint-mode guarded, and remains disabled pending a v5e-1 owner run.
+  The lifecycle harness also supports a compiled repeat pass after the one-shot
+  compile check succeeds; each fresh child must emit compile evidence, and the
+  normalized report records the selected mode. This harness extension has only
+  source-level validation so far.
   Continue only behind explicit experimental selection until CPU and owner-run
   TPU checks pass.
 

@@ -53,7 +53,10 @@
   clean installation remains unverified. An opt-in T1 lifecycle harness can
   start two or three fresh single-device probe processes, bound each run,
   terminate its process group on timeout, and save sanitized per-run evidence.
-  Its source-level CPU tests pass; no TPU repeat-run/teardown result exists.
+  It can repeat eager or compiled smoke; compiled repeats require a compile-pass
+  marker from every child and stay disabled until the standalone compile check
+  passes. Source-level tests cover the mode guard; no compiled TPU
+  repeat-run/teardown result exists.
   `accelerator="auto"` selects CUDA/CPU only when native TPU is not detected;
   it now raises on detected TPU or broken TorchTPU discovery rather than
   silently falling back. Explicit `tpu` still uses the XLA coordinator.

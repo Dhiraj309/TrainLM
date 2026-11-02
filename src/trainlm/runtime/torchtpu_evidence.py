@@ -200,6 +200,9 @@ def lifecycle_evidence(report: dict | None) -> dict:
             or report["schema_version"] != 1:
         return invalid
     requested, completed = report.get("requested_attempts"), report.get("completed_attempts")
+    compile_enabled = report.get("compile_enabled", False)
+    if type(compile_enabled) is not bool:
+        return invalid
     if type(requested) is not int or not 2 <= requested <= 3 \
             or type(completed) is not int or not 1 <= completed <= requested:
         return invalid
@@ -214,12 +217,16 @@ def lifecycle_evidence(report: dict | None) -> dict:
         status = attempt.get("status")
         if not isinstance(status, str) or status not in {"passed", "failed", "timeout", "interrupted"}:
             return invalid
+        attempt_compile = attempt.get("compile_enabled", compile_enabled)
+        if type(attempt_compile) is not bool or attempt_compile != compile_enabled:
+            return invalid
         discovery = NORMALIZE(attempt.get("report")) if attempt.get("report") else None
         fields = _process_fields(attempt)
         if status == "passed" and (discovery is None or discovery["status"] != "ready"
                                    or fields["fatal_markers"] or fields["exit_code"] != 0):
             return invalid
-        normalized.append(dict(fields, attempt=index, status=status, discovery=discovery))
+        normalized.append(dict(fields, attempt=index, status=status,
+                               compile_enabled=compile_enabled, discovery=discovery))
     fingerprints = {json.dumps({key: attempt["discovery"].get(key) for key in (
         "device_name", "topology", "device_count_visible", "torch_version",
         "torch_tpu_version", "libtpu_version")}, sort_keys=True)
@@ -228,6 +235,7 @@ def lifecycle_evidence(report: dict | None) -> dict:
               and all(attempt["status"] == "passed" for attempt in normalized)
               and len(fingerprints) == 1 and report.get("observations_consistent") is True)
     return {"status": "passed" if passed else "failed", "scope": "process_restart",
+            "compile_enabled": compile_enabled,
             "requested_attempts": requested, "completed_attempts": completed,
             "observations_consistent": passed, "attempts": normalized}
 

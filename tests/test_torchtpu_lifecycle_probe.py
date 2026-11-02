@@ -27,14 +27,15 @@ def ready_report(name="TPU v5e"):
 
 
 class FinishedProcess:
-    def __init__(self, pid):
+    def __init__(self, pid, markers=MARKERS):
         self.pid = pid
         self.returncode = 0
         self.timeouts = []
+        self.markers = markers
 
     def communicate(self, timeout):
         self.timeouts.append(timeout)
-        return "\n".join(MARKERS) + "\n", ""
+        return "\n".join(self.markers) + "\n", ""
 
 
 class LifecycleTests(unittest.TestCase):
@@ -65,6 +66,44 @@ class LifecycleTests(unittest.TestCase):
         self.assertTrue(all(args["start_new_session"] for _, args in commands))
         self.assertTrue(all("--device" in command and "tpu" in command
                             for command, _ in commands))
+
+    def test_compiled_lifecycle_requires_compile_marker_on_each_child(self):
+        commands = []
+
+        def launch(command, **kwargs):
+            commands.append(command)
+            destination = Path(command[command.index("--report-json") + 1])
+            destination.write_text(json.dumps(ready_report()))
+            return FinishedProcess(400 + len(commands), (*MARKERS, "compile=PASS"))
+
+        with TemporaryDirectory() as directory:
+            report = RUN(Path(directory), repeats=2, timeout=12, compiled=True,
+                         process_factory=launch,
+                         kill_group=lambda *args: self.fail("unexpected kill"))
+
+        self.assertEqual(report["status"], "passed")
+        self.assertTrue(report["compile_enabled"])
+        self.assertTrue(all(attempt["compile_enabled"] for attempt in report["attempts"]))
+        self.assertTrue(all("--compile" in command for command in commands))
+
+    def test_compiled_lifecycle_fails_when_a_child_omits_compile_marker(self):
+        def launch(command, **kwargs):
+            destination = Path(command[command.index("--report-json") + 1])
+            destination.write_text(json.dumps(ready_report()))
+            return FinishedProcess(500, MARKERS)
+
+        with TemporaryDirectory() as directory:
+            report = RUN(Path(directory), repeats=2, timeout=12, compiled=True,
+                         process_factory=launch,
+                         kill_group=lambda *args: None)
+
+        self.assertEqual(report["status"], "failed")
+        self.assertIn("compile", report["attempts"][0]["missing_markers"])
+
+    def test_compile_mode_must_be_boolean(self):
+        with TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ValueError, "compiled must be boolean"):
+                RUN(Path(directory), compiled="yes")
 
     def test_timeout_terminates_process_group_and_stops_retries(self):
         launches = []
