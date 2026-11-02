@@ -8,7 +8,7 @@
 
 ## Current project snapshot
 
-- PR #18, including PR #16, PR #20, and PRs #28–#36 are merged.
+- PR #18, including PR #16, PR #20, and PRs #28–#37 are merged.
   PR #28
   merged the native single-device foundation at
   `860bb289bf35444d8d435cf41caf51bcf77afaaf`; PR #29 rebase-merged streaming
@@ -24,11 +24,13 @@
   PR #35 rebase-merged local GPT-2 configuration at
   `063a8b9ff9b42733f8b9f4720ba3307c2b2f4cdf`; PR #36 rebase-merged pinned
   custom corpus selection at `d075987574fe471d1b9159315a0688416664f2ba` after
-  passing CI. This iteration starts from that verified head on
-  `feat/10-configurable-bf16-pretraining`.
-  The current changes make BF16 an explicit experimental option in the scratch
-  recipe and include precision in the sanitized run report. BF16 remains off
-  by default pending owner TPU validation.
+  passing CI; PR #37 rebase-merged opt-in BF16 and precision reporting at
+  `31aa3acd06bf89c9430615103ebd4dd0da46ae6c` after CI passed. This iteration
+  starts from that verified head on `feat/11-scratch-optimizer-config`.
+  The current changes expose scratch learning rate, weight decay, warmup, and
+  seed settings and add them to sanitized evidence. Ten dependency-free
+  launcher checks, ten evidence tests, compilation, notebook parsing, and diff
+  checks pass locally; branch CI and end-to-end training remain pending.
 - T0.1 code inventory is recorded in `TORCHTPU_SALVAGE_INVENTORY.md`. The
   mapped legacy cards remain candidates, not an approved implementation queue.
 - Current implementation backend: PyTorch/XLA. Target: native TorchTPU on
@@ -211,7 +213,8 @@
   smoke; PR #32 passed exact packed-data checkpoint continuation and stale-data
   rejection; PR #33 passed active-notebook source checks; PR #34 passed the
   train-only BPE tokenizer tests; PR #35 passed explicit-config and evidence
-  tests; PR #36 passed pinned custom-corpus tests. This container lacks
+  tests; PR #36 passed pinned custom-corpus tests; PR #37 passed BF16 option
+  and precision evidence tests. This container lacks
   Torch/pytest, so full runtime tests are left to branch CI. No TPU run or
   convergence result is claimed.
 - `trainlm doctor` adds a one-command read-only package/runtime report to the

@@ -39,12 +39,12 @@ approvals. T2 integrates the report into backend selection and the public UX.
 
 ## PR-by-PR serial execution
 
-**Current sequence:** PR #35 added a local GPT-2 config → PR #36 rebase-merged
-pinned custom corpus selection at verified `main` SHA
-`d075987574fe471d1b9159315a0688416664f2ba`, with CI passing. The active
-`feat/10-configurable-bf16-pretraining` branch adds an explicit BF16 option to
-the scratch recipe and records precision in run evidence. BF16 stays opt-in
-until owner TPU validation. The old numbered cards below do not set this order.
+**Current sequence:** PR #36 added pinned custom-corpus selection → PR #37
+rebase-merged opt-in BF16 and precision evidence at verified `main` SHA
+`31aa3acd06bf89c9430615103ebd4dd0da46ae6c`, with CI passing. The active
+`feat/11-scratch-optimizer-config` branch exposes optimizer schedule settings
+and seed controls in the scratch notebook and evidence. The old numbered cards
+below do not set this order.
 
 - A **PR-plan number** is a planned delivery slot, not a GitHub PR number.
   GitHub assigns its own PR number on creation. Do not create the next branch

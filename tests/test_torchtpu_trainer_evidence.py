@@ -32,6 +32,12 @@ def successful_process(*, compile_requested=False, resume_requested=False):
                      "libtpu": "0.0.50", "transformers": "5.20.2",
                      "tokenizers": "0.22.1"},
         "precision": "fp32",
+        "training": {
+            "max_steps": 1000, "learning_rate": 0.0003,
+            "weight_decay": 0.1, "lr_scheduler_type": "cosine",
+            "warmup_steps": 100, "gradient_accumulation_steps": 8,
+            "seed": 42,
+        },
         "checks": checks,
     }
     markers = ["train=PASS", "export=PASS"]
@@ -169,6 +175,8 @@ class TrainerEvidenceTests(unittest.TestCase):
 
         self.assertEqual(report["status"], "passed")
         self.assertEqual(report["precision"], "bf16")
+        self.assertEqual(report["training"]["max_steps"], 1000)
+        self.assertEqual(report["training"]["lr_scheduler_type"], "cosine")
         self.assertEqual(report["model"]["revision"], None)
         self.assertEqual(report["model"]["config"]["n_layer"], 6)
         self.assertEqual(
@@ -194,6 +202,26 @@ class TrainerEvidenceTests(unittest.TestCase):
 
                 self.assertEqual(report["status"], "failed")
                 self.assertIn("invalid_precision", report["issues"])
+
+    def test_invalid_training_config_fails_closed(self):
+        for overrides in ({"learning_rate": -1.0},
+                          {"learning_rate": 10 ** 400},
+                          {"weight_decay": float("inf")},
+                          {"lr_scheduler_type": "secret/path"},
+                          {"seed": True}):
+            with self.subTest(overrides=overrides):
+                process = successful_process()
+                lines = process["stdout"].splitlines()
+                index = next(i for i, line in enumerate(lines)
+                             if line.startswith("trainer_summary="))
+                summary = json.loads(lines[index].split("=", 1)[1])
+                summary["training"].update(overrides)
+                lines[index] = "trainer_summary=" + json.dumps(summary)
+
+                report = self.report({**process, "stdout": "\n".join(lines)})
+
+                self.assertEqual(report["status"], "failed")
+                self.assertIn("invalid_training_config", report["issues"])
 
     def test_invalid_scratch_selector_metadata_fails_closed(self):
         process = successful_process()
