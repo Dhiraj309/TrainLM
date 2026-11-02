@@ -10,6 +10,7 @@ from importlib import metadata
 import json
 import math
 from pathlib import Path
+import re
 import sys
 
 
@@ -22,7 +23,8 @@ sys.path.insert(0, str(ROOT / "src"))
 
 
 def _token_documents(
-    dataset, tokenizer, *, max_examples: int, batch_size: int = 64
+    dataset, tokenizer, *, max_examples: int, batch_size: int = 64,
+    text_field: str = "text",
 ):
     """Yield EOS-separated tokenized documents without materializing a split."""
     eos_token_id = tokenizer.eos_token_id
@@ -42,10 +44,10 @@ def _token_documents(
     for row in dataset:
         if seen >= max_examples:
             break
-        text = row.get("text") if isinstance(row, dict) else None
+        text = row.get(text_field) if isinstance(row, dict) else None
         if not isinstance(text, str):
             raise ValueError(
-                "TinyStories rows must contain a string 'text' field."
+                f"Training rows must contain a string {text_field!r} field."
             )
         pending.append(text)
         seen += 1
@@ -58,7 +60,9 @@ def _token_documents(
         raise ValueError("The selected dataset split contains no text examples.")
 
 
-def _train_byte_level_tokenizer(dataset, *, max_examples: int, vocab_size: int):
+def _train_byte_level_tokenizer(
+    dataset, *, max_examples: int, vocab_size: int, text_field: str = "text",
+):
     """Train a compact tokenizer from the training text without caching it."""
     if max_examples < 1:
         raise ValueError("Tokenizer training examples must be positive.")
@@ -75,10 +79,10 @@ def _train_byte_level_tokenizer(dataset, *, max_examples: int, vocab_size: int):
         for row in dataset:
             if seen >= max_examples:
                 break
-            text = row.get("text") if isinstance(row, dict) else None
+            text = row.get(text_field) if isinstance(row, dict) else None
             if not isinstance(text, str):
                 raise ValueError(
-                    "Tokenizer training rows must contain a string 'text' field."
+                    f"Tokenizer rows must contain a string {text_field!r} field."
                 )
             seen += 1
             yield text
@@ -116,6 +120,34 @@ def _train_byte_level_tokenizer(dataset, *, max_examples: int, vocab_size: int):
     return tokenizer, seen
 
 
+def _validate_scratch_dataset_source(
+    *, dataset_id: str, dataset_revision: str, train_split: str,
+    validation_split: str, text_field: str,
+) -> None:
+    if not isinstance(dataset_id, str) or not re.fullmatch(
+        r"[A-Za-z0-9._-]{1,96}/[A-Za-z0-9._-]{1,96}", dataset_id
+    ):
+        raise ValueError("dataset_id must be a Hugging Face owner/name ID.")
+    if not isinstance(dataset_revision, str) or not re.fullmatch(
+        r"[0-9a-f]{40}", dataset_revision
+    ):
+        raise ValueError("dataset_revision must be an immutable 40-character commit SHA.")
+    if (
+        not isinstance(train_split, str)
+        or not train_split.strip()
+        or not re.fullmatch(r"[A-Za-z0-9._+-]{1,96}", train_split)
+        or not isinstance(validation_split, str)
+        or not validation_split.strip()
+        or not re.fullmatch(r"[A-Za-z0-9._+-]{1,96}", validation_split)
+        or train_split == validation_split
+    ):
+        raise ValueError("Use distinct non-empty training and validation split names.")
+    if not isinstance(text_field, str) or not re.fullmatch(
+        r"[A-Za-z0-9._+-]{1,96}", text_field
+    ):
+        raise ValueError("text_field must name a dataset text column.")
+
+
 def _scratch_gpt2_config(
     *, vocab_size: int, sequence_length: int, embedding_size: int,
     layers: int, attention_heads: int, pad_token_id: int,
@@ -150,6 +182,9 @@ def run_smoke(
     gradient_accumulation_steps: int = 1, tokenizer_vocab_size: int = 16000,
     model_embedding_size: int = 768, model_layers: int = 6,
     model_attention_heads: int = 12,
+    dataset_id: str = DATASET_ID, dataset_revision: str = DATASET_REVISION,
+    train_split: str = "train", validation_split: str = "validation",
+    text_field: str = "text",
 ) -> None:
     if max_steps < 1 or sequence_length < 1 or gradient_accumulation_steps < 1:
         raise ValueError("Training steps, sequence length, and accumulation must be positive.")
@@ -163,6 +198,14 @@ def run_smoke(
         raise ValueError("Scratch GPT-2 model dimensions must be positive.")
     if from_scratch and model_embedding_size % model_attention_heads:
         raise ValueError("model embedding size must be divisible by attention heads.")
+    if from_scratch:
+        _validate_scratch_dataset_source(
+            dataset_id=dataset_id,
+            dataset_revision=dataset_revision,
+            train_split=train_split,
+            validation_split=validation_split,
+            text_field=text_field,
+        )
     if save_steps is not None and save_steps < 1:
         raise ValueError("save_steps must be positive when configured.")
     if resume and compile_enabled:
@@ -191,34 +234,39 @@ def run_smoke(
     if from_scratch:
         data_root = output_dir / "packed-data"
         train_source = load_dataset(
-            DATASET_ID, revision=DATASET_REVISION,
-            split="train", streaming=True,
+            dataset_id, revision=dataset_revision,
+            split=train_split, streaming=True,
         )
         tokenizer, tokenizer_training_documents = _train_byte_level_tokenizer(
             train_source,
             max_examples=train_examples,
             vocab_size=tokenizer_vocab_size,
+            text_field=text_field,
         )
         tokenizer.save_pretrained(output_dir / "trained-tokenizer")
         # Re-open the deterministic stream after consuming it for tokenizer fit.
         train_source = load_dataset(
-            DATASET_ID, revision=DATASET_REVISION,
-            split="train", streaming=True,
+            dataset_id, revision=dataset_revision,
+            split=train_split, streaming=True,
         )
         validation_source = load_dataset(
-            DATASET_ID, revision=DATASET_REVISION,
-            split="validation", streaming=True,
+            dataset_id, revision=dataset_revision,
+            split=validation_split, streaming=True,
         )
         train_manifest_path = write_packed_binary_shard(
-            _token_documents(train_source, tokenizer, max_examples=train_examples),
-            data_root / "train", shard_id="tinystories-train",
+            _token_documents(
+                train_source, tokenizer, max_examples=train_examples,
+                text_field=text_field,
+            ),
+            data_root / "train", shard_id="scratch-train",
             vocab_size=len(tokenizer),
         )
         validation_manifest_path = write_packed_binary_shard(
             _token_documents(
                 validation_source, tokenizer, max_examples=eval_examples,
+                text_field=text_field,
             ),
-            data_root / "validation", shard_id="tinystories-validation",
+            data_root / "validation", shard_id="scratch-validation",
             vocab_size=len(tokenizer),
         )
         rows = PackedBinDataset.from_directory(
@@ -251,7 +299,10 @@ def run_smoke(
         torch.manual_seed(42)
         model = AutoModelForCausalLM.from_config(model_config)
         dataset_info = {
-            "id": DATASET_ID, "revision": DATASET_REVISION,
+            "id": dataset_id, "revision": dataset_revision,
+            "train_split": train_split,
+            "validation_split": validation_split,
+            "text_field": text_field,
             "train_examples": len(rows), "validation_examples": len(eval_rows),
             "tokenizer": {
                 "kind": "byte_level_bpe_from_training_split",
@@ -477,6 +528,11 @@ def main() -> int:
     parser.add_argument("--model-embedding-size", type=int, default=768)
     parser.add_argument("--model-layers", type=int, default=6)
     parser.add_argument("--model-attention-heads", type=int, default=12)
+    parser.add_argument("--dataset-id", default=DATASET_ID)
+    parser.add_argument("--dataset-revision", default=DATASET_REVISION)
+    parser.add_argument("--train-split", default="train")
+    parser.add_argument("--validation-split", default="validation")
+    parser.add_argument("--text-field", default="text")
     args = parser.parse_args()
     run_smoke(
         args.output_dir, compile_enabled=args.compile, resume=args.resume,
@@ -489,6 +545,11 @@ def main() -> int:
         model_embedding_size=args.model_embedding_size,
         model_layers=args.model_layers,
         model_attention_heads=args.model_attention_heads,
+        dataset_id=args.dataset_id,
+        dataset_revision=args.dataset_revision,
+        train_split=args.train_split,
+        validation_split=args.validation_split,
+        text_field=args.text_field,
     )
     return 0
 

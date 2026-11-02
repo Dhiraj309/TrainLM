@@ -13,9 +13,10 @@ the scratch workflow. PR #30 added passing CI coverage for packed-data update
 parity, PR #31 added the random-init GPT-2 train/eval/checkpoint/export CPU
 smoke, PR #32 added exact packed-data checkpoint recovery, and PR #33 fixed
 active notebooks to load merged `main`; PR #34 added a BPE tokenizer trained
-from the training split. This iteration builds a configurable GPT-2 model
-without downloading its config or weights. These checks do not certify TPU
-support or end-to-end convergence. PR #20 closed T0.2.
+from the training split; PR #35 builds GPT-2 from an explicit local config.
+This iteration lets notebook users select a pinned HF text dataset and its
+train/validation splits and text column. These checks do not certify TPU support
+or end-to-end convergence. PR #20 closed T0.2.
 T1 software probes cover shared hardware and capability discovery, dependency
 metadata and process lifecycle, and a distributed entry check; owner-run
 compile, lifecycle and v5e-8 collective evidence remain pending. Use v5e-1 for

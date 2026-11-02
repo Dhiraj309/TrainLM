@@ -8,7 +8,7 @@
 
 ## Current project snapshot
 
-- PR #18, including PR #16, PR #20, and PRs #28–#34 are merged.
+- PR #18, including PR #16, PR #20, and PRs #28–#35 are merged.
   PR #28
   merged the native single-device foundation at
   `860bb289bf35444d8d435cf41caf51bcf77afaaf`; PR #29 rebase-merged streaming
@@ -21,8 +21,13 @@
   after passing CI; PR #33 rebase-merged current Colab source references at
   `83d4b08dd9c510a6edf6ae0a5dc7e2b739343eb6`; PR #34 rebase-merged the
   training-split BPE tokenizer at `7c75f6d0aa8ff75299328847e9fa7dcfcdf791e1`.
-  This iteration starts from that verified head on
-  `feat/08-explicit-scratch-gpt2-config`.
+  PR #35 rebase-merged local GPT-2 configuration at
+  `063a8b9ff9b42733f8b9f4720ba3307c2b2f4cdf`. This iteration starts from that
+  verified head on `feat/09-custom-scratch-corpus`.
+  The current changes accept a pinned Hugging Face corpus, separate split
+  names, and a text column; 11 dependency-free launcher tests, 8 evidence
+  tests, compilation, notebook parsing, and diff checks pass locally. Branch
+  CI and end-to-end training remain pending.
 - T0.1 code inventory is recorded in `TORCHTPU_SALVAGE_INVENTORY.md`. The
   mapped legacy cards remain candidates, not an approved implementation queue.
 - Current implementation backend: PyTorch/XLA. Target: native TorchTPU on
@@ -179,9 +184,9 @@
   The native fine-tuning smoke pins its `distilbert/distilgpt2` model and
   tokenizer to Hub commit `2290a62682d06624634c1f46a6ad5be0f47f38aa`. The
   separate scratch path now trains a byte-level BPE tokenizer only on pinned
-  training documents. This branch replaces its remaining pretrained GPT-2
-  config lookup with explicit local dimensions and records that config in
-  evidence.
+  training documents and builds a local GPT-2 config from explicit dimensions.
+  This branch lets users select a pinned Hugging Face corpus, its distinct
+  train/validation splits, and the text column.
   A separate [Colab notebook](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb)
   constructs that GPT-2 architecture through `from_config`, so weights start
   random, then fits a byte-level BPE tokenizer on bounded TinyStories training
@@ -204,8 +209,9 @@
   PR #31's GitHub CI passed the random-init GPT-2 train/eval/checkpoint/export
   smoke; PR #32 passed exact packed-data checkpoint continuation and stale-data
   rejection; PR #33 passed active-notebook source checks; PR #34 passed the
-  train-only BPE tokenizer and evidence tests. Local runtime tests are
-  unavailable because this container lacks Torch/pytest. No TPU run or
+  train-only BPE tokenizer tests; PR #35 passed explicit-config and evidence
+  tests. This container lacks Torch/pytest, so full runtime tests are left to
+  branch CI. No TPU run or
   convergence result is claimed.
 - `trainlm doctor` adds a one-command read-only package/runtime report to the
   CLI, reusing the T1 profile and hardware discovery contracts. From a source

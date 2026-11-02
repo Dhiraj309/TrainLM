@@ -30,8 +30,10 @@ TorchTPU support. “Implemented” means present in that historical code path;
   `83d4b08dd9c510a6edf6ae0a5dc7e2b739343eb6`; PR #34 rebase-merged the
   training-split BPE tokenizer at verified `main`
   `7c75f6d0aa8ff75299328847e9fa7dcfcdf791e1`. The active
-  `feat/08-explicit-scratch-gpt2-config` branch removes the remaining model
-  config Hub lookup and exposes the GPT-2 architecture dimensions. T1 source-level
+  `063a8b9ff9b42733f8b9f4720ba3307c2b2f4cdf` after PR #35 added a local GPT-2
+  config. The active `feat/09-custom-scratch-corpus` branch accepts a pinned
+  HF dataset, split names, and text column; its dependency-free launcher and
+  evidence checks pass locally, with branch CI pending. T1 source-level
   probes and the explicit `native_tpu` path are implemented; owner-run compile,
   lifecycle and v5e-8 collective evidence remain pending. Hosted Kaggle currently documents
   v5e-8 and hosted Colab TPU v2, so neither is the v5e-1 target; use a
@@ -157,9 +159,9 @@ TorchTPU support. “Implemented” means present in that historical code path;
   that model revision for repeatable runs. No TPU trainer result is claimed.
   A separate Colab notebook trains random model weights and a byte-level BPE
   tokenizer from the pinned TinyStories training split, then evaluates on the
-  separate validation split. It still fetches its GPT-2 architecture config;
-  the active branch replaces that with explicit local dimensions. The default
-  recipe uses 1,000 steps, gradient
+  separate validation split. PR #35 builds its GPT-2 config locally from
+  explicit dimensions. The active branch allows other pinned HF text datasets.
+  The default recipe uses 1,000 steps, gradient
   accumulation, periodic checkpoints, evaluation, and HF export. It checks for
   the optional `datasets` package before fetching data. This is a small-scale
   pretraining implementation; native TPU execution and convergence remain
@@ -172,8 +174,8 @@ TorchTPU support. “Implemented” means present in that historical code path;
   updates. PR #31's CI verified the random-init train/eval/checkpoint/export
   path; PR #32 verified exact packed-data continuation and stale-data rejection;
   PR #33 verified notebook source freshness; PR #34 verified train-only BPE
-  fitting and reporting. Owner-run TPU validation and training convergence
-  remain pending.
+  fitting and reporting; PR #35 verified local model config and report
+  provenance. Owner-run TPU validation and training convergence remain pending.
   Continue only behind explicit experimental selection until CPU and owner-run
   TPU checks pass.
 
