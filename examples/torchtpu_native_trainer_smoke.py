@@ -618,10 +618,19 @@ def run_smoke(
             raise RuntimeError("Resumed weights differ from uninterrupted weights.")
         print("resume=PASS", flush=True)
         print("exact_weight_match=PASS", flush=True)
+        del reference_trainer, reference_model, resumed_weights, reference_weights
+        gc.collect()
 
     if from_scratch:
         rows.close()
         eval_rows.close()
+
+    # Validate the portable Hugging Face export on CPU after device training.
+    # This stays outside TPU execution and is not evidence of TPU generation.
+    del trainer, model
+    gc.collect()
+    _check_export_generation(export, sequence_length=sequence_length)
+    print("reload_generate=PASS", flush=True)
 
     packages = {}
     for name in ("torch", "torch_tpu", "libtpu", "transformers", "tokenizers"):
@@ -687,6 +696,7 @@ def run_smoke(
         "packages": packages,
         "checks": {
             "train": "passed", "export": "passed",
+            "reload_generate": "passed",
             "compile": "passed" if compile_enabled else "not_run",
             "resume": "passed" if resume else "not_run",
             "exact_weight_match": "passed" if resume else "not_run",
@@ -699,6 +709,58 @@ def _check_export(path: Path) -> None:
     required = ("config.json", "model.safetensors", "tokenizer_config.json")
     if not all((path / name).is_file() for name in required):
         raise RuntimeError("Model/tokenizer export is incomplete.")
+
+
+def _check_export_generation(path: Path, *, sequence_length: int) -> int:
+    """Reload the local export on CPU and ensure greedy generation adds tokens."""
+    if isinstance(sequence_length, bool) or not isinstance(sequence_length, int):
+        raise ValueError("sequence_length must be a positive integer.")
+    if sequence_length < 2:
+        raise ValueError("sequence_length must be at least two.")
+    _check_export(path)
+
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    tokenizer = AutoTokenizer.from_pretrained(path, local_files_only=True)
+    model = AutoModelForCausalLM.from_pretrained(path, local_files_only=True)
+    model.to(torch.device("cpu"))
+    model.eval()
+
+    configured_limit = getattr(model.config, "max_position_embeddings", None)
+    if configured_limit is None:
+        configured_limit = getattr(model.config, "n_positions", sequence_length)
+    if (isinstance(configured_limit, bool)
+            or not isinstance(configured_limit, int)
+            or configured_limit < 2):
+        configured_limit = sequence_length
+    position_limit = min(sequence_length, configured_limit)
+    max_new_tokens = min(4, position_limit - 1)
+    prompt_limit = position_limit - max_new_tokens
+    encoded = tokenizer(
+        "TrainLM", add_special_tokens=False, return_tensors="pt",
+    )
+    input_ids = encoded["input_ids"][:, :prompt_limit].to("cpu")
+    attention_mask = encoded["attention_mask"][:, :prompt_limit].to("cpu")
+    if input_ids.shape[0] != 1 or input_ids.shape[1] < 1:
+        raise RuntimeError("The export tokenizer produced no prompt tokens.")
+
+    with torch.inference_mode():
+        generated = model.generate(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            max_new_tokens=max_new_tokens,
+            do_sample=False,
+            pad_token_id=tokenizer.pad_token_id,
+            eos_token_id=tokenizer.eos_token_id,
+        )
+    if (generated.ndim != 2 or generated.shape[0] != 1
+            or generated.shape[1] <= input_ids.shape[1]):
+        raise RuntimeError("Reloaded export did not generate new token IDs.")
+    new_token_ids = generated[0, input_ids.shape[1]:].tolist()
+    if not tokenizer.decode(new_token_ids, skip_special_tokens=False).strip():
+        raise RuntimeError("Generated token IDs did not decode to text.")
+    return len(new_token_ids)
 
 
 def main() -> int:

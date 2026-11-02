@@ -19,9 +19,13 @@ _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _SAFE_TEXT = re.compile(r"[A-Za-z0-9._+\-]{1,96}\Z")
 _MODEL_ID = re.compile(r"[A-Za-z0-9._-]{1,96}/[A-Za-z0-9._-]{1,96}\Z")
 _REPO_ID = re.compile(r"[A-Za-z0-9._-]{1,96}/[A-Za-z0-9._-]{1,96}\Z")
-_CHECKS = ("train", "export", "compile", "resume", "exact_weight_match")
+_CHECKS = (
+    "train", "export", "reload_generate", "compile", "resume",
+    "exact_weight_match",
+)
 _MARKERS = {
     "train": "train=PASS", "export": "export=PASS",
+    "reload_generate": "reload_generate=PASS",
     "compile": "compile=PASS", "resume": "resume=PASS",
     "exact_weight_match": "exact_weight_match=PASS",
 }
@@ -424,6 +428,7 @@ def build_trainer_report(
 
     expected = {
         "train": "passed", "export": "passed",
+        "reload_generate": "passed",
         "compile": "passed" if compile_requested else "not_run",
         "resume": "passed" if resume_requested else "not_run",
         "exact_weight_match": "passed" if resume_requested else "not_run",

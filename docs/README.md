@@ -19,8 +19,10 @@ PR #37 adds opt-in BF16 autocast and precision reporting; PR #38 adds learning
 rate, weight decay, warmup, and seed controls; PR #39 adds opt-in gradient
 checkpointing; PR #40 adds per-device batch sizes; PR #41 adds supervised-token
 budgets and actual token counts; PR #42 adds configurable sparse logging and
-final loss snapshots. The active notebook iteration packages the exported
-model/tokenizer and JSON evidence into one download for Colab or Kaggle.
+final loss snapshots; PR #43 packages the exported model/tokenizer and JSON
+evidence into one download for Colab or Kaggle. The current notebook check
+reloads that saved artifact on CPU and confirms it generates tokens. It does
+not certify TPU generation or training quality.
 These checks do not certify TPU support or end-to-end convergence. PR #20
 closed T0.2.
 T1 software probes cover shared hardware and capability discovery, dependency

@@ -8,7 +8,7 @@
 
 ## Current project snapshot
 
-- PR #18, including PR #16, PR #20, and PRs #28–#42 are merged.
+- PR #18, including PR #16, PR #20, and PRs #28–#43 are merged.
   PR #28
   merged the native single-device foundation at
   `860bb289bf35444d8d435cf41caf51bcf77afaaf`; PR #29 rebase-merged streaming
@@ -37,14 +37,16 @@
   passed in 2m10s, including the packed-training token-budget regression. PR
   #42 rebase-merged sparse logging and terminal loss snapshots at verified
   `main` SHA `2e90537371aa03c98f4fc395edb2b231727eaebb`; GitHub pytest passed in
-  2m0s. The active `feat/16-colab-model-artifact` change bundles the exported
-  model/tokenizer with the JSON evidence report, downloads it in Colab, and
-  writes it to `/kaggle/working` in Kaggle. If training is blocked before
-  export, the ZIP still contains the report and clearly marks the model as
-  absent. Sixteen dependency-free notebook/launcher tests, eleven evidence
-  tests, notebook parsing, and synthetic ZIP inclusion/fallback checks pass.
-  Three additional smoke tests need Torch, Transformers and Tokenizers, which
-  are absent here; full pytest awaits GitHub CI.
+  2m0s. PR #43 bundled the exported model/tokenizer with the JSON evidence
+  report for Colab/Kaggle download at verified `main` SHA
+  `73952a9724456390c6def5b74a474d4274dc7544`; GitHub pytest passed in 2m4s.
+  The current `feat/17-reload-exported-model` change reloads that local export
+  on CPU and confirms greedy generation adds tokens. Its evidence report
+  records `reload_generate`; this is an export usability check, not TPU
+  generation evidence. Sixteen dependency-free notebook/launcher tests and
+  eleven evidence tests pass locally, along with syntax and notebook checks.
+  The Transformers-backed generation integration test awaits branch CI because
+  this workspace lacks Torch, Transformers and Tokenizers.
 - T0.1 code inventory is recorded in `TORCHTPU_SALVAGE_INVENTORY.md`. The
   mapped legacy cards remain candidates, not an approved implementation queue.
 - Current implementation backend: PyTorch/XLA. Target: native TorchTPU on
@@ -232,8 +234,8 @@
   PR #39 passed checkpointed GPT-2 CPU forward/backward and full CI; PR #40
   passed CI after adding batch controls; PR #41 passed CI with the token-budget
   CPU integration regression; PR #42 passed full CI with sparse-logging and
-  terminal-loss regressions. The current notebook artifact packaging awaits
-  branch CI.
+  terminal-loss regressions; PR #43 passed full CI with notebook artifact
+  packaging. The exported-model generation integration test awaits branch CI.
   This container lacks
   Torch/pytest, so full runtime tests are left to branch CI. No TPU run or
   convergence result is claimed.
