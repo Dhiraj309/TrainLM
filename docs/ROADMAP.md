@@ -38,11 +38,15 @@ TorchTPU support. “Implemented” means present in that historical code path;
   checkpointing at `df0a9ff562e48b67ae4ea48dbe10abe565137f4b`. PR #40 merged
   per-device batch sizes at `d7359bc20d5fa2af800c113b2e85779b6987f2f4`; PR #41
   merged supervised-token budgets at
-  `a24514a7693e918c1c10c8a84c705399fa3b3bcf`, with CI passing. The active
-  `perf/15-sparse-training-logging` branch makes scratch loss logging
-  configurable and preserves a final loss snapshot. Sixteen dependency-free
-  launcher/notebook checks, 11 evidence tests, compilation and notebook parsing
-  pass locally; the trainer pytest regression awaits branch CI. BF16 and
+  `a24514a7693e918c1c10c8a84c705399fa3b3bcf`, with CI passing. PR #42
+  rebase-merged configurable sparse logging and terminal loss snapshots at
+  `2e90537371aa03c98f4fc395edb2b231727eaebb`, with GitHub pytest passing in
+  2m0s. Active branch `feat/16-colab-model-artifact` packages the exported
+  Hugging Face model/tokenizer and evidence report for Colab/Kaggle download.
+  Sixteen dependency-free notebook/launcher checks, 11 evidence tests,
+  notebook parsing and synthetic ZIP inclusion/fallback checks pass locally.
+  Three smoke tests require packages absent from this workspace; full pytest
+  awaits branch CI. BF16 and
   checkpointing remain unvalidated on TPU. T1 source-level
   probes and the explicit `native_tpu` path are implemented; owner-run compile,
   lifecycle and v5e-8 collective evidence remain pending. Hosted Kaggle currently documents
@@ -173,8 +177,10 @@ TorchTPU support. “Implemented” means present in that historical code path;
   explicit dimensions; PR #36 allows other pinned HF text datasets; PR #37
   exposes opt-in BF16; PR #38 adds optimizer schedule and seed controls; PR #39
   adds opt-in activation checkpointing; PR #40 adds per-device batch sizes; PR
-  #41 adds supervised-token targets and reports actual consumption. The active
-  branch exposes logging cadence and preserves the final loss snapshot. The
+  #41 adds supervised-token targets and reports actual consumption; PR #42
+  exposes logging cadence and preserves the final loss snapshot. The active
+  notebook iteration bundles the exported model and evidence report for
+  download. The
   default recipe targets 1,000,000 next-token targets, with gradient
   accumulation, periodic checkpoints, evaluation, and HF export. It checks for
   the optional `datasets` package before fetching data. This is a small-scale
