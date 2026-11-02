@@ -15,6 +15,7 @@ from typing import Any, Mapping
 
 _SHA = re.compile(r"[0-9a-f]{40}\Z")
 _SAFE_TEXT = re.compile(r"[A-Za-z0-9._+\-]{1,96}\Z")
+_MODEL_ID = re.compile(r"[A-Za-z0-9._-]{1,96}/[A-Za-z0-9._-]{1,96}\Z")
 _CHECKS = ("train", "export", "compile", "resume", "exact_weight_match")
 _MARKERS = {
     "train": "train=PASS", "export": "export=PASS",
@@ -75,6 +76,7 @@ def build_trainer_report(
 
     checks = {name: "unknown" for name in _CHECKS}
     device = None
+    model = None
     packages = {name: None for name in _PACKAGES}
     if (isinstance(summary, dict)
             and type(summary.get("schema_version")) is int
@@ -87,6 +89,16 @@ def build_trainer_report(
                 or device.get("device_count_visible") != 1):
             issues.append("invalid_device")
             device = None
+        raw_model = summary.get("model")
+        if raw_model is not None:
+            if (not isinstance(raw_model, dict)
+                    or not isinstance(raw_model.get("id"), str)
+                    or not _MODEL_ID.fullmatch(raw_model["id"])
+                    or not isinstance(raw_model.get("revision"), str)
+                    or not _SHA.fullmatch(raw_model["revision"])):
+                issues.append("invalid_model_revision")
+            else:
+                model = {"id": raw_model["id"], "revision": raw_model["revision"]}
         raw_packages = summary.get("packages")
         if not isinstance(raw_packages, dict):
             issues.append("invalid_packages")
@@ -136,6 +148,7 @@ def build_trainer_report(
                     "error_type": error_type, "fatal_markers": fatal_markers,
                     "cleanup_completed": cleanup_completed},
         "device": device,
+        "model": model,
         "packages": packages,
         "checks": checks,
         "issues": sorted(set(issues)),

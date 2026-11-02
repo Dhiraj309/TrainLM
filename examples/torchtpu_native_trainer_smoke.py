@@ -14,6 +14,8 @@ import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]
+MODEL_ID = "distilbert/distilgpt2"
+MODEL_REVISION = "2290a62682d06624634c1f46a6ad5be0f47f38aa"
 sys.path.insert(0, str(ROOT / "src"))
 
 
@@ -33,11 +35,11 @@ def run_smoke(output_dir: Path, *, compile_enabled: bool, resume: bool) -> None:
         raise RuntimeError("This smoke requires one allocatable native TPU device.")
     print(f"device={discovery['device_name'] or 'tpu'}", flush=True)
 
-    model_id = "distilgpt2"
-    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    model_id = MODEL_ID
+    tokenizer = AutoTokenizer.from_pretrained(model_id, revision=MODEL_REVISION)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
-    model = AutoModelForCausalLM.from_pretrained(model_id)
+    model = AutoModelForCausalLM.from_pretrained(model_id, revision=MODEL_REVISION)
     model.config.pad_token_id = tokenizer.pad_token_id
     texts = [
         "TrainLM trains causal language models with PyTorch.",
@@ -91,7 +93,9 @@ def run_smoke(output_dir: Path, *, compile_enabled: bool, resume: bool) -> None:
         del trainer, model
         gc.collect()
 
-        resumed_model = AutoModelForCausalLM.from_pretrained(model_id)
+        resumed_model = AutoModelForCausalLM.from_pretrained(
+            model_id, revision=MODEL_REVISION,
+        )
         resumed_model.config.pad_token_id = tokenizer.pad_token_id
         resumed_trainer = TrainLMTrainer(
             model=resumed_model, tokenizer=tokenizer, train_dataset=rows,
@@ -109,7 +113,9 @@ def run_smoke(output_dir: Path, *, compile_enabled: bool, resume: bool) -> None:
         del resumed_trainer, resumed_model
         gc.collect()
 
-        reference_model = AutoModelForCausalLM.from_pretrained(model_id)
+        reference_model = AutoModelForCausalLM.from_pretrained(
+            model_id, revision=MODEL_REVISION,
+        )
         reference_model.config.pad_token_id = tokenizer.pad_token_id
         reference_trainer = TrainLMTrainer(
             model=reference_model, tokenizer=tokenizer, train_dataset=rows,
@@ -140,6 +146,7 @@ def run_smoke(output_dir: Path, *, compile_enabled: bool, resume: bool) -> None:
             packages[name] = None
     print("trainer_summary=" + json.dumps({
         "schema_version": 1,
+        "model": {"id": model_id, "revision": MODEL_REVISION},
         "device": normalize_worker_report(discovery),
         "packages": packages,
         "checks": {

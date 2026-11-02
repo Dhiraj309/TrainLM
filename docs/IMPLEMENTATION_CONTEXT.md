@@ -161,6 +161,10 @@
   through the explicit smoke; this does not approve the dependency profile.
   No package installation or pin change is performed. The gate awaits an
   owner Colab run; local validation is source-level only.
+  The native trainer example now pins all `distilbert/distilgpt2` model and
+  tokenizer loads to Hub commit `2290a62682d06624634c1f46a6ad5be0f47f38aa`.
+  Its bounded evidence report records the model ID and full revision SHA, so
+  resumed and reference runs use the same source snapshot.
 - `trainlm doctor` adds a one-command read-only package/runtime report to the
   CLI, reusing the T1 profile and hardware discovery contracts. From a source
   checkout it records the Git revision; an installed wheel uses its declared

@@ -134,6 +134,9 @@ TorchTPU support. “Implemented” means present in that historical code path;
   source-range mismatch plus unrelated IPython/Jedi conflict is explicitly
   labeled experimental, allowing the opt-in smoke without changing pins or
   implying package support. This gate has source-level tests only.
+  The trainer smoke pins `distilbert/distilgpt2` and its tokenizer to Hub commit
+  `2290a62682d06624634c1f46a6ad5be0f47f38aa`; the downloadable evidence records
+  that model revision for repeatable runs. No TPU trainer result is claimed.
   Continue only behind explicit experimental selection until CPU and owner-run
   TPU checks pass.
 
