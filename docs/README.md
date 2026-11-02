@@ -10,9 +10,9 @@ established backend is PyTorch/XLA. An experimental, explicitly selected
 single-device native TorchTPU path and a from-scratch starter workflow are
 implemented in PR #28. PR #29 merged the streamed uint32 packed-data path into
 the scratch workflow. PR #30 added passing CI coverage for packed-data update
-parity. The active CPU test adds a random-init GPT-2 train/eval/checkpoint/export
-smoke; neither path is certified on TPU, and end-to-end convergence is not
-established. PR #20 closed T0.2.
+parity, and PR #31 added the random-init GPT-2 train/eval/checkpoint/export CPU
+smoke. The active branch adds resumable packed-data cursors. None of these
+checks certify TPU support or end-to-end convergence. PR #20 closed T0.2.
 T1 software probes cover shared hardware and capability discovery, dependency
 metadata and process lifecycle, and a distributed entry check; owner-run
 compile, lifecycle and v5e-8 collective evidence remain pending. Use v5e-1 for

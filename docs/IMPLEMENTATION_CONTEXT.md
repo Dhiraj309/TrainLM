@@ -8,15 +8,16 @@
 
 ## Current project snapshot
 
-- PR #18, including PR #16, PR #20, PR #28, PR #29, and PR #30 are merged.
+- PR #18, including PR #16, PR #20, PR #28, PR #29, PR #30, and PR #31 are merged.
   PR #28
   merged the native single-device foundation at
   `860bb289bf35444d8d435cf41caf51bcf77afaaf`; PR #29 rebase-merged streaming
   packed-data support at verified `main`
   `f3df754ea98156b083801447b41540670134bf2e`; PR #30 rebase-merged packed
-  causal-LM update parity at `2b5e0e9bef3b105d8ebeb40a0a9d04d1d4b7e748`.
-  This iteration starts from that verified head on
-  `test/04-scratch-pretraining-cpu-smoke`.
+  causal-LM update parity at `2b5e0e9bef3b105d8ebeb40a0a9d04d1d4b7e748`;
+  PR #31 rebase-merged the CPU scratch lifecycle at
+  `a58a9e13d792c2468f4c20d6cdc7375f4bc63ffd`. This iteration starts from that
+  verified head on `feat/05-packed-dataset-resume-cursor`.
 - T0.1 code inventory is recorded in `TORCHTPU_SALVAGE_INVENTORY.md`. The
   mapped legacy cards remain candidates, not an approved implementation queue.
 - Current implementation backend: PyTorch/XLA. Target: native TorchTPU on
@@ -125,8 +126,10 @@
   RNG state through guarded generic APIs; an absent API rejects checkpointing
   or resume. Native resume is currently guarded to deterministic map-style
   data, zero loader workers, and a TrainLM-owned random sampler or sequential
-  order; iterable sources need an explicit cursor first. This has not been run
-  against TorchTPU hardware. `torch_compile=True` opts into `torch.compile` for
+  order. The active `feat/05-packed-dataset-resume-cursor` branch adds an exact
+  cursor contract for packed iterable data and wires it into trainer
+  checkpoints; CPU resume parity and native TPU validation are pending.
+  `torch_compile=True` opts into `torch.compile` for
   this native path and is rejected for other accelerators or injected runtimes.
   Eager remains the default; compile failures surface without fallback, and
   saved runtime state rejects resume if the compile setting changed. This has
@@ -190,11 +193,12 @@
   pinned TinyStories stream through `PackedBinDataset`. The notebook report
   records source revision, token/document counts, and packed-shard hashes.
 - PR #30's CI passed its packed-data reference test and it was rebase-merged.
-  The active `test/04-scratch-pretraining-cpu-smoke` branch exercises random
-  GPT-2 initialization, packed train/eval data, optimizer updates, checkpoints
-  and HF model export on CPU. The local container lacks Torch/pytest, so this
-  branch relies on GitHub CI for execution. No TPU run or convergence result
-  is claimed.
+  PR #31's GitHub CI passed the random-init GPT-2 train/eval/checkpoint/export
+  smoke and it was rebase-merged. The active
+  `feat/05-packed-dataset-resume-cursor` branch saves validated packed data's
+  exact next-batch position with training checkpoints. Local runtime tests are
+  unavailable because this container lacks Torch/pytest. No TPU run or
+  convergence result is claimed.
 - `trainlm doctor` adds a one-command read-only package/runtime report to the
   CLI, reusing the T1 profile and hardware discovery contracts. From a source
   checkout it records the Git revision; an installed wheel uses its declared

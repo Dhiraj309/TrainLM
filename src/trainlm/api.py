@@ -624,7 +624,7 @@ class TrainLMTrainer:
         return {**result, "trainer_state": asdict(state)}
 
     def _training_checkpoint_payload(self, engine: EngineTrainer) -> dict[str, Any]:
-        return {
+        payload = {
             "schema_version": 1,
             "model": engine.model.state_dict(),
             "optimizer": engine.optimizer.state_dict(),
@@ -639,6 +639,16 @@ class TrainLMTrainer:
             "cuda_rng_state": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
             "loader_generator_initial_state": self._train_loader_generator_initial_state,
         }
+        loader = engine.train_dataloader
+        dataset = getattr(loader, "dataset", None)
+        dataset_state_dict = getattr(dataset, "state_dict", None)
+        if (
+            getattr(loader, "num_workers", 0) == 0
+            and callable(dataset_state_dict)
+            and callable(getattr(dataset, "load_state_dict", None))
+        ):
+            payload["train_dataset_state"] = dataset_state_dict()
+        return payload
 
     def _validate_native_resume_data(self, engine: EngineTrainer) -> None:
         """Reject native checkpoints whose data position cannot be replayed."""
@@ -647,18 +657,27 @@ class TrainLMTrainer:
         loader = engine.train_dataloader
         dataset = getattr(loader, "dataset", None)
         sampler = getattr(loader, "sampler", None)
-        if isinstance(dataset, IterableDataset) or not (
-            hasattr(dataset, "__getitem__") and hasattr(dataset, "__len__")
-        ):
-            raise ValueError(
-                "Native TPU checkpoint/resume currently requires a deterministic "
-                "map-style dataset; iterable sources need a resumable cursor."
-            )
         if getattr(loader, "num_workers", 0) != 0:
             raise ValueError(
                 "Native TPU checkpoint/resume currently requires "
                 "dataloader_num_workers=0 so worker RNG and prefetch state are "
                 "not lost."
+            )
+        if isinstance(dataset, IterableDataset):
+            if not (
+                callable(getattr(dataset, "state_dict", None))
+                and callable(getattr(dataset, "load_state_dict", None))
+            ):
+                raise ValueError(
+                    "Native TPU checkpoint/resume requires a deterministic "
+                    "map-style dataset or an iterable dataset with an exact "
+                    "state_dict/load_state_dict cursor."
+                )
+            return
+        if not (hasattr(dataset, "__getitem__") and hasattr(dataset, "__len__")):
+            raise ValueError(
+                "Native TPU checkpoint/resume requires a deterministic "
+                "map-style dataset or a stateful packed-data cursor."
             )
         if isinstance(sampler, RandomSampler):
             if self._train_loader_generator is None:
@@ -707,14 +726,31 @@ class TrainLMTrainer:
             )
         if self._train_loader_generator is not None and initial_state is not None:
             self._train_loader_generator.set_state(initial_state)
-        iterator = iter(engine.train_dataloader)
-        remaining = engine.state.micro_step
-        while remaining:
-            try:
-                next(iterator)
-                remaining -= 1
-            except StopIteration:
-                iterator = iter(engine.train_dataloader)
+        dataset = getattr(engine.train_dataloader, "dataset", None)
+        dataset_state = payload.get("train_dataset_state")
+        load_dataset_state = getattr(dataset, "load_state_dict", None)
+        if dataset_state is not None:
+            if not callable(load_dataset_state):
+                raise ValueError(
+                    "Checkpoint contains train dataset state but the current "
+                    "dataset cannot restore it."
+                )
+            if getattr(engine.train_dataloader, "num_workers", 0) != 0:
+                raise ValueError(
+                    "Exact iterable dataset resume requires "
+                    "dataloader_num_workers=0."
+                )
+            load_dataset_state(dataset_state)
+            iterator = iter(engine.train_dataloader)
+        else:
+            iterator = iter(engine.train_dataloader)
+            remaining = engine.state.micro_step
+            while remaining:
+                try:
+                    next(iterator)
+                    remaining -= 1
+                except StopIteration:
+                    iterator = iter(engine.train_dataloader)
         engine._train_iterator = iterator
         # Iterator reconstruction may execute dataset code. Restore training
         # RNG only after positioning so the next model operation sees the
