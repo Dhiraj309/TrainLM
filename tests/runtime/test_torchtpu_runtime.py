@@ -3,6 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 import trainlm.runtime.torchtpu as native_runtime
+import trainlm.runtime.runtime as base_runtime
 from trainlm import TrainLMTrainingArguments
 
 
@@ -40,7 +41,7 @@ def test_torch_compile_is_opt_in_for_native_tpu_only():
 def test_native_runtime_compiles_only_when_explicitly_enabled(monkeypatch):
     calls = []
     monkeypatch.setattr(
-        native_runtime,
+        base_runtime,
         "torch",
         SimpleNamespace(compile=lambda model: calls.append(model) or model),
     )
@@ -171,6 +172,8 @@ def test_native_runtime_rejects_incompatible_or_incomplete_rng_state(monkeypatch
         SimpleNamespace(accelerator=SimpleNamespace(set_rng_state=lambda _: None)),
     )
     runtime = object.__new__(native_runtime.TorchTPURuntime)
+    runtime._precision = "fp32"
+    runtime._compile_enabled = False
 
     with pytest.raises(ValueError, match="created by the native"):
         runtime.load_state_dict({"backend": "cpu"})

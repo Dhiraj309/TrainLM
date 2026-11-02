@@ -173,6 +173,10 @@
   optional `datasets` distribution before download. This source-level path has
   not run on TPU and does not establish convergence, throughput, or a
   production-scale recipe.
+  PR #28's first CI run executed 804 tests: 802 passed and two native-runtime
+  tests failed because their mocks patched the wrong `torch.compile` namespace
+  and omitted initialized runtime fields. The follow-up corrects those test
+  fixtures; a full CI rerun remains the merge gate.
 - `trainlm doctor` adds a one-command read-only package/runtime report to the
   CLI, reusing the T1 profile and hardware discovery contracts. From a source
   checkout it records the Git revision; an installed wheel uses its declared

@@ -144,6 +144,9 @@ TorchTPU support. “Implemented” means present in that historical code path;
   the optional `datasets` package before fetching data. This is a small-scale
   pretraining implementation; native TPU execution and convergence remain
   unverified.
+  The first PR CI run executed 804 tests (802 passed, two failed on native
+  runtime test-fixture assumptions). A follow-up repairs the mock target and
+  runtime setup; merging remains gated on the complete rerun.
   Continue only behind explicit experimental selection until CPU and owner-run
   TPU checks pass.
 
