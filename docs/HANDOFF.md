@@ -5,14 +5,15 @@
 - **Direction:** native TorchTPU on Cloud TPU, with v5e-1 for single-device
   work and v5e-8 for collectives, DP8, sharding, and scaling. The public native
   path is experimental and is not hardware-certified.
-- **Current gate:** T3/T5 training continuity. PR #28 merged the native
+- **Current gate:** T3/T5 training continuity and notebook freshness. PR #28 merged the native
   trainer foundation; PR #29 merged streaming TinyStories tokenization into
   validated uint32 packed shards; PR #30 merged packed causal-LM update parity;
-  PR #31 merged the CPU random-init train/eval/checkpoint/export lifecycle.
+  PR #31 merged the CPU random-init train/eval/checkpoint/export lifecycle;
+  PR #32 merged exact packed-data checkpoint recovery with passing CI.
 - **Verified base:** `main` at
-  `a58a9e13d792c2468f4c20d6cdc7375f4bc63ffd` after PR #31.
-- **Active branch:** `feat/05-packed-dataset-resume-cursor` adds exact packed
-  iterable data position to trainer checkpoints and CPU continuation tests.
+  `82ead5b72991fc154738bcd8334e477d563d7ea3` after PR #32.
+- **Active branch:** `fix/06-colab-notebooks-track-main` updates current
+  notebooks to use merged `main` instead of stale feature branches.
 - **Probe:** [`T1 v5e-1 guide`](T1_V5E1_PROBE.md) and its
   [Kaggle/Colab notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb) test a tiny
   synthetic forward/backward and optimizer update, with optional `torch.compile`.
