@@ -14,22 +14,25 @@
   added explicit GPT-2 configuration without a model-config download; PR #36
   added pinned custom corpus selection; PR #37 made BF16 autocast an explicit
   opt-in and added precision reporting; PR #38 exposed optimizer schedule and
-  seed settings in the scratch workflow.
+  seed settings in the scratch workflow; PR #39 added opt-in gradient
+  checkpointing.
 - **Verified base:** `main` at
-  `357cac307bfaf94b4bcf4c55ed53c9fb99815cc8` after PR #38.
-- **Active branch:** `feat/12-scratch-gradient-checkpointing` adds opt-in HF
-  activation checkpointing and disables KV cache during training.
+  `df0a9ff562e48b67ae4ea48dbe10abe565137f4b` after PR #39.
+- **Active branch:** `feat/13-scratch-batch-config` exposes train/eval batch
+  sizes and reports nominal tokens per optimizer update.
 - **Probe:** [`T1 v5e-1 guide`](T1_V5E1_PROBE.md) and its
   [Kaggle/Colab notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb) test a tiny
   synthetic forward/backward and optimizer update, with optional `torch.compile`.
 - **Evidence:** the owner reported an eager native TPU allocation,
   forward/backward and AdamW pass on torch_tpu 0.2.0 with torch 2.14.1+cpu.
   Hardware generation and explicit compile remain unverified.
-- **Validation boundary:** PR #38 passed GitHub CI. The active memory-saving
-  change passes 11 dependency-free launcher checks, 10 evidence tests,
-  compilation, notebook parsing, and diff checks. The real GPT-2 CPU backward
-  check and full suite await branch CI because Torch is absent locally.
-  No TPU trainer run or convergence result is claimed.
+- **Validation boundary:** PR #39 passed GitHub CI, including the GPT-2 CPU
+  checkpointed backward test. The active batch-size change passes 14
+  dependency-free launcher/notebook contract tests, 10 evidence tests, Python
+  compilation, notebook parsing, and diff checks. Three dependency-backed
+  launcher tests need `torch`, `transformers`, and `tokenizers`, which are not
+  installed here; branch CI remains pending. No TPU trainer run or convergence
+  result is claimed.
   This workspace has no PyTorch or pytest installation; no local training or
   accelerator test has run. Native TPU training, compilation and convergence
   still require owner-run evidence.

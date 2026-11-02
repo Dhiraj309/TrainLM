@@ -221,11 +221,19 @@ def run_smoke(
     dataset_id: str = DATASET_ID, dataset_revision: str = DATASET_REVISION,
     train_split: str = "train", validation_split: str = "validation",
     text_field: str = "text",
+    train_batch_size: int = 1,
+    eval_batch_size: int = 1,
 ) -> None:
     if max_steps < 1 or sequence_length < 1 or gradient_accumulation_steps < 1:
         raise ValueError("Training steps, sequence length, and accumulation must be positive.")
     if from_scratch and min(train_examples, eval_examples, max_eval_batches) < 1:
         raise ValueError("Scratch training/evaluation dataset sizes must be positive.")
+    for name, value in (
+        ("train_batch_size", train_batch_size),
+        ("eval_batch_size", eval_batch_size),
+    ):
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            raise ValueError(f"{name} must be a positive integer.")
     if from_scratch and tokenizer_vocab_size < 260:
         raise ValueError("Byte-level BPE vocab_size must be at least 260.")
     if from_scratch and min(
@@ -342,14 +350,16 @@ def run_smoke(
             data_root / "validation", sequence_length=sequence_length,
             split="validation",
         )
-        required_train_batches = max_steps * gradient_accumulation_steps
-        if len(rows) < required_train_batches:
-            available_train_batches = len(rows)
+        required_train_sequences = (
+            max_steps * gradient_accumulation_steps * train_batch_size
+        )
+        if len(rows) < required_train_sequences:
+            available_train_sequences = len(rows)
             rows.close()
             eval_rows.close()
             raise ValueError(
-                f"Packed train split has {available_train_batches} sequences; "
-                f"{required_train_batches} are required for the requested run."
+                f"Packed train split has {available_train_sequences} sequences; "
+                f"{required_train_sequences} are required for the requested run."
             )
         model_config = _scratch_gpt2_config(
             vocab_size=len(tokenizer),
@@ -426,7 +436,8 @@ def run_smoke(
         output_dir=output_dir,
         accelerator="native_tpu",
         max_steps=max_steps,
-        per_device_train_batch_size=1,
+        per_device_train_batch_size=train_batch_size,
+        per_device_eval_batch_size=eval_batch_size,
         sequence_length=sequence_length,
         learning_rate=resolved_learning_rate,
         lr_scheduler_type="cosine" if from_scratch else "constant",
@@ -573,6 +584,12 @@ def run_smoke(
             "lr_scheduler_type": "cosine" if from_scratch else "constant",
             "warmup_steps": resolved_warmup_steps,
             "gradient_accumulation_steps": gradient_accumulation_steps,
+            "per_device_train_batch_size": train_batch_size,
+            "per_device_eval_batch_size": eval_batch_size,
+            "sequence_length": sequence_length,
+            "nominal_tokens_per_update": (
+                sequence_length * train_batch_size * gradient_accumulation_steps
+            ),
             "gradient_checkpointing": gradient_checkpointing,
             "seed": seed,
         },
@@ -616,6 +633,8 @@ def main() -> int:
     parser.add_argument("--eval-examples", type=int, default=128)
     parser.add_argument("--max-eval-batches", type=int, default=20)
     parser.add_argument("--gradient-accumulation-steps", type=int, default=1)
+    parser.add_argument("--per-device-train-batch-size", type=int, default=1)
+    parser.add_argument("--per-device-eval-batch-size", type=int, default=1)
     parser.add_argument("--tokenizer-vocab-size", type=int, default=16000)
     parser.add_argument("--model-embedding-size", type=int, default=768)
     parser.add_argument("--model-layers", type=int, default=6)
@@ -645,6 +664,8 @@ def main() -> int:
         save_steps=args.save_steps, eval_examples=args.eval_examples,
         max_eval_batches=args.max_eval_batches,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
+        train_batch_size=args.per_device_train_batch_size,
+        eval_batch_size=args.per_device_eval_batch_size,
         tokenizer_vocab_size=args.tokenizer_vocab_size,
         model_embedding_size=args.model_embedding_size,
         model_layers=args.model_layers,

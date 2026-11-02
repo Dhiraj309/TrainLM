@@ -16,8 +16,9 @@ active notebooks to load merged `main`; PR #34 added a BPE tokenizer trained
 from the training split; PR #35 builds GPT-2 from an explicit local config;
 PR #36 adds a pinned user-selected HF corpus and split/text-column settings.
 PR #37 adds opt-in BF16 autocast and precision reporting; PR #38 adds learning
-rate, weight decay, warmup, and seed controls. This iteration adds opt-in
-gradient checkpointing to reduce activation memory.
+rate, weight decay, warmup, and seed controls; PR #39 adds opt-in gradient
+checkpointing. This iteration exposes per-device batch sizes and reports
+nominal tokens per optimizer update.
 These checks do not certify TPU support or end-to-end convergence. PR #20
 closed T0.2.
 T1 software probes cover shared hardware and capability discovery, dependency
