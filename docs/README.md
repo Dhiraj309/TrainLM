@@ -8,7 +8,9 @@ PyTorch/XLA work. Read the status labels before treating an item as current.
 TrainLM is rebaselining toward native TorchTPU on Kaggle TPU v5e-8. The
 established backend is PyTorch/XLA. An experimental, explicitly selected
 single-device native TorchTPU path and a from-scratch starter workflow are
-implemented in PR #28, but are not validated or certified. PR #20 closed T0.2.
+implemented in PR #28. PR #29 merged the streamed uint32 packed-data path into
+the scratch workflow. CI validates these software paths; neither is certified
+on TPU, and end-to-end convergence is not established. PR #20 closed T0.2.
 T1 software probes cover shared hardware and capability discovery, dependency
 metadata and process lifecycle, and a distributed entry check; owner-run
 compile, lifecycle and v5e-8 collective evidence remain pending. Use v5e-1 for
@@ -28,7 +30,7 @@ snapshot; `accelerator="native_tpu"` is the opt-in single-device prototype.
 - [Open T1 single-device probe directly in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/docs/01-t1-v5e1-probe/notebooks/TorchTPU_T1_v5e1_Probe.ipynb) · [view notebook source](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb)
 - [Open optional v5e-8 distributed probe directly in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/docs/01-t1-v5e1-probe/notebooks/TorchTPU_T1_v5e8_Distributed_Probe.ipynb) · [view notebook source](../notebooks/TorchTPU_T1_v5e8_Distributed_Probe.ipynb)
 - [Open experimental single-device training directly in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Native_TorchTPU_Single_Device_Training.ipynb) · [view notebook source](../notebooks/TrainLM_Native_TorchTPU_Single_Device_Training.ipynb)
-- [Open native TorchTPU pretraining from scratch directly in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/feat/02-packed-pretraining-data/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) · [view notebook source](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb)
+- [Open native TorchTPU pretraining from scratch directly in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) · [view notebook source](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb)
 
 ## Status meanings
 
