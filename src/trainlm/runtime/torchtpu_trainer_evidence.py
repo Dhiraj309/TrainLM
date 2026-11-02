@@ -180,12 +180,20 @@ def build_trainer_report(
                     "revision": raw_dataset["revision"],
                     "train_examples": raw_dataset["train_examples"],
                 }
+                for name in ("train_split", "validation_split", "text_field"):
+                    value = raw_dataset.get(name)
+                    if value is not None:
+                        if not isinstance(value, str) or not _SAFE_TEXT.fullmatch(value):
+                            issues.append("invalid_dataset_provenance")
+                            dataset = None
+                        elif dataset is not None:
+                            dataset[name] = value
                 validation_examples = raw_dataset.get("validation_examples")
                 if validation_examples is not None:
                     if type(validation_examples) is not int or validation_examples < 1:
                         issues.append("invalid_dataset_provenance")
                         dataset = None
-                    else:
+                    elif dataset is not None:
                         dataset["validation_examples"] = validation_examples
                 for name in (
                     "train_tokens", "validation_tokens",

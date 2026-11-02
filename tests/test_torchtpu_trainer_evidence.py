@@ -155,6 +155,8 @@ class TrainerEvidenceTests(unittest.TestCase):
         summary["dataset"] = {
             "id": "roneneldan/TinyStories", "revision": "c" * 40,
             "train_examples": 10000, "validation_examples": 1000,
+            "train_split": "train_v1", "validation_split": "validation_v1",
+            "text_field": "content",
             "tokenizer": {
                 "kind": "byte_level_bpe_from_training_split",
                 "training_documents": 10000, "vocab_size": 16000,
@@ -170,6 +172,27 @@ class TrainerEvidenceTests(unittest.TestCase):
             report["dataset"]["tokenizer"]["kind"],
             "byte_level_bpe_from_training_split",
         )
+        self.assertEqual(report["dataset"]["train_split"], "train_v1")
+        self.assertEqual(report["dataset"]["validation_split"], "validation_v1")
+        self.assertEqual(report["dataset"]["text_field"], "content")
+
+    def test_invalid_scratch_selector_metadata_fails_closed(self):
+        process = successful_process()
+        lines = process["stdout"].splitlines()
+        index = next(i for i, line in enumerate(lines)
+                     if line.startswith("trainer_summary="))
+        summary = json.loads(lines[index].split("=", 1)[1])
+        summary["dataset"] = {
+            "id": "org/corpus", "revision": "c" * 40,
+            "train_examples": 10, "validation_examples": 2,
+            "text_field": "unsafe/path",
+        }
+        lines[index] = "trainer_summary=" + json.dumps(summary)
+
+        report = self.report({**process, "stdout": "\n".join(lines)})
+
+        self.assertEqual(report["status"], "failed")
+        self.assertIsNone(report["dataset"])
 
 
 if __name__ == "__main__":

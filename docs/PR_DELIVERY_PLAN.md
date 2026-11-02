@@ -39,11 +39,11 @@ approvals. T2 integrates the report into backend selection and the public UX.
 
 ## PR-by-PR serial execution
 
-**Current sequence:** PR #33 refreshed active Colab notebooks → PR #34
-rebase-merged a train-only BPE tokenizer at verified `main` SHA
-`7c75f6d0aa8ff75299328847e9fa7dcfcdf791e1`, with CI passing. The active
-`feat/08-explicit-scratch-gpt2-config` branch removes the last model Hub config
-lookup from the random-init recipe and makes architecture dimensions explicit.
+**Current sequence:** PR #34 added train-only BPE → PR #35 rebase-merged an
+explicit local GPT-2 config at verified `main` SHA
+`063a8b9ff9b42733f8b9f4720ba3307c2b2f4cdf`, with CI passing. The active
+`feat/09-custom-scratch-corpus` branch accepts a user-pinned HF dataset ID and
+revision, separate train/validation splits, and a configurable text column.
 After CI, merge using Rebase & Merge, verify remote `main`, then select the next
 T3/T5 dependency. The old numbered cards below do not set this order.
 
