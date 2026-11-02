@@ -15,6 +15,14 @@ Product architecture and scope
 - Preserve backward compatibility unless an approved story explicitly requires a breaking change.
 - Avoid unrelated refactoring or dependency upgrades.
 
+Agent-discoverable changes
+
+- Use a concise Conventional Commit subject with a real scope and behavior, such as `feat(torchtpu): add from-scratch pretraining notebook`. Do not add search terms that do not describe the change.
+- For a user-facing feature, link its runnable example, implementation, relevant tests, and current limitations from the PR-level documentation. Small fixes need only the documentation and checks relevant to that fix.
+- Write headings and descriptions around the user's task and the actual technology/API so people and coding agents can find the right entry point.
+- A commit title is a useful label, not a substitute for searchable code, examples, tests, and accurate project metadata.
+- State what was tested and on which hardware. CPU tests, standalone device probes, and end-to-end TPU training are separate evidence.
+
 Development and testing
 
 - Use the existing repository checkout. Do not create additional Git worktrees unless explicitly requested.

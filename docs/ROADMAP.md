@@ -4,7 +4,8 @@
 > detailed PyTorch/XLA-era roadmap and evidence for traceability. Its milestone
 > checkboxes and old XLA PR cards do not describe the active native TorchTPU
 > queue. For current work, start at [the docs guide](README.md), then follow
-> [T0–T11](TORCHTPU_REBASELINE.md), the [salvage inventory](TORCHTPU_SALVAGE_INVENTORY.md),
+> the [coding-agent guide](AI_AGENT_GUIDE.md), [T0–T11](TORCHTPU_REBASELINE.md),
+> the [salvage inventory](TORCHTPU_SALVAGE_INVENTORY.md),
 > and the [accepted T0.2 mapping](PR_DELIVERY_PLAN.md#t02-accepted-mapping-to-native-torchtpu-gates).
 
 Historical status labels below refer to software and evidence in the backend
@@ -43,11 +44,10 @@ TorchTPU support. “Implemented” means present in that historical code path;
   `2e90537371aa03c98f4fc395edb2b231727eaebb`, with GitHub pytest passing in
   2m0s. PR #43 packages the exported Hugging Face model/tokenizer and evidence
   report for Colab/Kaggle download at `73952a9724456390c6def5b74a474d4274dc7544`;
-  GitHub pytest passed in 2m4s. The current branch adds a CPU reload/generation
-  check to verify artifact usability; the report records that phase separately
-  from TPU validation. Sixteen dependency-free tests and 11 evidence tests pass
-  locally; the Transformers-backed generation test awaits branch CI. BF16 and
-  checkpointing remain unvalidated on TPU. T1 source-level
+  GitHub pytest passed in 2m4s. PR #44 merged a CPU reload/generation check at
+  `fad1df41278d4ea904b4d26968d75ee97ae17923`; the report records that phase
+  separately from TPU validation. BF16 and checkpointing remain unvalidated on
+  TPU. T1 source-level
   probes and the explicit `native_tpu` path are implemented; owner-run compile,
   lifecycle and v5e-8 collective evidence remain pending. Hosted Kaggle currently documents
   v5e-8 and hosted Colab TPU v2, so neither is the v5e-1 target; use a
