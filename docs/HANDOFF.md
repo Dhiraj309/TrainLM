@@ -5,27 +5,28 @@
 - **Direction:** native TorchTPU on Cloud TPU, with v5e-1 for single-device
   work and v5e-8 for collectives, DP8, sharding, and scaling. The public native
   path is experimental and is not hardware-certified.
-- **Current gate:** T3 custom-corpus pretraining and T5 continuity.
+- **Current gate:** T3 precision-configurable scratch pretraining and T5
+  continuity.
   PR #28 merged the native trainer foundation; PR #29 merged streaming TinyStories tokenization into
   validated uint32 packed shards; PR #30 merged packed causal-LM update parity;
   PR #31 merged the CPU random-init train/eval/checkpoint/export lifecycle;
   PR #32 merged exact packed-data checkpoint recovery; PR #33 refreshed active
   notebook source references; PR #34 added a corpus-trained tokenizer; PR #35
-  added explicit GPT-2 configuration without a model-config download.
+  added explicit GPT-2 configuration without a model-config download; PR #36
+  added pinned custom corpus selection.
 - **Verified base:** `main` at
-  `063a8b9ff9b42733f8b9f4720ba3307c2b2f4cdf` after PR #35.
-- **Active branch:** `feat/09-custom-scratch-corpus` accepts a pinned HF dataset
-  revision, distinct split names, and a text-column setting.
+  `d075987574fe471d1b9159315a0688416664f2ba` after PR #36.
+- **Active branch:** `feat/10-configurable-bf16-pretraining` exposes opt-in
+  BF16 autocast and records precision in sanitized training evidence.
 - **Probe:** [`T1 v5e-1 guide`](T1_V5E1_PROBE.md) and its
   [Kaggle/Colab notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb) test a tiny
   synthetic forward/backward and optimizer update, with optional `torch.compile`.
 - **Evidence:** the owner reported an eager native TPU allocation,
   forward/backward and AdamW pass on torch_tpu 0.2.0 with torch 2.14.1+cpu.
   Hardware generation and explicit compile remain unverified.
-- **Validation boundary:** recent implementation PRs passed GitHub CI. The
-  custom-corpus branch passes 11 dependency-free launcher checks, 8 evidence
-  checks, Python compilation, notebook JSON parsing, and `git diff --check`;
-  branch CI is still pending.
+- **Validation boundary:** PR #36 passed GitHub CI. The active BF16 changes
+  still need local contract checks and branch CI; no TPU trainer run or
+  convergence result is claimed.
   This workspace has no PyTorch or pytest installation; no local training or
   accelerator test has run. Native TPU training, compilation and convergence
   still require owner-run evidence.

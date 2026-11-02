@@ -31,6 +31,7 @@ def successful_process(*, compile_requested=False, resume_requested=False):
         "packages": {"torch": "2.14.1+cpu", "torch_tpu": "0.2.0",
                      "libtpu": "0.0.50", "transformers": "5.20.2",
                      "tokenizers": "0.22.1"},
+        "precision": "fp32",
         "checks": checks,
     }
     markers = ["train=PASS", "export=PASS"]
@@ -162,10 +163,12 @@ class TrainerEvidenceTests(unittest.TestCase):
                 "training_documents": 10000, "vocab_size": 16000,
             },
         }
+        summary["precision"] = "bf16"
         lines[index] = "trainer_summary=" + json.dumps(summary)
         report = self.report({**process, "stdout": "\n".join(lines)})
 
         self.assertEqual(report["status"], "passed")
+        self.assertEqual(report["precision"], "bf16")
         self.assertEqual(report["model"]["revision"], None)
         self.assertEqual(report["model"]["config"]["n_layer"], 6)
         self.assertEqual(
@@ -175,6 +178,22 @@ class TrainerEvidenceTests(unittest.TestCase):
         self.assertEqual(report["dataset"]["train_split"], "train_v1")
         self.assertEqual(report["dataset"]["validation_split"], "validation_v1")
         self.assertEqual(report["dataset"]["text_field"], "content")
+
+    def test_invalid_precision_provenance_fails_closed(self):
+        for value in ("bfloat-secret", [], {"dtype": "bf16"}):
+            with self.subTest(value=value):
+                process = successful_process()
+                lines = process["stdout"].splitlines()
+                index = next(i for i, line in enumerate(lines)
+                             if line.startswith("trainer_summary="))
+                summary = json.loads(lines[index].split("=", 1)[1])
+                summary["precision"] = value
+                lines[index] = "trainer_summary=" + json.dumps(summary)
+
+                report = self.report({**process, "stdout": "\n".join(lines)})
+
+                self.assertEqual(report["status"], "failed")
+                self.assertIn("invalid_precision", report["issues"])
 
     def test_invalid_scratch_selector_metadata_fails_closed(self):
         process = successful_process()
