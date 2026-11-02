@@ -99,8 +99,11 @@ def build_trainer_report(
                 lr = raw_training.get("learning_rate")
                 decay = raw_training.get("weight_decay")
                 schedule = raw_training.get("lr_scheduler_type")
+                gradient_checkpointing = raw_training.get(
+                    "gradient_checkpointing", False
+                )
             else:
-                lr = decay = schedule = None
+                lr = decay = schedule = gradient_checkpointing = None
             integer_fields = (
                 "max_steps", "warmup_steps", "gradient_accumulation_steps", "seed"
             )
@@ -127,7 +130,8 @@ def build_trainer_report(
                 numbers_valid = False
             if (not integers_valid or not numbers_valid
                     or not isinstance(schedule, str)
-                    or schedule not in {"constant", "cosine"}):
+                    or schedule not in {"constant", "cosine"}
+                    or type(gradient_checkpointing) is not bool):
                 issues.append("invalid_training_config")
             else:
                 training = {name: raw_training[name] for name in integer_fields}
@@ -135,6 +139,7 @@ def build_trainer_report(
                     "learning_rate": safe_lr,
                     "weight_decay": safe_decay,
                     "lr_scheduler_type": schedule,
+                    "gradient_checkpointing": gradient_checkpointing,
                 })
         normalize = runpy.run_path(str(Path(__file__).with_name(
             "torchtpu_discovery.py")))["normalize_worker_report"]
