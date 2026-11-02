@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "trainlm"
 version = "0.1.0"
-description = "A research-oriented, production-quality Large Language Model training framework built with PyTorch."
+description = "Hugging Face-native language-model pretraining in PyTorch, with experimental TorchTPU support."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
@@ -20,6 +20,11 @@ keywords = [
     "llm",
     "transformers",
     "pytorch",
+    "torchtpu",
+    "torch-tpu",
+    "google-tpu",
+    "pretraining",
+    "jupyter-notebook",
     "training",
     "nlp"
 ]

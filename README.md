@@ -4,12 +4,26 @@ TrainLM is a Hugging Face-native framework for efficient language-model
 pretraining, with Google TPU execution provided through replaceable runtime and
 kernel backends.
 
+## Start here: pretrain a language model from scratch
+
+The [Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb)
+shows the experimental native TorchTPU workflow: initialize model weights
+randomly, prepare training and validation data, train, checkpoint, and export a
+Hugging Face model. The notebook is a small-scale recipe, not evidence of
+convergence or TPU performance.
+
+- [Open the notebook in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb)
+- [Read the notebook source](notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb)
+- [Inspect its training implementation](examples/torchtpu_native_trainer_smoke.py)
+- [Review CPU scratch-training coverage](tests/test_packed_scratch_training.py)
+- [Find files and current evidence for coding agents](docs/AI_AGENT_GUIDE.md)
+
 ## Project status and roadmap
 
 The current development direction is native TorchTPU on Kaggle TPU v5e-8.
-The established backend is PyTorch/XLA; an experimental, explicitly selected
-single-device native TorchTPU path is now being implemented. It is not yet
-validated or certified. Existing XLA code is being classified for reuse,
+The established backend is PyTorch/XLA. A single-device native TorchTPU path is
+implemented behind explicit selection, but remains experimental and is not
+hardware-certified. Existing XLA code is being classified for reuse,
 replacement, or preservation as an optional backend.
 
 - [Current roadmap and documentation guide](docs/README.md)

@@ -5,6 +5,9 @@ PyTorch/XLA work. Read the status labels before treating an item as current.
 
 ## Current direction
 
+For a task-oriented map of the notebook, implementation, tests, and evidence
+limits, start with the [coding-agent guide](AI_AGENT_GUIDE.md).
+
 TrainLM is rebaselining toward native TorchTPU on Kaggle TPU v5e-8. The
 established backend is PyTorch/XLA. An experimental, explicitly selected
 single-device native TorchTPU path and a from-scratch starter workflow are
@@ -22,7 +25,9 @@ budgets and actual token counts; PR #42 adds configurable sparse logging and
 final loss snapshots; PR #43 packages the exported model/tokenizer and JSON
 evidence into one download for Colab or Kaggle. The current notebook check
 reloads that saved artifact on CPU and confirms it generates tokens. It does
-not certify TPU generation or training quality.
+not certify TPU generation or training quality. PR #44 merged this check at
+`fad1df41278d4ea904b4d26968d75ee97ae17923`; it adds no TPU-generation or
+convergence evidence.
 These checks do not certify TPU support or end-to-end convergence. PR #20
 closed T0.2.
 T1 software probes cover shared hardware and capability discovery, dependency

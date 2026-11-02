@@ -19,21 +19,21 @@
   reporting; PR #41 added supervised-token budgets and actual token counts.
   PR #42 added sparse scratch logging and terminal loss snapshots.
   PR #43 added a portable model/evidence ZIP for Colab and Kaggle.
+- PR #44 merged the CPU export reload and generation check into `main` at
+  `fad1df41278d4ea904b4d26968d75ee97ae17923`. This verifies an exported model
+  can be loaded and generate tokens on CPU; it is not TPU-generation or
+  convergence evidence.
 - **Verified base:** `main` at
-  `73952a9724456390c6def5b74a474d4274dc7544` after PR #43.
-- **Active branch:** `feat/17-reload-exported-model` checks that the saved
-  model/tokenizer can be reloaded on CPU and greedily generate new token IDs.
+  `fad1df41278d4ea904b4d26968d75ee97ae17923` after PR #44.
 - **Probe:** [`T1 v5e-1 guide`](T1_V5E1_PROBE.md) and its
   [Kaggle/Colab notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb) test a tiny
   synthetic forward/backward and optimizer update, with optional `torch.compile`.
 - **Evidence:** the owner reported an eager native TPU allocation,
   forward/backward and AdamW pass on torch_tpu 0.2.0 with torch 2.14.1+cpu.
   Hardware generation and explicit compile remain unverified.
-- **Validation boundary:** PR #43 passed GitHub pytest in 2m4s. The current
-  branch checks export reload/generation on CPU and reports it separately from
-  TPU phases. Sixteen dependency-free tests and eleven evidence tests pass
-  locally; the Transformers-backed generation integration test awaits CI. No
-  TPU generation or convergence result is claimed.
+- **Validation boundary:** PR #43 passed GitHub pytest in 2m4s. PR #44 adds a
+  separate CPU export reload/generation phase to the evidence report. No TPU
+  generation or convergence result is claimed.
   This workspace has no PyTorch or pytest installation; no local training or
   accelerator test has run. Native TPU training, compilation and convergence
   still require owner-run evidence.
