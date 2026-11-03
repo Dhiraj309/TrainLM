@@ -82,6 +82,11 @@ def test_facade_resumes_local_training_state(tmp_path):
     )
     first.train()
     checkpoint = tmp_path / "checkpoint-1"
+    checkpoint_state = checkpoint / "trainer_state.pt"
+    payload = torch.load(checkpoint_state, map_location="cpu", weights_only=False)
+    payload.pop("optimizer_type")
+    payload.pop("scheduler_type")
+    torch.save(payload, checkpoint_state)
 
     resumed = TrainLMTrainer(
         model=TinyModel(),
@@ -97,6 +102,66 @@ def test_facade_resumes_local_training_state(tmp_path):
 
     assert state.step == 2
     assert state.micro_step == 2
+
+
+@pytest.mark.parametrize(
+    ("corruption", "message"),
+    [
+        ("optimizer_type", "optimizer type does not match"),
+        ("scheduler_type", "scheduler type does not match"),
+        ("optimizer_groups", "parameter-group count does not match"),
+    ],
+)
+def test_resume_preflights_optimizer_and_scheduler_before_mutation(
+    tmp_path, corruption, message
+):
+    first = TrainLMTrainer(
+        model=TinyModel(),
+        train_dataset=_dataset(),
+        args=TrainLMTrainingArguments(
+            output_dir=tmp_path / "source",
+            max_steps=1,
+            sequence_length=4,
+            accelerator="cpu",
+        ),
+    )
+    first.train()
+    checkpoint = first.save_state(tmp_path / "checkpoint")
+    payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    if corruption == "optimizer_type":
+        payload["optimizer_type"] = "torch.optim.SGD"
+    elif corruption == "scheduler_type":
+        payload["scheduler_type"] = "torch.optim.lr_scheduler.StepLR"
+    else:
+        payload["optimizer"]["param_groups"] = []
+    torch.save(payload, checkpoint)
+
+    resumed = TrainLMTrainer(
+        model=TinyModel(),
+        train_dataset=_dataset(),
+        args=TrainLMTrainingArguments(
+            output_dir=tmp_path / "resume",
+            max_steps=2,
+            sequence_length=4,
+            accelerator="cpu",
+        ),
+    )
+    before_model = {
+        key: value.detach().clone()
+        for key, value in resumed.model.state_dict().items()
+    }
+    before_scheduler = deepcopy(resumed.scheduler.state_dict())
+
+    with pytest.raises(ValueError, match=message):
+        resumed._load_training_checkpoint(resumed.engine, checkpoint)
+
+    assert all(
+        torch.equal(before_model[key], value)
+        for key, value in resumed.model.state_dict().items()
+    )
+    assert resumed.engine.optimizer.state == {}
+    assert resumed.scheduler.state_dict() == before_scheduler
+    assert resumed.engine.state.step == 0
 
 
 def test_resume_preflights_model_shapes_before_mutating_trainer(tmp_path):
