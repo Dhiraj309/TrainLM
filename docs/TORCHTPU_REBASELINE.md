@@ -22,15 +22,24 @@ remains experimental and explicit while owner-run T1 evidence is pending.
 
 PR #47 aligned the current handoff and roadmap status at verified `main` SHA
 `e109ad253754303e44eb6162aacb046c415b990b`; it did not change runtime support.
-The current source-level distributed slice implements global valid-token
+PR #48 rebase-merged the distributed token correctness slice at verified `main`
+SHA `7ae837d085fbbaab9f6c2d3617ff129b89dd454e`; its full GitHub CI passed.
+That slice implements global valid-token
 gradient normalization for pre-clipping gradient-averaging backends and
 global `max_tokens` stopping at matching microbatch boundaries. It also reduces
 loss/progress metrics globally while preserving per-rank checkpoint counters.
 Two CPU/Gloo regressions cover gradient parity and rank-consistent stopping
 with global reports. The focused CPU/Gloo and related trainer/runtime/API
 suite passed locally in an isolated Python 3.12.14, torch 2.9.0+cpu, pytest
-9.2.0 environment (79 tests); GitHub CI remains pending. Native multi-device
-TPU execution remains gated.
+9.2.0 environment (79 tests). Native multi-device TPU execution remains gated.
+
+The active T5 checkpoint slice on `feat/19-distributed-checkpoint-resume`
+records rank-shard sizes and SHA-256 digests in schema v3, validates each
+rank's shard before state restore, and coordinates distributed preflight
+failures. The full CPU suite passed locally (848 tests and 41 subtests in
+Python 3.12.14 with torch 2.9.0+cpu and pytest 9.2.0), including Gloo
+corruption and coordinated write-failure cases. GitHub CI and native TPU
+checkpoint validation are pending.
 
 Owner direction allows CPU-verifiable implementation to proceed while scarce
 TPU slots are pending. A provisional, explicit `accelerator="native_tpu"`
@@ -86,7 +95,7 @@ reversible.
 | Item | Verified/recorded context | Required next action |
 |---|---|---|
 | Repository | `Dhiraj309/TrainLM` | Verify checkout, branch, origin, permissions |
-| Current base | PR #47 rebase-merged; verified `main` SHA `e109ad253754303e44eb6162aacb046c415b990b` | Continue the owner-approved CPU/Gloo T4 correctness slice; keep TPU execution gated |
+| Current base | PR #48 rebase-merged; verified `main` SHA `7ae837d085fbbaab9f6c2d3617ff129b89dd454e` | Continue T5 checkpoint integrity and coordinated resume preflight on CPU; keep TPU execution gated |
 | Legacy integration | PR #18 merged into `main` on 2026-10-28; merge commit `23959d29434fd2ae3f78b20469e1d61c6b1e18c9` | T0.1 inventory is complete; XLA-era PR cards are not the active queue |
 | Earlier salvage | PR #16 was merged into PR #18, which is now merged into `main` | Inventory its code as part of the merged tree; do not merge it again |
 | Existing TPU backend | Primarily PyTorch/XLA with historical measurements | Classify reusable vs XLA-specific components |
