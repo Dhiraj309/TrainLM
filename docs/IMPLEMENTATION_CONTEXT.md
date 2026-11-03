@@ -192,6 +192,12 @@ for file discovery; this document remains the detailed implementation record.
   epoch rollover. The checkpoint/API suites passed 43 tests (46 including the
   roadmap contract). No full-suite rerun or TPU validation is claimed for PR
   #68.
+- A further CPU case uses five sequential rows, batch size two, and gradient
+  accumulation two, leaving a one-row final batch. Resume consumes that partial
+  batch and the next epoch's first batch without dropping or repeating rows;
+  final weights match uninterrupted training. The checkpoint/API suites pass
+  (44 tests; 47 including the roadmap contract); no full-suite or TPU
+  validation is claimed.
 - The last full local suite, on PR #56's branch, produced 865 passed, 7 failed
   and 41 subtests: missing `pip` blocked the wheel smoke, five Phi cases hit the
   installed Transformers 5.0.0 `PhiConfig` missing `pad_token_id`, and a
