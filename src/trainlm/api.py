@@ -70,6 +70,11 @@ DEPRECATED_CONFIG_KEYS = {"args": "training_args"}
 _COMMIT_SHA = re.compile(r"[0-9a-f]{40}")
 
 
+def _checkpoint_component_type(value: Any) -> str:
+    component_type = type(value)
+    return f"{component_type.__module__}.{component_type.__qualname__}"
+
+
 def _resolve_hugging_face_model_revision(
     repo_id: str, revision: str | None
 ) -> str:
@@ -628,7 +633,9 @@ class TrainLMTrainer:
             "schema_version": 1,
             "model": engine.model.state_dict(),
             "optimizer": engine.optimizer.state_dict(),
+            "optimizer_type": _checkpoint_component_type(engine.optimizer),
             "scheduler": engine.scheduler.state_dict(),
+            "scheduler_type": _checkpoint_component_type(engine.scheduler),
             "runtime": dict(engine.runtime.state_dict()),
             "trainer": {
                 key: value
@@ -755,6 +762,24 @@ class TrainLMTrainer:
         for name in ("optimizer", "scheduler", "runtime", "trainer"):
             if not isinstance(payload[name], Mapping):
                 raise ValueError(f"Training checkpoint {name} state must be a mapping.")
+        for name, component in (
+            ("optimizer_type", engine.optimizer),
+            ("scheduler_type", engine.scheduler),
+        ):
+            if name not in payload:
+                # Schema-v1 checkpoints written before class metadata remain valid.
+                continue
+            checkpoint_type = payload[name]
+            if (
+                not isinstance(checkpoint_type, str)
+                or checkpoint_type != _checkpoint_component_type(component)
+            ):
+                component_name = name.removesuffix("_type")
+                raise ValueError(
+                    f"Training checkpoint {component_name} type does not match "
+                    "the active trainer."
+                )
+        self._preflight_optimizer_state(engine.optimizer, payload["optimizer"])
         validate_runtime_state = getattr(engine.runtime, "validate_state_dict", None)
         if callable(validate_runtime_state):
             validate_runtime_state(payload["runtime"])
@@ -830,6 +855,72 @@ class TrainLMTrainer:
                     "dataloader_num_workers=0."
                 )
         return initial_state, dataset_state
+
+    @staticmethod
+    def _preflight_optimizer_state(optimizer: Optimizer, state: Mapping[str, Any]) -> None:
+        """Check PyTorch optimizer group compatibility without loading state."""
+        optimizer_state = state.get("state")
+        saved_groups = state.get("param_groups")
+        if not isinstance(optimizer_state, Mapping) or not isinstance(
+            saved_groups, (list, tuple)
+        ):
+            raise ValueError("Training checkpoint optimizer state is malformed.")
+
+        active_groups = getattr(optimizer, "param_groups", None)
+        if not isinstance(active_groups, (list, tuple)):
+            raise ValueError("Active optimizer parameter groups are invalid.")
+        if len(saved_groups) != len(active_groups):
+            raise ValueError(
+                "Training checkpoint optimizer parameter-group count does not "
+                "match the active optimizer."
+            )
+
+        seen_parameter_ids = set()
+        for index, (saved_group, active_group) in enumerate(
+            zip(saved_groups, active_groups)
+        ):
+            if not isinstance(saved_group, Mapping) or not isinstance(
+                active_group, Mapping
+            ):
+                raise ValueError(
+                    f"Training checkpoint optimizer group {index} is malformed."
+                )
+            saved_parameters = saved_group.get("params")
+            active_parameters = active_group.get("params")
+            if not isinstance(saved_parameters, (list, tuple)) or not isinstance(
+                active_parameters, (list, tuple)
+            ):
+                raise ValueError(
+                    f"Training checkpoint optimizer group {index} has invalid params."
+                )
+            if len(saved_parameters) != len(active_parameters):
+                raise ValueError(
+                    f"Training checkpoint optimizer group {index} parameter count "
+                    "does not match the active optimizer."
+                )
+            for parameter_id in saved_parameters:
+                try:
+                    if parameter_id in seen_parameter_ids:
+                        raise ValueError(
+                            "Training checkpoint optimizer parameter IDs are not unique."
+                        )
+                    seen_parameter_ids.add(parameter_id)
+                except TypeError as exc:
+                    raise ValueError(
+                        "Training checkpoint optimizer parameter IDs must be hashable."
+                    ) from exc
+
+            saved_names = saved_group.get("param_names")
+            active_names = active_group.get("param_names")
+            if (
+                saved_names is not None
+                and active_names is not None
+                and saved_names != active_names
+            ):
+                raise ValueError(
+                    f"Training checkpoint optimizer group {index} parameter names "
+                    "do not match the active optimizer."
+                )
 
     def _load_training_checkpoint(self, engine: EngineTrainer, source: object):
         self._validate_native_resume_data(engine)
