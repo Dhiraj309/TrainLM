@@ -893,6 +893,9 @@ class TrainLMTrainer:
                     "Exact iterable dataset resume requires "
                     "dataloader_num_workers=0."
                 )
+            validate_dataset_state = getattr(dataset, "validate_state_dict", None)
+            if callable(validate_dataset_state):
+                validate_dataset_state(dataset_state)
         return initial_state, dataset_state
 
     @staticmethod

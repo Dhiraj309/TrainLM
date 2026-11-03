@@ -130,6 +130,70 @@ def test_packed_iterable_checkpoint_resume_matches_uninterrupted_training(tmp_pa
         resumed_data.close()
 
 
+def test_packed_cursor_preflight_rejects_stale_data_before_trainer_mutation(tmp_path):
+    data_dir = tmp_path / "packed"
+    _write_dataset(data_dir, [1, 2, 3, 4, 5, 6, 7, 0] * 2)
+    initial_model = TinyCausalLM()
+
+    def make_trainer(model, data, output_dir):
+        return TrainLMTrainer(
+            model=model,
+            train_dataset=data,
+            args=TrainLMTrainingArguments(
+                output_dir=output_dir,
+                max_steps=2,
+                sequence_length=4,
+                accelerator="cpu",
+                learning_rate=1e-3,
+                weight_decay=0.0,
+                lr_scheduler_type="constant",
+                seed=31,
+            ),
+        )
+
+    source_data = PackedBinDataset.from_directory(
+        data_dir, sequence_length=4, split="train", seed=31
+    )
+    source = make_trainer(deepcopy(initial_model), source_data, tmp_path / "source")
+    try:
+        source.train()
+        checkpoint = source.save_state(tmp_path / "checkpoint")
+    finally:
+        source_data.close()
+
+    payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    payload["train_dataset_state"]["cursor"]["dataset_fingerprint"] = "stale"
+    torch.save(payload, checkpoint)
+
+    resumed_data = PackedBinDataset.from_directory(
+        data_dir, sequence_length=4, split="train", seed=31
+    )
+    resumed = make_trainer(
+        deepcopy(initial_model), resumed_data, tmp_path / "resumed"
+    )
+    before_model = {
+        name: value.detach().clone()
+        for name, value in resumed.model.state_dict().items()
+    }
+    before_scheduler = deepcopy(resumed.scheduler.state_dict())
+    before_trainer = deepcopy(resumed.engine.state)
+    before_dataset = resumed_data.state_dict()
+    try:
+        with pytest.raises(ValueError, match="dataset_fingerprint"):
+            resumed._load_training_checkpoint(resumed.engine, checkpoint)
+
+        assert all(
+            torch.equal(before_model[name], value)
+            for name, value in resumed.model.state_dict().items()
+        )
+        assert resumed.engine.optimizer.state == {}
+        assert resumed.scheduler.state_dict() == before_scheduler
+        assert resumed.engine.state == before_trainer
+        assert resumed_data.state_dict() == before_dataset
+    finally:
+        resumed_data.close()
+
+
 def test_native_resume_gate_accepts_stateful_packed_iterable(tmp_path):
     data_dir = tmp_path / "packed"
     _write_dataset(data_dir, [1, 2, 3, 4, 5, 6, 7, 0])
