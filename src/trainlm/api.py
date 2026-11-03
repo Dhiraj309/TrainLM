@@ -86,6 +86,19 @@ _PARAMETER_SHAPED_OPTIMIZER_SLOTS = frozenset(
         "sum",
     }
 )
+_PERSISTED_TRAINER_STATE_FIELDS = frozenset(
+    {
+        "step",
+        "micro_step",
+        "epoch",
+        "tokens_seen",
+        "samples_seen",
+        "global_batch_size",
+        "learning_rate",
+        "loss",
+        "grad_norm",
+    }
+)
 
 
 def _checkpoint_component_type(value: Any) -> str:
@@ -828,9 +841,12 @@ class TrainLMTrainer:
             validate_runtime_state(payload["runtime"])
         trainer_payload = payload["trainer"]
         for key in trainer_payload:
-            if not isinstance(key, str) or not hasattr(engine.state, key):
+            if (
+                not isinstance(key, str)
+                or key not in _PERSISTED_TRAINER_STATE_FIELDS
+            ):
                 raise ValueError(
-                    f"Unknown trainer-state field in checkpoint: {key!r}."
+                    f"Training checkpoint trainer field {key!r} is not persisted."
                 )
         self._preflight_trainer_state(trainer_payload)
 
