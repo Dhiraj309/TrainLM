@@ -33,13 +33,17 @@ with global reports. The focused CPU/Gloo and related trainer/runtime/API
 suite passed locally in an isolated Python 3.12.14, torch 2.9.0+cpu, pytest
 9.2.0 environment (79 tests). Native multi-device TPU execution remains gated.
 
-The active T5 checkpoint slice on `feat/19-distributed-checkpoint-resume`
-records rank-shard sizes and SHA-256 digests in schema v3, validates each
-rank's shard before state restore, and coordinates distributed preflight
-failures. The full CPU suite passed locally (848 tests and 41 subtests in
-Python 3.12.14 with torch 2.9.0+cpu and pytest 9.2.0), including Gloo
-corruption and coordinated write-failure cases. PR #49's full Python 3.11
-GitHub CI run #296 passed. Native TPU checkpoint validation is pending.
+PR #49 rebase-merged T5 rank-shard integrity at verified `main` SHA
+`01a71f990fc5578b77be6e2e0a84473486fbe488`; its Python 3.11 GitHub CI runs
+#296 and #297 passed. Schema v3 records each rank shard's size and SHA-256,
+and coordinated CPU/Gloo preflight catches corruption or rank-local write
+failures before state restore. Native TPU checkpoint validation is pending.
+
+The active T5 follow-on branch `fix/20-trainer-checkpoint-preflight` validates
+the public trainer checkpoint's schema, model keys/shapes, trainer fields,
+runtime metadata, RNG state and data-cursor compatibility before mutation. Its
+full CPU suite passed locally (850 tests and 41 subtests in Python 3.12.14 with
+torch 2.9.0+cpu and pytest 9.2.0); GitHub CI is pending.
 
 Owner direction allows CPU-verifiable implementation to proceed while scarce
 TPU slots are pending. A provisional, explicit `accelerator="native_tpu"`
@@ -95,7 +99,7 @@ reversible.
 | Item | Verified/recorded context | Required next action |
 |---|---|---|
 | Repository | `Dhiraj309/TrainLM` | Verify checkout, branch, origin, permissions |
-| Current base | PR #48 rebase-merged; verified `main` SHA `7ae837d085fbbaab9f6c2d3617ff129b89dd454e` | Continue T5 checkpoint integrity and coordinated resume preflight on CPU; keep TPU execution gated |
+| Current base | PR #49 rebase-merged; verified `main` SHA `01a71f990fc5578b77be6e2e0a84473486fbe488` | Continue public trainer checkpoint preflight on CPU; keep TPU execution gated |
 | Legacy integration | PR #18 merged into `main` on 2026-10-28; merge commit `23959d29434fd2ae3f78b20469e1d61c6b1e18c9` | T0.1 inventory is complete; XLA-era PR cards are not the active queue |
 | Earlier salvage | PR #16 was merged into PR #18, which is now merged into `main` | Inventory its code as part of the merged tree; do not merge it again |
 | Existing TPU backend | Primarily PyTorch/XLA with historical measurements | Classify reusable vs XLA-specific components |
