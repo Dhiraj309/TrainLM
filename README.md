@@ -216,6 +216,15 @@ backend-neutral lifecycle used for training. A local run can continue from a
 TrainLM training checkpoint with
 `trainer.train(resume_from_checkpoint="runs/example/checkpoint-100")`.
 
+Custom stateful datasets can include their position in a checkpoint by
+implementing `state_dict()` and `load_state_dict()` with
+`dataloader_num_workers=0`. They can also implement
+`validate_state_dict(state)` to reject incompatible saved state during
+preflight, before TrainLM restores model, optimizer, scheduler, or trainer
+state. This validator must not change the active data position. Without the
+optional validator, the dataset is still loaded during restore, so an error in
+`load_state_dict()` can occur after the trainer state has been applied.
+
 Packed token shards can be downloaded by end-exclusive numeric range. TrainLM
 resolves the requested Hub revision to an immutable commit, uses the standard
 Hugging Face cache, validates every downloaded token payload, and partitions

@@ -39,16 +39,17 @@ approvals. T2 integrates the report into backend selection and the public UX.
 
 ## PR-by-PR serial execution
 
-**Status snapshot (2026-11-03):** PR #50 rebase-merged at verified `main` SHA
-`f57d6d71339753a6a3cee4082a43dfa2f5113017`. PRs #45 and #47 refreshed
-agent-facing documentation and live status; neither added runtime or
-accelerator evidence. PRs #28–#44 established the experimental native
-single-device foundation and the from-scratch CPU workflow. T4 distributed
-token weighting, synchronized global `max_tokens` stopping, and global
-loss/progress reporting are merged; 79 focused CPU tests and the full GitHub
-CI passed. PR #49 added schema-v3 rank-shard checksums and coordinated
-multi-rank save/resume preflight; its full Python 3.11 GitHub CI runs #296 and
-#297 passed. PR #50 added public checkpoint preflight and passed CI run #299.
+**Status snapshot (2026-11-03):** PR #55 rebase-merged at verified `main` SHA
+`ea9dbadfb86f17cd3713b2abcee808677c38e845`; GitHub CI passed (run ID
+`41578130077`). PRs #45 and #47 refreshed agent-facing documentation and live
+status; neither added accelerator evidence. PRs #28–#44 established the
+experimental native single-device foundation and the from-scratch CPU
+workflow. T4 distributed token weighting, synchronized global `max_tokens`
+stopping, and global loss/progress reporting are merged; 79 focused CPU tests
+and full GitHub CI passed. PR #49 added schema-v3 rank-shard checksums and
+coordinated multi-rank save/resume preflight; its Python 3.11 GitHub CI runs
+#296 and #297 passed. PR #50 added public checkpoint preflight and passed CI
+run #299.
 PR #51 rebase-merged at verified `main` SHA
 `c63e6903767f3a2aab2ff733e6248ff0c4e4bd3b`; CI run #302 passed. It records
 optimizer and scheduler type metadata and validates optimizer group layout
@@ -58,11 +59,18 @@ CI run #304 passed. PR #53 validates saved progress counters and metric values
 before restore and rebase-merged at verified `main` SHA
 `8ea810c2e5e54f492cb4e29e0844a74c9935f23e`; CI run #306 passed. PR #54
 preflights packed-data cursor identity and rebase-merged at verified `main`
-SHA `6ab2b8c9fcde5895c71d5f8450808b7f5756c520`; CI run #308 passed. Branch
-`fix/25-checkpoint-trainer-fields` rejects transient lifecycle fields in
-checkpoint trainer state. Its full CPU suite passed (871 tests and 41
-subtests in Python 3.12.14 / torch 2.9.0+cpu); GitHub CI is pending.
-This does not establish native multi-device launch or v5e-8 support. The
+SHA `6ab2b8c9fcde5895c71d5f8450808b7f5756c520`; CI run #308 passed. PR #55
+rejects transient lifecycle fields in checkpoint trainer state; its full CPU
+suite passed (871 tests and 41 subtests in Python 3.12.14 / torch 2.9.0+cpu /
+pytest 9.2.0), and GitHub CI passed. PR #56 is open from
+`fix/26-custom-dataset-state-preflight` and covers the optional pre-restore
+validator for custom stateful datasets. Its focused lifecycle suite passes
+(30 tests). The local full suite reports 865 passed, 7 failed, and 41
+subtests: missing `pip` blocks the wheel smoke, five Phi cases fail because the
+installed Transformers 5.0.0 `PhiConfig` lacks `pad_token_id`, and a separate
+TrainLM model reload test has mismatched weights. These failures are outside
+this PR and remain visible for review. This does not establish native
+multi-device launch or v5e-8 support. The
 old numbered cards below do not set the current work order; use [the T0–T11
 rebaseline](TORCHTPU_REBASELINE.md), [the handoff](HANDOFF.md), and
 owner-reviewed evidence to select the next scoped deliverable.

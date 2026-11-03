@@ -53,11 +53,15 @@ and scheduler-payload preflight at verified `main` SHA
 rebase-merged trainer progress metadata preflight at verified `main` SHA
 `8ea810c2e5e54f492cb4e29e0844a74c9935f23e`; CI run #306 passed. PR #54
 preflights packed-data cursor identity at verified `main` SHA
-`6ab2b8c9fcde5895c71d5f8450808b7f5756c520`; CI run #308 passed. Branch
-`fix/25-checkpoint-trainer-fields` rejects transient lifecycle fields in saved
-trainer state. The complete CPU suite passed locally (871 tests and 41
-subtests in Python 3.12.14 with torch 2.9.0+cpu and pytest 9.2.0); GitHub CI is
-pending. Native TPU checkpoint validation remains pending.
+`6ab2b8c9fcde5895c71d5f8450808b7f5756c520`; CI run #308 passed. PR #55
+rebase-merged at verified `main` SHA
+`ea9dbadfb86f17cd3713b2abcee808677c38e845`; it rejects transient trainer
+fields, with GitHub CI passed (run ID `41578130077`). The complete CPU suite
+passed locally (871 tests and 41 subtests in Python 3.12.14 with torch 2.9.0+cpu
+and pytest 9.2.0). PR #56 is open for custom dataset pre-restore validation;
+the focused lifecycle suite passes (30 tests). Its local full-suite run
+reported 865 passed, 7 unrelated environment failures, and 41 subtests. Native
+TPU checkpoint validation remains pending.
 
 Owner direction allows CPU-verifiable implementation to proceed while scarce
 TPU slots are pending. A provisional, explicit `accelerator="native_tpu"`
@@ -113,7 +117,7 @@ reversible.
 | Item | Verified/recorded context | Required next action |
 |---|---|---|
 | Repository | `Dhiraj309/TrainLM` | Verify checkout, branch, origin, permissions |
-| Current base | PR #54 rebase-merged; verified `main` SHA `6ab2b8c9fcde5895c71d5f8450808b7f5756c520` | Reject transient trainer fields before checkpoint restore; keep TPU execution gated |
+| Current base | PR #55 rebase-merged; verified `main` SHA `ea9dbadfb86f17cd3713b2abcee808677c38e845` | Cover the optional custom dataset state validator before checkpoint restore; keep TPU execution gated |
 | Legacy integration | PR #18 merged into `main` on 2026-10-28; merge commit `23959d29434fd2ae3f78b20469e1d61c6b1e18c9` | T0.1 inventory is complete; XLA-era PR cards are not the active queue |
 | Earlier salvage | PR #16 was merged into PR #18, which is now merged into `main` | Inventory its code as part of the merged tree; do not merge it again |
 | Existing TPU backend | Primarily PyTorch/XLA with historical measurements | Classify reusable vs XLA-specific components |
