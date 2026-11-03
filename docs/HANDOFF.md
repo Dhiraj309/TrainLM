@@ -30,29 +30,34 @@
   #296 and #297 passed.
 - PR #50 rebase-merged public trainer checkpoint preflight at verified `main`
   SHA `f57d6d71339753a6a3cee4082a43dfa2f5113017`; GitHub CI run #299 passed.
+- PR #51 rebase-merged optimizer/scheduler identity and parameter-group
+  preflight at verified `main` SHA
+  `c63e6903767f3a2aab2ff733e6248ff0c4e4bd3b`; CI run #302 passed.
 - **Verified base:** `main` at
-  `f57d6d71339753a6a3cee4082a43dfa2f5113017` after PR #50.
+  `c63e6903767f3a2aab2ff733e6248ff0c4e4bd3b` after PR #51.
 - **Probe:** [`T1 v5e-1 guide`](T1_V5E1_PROBE.md) and its
   [Kaggle/Colab notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb) test a tiny
   synthetic forward/backward and optimizer update, with optional `torch.compile`.
 - **Evidence:** the owner reported an eager native TPU allocation,
   forward/backward and AdamW pass on torch_tpu 0.2.0 with torch 2.14.1+cpu.
   Hardware generation and explicit compile remain unverified.
-- **Validation boundary:** PR #50's full GitHub pytest check passed. The base
-  interpreter lacks PyTorch and pytest; a temporary isolated environment ran
-  the focused CPU/Gloo and related trainer/runtime/API suite (79 tests passed).
-  No complete training run was performed during this handoff update. CPU tests, standalone device probes,
-  and complete TPU training are separate evidence; no TPU generation,
-  convergence, or performance result is claimed.
+- **Validation boundary:** the temporary isolated Python 3.12.14 / torch
+  2.9.0+cpu / pytest 9.2.0 environment passed the current full CPU suite
+  (859 tests and 41 subtests), including the 39 focused checkpoint/lifecycle
+  tests. `compileall` and `git diff --check` passed; Ruff was unavailable.
+  GitHub CI for the current branch and TPU checkpoint validation are pending.
+  CPU tests, standalone device probes, and complete TPU training are separate
+  evidence; no TPU generation, convergence, or performance result is claimed.
 - **Current T5 checkpoint work:** PR #49 added schema-v3 shard checksums and
   coordinated distributed write/resume preflight; PR #50 added public trainer
-  checkpoint preflight before state restore. The active branch
-  Follow-on branch `fix/21-optimizer-scheduler-preflight` records optimizer/scheduler class
-  identity and checks optimizer parameter-group compatibility before mutation.
-  Legacy schema-v1 checkpoints without class metadata remain loadable. The full
-  CPU suite passed (853 tests and 41 subtests in Python 3.12.14 with torch
-  2.9.0+cpu); GitHub CI run #301 passed. Native TPU checkpoint validation
-  remains pending.
+  checkpoint preflight before state restore. PR #51 records optimizer/scheduler
+  class identity and checks optimizer parameter-group compatibility before
+  mutation; legacy schema-v1 checkpoints
+  without class metadata remain loadable. The active branch
+  `fix/22-optimizer-slot-state-preflight` adds preflight checks for common
+  optimizer slot shapes and scalar steps, plus scheduler payload structure and
+  invariants. The complete CPU suite passed locally (859 tests and 41
+  subtests); remote CI and native TPU checkpoint validation remain pending.
 - **Older open PR stack:** PRs #22–#27 remain open on the older M8 branch chain.
   They are more than 250 commits behind current `main`; PR #22 is merge-conflicted and
   its recorded CPU run had 335 passed / 6 failed. Keep them separate until
