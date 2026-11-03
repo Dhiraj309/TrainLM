@@ -39,7 +39,10 @@ approvals. T2 integrates the report into backend selection and the public UX.
 
 ## PR-by-PR serial execution
 
-**Status snapshot (2026-11-03):** PR #62 rebase-merged at verified `main` SHA
+**Status snapshot (2026-11-03):** PR #64 rebase-merged at verified `main` SHA
+`dd3cf7bcea791f370ea0c58d3e863a1702dfc79f`; GitHub pytest passed (run ID
+`41595632995`). PR #63 rebase-merged at `97a061df7bc96fc311d1bab341d91f92c8a43b61`
+and passed GitHub pytest (run ID `41594915207`). PR #62 rebase-merged at
 `821beacdee235e9ed6e70781023126023120adef`; GitHub pytest passed (run ID
 `41594252050`). PR #61 rebase-merged at `448ea9dc3d5969aa88d612bdfbbf11af682bc78d`
 and passed GitHub pytest (run ID `41585945140`). PR #60 rebase-merged at `839d8fcc1f9320ff6193b7c54399c629881945f0`
@@ -98,7 +101,11 @@ failed, and 41 subtests: missing `pip` blocks the wheel smoke, five Phi cases
 fail because the installed Transformers
 5.0.0 `PhiConfig` lacks `pad_token_id`, and a separate TrainLM model reload test
 has mismatched weights. No full-suite rerun or TPU validation is claimed for
-PR #62. This does not
+PR #62. PR #63 records the post-merge status correction. PR #64 verifies exact
+resume parity for a caller-provided sequential loader without saved loader RNG;
+the checkpoint/API lifecycle suites passed (41 tests, or 44 with the roadmap
+contract), and GitHub pytest passed (run ID `41595632995`). No full-suite or TPU
+validation is claimed for PR #64. This does not
 establish native multi-device launch or v5e-8 support. The
 old numbered cards below do not set the current work order; use [the T0–T11
 rebaseline](TORCHTPU_REBASELINE.md), [the handoff](HANDOFF.md), and

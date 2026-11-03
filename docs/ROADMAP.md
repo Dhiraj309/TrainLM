@@ -109,11 +109,15 @@ TorchTPU support. “Implemented” means present in that historical code path;
   missing `pip` blocked wheel smoke, five Phi cases hit a Transformers 5.0.0
   config issue, and a TrainLM model reload test had mismatched weights. No full-suite rerun or
   TPU checkpoint validation is claimed for PR #62.
-  A follow-up CPU regression supplies a SequentialSampler DataLoader without
-  TrainLM-owned loader RNG, removes the optional checkpoint field, and verifies
-  exact weights after resuming from an intermediate checkpoint. The combined
-  checkpoint/API lifecycle suites now pass (41 tests); this does not add full
-  suite or TPU validation.
+  PR #63 rebase-merged the status correction at verified `main` SHA
+  `97a061df7bc96fc311d1bab341d91f92c8a43b61`; GitHub pytest passed (run ID
+  `41594915207`). PR #64 rebase-merged at verified `main` SHA
+  `dd3cf7bcea791f370ea0c58d3e863a1702dfc79f`; GitHub pytest passed (run ID
+  `41595632995`). Its CPU regression supplies a SequentialSampler DataLoader
+  without TrainLM-owned loader RNG, removes the optional checkpoint field, and
+  verifies exact weights after resuming from an intermediate checkpoint. The
+  checkpoint/API lifecycle suites passed (41 tests; 44 including the roadmap
+  contract). No full-suite or TPU validation is claimed for PR #64.
   BF16 and checkpointing remain unvalidated on TPU. T1 source-level
   probes and the explicit `native_tpu` path are implemented; owner-run compile,
   lifecycle and v5e-8 collective evidence remain pending. Hosted Kaggle currently documents
