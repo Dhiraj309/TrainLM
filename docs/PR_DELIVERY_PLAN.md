@@ -39,10 +39,11 @@ approvals. T2 integrates the report into backend selection and the public UX.
 
 ## PR-by-PR serial execution
 
-**Status snapshot (2026-11-03):** PR #55 rebase-merged at verified `main` SHA
-`ea9dbadfb86f17cd3713b2abcee808677c38e845`; GitHub CI passed (run ID
-`41578130077`). PRs #45 and #47 refreshed agent-facing documentation and live
-status; neither added accelerator evidence. PRs #28–#44 established the
+**Status snapshot (2026-11-03):** PR #56 rebase-merged at verified `main` SHA
+`4aa3614858065c6255c4ecc2d0949c24ee715f70`; its GitHub pytest workflow passed
+in 2m24s. PR #55 rebase-merged at `ea9dbadfb86f17cd3713b2abcee808677c38e845`
+and passed GitHub CI. PRs #45 and #47 refreshed agent-facing documentation and
+live status; neither added accelerator evidence. PRs #28–#44 established the
 experimental native single-device foundation and the from-scratch CPU
 workflow. T4 distributed token weighting, synchronized global `max_tokens`
 stopping, and global loss/progress reporting are merged; 79 focused CPU tests
@@ -62,15 +63,17 @@ preflights packed-data cursor identity and rebase-merged at verified `main`
 SHA `6ab2b8c9fcde5895c71d5f8450808b7f5756c520`; CI run #308 passed. PR #55
 rejects transient lifecycle fields in checkpoint trainer state; its full CPU
 suite passed (871 tests and 41 subtests in Python 3.12.14 / torch 2.9.0+cpu /
-pytest 9.2.0), and GitHub CI passed. PR #56 is open from
-`fix/26-custom-dataset-state-preflight` and covers the optional pre-restore
-validator for custom stateful datasets. Its focused lifecycle suite passes
-(30 tests). The local full suite reports 865 passed, 7 failed, and 41
+pytest 9.2.0), and GitHub CI passed. PR #56 documents/tests custom dataset
+pre-restore validation and is merged at `4aa3614858065c6255c4ecc2d0949c24ee715f70`.
+PR #57 is open from `test/27-custom-iterable-resume-parity`; 35 focused
+lifecycle and data-resume tests pass. The new test proves exact model-tensor
+equality after a custom iterable checkpoint/resume compared with uninterrupted
+training. The last full local suite reports 865 passed, 7 failed, and 41
 subtests: missing `pip` blocks the wheel smoke, five Phi cases fail because the
 installed Transformers 5.0.0 `PhiConfig` lacks `pad_token_id`, and a separate
-TrainLM model reload test has mismatched weights. These failures are outside
-this PR and remain visible for review. This does not establish native
-multi-device launch or v5e-8 support. The
+TrainLM model reload test has mismatched weights. No full-suite rerun or TPU
+validation is claimed for PR #57. This does not establish native multi-device
+launch or v5e-8 support. The
 old numbered cards below do not set the current work order; use [the T0–T11
 rebaseline](TORCHTPU_REBASELINE.md), [the handoff](HANDOFF.md), and
 owner-reviewed evidence to select the next scoped deliverable.
