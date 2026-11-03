@@ -19,9 +19,10 @@ a revision-pinned Hugging Face dataset. The API trains a byte-level tokenizer,
 prepares validated packed shards, initializes GPT-2 by default (or a configured
 registered Transformers causal-LM architecture), and returns the familiar
 trainer lifecycle. Vocabulary and special-token IDs come from the trained
-tokenizer. The notebook's downloadable report records the requested and
-effective model config, architecture class, vocabulary size, and parameter
-counts. The notebook uses this API; native TPU remains experimental and gains no
+tokenizer. The notebook's version 3 downloadable report records the requested
+and effective model config, architecture class, vocabulary size, tokenizer
+special-token IDs and artifact hash, runtime versions, and parameter counts.
+The notebook uses this API; native TPU remains experimental and gains no
 end-to-end evidence from CPU/API tests. PR #77 was rebase-merged to verified `main` at SHA
 `f844d048b17640d4d71a127c4a860dd1f6d7d52c`. The rebase-preserved API commit
 is `e340d7f604151ee869243d80bc5429c1bb008801`; the post-train evaluation fix
@@ -29,7 +30,10 @@ is `3fbac2a19209dfd035d021f7911f2fa0b4a2f91b`. PR #79 added configured
 Transformers causal-LM architectures and rebase-merged to verified `main` at
 `ba5f4761c35c23403d35e44be5d564dbe7ffadb3`; CI passed 891 tests and 41
 subtests. This is CPU software evidence only. The feature branch was deleted
-after verification. CI run 360 first found four failures; final run 362 passed
+after verification. PR #80 added model provenance to report schema v2 and
+rebase-merged at verified `main` SHA
+`e9b4a1bde4869d89c323ed457a6b6cebccb0ae40`; CI passed 891 tests and 41
+subtests. CI run 360 first found four failures; final run 362 passed
 890 tests and 41 subtests on Python 3.11. Local syntax, notebook, config-guard,
 state-transition, and CLI-help checks pass. No TPU training was run. See the
 [coding-agent guide](AI_AGENT_GUIDE.md) for the entry point and limits.
