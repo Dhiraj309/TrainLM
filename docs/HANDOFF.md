@@ -19,19 +19,29 @@
 - PR #45 added agent-facing documentation and package metadata. It rebase-merged
   at `d983408221b92d631aea817bee7539e07de1bbf5`; it adds no runtime behavior
   or TPU evidence.
+- PR #47 aligned the current status pages and historical labels. It rebase-merged
+  at `e109ad253754303e44eb6162aacb046c415b990b`; it adds no runtime behavior
+  or TPU evidence.
 - **Verified base:** `main` at
-  `d983408221b92d631aea817bee7539e07de1bbf5` after PR #45.
+  `e109ad253754303e44eb6162aacb046c415b990b` after PR #47.
 - **Probe:** [`T1 v5e-1 guide`](T1_V5E1_PROBE.md) and its
   [Kaggle/Colab notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb) test a tiny
   synthetic forward/backward and optimizer update, with optional `torch.compile`.
 - **Evidence:** the owner reported an eager native TPU allocation,
   forward/backward and AdamW pass on torch_tpu 0.2.0 with torch 2.14.1+cpu.
   Hardware generation and explicit compile remain unverified.
-- **Validation boundary:** PR #45's GitHub pytest check passed. This workspace
-  has no PyTorch or pytest installation, so no local suite or training run was
-  performed during this handoff update. CPU tests, standalone device probes,
+- **Validation boundary:** PR #47's GitHub pytest check passed. The base
+  interpreter lacks PyTorch and pytest; a temporary isolated environment ran
+  the focused CPU/Gloo and related trainer/runtime/API suite (79 tests passed).
+  No complete training run was performed during this handoff update. CPU tests, standalone device probes,
   and complete TPU training are separate evidence; no TPU generation,
   convergence, or performance result is claimed.
+- **Current CPU/Gloo work:** global valid-token gradient normalization and
+  globally reduced loss/progress reporting and synchronized distributed
+  `max_tokens` stopping are implemented on the local T4 correctness branch,
+  with reference-parity and rank-boundary regressions. Those tests remain
+  locally passing in the isolated CPU environment; GitHub CI is pending.
+  Native TPU multi-device support is not implemented or claimed.
 - **History:** PR #18 (including PR #16) is merged. The old M0–M17 tables and
   P0/P1 XLA backlog below describe historical XLA implementation/evidence;
   use them for salvage, not as the current TorchTPU task list.

@@ -63,6 +63,10 @@ class TorchRuntime:
     def is_primary_process(self) -> bool:
         return True
 
+    @property
+    def mean_reduces_gradients_before_clipping(self) -> bool:
+        return False
+
     def initialize(self) -> None:
         """Initialize backend resources."""
 
@@ -149,9 +153,16 @@ class TorchRuntime:
     def scale_gradients(
         self,
         parameters: Iterable[nn.Parameter],
-        scale: float,
+        scale: float | torch.Tensor,
     ) -> None:
-        if not isinstance(scale, (int, float)) or scale <= 0:
+        if isinstance(scale, torch.Tensor):
+            if scale.ndim != 0 or scale.requires_grad:
+                raise ValueError("Gradient scale tensor must be a detached scalar.")
+        elif (
+            isinstance(scale, bool)
+            or not isinstance(scale, (int, float))
+            or scale <= 0
+        ):
             raise ValueError("Gradient scale must be positive.")
         for parameter in parameters:
             if parameter.grad is not None:

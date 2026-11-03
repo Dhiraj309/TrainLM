@@ -50,7 +50,9 @@ for file discovery; this document remains the detailed implementation record.
   generation, training, or convergence evidence. PR #45 rebase-merged
   agent-facing documentation and package metadata at verified `main` SHA
   `d983408221b92d631aea817bee7539e07de1bbf5`; it adds no runtime or TPU
-  evidence.
+  evidence. PR #47 aligned the live status and historical labels at verified
+  `main` SHA `e109ad253754303e44eb6162aacb046c415b990b`; it also adds no runtime
+  or TPU evidence.
 - T0.1 code inventory is recorded in `TORCHTPU_SALVAGE_INVENTORY.md`. The
   mapped legacy cards remain candidates, not an approved implementation queue.
 - Current implementation backend: PyTorch/XLA. Target: native TorchTPU on
@@ -65,7 +67,23 @@ for file discovery; this document remains the detailed implementation record.
 - T1 policy: use a one-chip Cloud TPU v5e VM first for single-device import,
   device operations, autograd, optimizer, and compile checks. Use v5e-8 for
   collective, DP8, sharding, distributed-checkpoint, or scaling requirements.
-  An owner-run eager TPU smoke passed; this workspace has no PyTorch installed.
+  An owner-run eager TPU smoke passed. The base workspace interpreter has no
+  PyTorch; the current CPU checks ran in an isolated temporary environment.
+- The current distributed-training slice implements global valid-token
+  gradient normalization for backends that average gradients before clipping,
+  and synchronizes distributed `max_tokens` stopping at a global microbatch
+  boundary. DDP-style backends that declare pre-clipping gradient averaging
+  reduce update losses and effective global batch size; callback progress
+  counters are summed across distributed ranks. Two CPU/Gloo regressions cover
+  accumulated unequal-mask parity, rank-consistent budget stopping, and global
+  reporting. In a temporary Python 3.12.14 environment with torch 2.9.0+cpu and
+  pytest 9.2.0, the focused CPU/Gloo and related trainer/runtime/API suite
+  passed (79 tests). GitHub CI is still pending. `TrainerState.tokens_seen` and `samples_seen` remain
+  per-rank; callback progress and the stopping threshold use global counts.
+  The DDP-style token-indexed scheduler and `global_batch_size` use global
+  counts too. The final microbatch can take the run past the requested budget.
+  Native TorchTPU launch, distributed
+  runtime, checkpointing, and v5e-8 training remain unimplemented or unverified.
 - [T1 v5e-1 probe guide](T1_V5E1_PROBE.md) and the
   [Colab-openable Kaggle/Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TorchTPU_T1_v5e1_Probe.ipynb) describe
   synthetic smoke. The latest owner run at source `d3dea896` passed allocation,

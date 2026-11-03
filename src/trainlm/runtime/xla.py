@@ -142,6 +142,12 @@ class XlaRuntime:
         return self.world_size > 1
 
     @property
+    def mean_reduces_gradients_before_clipping(self) -> bool:
+        # xm.optimizer_step reduces gradients during the optimizer step, after
+        # TrainLM's clipping boundary. Preserve that existing XLA behavior.
+        return False
+
+    @property
     def is_primary_process(self) -> bool:
         is_master = getattr(self._xm, "is_master_ordinal", None)
         return bool(is_master()) if callable(is_master) else self.rank == 0
@@ -389,9 +395,16 @@ class XlaRuntime:
     def scale_gradients(
         self,
         parameters: Iterable[nn.Parameter],
-        scale: float,
+        scale: float | torch.Tensor,
     ) -> None:
-        if not isinstance(scale, (int, float)) or scale <= 0:
+        if isinstance(scale, torch.Tensor):
+            if scale.ndim != 0 or scale.requires_grad:
+                raise ValueError("Gradient scale tensor must be a detached scalar.")
+        elif (
+            isinstance(scale, bool)
+            or not isinstance(scale, (int, float))
+            or scale <= 0
+        ):
             raise ValueError("Gradient scale must be positive.")
         for parameter in parameters:
             if parameter.grad is not None:

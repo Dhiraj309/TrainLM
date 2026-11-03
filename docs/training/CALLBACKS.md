@@ -21,6 +21,12 @@ values. Live tensors are rejected rather than implicitly calling `.item()` in
 the callback path. Training metrics are emitted at
 `config.logging.log_every_steps`; evaluation metrics are emitted once after
 streaming evaluation completes. Both boundaries are intentionally sparse.
+During distributed training, `tokens_seen` and `samples_seen` in this snapshot
+are summed globally and match across ranks. On backends that declare
+pre-clipping gradient averaging, exact-token loss is also global and
+`TrainerState.global_batch_size` records global examples in the latest update.
+The corresponding `TrainerState.tokens_seen` and `samples_seen` remain
+per-rank.
 
 The trainer materializes metrics before dispatching callbacks at the configured
 logging cadence. `TrainerConfig.materialize_loss_every_steps` controls the

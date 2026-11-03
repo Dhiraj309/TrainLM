@@ -39,15 +39,21 @@ approvals. T2 integrates the report into backend selection and the public UX.
 
 ## PR-by-PR serial execution
 
-**Status snapshot (2026-11-02):** PR #45 rebase-merged at verified `main` SHA
-`d983408221b92d631aea817bee7539e07de1bbf5`. It adds agent-discoverability
-documentation and package metadata; it is not a T0–T11 implementation gate.
-PRs #28–#44 established the experimental native single-device foundation and
-the from-scratch CPU workflow; owner-run TorchTPU compile, lifecycle, and
-multi-device evidence remain pending. The old numbered cards below do not set
-the current work order; use [the T0–T11 rebaseline](TORCHTPU_REBASELINE.md),
-[the handoff](HANDOFF.md), and owner-reviewed evidence to select the next
-scoped deliverable.
+**Status snapshot (2026-11-03):** PR #47 rebase-merged at verified `main` SHA
+`e109ad253754303e44eb6162aacb046c415b990b`. PRs #45 and #47 refreshed
+agent-facing documentation and live status; neither added runtime or
+accelerator evidence. PRs #28–#44 established the experimental native
+single-device foundation and the from-scratch CPU workflow. The active
+distributed-training slice implements backend-gated global valid-token
+gradient weighting, synchronized global `max_tokens` stopping, and globally
+reduced loss/progress metrics, with two CPU/Gloo regressions. The focused
+CPU/Gloo and related trainer/runtime/API suite passed locally in an isolated
+Python 3.12.14, torch 2.9.0+cpu, pytest 9.2.0 environment (79 tests); GitHub
+CI is pending. This does not implement native multi-device launch or establish
+v5e-8 support. The
+old numbered cards below do not set the current work order; use [the T0–T11
+rebaseline](TORCHTPU_REBASELINE.md), [the handoff](HANDOFF.md), and
+owner-reviewed evidence to select the next scoped deliverable.
 
 - A **PR-plan number** is a planned delivery slot, not a GitHub PR number.
   GitHub assigns its own PR number on creation. Do not create the next branch

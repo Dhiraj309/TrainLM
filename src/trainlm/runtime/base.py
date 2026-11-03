@@ -131,7 +131,7 @@ class ExecutionBackend(Protocol):
     def scale_gradients(
         self,
         parameters: Iterable[nn.Parameter],
-        scale: float,
+        scale: float | torch.Tensor,
     ) -> None: ...
 
     def reduce_sum(self, value: torch.Tensor) -> torch.Tensor: ...

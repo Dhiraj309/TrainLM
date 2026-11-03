@@ -15,6 +15,15 @@ the scheduler. The reported update loss uses the same weighted numerator and
 token denominator. This is equivalent to a single concatenated batch even
 when masks or ignored-token counts differ between microbatches.
 
+For distributed backends that average gradients before clipping, the summed
+local gradients are converted to a global supervised-token mean using the
+sum of valid tokens across ranks before clipping. Their exact update losses
+and `global_batch_size` are reduced globally. Callback progress counters are
+also summed across distributed ranks. `TrainerState.tokens_seen` and
+`samples_seen` remain per-rank for checkpoint compatibility. A distributed
+`max_tokens` target is global and stops every rank after the same microbatch;
+the final microbatch may cross the requested threshold.
+
 `TrainerState.micro_step` counts completed task microbatches, while `step`
 counts optimizer updates. `tokens_seen` and `samples_seen` advance once per
 completed optimizer update using the exact task counts.
