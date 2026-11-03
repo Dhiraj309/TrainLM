@@ -832,13 +832,7 @@ class TrainLMTrainer:
                 raise ValueError(
                     f"Unknown trainer-state field in checkpoint: {key!r}."
                 )
-        for name in ("step", "micro_step"):
-            value = trainer_payload.get(name)
-            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-                raise ValueError(
-                    f"Training checkpoint trainer field {name!r} must be "
-                    "a non-negative integer."
-                )
+        self._preflight_trainer_state(trainer_payload)
 
         cpu_rng_state = payload["cpu_rng_state"]
         if (
@@ -871,7 +865,9 @@ class TrainLMTrainer:
                 or initial_state.dtype != torch.uint8
                 or initial_state.ndim != 1
             ):
-                raise ValueError("Training checkpoint data-loader RNG state is invalid.")
+                raise ValueError(
+                    "Training checkpoint data-loader RNG state is invalid."
+                )
             try:
                 torch.Generator().set_state(initial_state.cpu())
             except RuntimeError as exc:
@@ -898,6 +894,46 @@ class TrainLMTrainer:
                     "dataloader_num_workers=0."
                 )
         return initial_state, dataset_state
+
+    @staticmethod
+    def _preflight_trainer_state(state: Mapping[str, Any]) -> None:
+        """Validate persisted progress and metrics before applying the state."""
+        integer_fields = (
+            "step",
+            "micro_step",
+            "epoch",
+            "tokens_seen",
+            "samples_seen",
+            "global_batch_size",
+        )
+        for name in integer_fields:
+            if name not in state and name not in {"step", "micro_step"}:
+                continue
+            value = state.get(name)
+            if type(value) is not int or value < 0:
+                raise ValueError(
+                    f"Training checkpoint trainer field {name!r} must be "
+                    "a non-negative integer."
+                )
+
+        for name in ("learning_rate", "loss", "grad_norm"):
+            if name not in state:
+                continue
+            value = state[name]
+            if name in {"loss", "grad_norm"} and value is None:
+                continue
+            if not _is_finite_real(value) or (
+                name in {"learning_rate", "grad_norm"} and value < 0
+            ):
+                requirement = (
+                    "a finite non-negative scalar"
+                    if name in {"learning_rate", "grad_norm"}
+                    else "a finite scalar"
+                )
+                raise ValueError(
+                    f"Training checkpoint trainer field {name!r} must be "
+                    f"{requirement}."
+                )
 
     @staticmethod
     def _preflight_optimizer_state(optimizer: Optimizer, state: Mapping[str, Any]) -> None:
