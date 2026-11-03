@@ -38,8 +38,8 @@ records rank-shard sizes and SHA-256 digests in schema v3, validates each
 rank's shard before state restore, and coordinates distributed preflight
 failures. The full CPU suite passed locally (848 tests and 41 subtests in
 Python 3.12.14 with torch 2.9.0+cpu and pytest 9.2.0), including Gloo
-corruption and coordinated write-failure cases. GitHub CI and native TPU
-checkpoint validation are pending.
+corruption and coordinated write-failure cases. PR #49's full Python 3.11
+GitHub CI run #296 passed. Native TPU checkpoint validation is pending.
 
 Owner direction allows CPU-verifiable implementation to proceed while scarce
 TPU slots are pending. A provisional, explicit `accelerator="native_tpu"`

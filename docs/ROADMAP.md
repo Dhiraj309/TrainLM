@@ -63,8 +63,9 @@ TorchTPU support. “Implemented” means present in that historical code path;
   metadata and coordinated CPU/Gloo failure preflight on
   `feat/19-distributed-checkpoint-resume`. The full CPU suite passed locally
   (848 tests and 41 subtests); it includes two-rank Gloo checkpoint success and
-  coordinated failure cases. GitHub CI and native TPU checkpoint validation
-  remain pending. Native TPU multi-device training remains unverified.
+  coordinated failure cases. PR #49's full Python 3.11 GitHub CI run #296
+  passed; native TPU checkpoint validation and multi-device training remain
+  unverified.
   BF16 and checkpointing remain unvalidated on TPU. T1 source-level
   probes and the explicit `native_tpu` path are implemented; owner-run compile,
   lifecycle and v5e-8 collective evidence remain pending. Hosted Kaggle currently documents

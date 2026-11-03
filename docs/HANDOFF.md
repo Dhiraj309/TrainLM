@@ -45,7 +45,8 @@
   pass for rank restore, corruption rejection, shard-write and manifest-stage
   failure coordination. The full CPU suite passed (848 tests and 41 subtests
   in Python 3.12.14 with torch 2.9.0+cpu), including these Gloo cases. GitHub
-  CI and native TPU checkpoint validation are pending.
+  CI run #296 passed on Python 3.11; native TPU checkpoint validation remains
+  pending.
 - **Older open PR stack:** PRs #22–#27 remain open on the older M8 branch chain.
   They are 256 commits behind current `main`; PR #22 is merge-conflicted and
   its recorded CPU run had 335 passed / 6 failed. Keep them separate until

@@ -43,7 +43,8 @@ pytest 9.2.0 environment). This does not establish native multi-device TPU
 support. The active T5 checkpoint slice adds rank-shard checksums and
 coordinated CPU/Gloo failure handling; the full CPU suite passes locally
 (848 tests and 41 subtests), including two-rank checkpoint tests. GitHub CI
-and native TPU checkpoint validation are pending.
+run #296 passed on Python 3.11; native TPU checkpoint validation remains
+pending.
 T1 software probes cover shared hardware and capability discovery, dependency
 metadata and process lifecycle, and a distributed entry check; owner-run
 compile, lifecycle and v5e-8 collective evidence remain pending. Use v5e-1 for
