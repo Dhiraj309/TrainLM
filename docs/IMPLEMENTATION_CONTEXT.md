@@ -127,18 +127,24 @@ for file discovery; this document remains the detailed implementation record.
   `41579944075`). It compares a two-step custom iterable checkpoint plus two
   resumed steps with uninterrupted four-step training and requires exact
   model-tensor equality.
-- PR #58 is open from `test/28-custom-iterable-state-validation`, based on
-  verified `main` `e62052ae39d6216bce0dd5aec86fc42d9f10a837`. Commit `c45b201`
-  tests rejection of custom iterable checkpoints with a mismatched dataset ID
-  or out-of-range cursor before model, optimizer, scheduler, trainer, or dataset
-  state changes. The focused lifecycle and data-resume suites pass (37 tests);
-  compileall, `git diff --check`, and roadmap status contracts pass. No full
-  suite rerun was done for PR #58. The last full local suite, on PR #56's
-  branch, produced 865 passed, 7 failed and 41 subtests: missing `pip` blocked
-  the wheel smoke, five Phi cases hit the installed Transformers 5.0.0
-  `PhiConfig` missing `pad_token_id`, and a separate TrainLM model reload test
-  had mismatched weights. GitHub CI and TPU checkpoint validation for PR #58
-  are pending.
+- PR #58 rebase-merged at verified `main` SHA
+  `e90697f99db29355e135161ea62e66d91bbc6047`; GitHub pytest passed (run ID
+  `41581911584`). Commit `c45b201` rejects custom iterable checkpoints with a
+  mismatched dataset ID or out-of-range cursor before model, optimizer,
+  scheduler, trainer, or dataset state changes.
+- PR #59 is open from `test/29-legacy-custom-dataset-resume`, based on verified
+  `main` `e90697f99db29355e135161ea62e66d91bbc6047`. Commit `d835b54` adds a CPU
+  regression for stateful custom iterables that implement `state_dict()` and
+  `load_state_dict()` but omit the optional `validate_state_dict()` hook. It
+  compares a resumed run with uninterrupted training and requires exact model
+  tensor equality. The checkpoint suite passes (8 tests), the combined
+  checkpoint/API lifecycle suites pass (38 tests), and compileall plus
+  `git diff --check` pass. No full-suite rerun or TPU checkpoint validation is
+  claimed for PR #59.
+- The last full local suite, on PR #56's branch, produced 865 passed, 7 failed
+  and 41 subtests: missing `pip` blocked the wheel smoke, five Phi cases hit the
+  installed Transformers 5.0.0 `PhiConfig` missing `pad_token_id`, and a
+  separate TrainLM model reload test had mismatched weights.
 - [T1 v5e-1 probe guide](T1_V5E1_PROBE.md) and the
   [Colab-openable Kaggle/Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TorchTPU_T1_v5e1_Probe.ipynb) describe
   synthetic smoke. The latest owner run at source `d3dea896` passed allocation,
