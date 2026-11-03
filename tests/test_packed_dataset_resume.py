@@ -224,6 +224,80 @@ def test_custom_stateful_iterable_resume_matches_uninterrupted_training(tmp_path
         )
 
 
+@pytest.mark.parametrize(
+    ("corruption", "message"),
+    [
+        ("dataset_id", "Custom iterable dataset identity does not match"),
+        ("position", "Custom iterable dataset position is invalid"),
+    ],
+)
+def test_custom_iterable_preflight_rejects_identity_or_cursor_before_mutation(
+    tmp_path, corruption, message
+):
+    examples = [
+        {
+            "input_ids": torch.tensor([(index + offset) % 8 for offset in range(4)]),
+            "labels": torch.tensor([(index + offset) % 8 for offset in range(4)]),
+        }
+        for index in range(8)
+    ]
+    initial_model = TinyCausalLM()
+
+    def make_trainer(model, dataset, output_dir, max_steps):
+        return TrainLMTrainer(
+            model=model,
+            train_dataset=dataset,
+            args=TrainLMTrainingArguments(
+                output_dir=output_dir,
+                max_steps=max_steps,
+                sequence_length=4,
+                accelerator="cpu",
+                per_device_train_batch_size=1,
+                learning_rate=1e-3,
+                weight_decay=0.0,
+                lr_scheduler_type="constant",
+                seed=31,
+            ),
+        )
+
+    source_data = StatefulExamples(deepcopy(examples))
+    source = make_trainer(
+        deepcopy(initial_model), source_data, tmp_path / "source", max_steps=2
+    )
+    assert source.train().step == 2
+    checkpoint = source.save_state(tmp_path / "checkpoint")
+    payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    if corruption == "dataset_id":
+        payload["train_dataset_state"]["dataset_id"] = "different-dataset"
+    else:
+        payload["train_dataset_state"]["position"] = len(examples) + 1
+    torch.save(payload, checkpoint)
+
+    resumed_data = StatefulExamples(deepcopy(examples))
+    resumed = make_trainer(
+        deepcopy(initial_model), resumed_data, tmp_path / "resume", max_steps=4
+    )
+    before_model = {
+        name: value.detach().clone()
+        for name, value in resumed.model.state_dict().items()
+    }
+    before_scheduler = deepcopy(resumed.scheduler.state_dict())
+    before_trainer_state = deepcopy(resumed.engine.state)
+    before_dataset_state = resumed_data.state_dict()
+
+    with pytest.raises(ValueError, match=message):
+        resumed._load_training_checkpoint(resumed.engine, checkpoint)
+
+    assert all(
+        torch.equal(before_model[name], value)
+        for name, value in resumed.model.state_dict().items()
+    )
+    assert resumed.engine.optimizer.state == {}
+    assert resumed.scheduler.state_dict() == before_scheduler
+    assert resumed.engine.state == before_trainer_state
+    assert resumed_data.state_dict() == before_dataset_state
+
+
 def test_packed_cursor_preflight_rejects_stale_data_before_trainer_mutation(tmp_path):
     data_dir = tmp_path / "packed"
     _write_dataset(data_dir, [1, 2, 3, 4, 5, 6, 7, 0] * 2)
