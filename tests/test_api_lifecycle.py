@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 import torch
-from torch.utils.data import Dataset, RandomSampler, SequentialSampler
+from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
 
 from trainlm import TrainLMTrainer, TrainLMTrainingArguments
 from trainlm.training import TokenWSD, TrainerCallback
@@ -375,6 +375,61 @@ def test_resume_rejects_random_sampler_without_saved_rng_before_mutation(tmp_pat
     assert resumed.scheduler.state_dict() == before_scheduler
     assert resumed.engine.state == before_trainer_state
     assert torch.equal(resumed._train_loader_generator.get_state(), before_loader_rng)
+
+
+def test_resume_replays_sequential_loader_without_saved_rng(tmp_path):
+    rows = [
+        {
+            "input_ids": torch.tensor([offset, offset + 1, offset + 2, offset + 3]),
+            "labels": torch.tensor([offset, offset + 1, offset + 2, offset + 3]),
+        }
+        for offset in range(4)
+    ]
+
+    def make_loader():
+        return DataLoader(
+            rows,
+            batch_size=1,
+            sampler=SequentialSampler(rows),
+        )
+
+    def make_trainer(output_dir, *, save_steps=None):
+        return TrainLMTrainer(
+            model=TinyModel(),
+            train_dataset=make_loader(),
+            args=TrainLMTrainingArguments(
+                output_dir=output_dir,
+                max_steps=2,
+                sequence_length=4,
+                accelerator="cpu",
+                seed=17,
+                save_steps=save_steps,
+            ),
+        )
+
+    torch.manual_seed(17)
+    uninterrupted = make_trainer(tmp_path / "uninterrupted")
+    uninterrupted.train()
+    expected = deepcopy(uninterrupted.model.state_dict())
+
+    torch.manual_seed(17)
+    first = make_trainer(tmp_path / "source", save_steps=1)
+    assert isinstance(first.engine.train_dataloader.sampler, SequentialSampler)
+    assert first._train_loader_generator is None
+    first.train()
+    checkpoint = tmp_path / "source" / "checkpoint-1" / "trainer_state.pt"
+    payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    assert payload["loader_generator_initial_state"] is None
+    payload.pop("loader_generator_initial_state")
+    torch.save(payload, checkpoint)
+
+    resumed = make_trainer(tmp_path / "resume")
+    resumed.train(resume_from_checkpoint=checkpoint)
+
+    assert all(
+        torch.equal(expected[name], value)
+        for name, value in resumed.model.state_dict().items()
+    )
 
 
 def test_token_scheduler_preflight_rejects_inconsistent_cursor_without_mutation():
