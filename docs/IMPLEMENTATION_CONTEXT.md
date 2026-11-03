@@ -119,17 +119,21 @@ for file discovery; this document remains the detailed implementation record.
   restore. Its focused lifecycle tests passed (29 tests), and the full CPU
   suite passed (871 tests and 41 subtests) in Python 3.12.14 with torch
   2.9.0+cpu and pytest 9.2.0.
-- PR #56 is open from `fix/26-custom-dataset-state-preflight`, based on verified
-  `main` `ea9dbadfb86f17cd3713b2abcee808677c38e845`. Commit `9ce3125` adds a
-  custom-dataset checkpoint preflight regression: an optional
-  `validate_state_dict` rejection leaves model, optimizer, scheduler, trainer,
-  and dataset position unchanged. The focused lifecycle suite passes (30
-  tests). The local full suite produced 865 passed, 7 failed and 41 subtests:
-  wheel smoke is blocked by missing `pip`, five Phi cases hit the installed
-  Transformers 5.0.0 `PhiConfig` missing `pad_token_id`, and a separate TrainLM
-  model reload test produced mismatched weights. These failures are outside the
-  checkpoint change.
-  GitHub CI and native TPU checkpoint validation are pending.
+- PR #56 rebase-merged at verified `main` SHA
+  `4aa3614858065c6255c4ecc2d0949c24ee715f70`; its GitHub pytest workflow passed
+  in 2m24s. It documents and tests the optional custom-dataset
+  `validate_state_dict` hook, proving rejection leaves trainer and dataset
+  state unchanged. PR #57 is open from
+  `test/27-custom-iterable-resume-parity`, based on that verified SHA. Its
+  custom iterable dataset test compares a two-step checkpoint plus two resumed
+  steps with uninterrupted four-step training and requires exact model-tensor
+  equality. The focused lifecycle and data-resume suites pass (35 tests);
+  compileall and `git diff --check` pass. No full-suite rerun was done for PR
+  #57. The last full local suite, on PR #56's branch, produced 865 passed, 7
+  failed and 41 subtests: missing `pip` blocked the wheel smoke, five Phi cases
+  hit the installed Transformers 5.0.0 `PhiConfig` missing `pad_token_id`,
+  and a separate TrainLM model reload test had mismatched weights. GitHub CI
+  and TPU checkpoint validation for PR #57 are pending.
 - [T1 v5e-1 probe guide](T1_V5E1_PROBE.md) and the
   [Colab-openable Kaggle/Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TorchTPU_T1_v5e1_Probe.ipynb) describe
   synthetic smoke. The latest owner run at source `d3dea896` passed allocation,

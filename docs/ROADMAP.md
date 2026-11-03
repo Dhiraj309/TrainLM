@@ -81,14 +81,16 @@ TorchTPU support. “Implemented” means present in that historical code path;
   PR #55 rebase-merged at verified `main` SHA
   `ea9dbadfb86f17cd3713b2abcee808677c38e845`; GitHub CI passed (run ID
   `41578130077`). It rejects transient trainer fields in saved checkpoint
-  state. Its full CPU suite passed (871 tests and 41 subtests in Python 3.12.14
-  with torch 2.9.0+cpu and pytest 9.2.0). PR #56 is open from
-  `fix/26-custom-dataset-state-preflight`; it covers preflight rejection for a
-  custom stateful dataset. Its focused suite passes (30 tests). The current
-  local full suite has 865 passed, 7 failures and 41 subtests: the wheel smoke
-  lacks `pip`, five Phi cases fail because Transformers 5.0.0's `PhiConfig`
-  lacks `pad_token_id`, and a separate TrainLM model reload test has mismatched
-  weights. TPU checkpoint validation remains pending.
+  state. PR #56 rebase-merged at verified `main` SHA
+  `4aa3614858065c6255c4ecc2d0949c24ee715f70`; GitHub pytest passed in 2m24s.
+  It documents and tests pre-restore validation for custom stateful datasets.
+  PR #57 is open from `test/27-custom-iterable-resume-parity`; 35 focused
+  lifecycle/data-resume tests pass, including exact equality between custom
+  iterable resumed and uninterrupted model weights. The last full local suite
+  had 865 passed, 7 failed and 41 subtests: missing `pip` blocked wheel smoke,
+  five Phi cases hit a Transformers 5.0.0 config issue, and a TrainLM model
+  reload test had mismatched weights. No full-suite rerun or TPU checkpoint
+  validation is claimed for PR #57.
   BF16 and checkpointing remain unvalidated on TPU. T1 source-level
   probes and the explicit `native_tpu` path are implemented; owner-run compile,
   lifecycle and v5e-8 collective evidence remain pending. Hosted Kaggle currently documents

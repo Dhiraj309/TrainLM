@@ -224,6 +224,8 @@ preflight, before TrainLM restores model, optimizer, scheduler, or trainer
 state. This validator must not change the active data position. Without the
 optional validator, the dataset is still loaded during restore, so an error in
 `load_state_dict()` can occur after the trainer state has been applied.
+See the [custom iterable resume regression](tests/test_packed_dataset_resume.py)
+for a CPU example that compares resumed and uninterrupted model weights.
 
 Packed token shards can be downloaded by end-exclusive numeric range. TrainLM
 resolves the requested Hub revision to an immutable commit, uses the standard
