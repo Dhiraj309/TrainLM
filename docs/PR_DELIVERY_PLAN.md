@@ -39,9 +39,10 @@ approvals. T2 integrates the report into backend selection and the public UX.
 
 ## PR-by-PR serial execution
 
-**Status snapshot (2026-11-03):** PR #56 rebase-merged at verified `main` SHA
-`4aa3614858065c6255c4ecc2d0949c24ee715f70`; its GitHub pytest workflow passed
-in 2m24s. PR #55 rebase-merged at `ea9dbadfb86f17cd3713b2abcee808677c38e845`
+**Status snapshot (2026-11-03):** PR #57 rebase-merged at verified `main` SHA
+`e62052ae39d6216bce0dd5aec86fc42d9f10a837`; GitHub pytest passed (run ID
+`41579944075`). PR #56 rebase-merged at `4aa3614858065c6255c4ecc2d0949c24ee715f70`
+and passed GitHub pytest. PR #55 rebase-merged at `ea9dbadfb86f17cd3713b2abcee808677c38e845`
 and passed GitHub CI. PRs #45 and #47 refreshed agent-facing documentation and
 live status; neither added accelerator evidence. PRs #28–#44 established the
 experimental native single-device foundation and the from-scratch CPU
@@ -64,15 +65,15 @@ SHA `6ab2b8c9fcde5895c71d5f8450808b7f5756c520`; CI run #308 passed. PR #55
 rejects transient lifecycle fields in checkpoint trainer state; its full CPU
 suite passed (871 tests and 41 subtests in Python 3.12.14 / torch 2.9.0+cpu /
 pytest 9.2.0), and GitHub CI passed. PR #56 documents/tests custom dataset
-pre-restore validation and is merged at `4aa3614858065c6255c4ecc2d0949c24ee715f70`.
-PR #57 is open from `test/27-custom-iterable-resume-parity`; 35 focused
-lifecycle and data-resume tests pass. The new test proves exact model-tensor
-equality after a custom iterable checkpoint/resume compared with uninterrupted
-training. The last full local suite reports 865 passed, 7 failed, and 41
+pre-restore validation, and PR #57 proves exact custom iterable checkpoint
+resume parity. PR #58 is open from `test/28-custom-iterable-state-validation`;
+its 37 focused lifecycle and data-resume tests cover resume parity and
+pre-mutation rejection of an incompatible dataset identity or cursor. The last
+full local suite reports 865 passed, 7 failed, and 41
 subtests: missing `pip` blocks the wheel smoke, five Phi cases fail because the
 installed Transformers 5.0.0 `PhiConfig` lacks `pad_token_id`, and a separate
 TrainLM model reload test has mismatched weights. No full-suite rerun or TPU
-validation is claimed for PR #57. This does not establish native multi-device
+validation is claimed for PR #58. This does not establish native multi-device
 launch or v5e-8 support. The
 old numbered cards below do not set the current work order; use [the T0–T11
 rebaseline](TORCHTPU_REBASELINE.md), [the handoff](HANDOFF.md), and
