@@ -478,6 +478,60 @@ def test_resume_replays_sequential_loader_without_saved_rng(
     )
 
 
+def test_resume_replays_trainlm_random_sampler_across_epoch_boundary(tmp_path):
+    rows = [
+        {
+            "input_ids": torch.tensor(
+                [(offset + position) % 8 for position in range(4)]
+            ),
+            "labels": torch.tensor(
+                [(offset + position) % 8 for position in range(4)]
+            ),
+        }
+        for offset in range(8)
+    ]
+
+    def make_trainer(output_dir, *, save_steps=None):
+        return TrainLMTrainer(
+            model=TinyModel(),
+            train_dataset=rows,
+            args=TrainLMTrainingArguments(
+                output_dir=output_dir,
+                max_steps=3,
+                sequence_length=4,
+                accelerator="cpu",
+                seed=29,
+                per_device_train_batch_size=2,
+                gradient_accumulation_steps=2,
+                save_steps=save_steps,
+            ),
+        )
+
+    torch.manual_seed(29)
+    uninterrupted = make_trainer(tmp_path / "uninterrupted")
+    uninterrupted.train()
+    expected = deepcopy(uninterrupted.model.state_dict())
+
+    torch.manual_seed(29)
+    first = make_trainer(tmp_path / "source", save_steps=1)
+    assert isinstance(first.engine.train_dataloader.sampler, RandomSampler)
+    first.train()
+    checkpoint = tmp_path / "source" / "checkpoint-1" / "trainer_state.pt"
+    payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    assert payload["trainer"]["micro_step"] == 2
+    assert payload["loader_generator_initial_state"] is not None
+
+    resumed = make_trainer(tmp_path / "resume")
+    state = resumed.train(resume_from_checkpoint=checkpoint)
+
+    assert state.step == 3
+    assert state.micro_step == 6
+    assert all(
+        torch.equal(expected[name], value)
+        for name, value in resumed.model.state_dict().items()
+    )
+
+
 def test_token_scheduler_preflight_rejects_inconsistent_cursor_without_mutation():
     parameter = torch.nn.Parameter(torch.ones(()))
     optimizer = torch.optim.SGD([parameter], lr=0.1)
