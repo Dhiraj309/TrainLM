@@ -40,11 +40,13 @@ gradient weighting, rank-synchronized global token budgets, and global loss
 and progress reporting. Its focused CPU/Gloo and related trainer/runtime/API
 suite passed locally (79 tests in an isolated Python 3.12.14, torch 2.9.0+cpu,
 pytest 9.2.0 environment). This does not establish native multi-device TPU
-support. The active T5 checkpoint slice adds rank-shard checksums and
-coordinated CPU/Gloo failure handling; the full CPU suite passes locally
-(848 tests and 41 subtests), including two-rank checkpoint tests. GitHub CI
-run #296 passed on Python 3.11; native TPU checkpoint validation remains
-pending.
+support. PR #49 merged rank-shard checksums and coordinated CPU/Gloo checkpoint
+failure handling at `01a71f990fc5578b77be6e2e0a84473486fbe488`; GitHub CI runs
+#296 and #297 passed. The current follow-on branch
+`fix/20-trainer-checkpoint-preflight` checks public checkpoint and runtime
+compatibility before restore. The full CPU suite passes locally (850 tests and
+41 subtests);
+GitHub CI and native TPU checkpoint validation remain pending.
 T1 software probes cover shared hardware and capability discovery, dependency
 metadata and process lifecycle, and a distributed entry check; owner-run
 compile, lifecycle and v5e-8 collective evidence remain pending. Use v5e-1 for

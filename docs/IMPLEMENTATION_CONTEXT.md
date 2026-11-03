@@ -54,7 +54,9 @@ for file discovery; this document remains the detailed implementation record.
   `main` SHA `e109ad253754303e44eb6162aacb046c415b990b`; it also adds no runtime
   or TPU evidence. PR #48 rebase-merged distributed token correctness at
   verified `main` SHA `7ae837d085fbbaab9f6c2d3617ff129b89dd454e`; its full
-  Python 3.11 GitHub CI run passed.
+  Python 3.11 GitHub CI run passed. PR #49 rebase-merged checkpoint integrity
+  at verified `main` SHA `01a71f990fc5578b77be6e2e0a84473486fbe488`; CI runs
+  #296 and #297 passed.
 - T0.1 code inventory is recorded in `TORCHTPU_SALVAGE_INVENTORY.md`. The
   mapped legacy cards remain candidates, not an approved implementation queue.
 - Current implementation backend: PyTorch/XLA. Target: native TorchTPU on
@@ -86,17 +88,20 @@ for file discovery; this document remains the detailed implementation record.
   counts too. The final microbatch can take the run past the requested budget.
   Native TorchTPU launch, distributed
   runtime, checkpointing, and v5e-8 training remain unimplemented or unverified.
-- The active T5 slice is on `feat/19-distributed-checkpoint-resume`. Private
-  rank-sharded checkpoints now write schema v3 SHA-256/size metadata and verify
-  the current rank's artifact and payload before restoring state. Distributed
-  shard-write and manifest-publication failures are reduced across ranks;
-  resume preflight verifies each rank's shard before any rank mutates restored
-  state. Legacy v1/v2 loading remains supported. The full CPU suite passed
-  (848 tests and 41 subtests) in the isolated Python 3.12.14, torch 2.9.0+cpu,
-  pytest 9.2.0 environment; this includes two-rank Gloo checkpoint success and
-  coordinated failure cases. GitHub CI and native TPU checkpoint validation
-  are separate gates: PR #49's full Python 3.11 GitHub CI run #296 passed;
-  native TPU checkpoint validation remains pending.
+- T5 private rank-sharded checkpoints now write schema-v3 SHA-256/size
+  metadata and verify each rank's artifact and payload before state restore.
+  Distributed shard-write, manifest-publication and resume-preflight failures
+  are coordinated across ranks; legacy v1/v2 loading remains supported. PR
+  #49 merged at `01a71f990fc5578b77be6e2e0a84473486fbe488`; CI runs #296 and
+  #297 passed. Native TPU checkpoint validation remains pending.
+- The active T5 follow-on is `fix/20-trainer-checkpoint-preflight`. The public
+  trainer loader now preflights checkpoint schema, model keys/shapes, trainer
+  fields, runtime compatibility, RNG state and data-cursor compatibility before
+  restoring model or optimizer state. CPU regressions verify state stays
+  unchanged for incompatible model shapes and runtime metadata. The full CPU
+  suite passed locally (850 tests and 41 subtests) in Python 3.12.14 with torch
+  2.9.0+cpu and pytest 9.2.0. GitHub CI and TPU checkpoint validation are
+  pending.
 - [T1 v5e-1 probe guide](T1_V5E1_PROBE.md) and the
   [Colab-openable Kaggle/Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TorchTPU_T1_v5e1_Probe.ipynb) describe
   synthetic smoke. The latest owner run at source `d3dea896` passed allocation,
