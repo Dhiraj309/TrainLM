@@ -83,8 +83,15 @@
   `4a877768a1c8fcaae654be6c18e88ce374bdce25`; CI passed (run ID
   `41596764595`). It tests exact sequential-loader resume both mid-epoch and
   after the epoch's final row (42 focused checkpoint/API tests passed locally).
+- PR #67 rebase-merged a documentation-only status correction at verified
+  `main` SHA `74ba1d1d8c05a782b29b18c31131347025b7fcef`; CI passed (run ID
+  `41597332118`).
+- PR #68 rebase-merged at verified `main` SHA
+  `f52ad5fbed7ab51335ff04079fafbd5939069ece`; CI passed (run ID
+  `41631351981`). It verifies exact resume with batch size two and two-step
+  gradient accumulation (43 focused checkpoint/API tests passed locally).
 - **Verified base:** `main` at
-  `4a877768a1c8fcaae654be6c18e88ce374bdce25` after PR #66.
+  `f52ad5fbed7ab51335ff04079fafbd5939069ece` after PR #68.
 - **Probe:** [`T1 v5e-1 guide`](T1_V5E1_PROBE.md) and its
   [Kaggle/Colab notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb) test a tiny
   synthetic forward/backward and optimizer update, with optional `torch.compile`.
@@ -92,7 +99,7 @@
   forward/backward and AdamW pass on torch_tpu 0.2.0 with torch 2.14.1+cpu.
   Hardware generation and explicit compile remain unverified.
 - **Validation boundary:** PR #55 passed the full CPU suite (871 tests and 41
-  subtests) in Python 3.12.14 / torch 2.9.0+cpu / pytest 9.2.0. PRs #56–#66
+  subtests) in Python 3.12.14 / torch 2.9.0+cpu / pytest 9.2.0. PRs #56–#68
   passed GitHub pytest. The last full
   local suite reports 865 passed, 7 failed, and 41
   subtests. One failure is the wheel smoke blocked by missing `pip`; five Phi
