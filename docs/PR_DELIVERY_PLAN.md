@@ -50,7 +50,7 @@ CI passed. The active T5 slice on `feat/19-distributed-checkpoint-resume`
 adds v3 rank-shard checksums and coordinated multi-rank save/resume preflight;
 the full CPU suite passes locally (848 tests and 41 subtests in an isolated
 Python 3.12.14 / torch 2.9.0+cpu environment), including two-rank Gloo
-checkpoint tests; GitHub CI is pending.
+checkpoint tests; PR #49's full Python 3.11 GitHub CI run #296 passed.
 This does not establish native multi-device launch or v5e-8 support. The
 old numbered cards below do not set the current work order; use [the T0–T11
 rebaseline](TORCHTPU_REBASELINE.md), [the handoff](HANDOFF.md), and

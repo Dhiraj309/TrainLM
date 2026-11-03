@@ -95,7 +95,8 @@ for file discovery; this document remains the detailed implementation record.
   (848 tests and 41 subtests) in the isolated Python 3.12.14, torch 2.9.0+cpu,
   pytest 9.2.0 environment; this includes two-rank Gloo checkpoint success and
   coordinated failure cases. GitHub CI and native TPU checkpoint validation
-  remain pending.
+  are separate gates: PR #49's full Python 3.11 GitHub CI run #296 passed;
+  native TPU checkpoint validation remains pending.
 - [T1 v5e-1 probe guide](T1_V5E1_PROBE.md) and the
   [Colab-openable Kaggle/Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TorchTPU_T1_v5e1_Probe.ipynb) describe
   synthetic smoke. The latest owner run at source `d3dea896` passed allocation,
