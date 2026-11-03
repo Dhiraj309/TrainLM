@@ -8,7 +8,7 @@ import torch
 from torch.utils.data import RandomSampler, SequentialSampler
 
 from trainlm import TrainLMTrainer, TrainLMTrainingArguments
-from trainlm.training import TrainerCallback
+from trainlm.training import TokenWSD, TrainerCallback
 
 
 class TinyModel(torch.nn.Module):
@@ -110,6 +110,11 @@ def test_facade_resumes_local_training_state(tmp_path):
         ("optimizer_type", "optimizer type does not match"),
         ("scheduler_type", "scheduler type does not match"),
         ("optimizer_groups", "parameter-group count does not match"),
+        ("optimizer_slot_shape", "optimizer slot 'exp_avg' shape"),
+        ("optimizer_step_shape", "optimizer state 'step' must be a non-negative scalar"),
+        ("scheduler_lr_count", "scheduler field 'base_lrs' must contain one value"),
+        ("scheduler_epoch_type", "scheduler field 'last_epoch' has an incompatible value"),
+        ("scheduler_missing_field", "scheduler state is missing required fields"),
     ],
 )
 def test_resume_preflights_optimizer_and_scheduler_before_mutation(
@@ -132,6 +137,18 @@ def test_resume_preflights_optimizer_and_scheduler_before_mutation(
         payload["optimizer_type"] = "torch.optim.SGD"
     elif corruption == "scheduler_type":
         payload["scheduler_type"] = "torch.optim.lr_scheduler.StepLR"
+    elif corruption == "optimizer_slot_shape":
+        parameter_id = next(iter(payload["optimizer"]["state"]))
+        payload["optimizer"]["state"][parameter_id]["exp_avg"] = torch.zeros(1)
+    elif corruption == "optimizer_step_shape":
+        parameter_id = next(iter(payload["optimizer"]["state"]))
+        payload["optimizer"]["state"][parameter_id]["step"] = torch.ones(2)
+    elif corruption == "scheduler_lr_count":
+        payload["scheduler"]["base_lrs"] = []
+    elif corruption == "scheduler_epoch_type":
+        payload["scheduler"]["last_epoch"] = "zero"
+    elif corruption == "scheduler_missing_field":
+        payload["scheduler"].pop("_last_lr")
     else:
         payload["optimizer"]["param_groups"] = []
     torch.save(payload, checkpoint)
@@ -162,6 +179,31 @@ def test_resume_preflights_optimizer_and_scheduler_before_mutation(
     assert resumed.engine.optimizer.state == {}
     assert resumed.scheduler.state_dict() == before_scheduler
     assert resumed.engine.state.step == 0
+
+
+def test_token_scheduler_preflight_rejects_inconsistent_cursor_without_mutation():
+    parameter = torch.nn.Parameter(torch.ones(()))
+    optimizer = torch.optim.SGD([parameter], lr=0.1)
+    scheduler = TokenWSD(
+        optimizer,
+        horizon_tokens=100,
+        warmup_fraction=0.1,
+        stable_fraction=0.5,
+    )
+    state = scheduler.state_dict()
+
+    TrainLMTrainer._preflight_scheduler_state(
+        scheduler, state, optimizer_group_count=1
+    )
+    corrupt = {**state, "stable_end_tokens": 80}
+
+    with pytest.raises(ValueError, match="token scheduler state is inconsistent"):
+        TrainLMTrainer._preflight_scheduler_state(
+            scheduler, corrupt, optimizer_group_count=1
+        )
+
+    assert scheduler.last_tokens == 0
+    assert optimizer.param_groups[0]["lr"] == pytest.approx(0.0)
 
 
 def test_resume_preflights_model_shapes_before_mutating_trainer(tmp_path):
