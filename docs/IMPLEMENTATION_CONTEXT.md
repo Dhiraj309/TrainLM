@@ -108,13 +108,16 @@ for file discovery; this document remains the detailed implementation record.
   `9cf8d4ba0de0b91cc52908d9d98f984b29873a33`; CI run #304 passed. It adds
   preflight checks for common optimizer slot shapes and scalar steps, plus
   scheduler payload fields, ranges, and optimizer-group counts. Branch
-  `fix/23-trainer-state-preflight` validates persisted integer counters and
-  finite learning-rate/loss/gradient-norm metadata before restore. Its focused
-  lifecycle tests passed (25 tests), and the complete CPU suite passed (866
-  tests and 41 subtests) in Python 3.12.14 with torch 2.9.0+cpu and pytest
-  9.2.0; Gloo tests used per-command network permission. `compileall` and
-  `git diff --check` passed; Ruff was unavailable. GitHub CI and native TPU
-  checkpoint validation are pending.
+  PR #53 rebase-merged at verified `main` SHA
+  `8ea810c2e5e54f492cb4e29e0844a74c9935f23e`; CI run #306 passed. It validates
+  persisted counters and finite metrics before restore. Branch
+  `fix/24-packed-dataset-cursor-preflight` adds non-mutating packed cursor
+  validation to checkpoint preflight. Its focused data-resume and lifecycle
+  tests passed (29 tests), and the full CPU suite passed (867 tests and 41
+  subtests) in Python 3.12.14 with torch 2.9.0+cpu and pytest 9.2.0; Gloo tests
+  used per-command network permission. `compileall` and `git diff --check`
+  passed; Ruff was unavailable. GitHub CI and native TPU checkpoint validation
+  are pending.
 - [T1 v5e-1 probe guide](T1_V5E1_PROBE.md) and the
   [Colab-openable Kaggle/Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TorchTPU_T1_v5e1_Probe.ipynb) describe
   synthetic smoke. The latest owner run at source `d3dea896` passed allocation,

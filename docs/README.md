@@ -50,10 +50,13 @@ saved optimizer/scheduler identity and validates optimizer group layout before
 restore. PR #52 rebase-merged at verified `main` SHA
 `9cf8d4ba0de0b91cc52908d9d98f984b29873a33`; CI run #304 passed. It validates
 optimizer slot shapes, scalar steps and scheduler payload invariants before
-restore. Follow-on branch `fix/23-trainer-state-preflight` validates saved
-progress counters and metrics before mutation. Its full CPU suite passed
-(866 tests and 41 subtests in Python 3.12.14 with torch 2.9.0+cpu); GitHub CI
-is pending. Native TPU checkpoint validation remains pending.
+restore. PR #53 rebase-merged at verified `main` SHA
+`8ea810c2e5e54f492cb4e29e0844a74c9935f23e`; CI run #306 passed. It validates
+saved progress counters and metrics before mutation. Follow-on branch
+`fix/24-packed-dataset-cursor-preflight` preflights packed-data cursor identity
+before restoring trainer state. Its full CPU suite passed (867 tests and 41
+subtests in Python 3.12.14 with torch 2.9.0+cpu); GitHub CI is pending. Native
+TPU checkpoint validation remains pending.
 T1 software probes cover shared hardware and capability discovery, dependency
 metadata and process lifecycle, and a distributed entry check; owner-run
 compile, lifecycle and v5e-8 collective evidence remain pending. Use v5e-1 for
