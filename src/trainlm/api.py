@@ -11,6 +11,8 @@ from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from dataclasses import asdict, dataclass, replace
 import json
+import math
+from numbers import Real
 from pathlib import Path
 import re
 from typing import TYPE_CHECKING, Any, Literal
@@ -68,11 +70,47 @@ if TYPE_CHECKING:
 PUBLIC_API_VERSION = "1"
 DEPRECATED_CONFIG_KEYS = {"args": "training_args"}
 _COMMIT_SHA = re.compile(r"[0-9a-f]{40}")
+_PARAMETER_SHAPED_OPTIMIZER_SLOTS = frozenset(
+    {
+        "ax",
+        "exp_avg",
+        "exp_avg_sq",
+        "exp_inf",
+        "grad_avg",
+        "master_param",
+        "max_exp_avg_sq",
+        "momentum_buffer",
+        "prev",
+        "square_avg",
+        "step_size",
+        "sum",
+    }
+)
 
 
 def _checkpoint_component_type(value: Any) -> str:
     component_type = type(value)
     return f"{component_type.__module__}.{component_type.__qualname__}"
+
+
+def _is_finite_real(value: Any) -> bool:
+    if isinstance(value, bool) or not isinstance(value, Real):
+        return False
+    try:
+        return math.isfinite(value)
+    except (OverflowError, TypeError):
+        return False
+
+
+def _is_scheduler_scalar(value: Any) -> bool:
+    if isinstance(value, torch.Tensor):
+        return (
+            value.ndim == 0
+            and not value.is_complex()
+            and value.dtype != torch.bool
+            and bool(torch.isfinite(value).item())
+        )
+    return _is_finite_real(value)
 
 
 def _resolve_hugging_face_model_revision(
@@ -780,6 +818,11 @@ class TrainLMTrainer:
                     "the active trainer."
                 )
         self._preflight_optimizer_state(engine.optimizer, payload["optimizer"])
+        self._preflight_scheduler_state(
+            engine.scheduler,
+            payload["scheduler"],
+            optimizer_group_count=len(engine.optimizer.param_groups),
+        )
         validate_runtime_state = getattr(engine.runtime, "validate_state_dict", None)
         if callable(validate_runtime_state):
             validate_runtime_state(payload["runtime"])
@@ -858,7 +901,7 @@ class TrainLMTrainer:
 
     @staticmethod
     def _preflight_optimizer_state(optimizer: Optimizer, state: Mapping[str, Any]) -> None:
-        """Check PyTorch optimizer group compatibility without loading state."""
+        """Check optimizer groups and common parameter slots without loading."""
         optimizer_state = state.get("state")
         saved_groups = state.get("param_groups")
         if not isinstance(optimizer_state, Mapping) or not isinstance(
@@ -876,6 +919,7 @@ class TrainLMTrainer:
             )
 
         seen_parameter_ids = set()
+        parameter_by_saved_id = {}
         for index, (saved_group, active_group) in enumerate(
             zip(saved_groups, active_groups)
         ):
@@ -898,7 +942,9 @@ class TrainLMTrainer:
                     f"Training checkpoint optimizer group {index} parameter count "
                     "does not match the active optimizer."
                 )
-            for parameter_id in saved_parameters:
+            for parameter_id, parameter in zip(
+                saved_parameters, active_parameters
+            ):
                 try:
                     if parameter_id in seen_parameter_ids:
                         raise ValueError(
@@ -909,6 +955,7 @@ class TrainLMTrainer:
                     raise ValueError(
                         "Training checkpoint optimizer parameter IDs must be hashable."
                     ) from exc
+                parameter_by_saved_id[parameter_id] = parameter
 
             saved_names = saved_group.get("param_names")
             active_names = active_group.get("param_names")
@@ -921,6 +968,154 @@ class TrainLMTrainer:
                     f"Training checkpoint optimizer group {index} parameter names "
                     "do not match the active optimizer."
                 )
+
+        for parameter_id, saved_state in optimizer_state.items():
+            parameter = parameter_by_saved_id.get(parameter_id)
+            if parameter is None or not isinstance(saved_state, Mapping):
+                continue
+            step = saved_state.get("step")
+            if step is not None:
+                if isinstance(step, torch.Tensor):
+                    valid_step = (
+                        step.ndim == 0
+                        and step.dtype != torch.bool
+                        and not step.is_complex()
+                        and bool(torch.isfinite(step).item())
+                        and bool((step >= 0).item())
+                    )
+                else:
+                    valid_step = _is_finite_real(step) and step >= 0
+                if not valid_step:
+                    raise ValueError(
+                        "Training checkpoint optimizer state 'step' must be a "
+                        "non-negative scalar."
+                    )
+            for name in _PARAMETER_SHAPED_OPTIMIZER_SLOTS:
+                if name not in saved_state:
+                    continue
+                value = saved_state[name]
+                if not isinstance(value, torch.Tensor) or value.shape != parameter.shape:
+                    raise ValueError(
+                        f"Training checkpoint optimizer slot {name!r} shape "
+                        "does not match its parameter."
+                    )
+
+    @staticmethod
+    def _preflight_scheduler_state(
+        scheduler: LRScheduler,
+        state: Mapping[str, Any],
+        *,
+        optimizer_group_count: int,
+    ) -> None:
+        """Validate scheduler fields before loading can change trainer state."""
+        current_state = scheduler.state_dict()
+        missing = set(current_state) - state.keys()
+        if missing:
+            missing_names = ", ".join(sorted(str(name) for name in missing))
+            raise ValueError(
+                "Training checkpoint scheduler state is missing required fields: "
+                f"{missing_names}."
+            )
+
+        for name, current_value in current_state.items():
+            saved_value = state[name]
+            if isinstance(current_value, bool):
+                valid = isinstance(saved_value, bool)
+            elif isinstance(current_value, int):
+                valid = isinstance(saved_value, int) and not isinstance(
+                    saved_value, bool
+                )
+            elif isinstance(current_value, float):
+                valid = _is_finite_real(saved_value)
+            elif isinstance(current_value, torch.Tensor):
+                valid = (
+                    isinstance(saved_value, torch.Tensor)
+                    and saved_value.shape == current_value.shape
+                )
+            else:
+                continue
+            if not valid:
+                raise ValueError(
+                    f"Training checkpoint scheduler field {name!r} has an "
+                    "incompatible value."
+                )
+            if name == "_step_count" and saved_value < 0:
+                raise ValueError(
+                    "Training checkpoint scheduler '_step_count' must be "
+                    "non-negative."
+                )
+            if name == "last_epoch" and saved_value < -1:
+                raise ValueError(
+                    "Training checkpoint scheduler 'last_epoch' is invalid."
+                )
+            if name in {"T_max", "total_iters"} and saved_value < 1:
+                raise ValueError(
+                    f"Training checkpoint scheduler field {name!r} must be positive."
+                )
+            if name == "eta_min" and saved_value < 0:
+                raise ValueError(
+                    "Training checkpoint scheduler 'eta_min' must be non-negative."
+                )
+            if name == "start_factor" and not 0 < saved_value <= 1:
+                raise ValueError(
+                    "Training checkpoint scheduler 'start_factor' is invalid."
+                )
+            if name in {"end_factor", "min_lr_ratio"} and not 0 <= saved_value <= 1:
+                raise ValueError(
+                    f"Training checkpoint scheduler field {name!r} is invalid."
+                )
+
+        for name in ("base_lrs", "_last_lr"):
+            if name not in state:
+                continue
+            values = state[name]
+            if not isinstance(values, (list, tuple)) or len(values) != optimizer_group_count:
+                raise ValueError(
+                    f"Training checkpoint scheduler field {name!r} must contain "
+                    "one value per optimizer group."
+                )
+            if any(not _is_scheduler_scalar(value) for value in values):
+                raise ValueError(
+                    f"Training checkpoint scheduler field {name!r} contains "
+                    "an invalid learning rate."
+                )
+
+        if "lr_lambdas" in state:
+            lambdas = state["lr_lambdas"]
+            current_lambdas = current_state.get("lr_lambdas")
+            if (
+                not isinstance(lambdas, (list, tuple))
+                or not isinstance(current_lambdas, (list, tuple))
+                or len(lambdas) != len(current_lambdas)
+                or any(value is not None and not isinstance(value, Mapping) for value in lambdas)
+            ):
+                raise ValueError(
+                    "Training checkpoint scheduler 'lr_lambdas' state is invalid."
+                )
+
+        if "horizon_tokens" in state:
+            integer_fields = (
+                "horizon_tokens",
+                "warmup_tokens",
+                "stable_tokens",
+                "stable_end_tokens",
+                "last_tokens",
+            )
+            values = {name: state.get(name) for name in integer_fields}
+            if any(
+                isinstance(value, bool) or not isinstance(value, int) or value < 0
+                for value in values.values()
+            ) or values["horizon_tokens"] == 0:
+                raise ValueError("Training checkpoint token scheduler state is invalid.")
+            if (
+                values["warmup_tokens"] + values["stable_tokens"]
+                != values["stable_end_tokens"]
+                or values["stable_end_tokens"] > values["horizon_tokens"]
+            ):
+                raise ValueError("Training checkpoint token scheduler state is inconsistent.")
+            ratio = state.get("min_lr_ratio")
+            if not _is_finite_real(ratio) or not 0 <= ratio <= 1:
+                raise ValueError("Training checkpoint token scheduler LR ratio is invalid.")
 
     def _load_training_checkpoint(self, engine: EngineTrainer, source: object):
         self._validate_native_resume_data(engine)
