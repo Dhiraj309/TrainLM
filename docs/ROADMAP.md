@@ -65,12 +65,12 @@ TorchTPU support. “Implemented” means present in that historical code path;
   torch 2.9.0+cpu, pytest 9.2.0 environment (79 tests); PR #48's GitHub CI
   passed. T5 rank-sharded checkpoints now use schema-v3 shard digests and
   coordinated CPU/Gloo write/resume preflight; native TPU validation remains
-  unverified. Public trainer checkpoint preflight is merged. The active branch
+  unverified. Public trainer checkpoint preflight is merged. PR #51 on
   `fix/21-optimizer-scheduler-preflight` records optimizer/scheduler class
   identity and checks optimizer group compatibility before state restore; old
   schema-v1 checkpoints without type metadata remain accepted. Its full CPU
-  suite passed locally (853 tests and 41 subtests); GitHub CI and TPU checkpoint
-  validation are pending.
+  suite passed locally (853 tests and 41 subtests); GitHub CI run #301 passed.
+  TPU checkpoint validation remains pending.
   BF16 and checkpointing remain unvalidated on TPU. T1 source-level
   probes and the explicit `native_tpu` path are implemented; owner-run compile,
   lifecycle and v5e-8 collective evidence remain pending. Hosted Kaggle currently documents

@@ -99,13 +99,13 @@ for file discovery; this document remains the detailed implementation record.
 - PR #50 added public trainer checkpoint preflight for schema, model
   keys/shapes, trainer fields, runtime compatibility, RNG state and data cursor
   before restoring model or optimizer state. It merged at
-  `f57d6d71339753a6a3cee4082a43dfa2f5113017`; CI run #299 passed. The active
-  follow-on branch `fix/21-optimizer-scheduler-preflight` records optimizer and
-  scheduler class identity and checks optimizer parameter-group layout before
-  restore, while accepting earlier schema-v1 checkpoints without the optional
-  type metadata. The full CPU suite passed locally (853 tests and 41 subtests)
-  in Python 3.12.14 with torch 2.9.0+cpu and pytest 9.2.0. GitHub CI and native
-  TPU checkpoint validation are pending.
+  `f57d6d71339753a6a3cee4082a43dfa2f5113017`; CI run #299 passed. Follow-on
+  branch `fix/21-optimizer-scheduler-preflight` records optimizer and scheduler
+  class identity and checks optimizer parameter-group layout before restore,
+  while accepting earlier schema-v1 checkpoints without the optional type
+  metadata. The full CPU suite passed locally (853 tests and 41 subtests) in
+  Python 3.12.14 with torch 2.9.0+cpu and pytest 9.2.0; GitHub CI run #301
+  passed. Native TPU checkpoint validation remains pending.
 - [T1 v5e-1 probe guide](T1_V5E1_PROBE.md) and the
   [Colab-openable Kaggle/Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TorchTPU_T1_v5e1_Probe.ipynb) describe
   synthetic smoke. The latest owner run at source `d3dea896` passed allocation,

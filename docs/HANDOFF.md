@@ -47,11 +47,12 @@
 - **Current T5 checkpoint work:** PR #49 added schema-v3 shard checksums and
   coordinated distributed write/resume preflight; PR #50 added public trainer
   checkpoint preflight before state restore. The active branch
-  `fix/21-optimizer-scheduler-preflight` records optimizer/scheduler class
+  Follow-on branch `fix/21-optimizer-scheduler-preflight` records optimizer/scheduler class
   identity and checks optimizer parameter-group compatibility before mutation.
   Legacy schema-v1 checkpoints without class metadata remain loadable. The full
   CPU suite passed (853 tests and 41 subtests in Python 3.12.14 with torch
-  2.9.0+cpu); GitHub CI and native TPU checkpoint validation are pending.
+  2.9.0+cpu); GitHub CI run #301 passed. Native TPU checkpoint validation
+  remains pending.
 - **Older open PR stack:** PRs #22–#27 remain open on the older M8 branch chain.
   They are more than 250 commits behind current `main`; PR #22 is merge-conflicted and
   its recorded CPU run had 335 passed / 6 failed. Keep them separate until

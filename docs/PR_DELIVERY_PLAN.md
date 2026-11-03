@@ -49,10 +49,10 @@ loss/progress reporting are merged; 79 focused CPU tests and the full GitHub
 CI passed. PR #49 added schema-v3 rank-shard checksums and coordinated
 multi-rank save/resume preflight; its full Python 3.11 GitHub CI runs #296 and
 #297 passed. PR #50 added public checkpoint preflight and passed CI run #299.
-The active follow-on on `fix/21-optimizer-scheduler-preflight` records optimizer
-and scheduler type metadata and validates optimizer group layout before state
+PR #51 on `fix/21-optimizer-scheduler-preflight` records optimizer and
+scheduler type metadata and validates optimizer group layout before state
 restore. The full CPU suite passed locally (853 tests and 41 subtests in Python
-3.12.14 / torch 2.9.0+cpu); GitHub CI is pending.
+3.12.14 / torch 2.9.0+cpu); GitHub CI run #301 passed.
 This does not establish native multi-device launch or v5e-8 support. The
 old numbered cards below do not set the current work order; use [the T0–T11
 rebaseline](TORCHTPU_REBASELINE.md), [the handoff](HANDOFF.md), and
