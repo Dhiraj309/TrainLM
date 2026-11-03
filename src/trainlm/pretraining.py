@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+import json
 import math
 from numbers import Real
 from pathlib import Path
@@ -57,6 +58,8 @@ class TrainLMPretrainingConfig:
     logging_steps: int = 10
     max_eval_batches: int = 20
     seed: int = 42
+    model_type: str = "gpt2"
+    model_config_overrides: Mapping[str, Any] | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "output_dir", Path(self.output_dir).expanduser())
@@ -97,6 +100,45 @@ class TrainLMPretrainingConfig:
             raise ValueError(
                 "tokenizer_vocab_size must fit the packed uint16 token format "
                 "(at most 65536)."
+            )
+        if (not isinstance(self.model_type, str)
+                or not re.fullmatch(r"[a-z][a-z0-9_-]{0,63}", self.model_type)):
+            raise ValueError("model_type must be a Hugging Face model type name.")
+        if self.model_config_overrides is not None:
+            if not isinstance(self.model_config_overrides, Mapping):
+                raise ValueError("model_config_overrides must be a mapping.")
+            overrides = dict(self.model_config_overrides)
+            if any(not isinstance(key, str) for key in overrides):
+                raise ValueError("model_config_overrides keys must be strings.")
+            reserved = {
+                "model_type", "vocab_size", "pad_token_id", "bos_token_id",
+                "eos_token_id",
+            }
+            conflicting = reserved.intersection(overrides)
+            if conflicting:
+                names = ", ".join(sorted(conflicting))
+                raise ValueError(
+                    "model_config_overrides cannot set tokenizer-owned fields: "
+                    f"{names}. TrainLM derives vocabulary and special-token IDs."
+                )
+            try:
+                overrides = json.loads(json.dumps(overrides, allow_nan=False))
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    "model_config_overrides must contain JSON-compatible values."
+                ) from exc
+            object.__setattr__(self, "model_config_overrides", overrides)
+        else:
+            object.__setattr__(self, "model_config_overrides", {})
+        if self.model_type != "gpt2" and (
+            self.model_embedding_size != 768
+            or self.model_layers != 6
+            or self.model_attention_heads != 12
+        ):
+            raise ValueError(
+                "model_embedding_size, model_layers, and model_attention_heads "
+                "configure only the default GPT-2 model; use "
+                "model_config_overrides for other Hugging Face architectures."
             )
         if self.model_embedding_size % self.model_attention_heads:
             raise ValueError(
@@ -233,35 +275,45 @@ def _train_byte_level_tokenizer(
     return tokenizer, seen
 
 
-def _scratch_gpt2_config(
+def _scratch_huggingface_config(
+    config: TrainLMPretrainingConfig,
     *,
     vocab_size: int,
-    sequence_length: int,
-    embedding_size: int,
-    layers: int,
-    attention_heads: int,
     pad_token_id: int,
     bos_token_id: int,
     eos_token_id: int,
 ):
-    """Build a GPT-2 configuration locally, without pretrained weights."""
-    if min(vocab_size, sequence_length, embedding_size, layers, attention_heads) < 1:
-        raise ValueError("Scratch GPT-2 dimensions and vocabulary must be positive.")
-    if embedding_size % attention_heads:
-        raise ValueError("model embedding size must be divisible by attention heads.")
-    from transformers import GPT2Config
+    """Build a registered Transformers config without loading model weights."""
+    from transformers import AutoConfig
 
-    return GPT2Config(
+    architecture_values: dict[str, Any] = {}
+    if config.model_type == "gpt2":
+        architecture_values.update(
+            n_positions=config.sequence_length,
+            n_ctx=config.sequence_length,
+            n_embd=config.model_embedding_size,
+            n_layer=config.model_layers,
+            n_head=config.model_attention_heads,
+        )
+    architecture_values.update(config.model_config_overrides or {})
+    # The trained tokenizer is authoritative for vocabulary and token IDs.
+    architecture_values.update(
         vocab_size=vocab_size,
-        n_positions=sequence_length,
-        n_ctx=sequence_length,
-        n_embd=embedding_size,
-        n_layer=layers,
-        n_head=attention_heads,
         pad_token_id=pad_token_id,
         bos_token_id=bos_token_id,
         eos_token_id=eos_token_id,
     )
+    model_config = AutoConfig.for_model(config.model_type, **architecture_values)
+
+    context_limit = getattr(model_config, "max_position_embeddings", None)
+    if not isinstance(context_limit, int):
+        context_limit = getattr(model_config, "n_positions", None)
+    if isinstance(context_limit, int) and config.sequence_length > context_limit:
+        raise ValueError(
+            f"sequence_length={config.sequence_length} exceeds the selected "
+            f"{config.model_type} context limit ({context_limit})."
+        )
+    return model_config
 
 
 def _validate_scratch_dataset_source(
@@ -470,12 +522,9 @@ def _prepare_scratch_training(config: TrainLMPretrainingConfig):
         eval_dataset.close()
         raise ValueError("The validation split does not contain a full sequence.")
 
-    model_config = _scratch_gpt2_config(
+    model_config = _scratch_huggingface_config(
+        config,
         vocab_size=len(tokenizer),
-        sequence_length=config.sequence_length,
-        embedding_size=config.model_embedding_size,
-        layers=config.model_layers,
-        attention_heads=config.model_attention_heads,
         pad_token_id=tokenizer.pad_token_id,
         bos_token_id=tokenizer.bos_token_id,
         eos_token_id=tokenizer.eos_token_id,
