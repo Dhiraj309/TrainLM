@@ -389,8 +389,14 @@ def test_resume_rejects_random_sampler_without_saved_rng_before_mutation(tmp_pat
         (2, 1, 4, 1, 1),
         (6, 4, 4, 1, 1),
         (2, 1, 6, 2, 2),
+        (2, 1, 5, 2, 2),
     ],
-    ids=["within-epoch", "at-epoch-boundary", "batched-gradient-accumulation"],
+    ids=[
+        "within-epoch",
+        "at-epoch-boundary",
+        "batched-gradient-accumulation",
+        "partial-tail-with-gradient-accumulation",
+    ],
 )
 def test_resume_replays_sequential_loader_without_saved_rng(
     tmp_path,
@@ -417,7 +423,10 @@ def test_resume_replays_sequential_loader_without_saved_rng(
             rows,
             batch_size=batch_size,
             sampler=SequentialSampler(rows),
+            drop_last=False,
         )
+
+    assert len(make_loader()) == (row_count + batch_size - 1) // batch_size
 
     def make_trainer(output_dir, *, save_steps=None):
         return TrainLMTrainer(
