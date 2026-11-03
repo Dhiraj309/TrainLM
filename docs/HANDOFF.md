@@ -33,8 +33,11 @@
 - PR #51 rebase-merged optimizer/scheduler identity and parameter-group
   preflight at verified `main` SHA
   `c63e6903767f3a2aab2ff733e6248ff0c4e4bd3b`; CI run #302 passed.
+- PR #52 rebase-merged optimizer slot and scheduler payload preflight at
+  verified `main` SHA `9cf8d4ba0de0b91cc52908d9d98f984b29873a33`; CI run #304
+  passed.
 - **Verified base:** `main` at
-  `c63e6903767f3a2aab2ff733e6248ff0c4e4bd3b` after PR #51.
+  `9cf8d4ba0de0b91cc52908d9d98f984b29873a33` after PR #52.
 - **Probe:** [`T1 v5e-1 guide`](T1_V5E1_PROBE.md) and its
   [Kaggle/Colab notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb) test a tiny
   synthetic forward/backward and optimizer update, with optional `torch.compile`.
@@ -43,21 +46,22 @@
   Hardware generation and explicit compile remain unverified.
 - **Validation boundary:** the temporary isolated Python 3.12.14 / torch
   2.9.0+cpu / pytest 9.2.0 environment passed the current full CPU suite
-  (859 tests and 41 subtests), including the 39 focused checkpoint/lifecycle
-  tests. `compileall` and `git diff --check` passed; Ruff was unavailable.
-  GitHub CI for the current branch and TPU checkpoint validation are pending.
+  (866 tests and 41 subtests), including 25 focused lifecycle tests. Gloo tests
+  used per-command network permission. `compileall` and `git diff --check`
+  passed; Ruff was unavailable. GitHub CI for the current branch and TPU
+  checkpoint validation are pending.
   CPU tests, standalone device probes, and complete TPU training are separate
   evidence; no TPU generation, convergence, or performance result is claimed.
 - **Current T5 checkpoint work:** PR #49 added schema-v3 shard checksums and
   coordinated distributed write/resume preflight; PR #50 added public trainer
   checkpoint preflight before state restore. PR #51 records optimizer/scheduler
   class identity and checks optimizer parameter-group compatibility before
-  mutation; legacy schema-v1 checkpoints
-  without class metadata remain loadable. The active branch
-  `fix/22-optimizer-slot-state-preflight` adds preflight checks for common
-  optimizer slot shapes and scalar steps, plus scheduler payload structure and
-  invariants. The complete CPU suite passed locally (859 tests and 41
-  subtests); remote CI and native TPU checkpoint validation remain pending.
+  mutation; legacy schema-v1 checkpoints without class metadata remain
+  loadable. PR #52 adds preflight checks for common optimizer slot shapes and
+  scalar steps, plus scheduler payload structure and invariants. Active branch
+  `fix/23-trainer-state-preflight` validates progress counters and metrics
+  before state mutation. Its complete CPU suite passed locally (866 tests and
+  41 subtests); remote CI and native TPU checkpoint validation remain pending.
 - **Older open PR stack:** PRs #22–#27 remain open on the older M8 branch chain.
   They are more than 250 commits behind current `main`; PR #22 is merge-conflicted and
   its recorded CPU run had 335 passed / 6 failed. Keep them separate until

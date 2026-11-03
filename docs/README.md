@@ -47,11 +47,13 @@ failure handling at `01a71f990fc5578b77be6e2e0a84473486fbe488`; GitHub CI runs
 rebase-merged at verified `main` SHA
 `c63e6903767f3a2aab2ff733e6248ff0c4e4bd3b`; CI run #302 passed. It records
 saved optimizer/scheduler identity and validates optimizer group layout before
-restore. Follow-on branch `fix/22-optimizer-slot-state-preflight` validates
-common optimizer slot shapes, scalar steps and scheduler payload invariants
-before restore. Its complete CPU suite passed locally (859 tests and 41
-subtests in Python 3.12.14 with torch 2.9.0+cpu); GitHub CI is pending. Native
-TPU checkpoint validation remains pending.
+restore. PR #52 rebase-merged at verified `main` SHA
+`9cf8d4ba0de0b91cc52908d9d98f984b29873a33`; CI run #304 passed. It validates
+optimizer slot shapes, scalar steps and scheduler payload invariants before
+restore. Follow-on branch `fix/23-trainer-state-preflight` validates saved
+progress counters and metrics before mutation. Its full CPU suite passed
+(866 tests and 41 subtests in Python 3.12.14 with torch 2.9.0+cpu); GitHub CI
+is pending. Native TPU checkpoint validation remains pending.
 T1 software probes cover shared hardware and capability discovery, dependency
 metadata and process lifecycle, and a distributed entry check; owner-run
 compile, lifecycle and v5e-8 collective evidence remain pending. Use v5e-1 for

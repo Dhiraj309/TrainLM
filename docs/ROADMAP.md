@@ -70,11 +70,13 @@ TorchTPU support. “Implemented” means present in that historical code path;
   `c63e6903767f3a2aab2ff733e6248ff0c4e4bd3b`; CI run #302 passed. It records
   optimizer/scheduler class identity and checks optimizer group compatibility
   before state restore; old schema-v1 checkpoints without type metadata remain
-  accepted. The follow-on branch `fix/22-optimizer-slot-state-preflight`
-  validates common optimizer slot shapes and scalar steps plus scheduler
-  payload invariants before restore. Its complete CPU suite passed locally
-  (859 tests and 41 subtests in Python 3.12.14 with torch 2.9.0+cpu); GitHub
-  CI is pending. TPU checkpoint validation remains pending.
+  accepted. PR #52 rebase-merged at verified `main` SHA
+  `9cf8d4ba0de0b91cc52908d9d98f984b29873a33`; CI run #304 passed. It validates
+  optimizer slot shapes and scalar steps plus scheduler payload invariants
+  before restore. Follow-on branch `fix/23-trainer-state-preflight` validates
+  saved progress counters and metrics before mutation. Its full CPU suite
+  passed (866 tests and 41 subtests in Python 3.12.14 with torch 2.9.0+cpu);
+  GitHub CI is pending. TPU checkpoint validation remains pending.
   BF16 and checkpointing remain unvalidated on TPU. T1 source-level
   probes and the explicit `native_tpu` path are implemented; owner-run compile,
   lifecycle and v5e-8 collective evidence remain pending. Hosted Kaggle currently documents
