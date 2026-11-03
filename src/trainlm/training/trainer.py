@@ -72,6 +72,7 @@ class Trainer:
         self._checkpoint_loader = checkpoint_loader
 
         self._train_iterator: Iterator | None = None
+        self._global_tokens_seen: int | None = None
 
     def prepare(self) -> TrainerState:
         """Initialize backend resources and enter the prepared phase."""
@@ -113,6 +114,7 @@ class Trainer:
         self.state.is_training = True
 
         try:
+            self._initialize_global_token_budget()
             self.model.train()
 
             self.runtime.on_train_begin()
@@ -207,10 +209,77 @@ class Trainer:
             return True
         if (
             trainer.max_tokens is not None
-            and self.state.tokens_seen >= trainer.max_tokens
+            and (
+                self._global_tokens_seen
+                if self._global_tokens_seen is not None
+                else self.state.tokens_seen
+            )
+            >= trainer.max_tokens
         ):
             return True
         return False
+
+    def _initialize_global_token_budget(self) -> None:
+        """Restore the global token counter from per-rank checkpoint state."""
+
+        if self.config.trainer.max_tokens is None:
+            self._global_tokens_seen = None
+            return
+        self._global_tokens_seen = self._sum_tokens(self.state.tokens_seen)
+
+    def _sum_tokens(self, local_tokens: int) -> int:
+        """Return a global token count while preserving single-rank behavior."""
+
+        if not self.runtime.is_distributed:
+            return local_tokens
+        value = torch.tensor(
+            local_tokens,
+            dtype=torch.int64,
+            device=self.runtime.device,
+        )
+        return int(self.runtime.reduce_sum(value).item())
+
+    def _sum_progress_counters(self) -> tuple[int, int]:
+        """Return global progress values for distributed logging snapshots."""
+
+        if not self.runtime.is_distributed:
+            return self.state.tokens_seen, self.state.samples_seen
+        counters = torch.tensor(
+            (self.state.tokens_seen, self.state.samples_seen),
+            dtype=torch.int64,
+            device=self.runtime.device,
+        )
+        totals = self.runtime.reduce_sum(counters)
+        return int(totals[0].item()), int(totals[1].item())
+
+    def _global_microbatch_tokens(self, *, local_tokens: int, exact: bool) -> int:
+        """Synchronize token counts and validate exact global-budget inputs."""
+
+        if not self.runtime.is_distributed:
+            if not exact:
+                raise ValueError(
+                    "max_tokens stopping requires exact supervised-token counts."
+                )
+            return local_tokens
+
+        counts = torch.tensor(
+            (local_tokens, int(exact)),
+            dtype=torch.int64,
+            device=self.runtime.device,
+        )
+        reduced = self.runtime.reduce_sum(counts)
+        global_tokens = int(reduced[0].item())
+        exact_ranks = int(reduced[1].item())
+        if exact_ranks != self.runtime.world_size:
+            raise ValueError(
+                "Distributed max_tokens stopping requires exact supervised-token "
+                "counts on every rank."
+            )
+        if global_tokens <= 0:
+            raise ValueError(
+                "Distributed max_tokens update produced no supervised tokens."
+            )
+        return global_tokens
 
     def _emit_step_metrics(self) -> None:
         """Emit a sparse host-only snapshot according to logging policy."""
@@ -227,10 +296,11 @@ class Trainer:
             raise ValueError("logging.log_every_steps must be positive.")
         if self.state.step % interval != 0:
             return
+        tokens_seen, samples_seen = self._sum_progress_counters()
         metrics: dict[str, float] = {
             "step": float(self.state.step),
-            "tokens_seen": float(self.state.tokens_seen),
-            "samples_seen": float(self.state.samples_seen),
+            "tokens_seen": float(tokens_seen),
+            "samples_seen": float(samples_seen),
             "learning_rate": self.state.learning_rate,
         }
         if self.state.loss is not None:
@@ -304,17 +374,29 @@ class Trainer:
         loss_numerator: torch.Tensor,
         exact_tokens: bool,
         grad_norm: torch.Tensor | None,
+        global_loss_numerator: torch.Tensor | None = None,
+        global_tokens: int | None = None,
+        global_sequences: int | None = None,
     ) -> None:
         """Commit one optimizer update after all microbatches are reduced."""
 
         self.state.step += 1
         self.state.tokens_seen += total_tokens
         self.state.samples_seen += total_sequences
-        self.state.global_batch_size = total_sequences
+        self.state.global_batch_size = (
+            global_sequences if global_sequences is not None else total_sequences
+        )
         if self._should_materialize_loss():
-            loss_value = loss_numerator.detach().item()
+            if global_loss_numerator is not None and global_tokens is not None:
+                loss_value = global_loss_numerator.detach().item()
+                loss_denominator = global_tokens
+            else:
+                loss_value = loss_numerator.detach().item()
+                loss_denominator = total_tokens
             self.state.loss = (
-                loss_value / total_tokens if exact_tokens else loss_value
+                loss_value / loss_denominator
+                if exact_tokens and loss_denominator > 0
+                else loss_value
             )
             self.state.grad_norm = (
                 float(grad_norm.detach().item()) if grad_norm is not None else None
@@ -355,6 +437,18 @@ class Trainer:
             self.state.micro_step += 1
             micro_steps += 1
             token_count = result.tokens.supervised_tokens
+            stop_after_microbatch = False
+            max_tokens = self.config.trainer.max_tokens
+            if max_tokens is not None:
+                global_microbatch_tokens = self._global_microbatch_tokens(
+                    local_tokens=token_count,
+                    exact=result.tokens.exact,
+                )
+                if self._global_tokens_seen is None:
+                    raise RuntimeError("Global token budget was not initialized.")
+                self._global_tokens_seen += global_microbatch_tokens
+                stop_after_microbatch = self._global_tokens_seen >= max_tokens
+
             if not result.tokens.exact or token_count <= 0:
                 if accumulation_steps != 1:
                     raise ValueError(
@@ -378,15 +472,42 @@ class Trainer:
                 else loss_numerator + detached_weighted_loss
             )
 
-            if (
-                self.config.trainer.max_tokens is not None
-                and self.state.tokens_seen + total_tokens
-                >= self.config.trainer.max_tokens
-            ):
+            if stop_after_microbatch:
                 break
 
         if loss_numerator is None:
             raise RuntimeError("Training update produced no loss.")
+        global_loss_numerator = None
+        global_token_tensor = None
+        global_tokens = None
+        global_sequences = None
+        if (
+            self.runtime.is_distributed
+            and exact_tokens
+            and getattr(
+                self.runtime,
+                "mean_reduces_gradients_before_clipping",
+                False,
+            )
+        ):
+            detached_loss_numerator = loss_numerator.detach()
+            local_update_stats = torch.stack(
+                (
+                    detached_loss_numerator.to(dtype=torch.float32),
+                    detached_loss_numerator.new_tensor(
+                        float(total_tokens), dtype=torch.float32
+                    ),
+                    detached_loss_numerator.new_tensor(
+                        float(total_sequences), dtype=torch.float32
+                    ),
+                )
+            )
+            global_update_stats = self.runtime.reduce_sum(local_update_stats)
+            global_loss_numerator = global_update_stats[0]
+            global_token_tensor = global_update_stats[1]
+            global_tokens = int(global_update_stats[1].item())
+            global_sequences = int(global_update_stats[2].item())
+
         observe_accumulation = getattr(
             self.runtime,
             "observe_accumulation_steps",
@@ -397,10 +518,25 @@ class Trainer:
         if exact_tokens:
             if total_tokens <= 0:
                 raise ValueError("Training update produced no supervised tokens.")
-            self.runtime.scale_gradients(
-                self.model.parameters(),
-                1.0 / total_tokens,
-            )
+            if (
+                self.runtime.is_distributed
+                and getattr(
+                    self.runtime,
+                    "mean_reduces_gradients_before_clipping",
+                    False,
+                )
+            ):
+                # Convert each rank's accumulated loss sum into the global
+                # supervised-token mean before a backend's pre-clip gradient
+                # average: (world_size / global_tokens) * mean_r(local_sum).
+                if global_token_tensor is None:
+                    raise RuntimeError(
+                        "Distributed token totals were not reduced before scaling."
+                    )
+                gradient_scale = self.runtime.world_size / global_token_tensor
+            else:
+                gradient_scale = 1.0 / total_tokens
+            self.runtime.scale_gradients(self.model.parameters(), gradient_scale)
 
         grad_norm = self.runtime.clip_gradients(
             self.model.parameters(),
@@ -422,6 +558,9 @@ class Trainer:
             loss_numerator=loss_numerator,
             exact_tokens=exact_tokens,
             grad_norm=grad_norm,
+            global_loss_numerator=global_loss_numerator,
+            global_tokens=global_tokens,
+            global_sequences=global_sequences,
         )
         self._advance_scheduler(total_tokens=total_tokens)
         self.state.learning_rate = self._current_learning_rate()
@@ -433,10 +572,21 @@ class Trainer:
 
         step_tokens = getattr(self.scheduler, "step_tokens", None)
         if callable(step_tokens):
-            # State accounting is rank-local; the schedule horizon describes
-            # the global training corpus. Replicated DP uses equal token counts.
-            world_size = getattr(self.runtime, "world_size", 1)
-            step_tokens(self.state.tokens_seen * world_size)
+            # Use exact global counts when the backend advertises mean-reduced
+            # gradients or when global token-budget tracking is active.
+            global_tokens_seen = getattr(self, "_global_tokens_seen", None)
+            if global_tokens_seen is None:
+                if getattr(
+                    self.runtime,
+                    "mean_reduces_gradients_before_clipping",
+                    False,
+                ):
+                    global_tokens_seen = self._sum_tokens(self.state.tokens_seen)
+                else:
+                    global_tokens_seen = (
+                        self.state.tokens_seen * self.runtime.world_size
+                    )
+            step_tokens(global_tokens_seen)
         else:
             del total_tokens
             self.scheduler.step()

@@ -31,6 +31,14 @@ convergence evidence. PR #45 rebase-merged at
 `d983408221b92d631aea817bee7539e07de1bbf5`; it adds agent-facing documentation
 and package metadata, not runtime support or new TPU evidence. These checks do
 not certify TPU support or end-to-end convergence. PR #20 closed T0.2.
+PR #47 subsequently aligned current status pages at
+`e109ad253754303e44eb6162aacb046c415b990b`; it also adds no runtime or TPU
+evidence. The current CPU/Gloo correctness slice covers global valid-token
+gradient weighting, rank-synchronized global token budgets, and global loss
+and progress reporting. Its focused CPU/Gloo and related trainer/runtime/API
+suite passed locally (79 tests in an isolated Python 3.12.14, torch 2.9.0+cpu,
+pytest 9.2.0 environment); GitHub CI remains pending. This does not establish
+native multi-device TPU support.
 T1 software probes cover shared hardware and capability discovery, dependency
 metadata and process lifecycle, and a distributed entry check; owner-run
 compile, lifecycle and v5e-8 collective evidence remain pending. Use v5e-1 for

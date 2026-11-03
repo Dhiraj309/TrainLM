@@ -9,6 +9,7 @@ from types import MappingProxyType
 from typing import Any
 
 from torch import nn
+from torch.nn.parallel import DistributedDataParallel
 
 
 class ForwardSignatureError(ValueError):
@@ -69,8 +70,16 @@ class ForwardBatchDispatcher:
     ) -> "ForwardBatchDispatcher":
         if not isinstance(model, nn.Module):
             raise TypeError("model must be a torch.nn.Module.")
+        signature_model = (
+            model.module
+            if isinstance(model, DistributedDataParallel)
+            else model
+        )
         try:
-            signature = inspect.signature(model.forward, follow_wrapped=True)
+            signature = inspect.signature(
+                signature_model.forward,
+                follow_wrapped=True,
+            )
         except (TypeError, ValueError) as exc:
             raise ForwardSignatureError(
                 f"Cannot inspect {type(model).__name__}.forward."

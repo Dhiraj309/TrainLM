@@ -49,7 +49,15 @@ TorchTPU support. “Implemented” means present in that historical code path;
   separately from TPU validation. PR #45 rebase-merged agent-discoverability
   documentation at verified `main` SHA
   `d983408221b92d631aea817bee7539e07de1bbf5`; it adds no accelerator
-  evidence. BF16 and checkpointing remain unvalidated on TPU. T1 source-level
+  evidence. PR #47 aligned current status pages at verified `main` SHA
+  `e109ad253754303e44eb6162aacb046c415b990b`; it adds no runtime behavior.
+  CPU/Gloo regressions and backend-gated logic now cover global valid-token
+  gradient weighting, synchronized distributed `max_tokens` stopping, and
+  global loss/progress reporting. The focused CPU/Gloo and related
+  trainer/runtime/API suite passed locally in an isolated Python 3.12.14,
+  torch 2.9.0+cpu, pytest 9.2.0 environment (79 tests); GitHub CI is pending.
+  Native TPU multi-device training remains unverified.
+  BF16 and checkpointing remain unvalidated on TPU. T1 source-level
   probes and the explicit `native_tpu` path are implemented; owner-run compile,
   lifecycle and v5e-8 collective evidence remain pending. Hosted Kaggle currently documents
   v5e-8 and hosted Colab TPU v2, so neither is the v5e-1 target; use a

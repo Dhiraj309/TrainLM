@@ -20,6 +20,18 @@ SHA `d983408221b92d631aea817bee7539e07de1bbf5`. It did not close a T0–T11
 gate or add runtime/accelerator evidence. The active implementation path
 remains experimental and explicit while owner-run T1 evidence is pending.
 
+PR #47 aligned the current handoff and roadmap status at verified `main` SHA
+`e109ad253754303e44eb6162aacb046c415b990b`; it did not change runtime support.
+The current source-level distributed slice implements global valid-token
+gradient normalization for pre-clipping gradient-averaging backends and
+global `max_tokens` stopping at matching microbatch boundaries. It also reduces
+loss/progress metrics globally while preserving per-rank checkpoint counters.
+Two CPU/Gloo regressions cover gradient parity and rank-consistent stopping
+with global reports. The focused CPU/Gloo and related trainer/runtime/API
+suite passed locally in an isolated Python 3.12.14, torch 2.9.0+cpu, pytest
+9.2.0 environment (79 tests); GitHub CI remains pending. Native multi-device
+TPU execution remains gated.
+
 Owner direction allows CPU-verifiable implementation to proceed while scarce
 TPU slots are pending. A provisional, explicit `accelerator="native_tpu"`
 single-device path now reuses the portable engine; this does not close T1 or
@@ -74,7 +86,7 @@ reversible.
 | Item | Verified/recorded context | Required next action |
 |---|---|---|
 | Repository | `Dhiraj309/TrainLM` | Verify checkout, branch, origin, permissions |
-| Current base | PR #45 rebase-merged; verified `main` SHA `d983408221b92d631aea817bee7539e07de1bbf5` | Select a scoped deliverable from current T1/T2/T3 evidence before opening the next implementation PR |
+| Current base | PR #47 rebase-merged; verified `main` SHA `e109ad253754303e44eb6162aacb046c415b990b` | Continue the owner-approved CPU/Gloo T4 correctness slice; keep TPU execution gated |
 | Legacy integration | PR #18 merged into `main` on 2026-10-28; merge commit `23959d29434fd2ae3f78b20469e1d61c6b1e18c9` | T0.1 inventory is complete; XLA-era PR cards are not the active queue |
 | Earlier salvage | PR #16 was merged into PR #18, which is now merged into `main` | Inventory its code as part of the merged tree; do not merge it again |
 | Existing TPU backend | Primarily PyTorch/XLA with historical measurements | Classify reusable vs XLA-specific components |
