@@ -35,7 +35,7 @@ def _config(output_dir: Path, **overrides) -> TrainLMPretrainingConfig:
 def test_pretraining_config_requires_immutable_revision_and_disjoint_splits(tmp_path):
     with pytest.raises(ValueError, match="40-character commit SHA"):
         _config(tmp_path, dataset_revision="main")
-    with pytest.raises(ValueError, match="must differ"):
+    with pytest.raises(ValueError, match="must be distinct"):
         _config(tmp_path, validation_split="train")
     with pytest.raises(ValueError, match="divisible"):
         _config(tmp_path, model_embedding_size=15)

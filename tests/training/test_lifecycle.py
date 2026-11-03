@@ -35,6 +35,17 @@ def test_normal_training_finalizes_resources():
     assert state.failure is None
 
 
+def test_finalized_trainer_can_evaluate_without_reopening_training():
+    trainer = create_trainer()
+    state = trainer.train()
+
+    metrics = trainer.evaluate()
+
+    assert "eval_loss" in metrics
+    assert state.phase == TrainerPhase.FINALIZED
+    assert trainer.state.phase == TrainerPhase.FINALIZED
+
+
 class StopAfterFirstStep(TrainerCallback):
     def on_step_end(self, state, control):
         del state

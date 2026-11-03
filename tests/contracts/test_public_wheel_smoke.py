@@ -51,6 +51,7 @@ assert set(trainlm.__all__) == {{
     'HuggingFaceShardSpec',
     'PUBLIC_API_VERSION',
     'PackedBinDataset',
+    'TrainLMPretrainingConfig',
     'TrainLMTrainer',
     'TrainLMTrainingArguments',
 }}

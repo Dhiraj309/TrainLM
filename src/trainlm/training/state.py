@@ -101,6 +101,7 @@ class TrainerState:
                 TrainerPhase.CREATED,
                 TrainerPhase.PREPARED,
                 TrainerPhase.TRAINING,
+                TrainerPhase.FINALIZED,
                 TrainerPhase.FAILED,
             },
             TrainerPhase.SAVING: {
@@ -119,7 +120,9 @@ class TrainerState:
                 TrainerPhase.FAILED,
             },
             TrainerPhase.FAILED: {TrainerPhase.STOPPING, TrainerPhase.FINALIZED},
-            TrainerPhase.FINALIZED: set(),
+            # Finalized training may still be evaluated; training and resume
+            # remain terminal operations after runtime resources are released.
+            TrainerPhase.FINALIZED: {TrainerPhase.EVALUATING},
         }
         if phase not in allowed[self.phase]:
             raise InvalidTrainerTransition(
