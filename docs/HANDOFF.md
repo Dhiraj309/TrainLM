@@ -38,8 +38,10 @@
   passed.
 - PR #53 rebase-merged trainer progress metadata preflight at verified `main`
   SHA `8ea810c2e5e54f492cb4e29e0844a74c9935f23e`; CI run #306 passed.
+- PR #54 rebase-merged packed-data cursor preflight at verified `main` SHA
+  `6ab2b8c9fcde5895c71d5f8450808b7f5756c520`; CI run #308 passed.
 - **Verified base:** `main` at
-  `8ea810c2e5e54f492cb4e29e0844a74c9935f23e` after PR #53.
+  `6ab2b8c9fcde5895c71d5f8450808b7f5756c520` after PR #54.
 - **Probe:** [`T1 v5e-1 guide`](T1_V5E1_PROBE.md) and its
   [Kaggle/Colab notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb) test a tiny
   synthetic forward/backward and optimizer update, with optional `torch.compile`.
@@ -48,8 +50,8 @@
   Hardware generation and explicit compile remain unverified.
 - **Validation boundary:** the temporary isolated Python 3.12.14 / torch
   2.9.0+cpu / pytest 9.2.0 environment passed the current full CPU suite
-  (867 tests and 41 subtests), including 29 focused data-resume and lifecycle
-  tests. Gloo tests used per-command network permission. `compileall` and `git diff --check`
+  (871 tests and 41 subtests), including 29 focused lifecycle tests. Gloo tests
+  used per-command network permission. `compileall` and `git diff --check`
   passed; Ruff was unavailable. GitHub CI for the current branch and TPU
   checkpoint validation are pending.
   CPU tests, standalone device probes, and complete TPU training are separate
@@ -61,10 +63,11 @@
   mutation; legacy schema-v1 checkpoints without class metadata remain
   loadable. PR #52 adds preflight checks for common optimizer slot shapes and
   scalar steps, plus scheduler payload structure and invariants. PR #53
-  validates trainer progress counters and metrics before state mutation. Active
-  branch `fix/24-packed-dataset-cursor-preflight` adds read-only packed cursor
-  validation before restore. Its complete CPU suite passed locally (867 tests
-  and 41 subtests); remote CI and native TPU checkpoint validation remain pending.
+  validates trainer progress counters and metrics before state mutation. PR
+  #54 preflights packed-data cursors before restore. Active branch
+  `fix/25-checkpoint-trainer-fields` rejects non-persisted lifecycle fields in
+  saved trainer state. Its complete CPU suite passed locally (871 tests and 41
+  subtests); remote CI and native TPU checkpoint validation remain pending.
 - **Older open PR stack:** PRs #22–#27 remain open on the older M8 branch chain.
   They are more than 250 commits behind current `main`; PR #22 is merge-conflicted and
   its recorded CPU run had 335 passed / 6 failed. Keep them separate until
