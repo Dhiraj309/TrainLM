@@ -43,6 +43,16 @@ def test_pretraining_config_requires_immutable_revision_and_disjoint_splits(tmp_
         _config(tmp_path, tokenizer_vocab_size=65_537)
     with pytest.raises(ValueError, match="requires accelerator='native_tpu'"):
         _config(tmp_path, torch_compile=True)
+    with pytest.raises(ValueError, match="tokenizer-owned fields"):
+        _config(tmp_path, model_config_overrides={"vocab_size": 32000})
+    with pytest.raises(ValueError, match="JSON-compatible"):
+        _config(tmp_path, model_config_overrides={"custom_value": object()})
+    with pytest.raises(ValueError, match="configure only the default GPT-2"):
+        _config(
+            tmp_path,
+            model_type="llama",
+            model_config_overrides={"hidden_size": 16},
+        )
 
 
 def test_from_scratch_builds_and_trains_a_small_cpu_model(tmp_path, monkeypatch):
@@ -86,6 +96,53 @@ def test_from_scratch_builds_and_trains_a_small_cpu_model(tmp_path, monkeypatch)
     assert (export / "model.safetensors").is_file()
     assert (export / "tokenizer_config.json").is_file()
     assert (tmp_path / "run" / "tokenizer" / "tokenizer.json").is_file()
+
+
+def test_from_scratch_builds_a_configured_huggingface_causal_model(
+    tmp_path, monkeypatch
+):
+    rows = [
+        {"text": f"A tiny story about stars and friendly dogs number {i}. " * 4}
+        for i in range(12)
+    ]
+
+    class StreamingRows:
+        def __iter__(self):
+            return iter(rows)
+
+    def load_dataset(dataset_id, *, revision, split, streaming):
+        return StreamingRows()
+
+    datasets_module = ModuleType("datasets")
+    datasets_module.load_dataset = load_dataset
+    monkeypatch.setitem(sys.modules, "datasets", datasets_module)
+
+    config = _config(
+        tmp_path / "llama-run",
+        model_type="llama",
+        model_config_overrides={
+            "hidden_size": 16,
+            "intermediate_size": 32,
+            "num_hidden_layers": 1,
+            "num_attention_heads": 2,
+            "num_key_value_heads": 2,
+            "max_position_embeddings": 8,
+        },
+        model_embedding_size=768,
+        model_layers=6,
+        model_attention_heads=12,
+        max_tokens=3,
+        sequence_length=4,
+        max_eval_batches=1,
+    )
+    trainer = TrainLMTrainer.from_scratch(config)
+
+    assert trainer.model.config.model_type == "llama"
+    assert trainer.model.config.vocab_size == len(trainer.tokenizer)
+    assert trainer.model.config.pad_token_id == trainer.tokenizer.pad_token_id
+    state = trainer.train()
+    assert state.step == 1
+    assert torch.isfinite(torch.tensor(trainer.evaluate()["eval_loss"]))
 
 
 def test_auto_refuses_detected_tpu_before_loading_the_corpus(tmp_path, monkeypatch):
