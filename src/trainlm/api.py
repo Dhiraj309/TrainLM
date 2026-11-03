@@ -703,34 +703,123 @@ class TrainLMTrainer:
         temporary.replace(path / "trainer_state.pt")
         return path
 
-    def _load_training_checkpoint(self, engine: EngineTrainer, source: object):
-        self._validate_native_resume_data(engine)
-        path = Path(source)
-        if path.is_dir():
-            path = path / "trainer_state.pt"
-        if not path.is_file():
-            raise FileNotFoundError(f"Training checkpoint does not exist: {path}")
-        payload = torch.load(path, map_location="cpu", weights_only=False)
-        if payload.get("schema_version") != 1:
+    def _preflight_training_checkpoint(
+        self, engine: EngineTrainer, payload: object
+    ) -> tuple[Any, Any]:
+        """Validate checkpoint compatibility before mutating trainer state."""
+        if not isinstance(payload, Mapping):
+            raise ValueError("TrainLM training checkpoint must be a mapping.")
+        schema_version = payload.get("schema_version")
+        if (
+            isinstance(schema_version, bool)
+            or not isinstance(schema_version, int)
+            or schema_version != 1
+        ):
             raise ValueError("Unsupported TrainLM training checkpoint schema.")
-        engine.model.load_state_dict(payload["model"])
-        engine.optimizer.load_state_dict(payload["optimizer"])
-        engine.scheduler.load_state_dict(payload["scheduler"])
-        for key, value in payload["trainer"].items():
-            setattr(engine.state, key, value)
+
+        required = {
+            "model",
+            "optimizer",
+            "scheduler",
+            "runtime",
+            "trainer",
+            "cpu_rng_state",
+        }
+        missing = required - payload.keys()
+        if missing:
+            raise ValueError(
+                "TrainLM training checkpoint is missing required state: "
+                f"{sorted(missing)}."
+            )
+
+        model_payload = payload["model"]
+        if not isinstance(model_payload, Mapping):
+            raise ValueError("Training checkpoint model state must be a mapping.")
+        current_model_state = engine.model.state_dict()
+        if set(model_payload) != set(current_model_state):
+            raise ValueError(
+                "Training checkpoint model keys do not match the active model."
+            )
+        for key, current_value in current_model_state.items():
+            saved_value = model_payload[key]
+            if isinstance(current_value, torch.Tensor):
+                if not isinstance(saved_value, torch.Tensor):
+                    raise ValueError(
+                        f"Training checkpoint model value for {key!r} is not a tensor."
+                    )
+                if saved_value.shape != current_value.shape:
+                    raise ValueError(
+                        f"Training checkpoint model tensor shape mismatch for {key!r}."
+                    )
+
+        for name in ("optimizer", "scheduler", "runtime", "trainer"):
+            if not isinstance(payload[name], Mapping):
+                raise ValueError(f"Training checkpoint {name} state must be a mapping.")
+        validate_runtime_state = getattr(engine.runtime, "validate_state_dict", None)
+        if callable(validate_runtime_state):
+            validate_runtime_state(payload["runtime"])
+        trainer_payload = payload["trainer"]
+        for key in trainer_payload:
+            if not isinstance(key, str) or not hasattr(engine.state, key):
+                raise ValueError(
+                    f"Unknown trainer-state field in checkpoint: {key!r}."
+                )
+        for name in ("step", "micro_step"):
+            value = trainer_payload.get(name)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ValueError(
+                    f"Training checkpoint trainer field {name!r} must be "
+                    "a non-negative integer."
+                )
+
+        cpu_rng_state = payload["cpu_rng_state"]
+        if (
+            not isinstance(cpu_rng_state, torch.Tensor)
+            or cpu_rng_state.dtype != torch.uint8
+            or cpu_rng_state.ndim != 1
+        ):
+            raise ValueError("Training checkpoint CPU RNG state is invalid.")
+        try:
+            torch.Generator().set_state(cpu_rng_state.cpu())
+        except RuntimeError as exc:
+            raise ValueError("Training checkpoint CPU RNG state is invalid.") from exc
+
+        cuda_rng_state = payload.get("cuda_rng_state")
+        if cuda_rng_state is not None and (
+            not isinstance(cuda_rng_state, (list, tuple))
+            or any(
+                not isinstance(state, torch.Tensor)
+                or state.dtype != torch.uint8
+                or state.ndim != 1
+                for state in cuda_rng_state
+            )
+        ):
+            raise ValueError("Training checkpoint accelerator RNG state is invalid.")
+
         initial_state = payload.get("loader_generator_initial_state")
+        if initial_state is not None:
+            if (
+                not isinstance(initial_state, torch.Tensor)
+                or initial_state.dtype != torch.uint8
+                or initial_state.ndim != 1
+            ):
+                raise ValueError("Training checkpoint data-loader RNG state is invalid.")
+            try:
+                torch.Generator().set_state(initial_state.cpu())
+            except RuntimeError as exc:
+                raise ValueError(
+                    "Training checkpoint data-loader RNG state is invalid."
+                ) from exc
         sampler = getattr(engine.train_dataloader, "sampler", None)
         if isinstance(sampler, RandomSampler) and initial_state is None:
             raise ValueError(
                 "Exact resume requires a TrainLM-owned deterministic train loader."
             )
-        if self._train_loader_generator is not None and initial_state is not None:
-            self._train_loader_generator.set_state(initial_state)
-        dataset = getattr(engine.train_dataloader, "dataset", None)
+
         dataset_state = payload.get("train_dataset_state")
-        load_dataset_state = getattr(dataset, "load_state_dict", None)
+        dataset = getattr(engine.train_dataloader, "dataset", None)
         if dataset_state is not None:
-            if not callable(load_dataset_state):
+            if not callable(getattr(dataset, "load_state_dict", None)):
                 raise ValueError(
                     "Checkpoint contains train dataset state but the current "
                     "dataset cannot restore it."
@@ -740,6 +829,29 @@ class TrainLMTrainer:
                     "Exact iterable dataset resume requires "
                     "dataloader_num_workers=0."
                 )
+        return initial_state, dataset_state
+
+    def _load_training_checkpoint(self, engine: EngineTrainer, source: object):
+        self._validate_native_resume_data(engine)
+        path = Path(source)
+        if path.is_dir():
+            path = path / "trainer_state.pt"
+        if not path.is_file():
+            raise FileNotFoundError(f"Training checkpoint does not exist: {path}")
+        payload = torch.load(path, map_location="cpu", weights_only=False)
+        initial_state, dataset_state = self._preflight_training_checkpoint(
+            engine, payload
+        )
+        engine.model.load_state_dict(payload["model"])
+        engine.optimizer.load_state_dict(payload["optimizer"])
+        engine.scheduler.load_state_dict(payload["scheduler"])
+        for key, value in payload["trainer"].items():
+            setattr(engine.state, key, value)
+        if self._train_loader_generator is not None and initial_state is not None:
+            self._train_loader_generator.set_state(initial_state)
+        dataset = getattr(engine.train_dataloader, "dataset", None)
+        load_dataset_state = getattr(dataset, "load_state_dict", None)
+        if dataset_state is not None:
             load_dataset_state(dataset_state)
             iterator = iter(engine.train_dataloader)
         else:

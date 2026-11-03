@@ -101,7 +101,10 @@ class TorchTPURuntime(TorchRuntime):
             "device_rng_state": get_rng_state(),
         }
 
-    def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
+    def validate_state_dict(self, state_dict: Mapping[str, Any]) -> None:
+        """Check native checkpoint compatibility without changing device RNG."""
+        if not isinstance(state_dict, Mapping):
+            raise ValueError("Native TPU checkpoint state must be a mapping.")
         if state_dict.get("backend") != self.name:
             raise ValueError(
                 "Native TPU resume requires a checkpoint created by the "
@@ -122,6 +125,12 @@ class TorchTPURuntime(TorchRuntime):
                 "This PyTorch version does not expose accelerator RNG restore; "
                 "native TPU device RNG restoration is unavailable."
             )
+
+    def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
+        self.validate_state_dict(state_dict)
+        accelerator = getattr(torch, "accelerator", None)
+        set_rng_state = getattr(accelerator, "set_rng_state", None)
+        # validate_state_dict has already established that this API is callable.
         set_rng_state(state_dict["device_rng_state"])
 
     def diagnostics(self) -> BackendDiagnostics:
