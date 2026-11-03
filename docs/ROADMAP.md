@@ -13,6 +13,14 @@ that existed at the time, primarily PyTorch/XLA. They do not imply native
 TorchTPU support. “Implemented” means present in that historical code path;
 “partial” means validation remained; “deferred” means it was not delivered.
 
+**Current user-workflow update (2026-11-03):** the from-scratch Colab/Kaggle
+notebook now asks for a small token budget and sequence length, while an
+example helper owns the pinned data defaults, tokenizer/packing, starter model,
+package preflight, and isolated worker invocation. This reduces notebook
+setup; it does not promote the helper to a stable public API or establish
+end-to-end native TPU training evidence. See the [coding-agent guide](AI_AGENT_GUIDE.md)
+for the current entry point and its limits.
+
 - **Historical product:** Hugging Face-native dense autoregressive training
 - **Historical TPU backend:** PyTorch/XLA
 - **Current target:** Native TorchTPU on Cloud TPU; not yet verified
