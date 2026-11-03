@@ -8,6 +8,12 @@ PyTorch/XLA work. Read the status labels before treating an item as current.
 For a task-oriented map of the notebook, implementation, tests, and evidence
 limits, start with the [coding-agent guide](AI_AGENT_GUIDE.md).
 
+The from-scratch notebook now presents a short beginner configuration and
+delegates tokenizer/data preparation and TPU process setup to an example
+helper. This improves notebook onboarding; it is not yet a stable high-level
+raw-text pretraining API, and end-to-end native TPU training remains
+experimental.
+
 TrainLM is rebaselining toward native TorchTPU on Kaggle TPU v5e-8. The
 established backend is PyTorch/XLA. An experimental, explicitly selected
 single-device native TorchTPU path and a from-scratch starter workflow are

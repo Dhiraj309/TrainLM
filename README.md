@@ -9,11 +9,13 @@ kernel backends.
 The [Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb)
 shows the experimental native TorchTPU workflow: initialize model weights
 randomly, prepare training and validation data, train, checkpoint, and export a
-Hugging Face model. The notebook is a small-scale recipe, not evidence of
-convergence or TPU performance.
+Hugging Face model. For a first run, choose a token budget and sequence length;
+the notebook handles the pinned sample dataset and setup. This is an
+educational smoke run, not evidence of convergence or TPU performance.
 
 - [Open the notebook in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb)
 - [Read the notebook source](notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb)
+- [Inspect the beginner notebook helper](examples/torchtpu_pretraining_quickstart.py)
 - [Inspect its training implementation](examples/torchtpu_native_trainer_smoke.py)
 - [Review CPU scratch-training coverage](tests/test_packed_scratch_training.py)
 - [Find files and current evidence for coding agents](docs/AI_AGENT_GUIDE.md)

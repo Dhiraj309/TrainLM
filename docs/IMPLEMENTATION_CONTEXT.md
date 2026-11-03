@@ -12,6 +12,14 @@ The [coding-agent guide](AI_AGENT_GUIDE.md) maps common pretraining tasks to
 the current notebook, implementation, tests, and validation limits. Prefer it
 for file discovery; this document remains the detailed implementation record.
 
+The from-scratch Colab/Kaggle notebook now exposes a concise token-budget and
+sequence-length setup. Its example helper owns the pinned dataset defaults,
+tokenizer/packing setup, starter GPT-2 configuration, package preflight, and
+isolated worker launch. This is a notebook usability layer, not yet a stable
+public high-level pretraining API; TPU training remains experimental and has
+not been validated by this change. Four focused CPU-side notebook/command
+contract tests and notebook code-cell syntax checks pass.
+
 - PR #18, including PR #16, PR #20, and PRs #28–#43 are merged.
   PR #28
   merged the native single-device foundation at
