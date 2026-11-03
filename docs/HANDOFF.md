@@ -63,11 +63,13 @@
 - PR #61 rebase-merged documentation status updates at verified `main` SHA
   `448ea9dc3d5969aa88d612bdfbbf11af682bc78d`; CI passed (run ID
   `41585945140`).
-- PR #62 is open from `test/32-reject-random-resume-without-rng`; it verifies
-  rejection before mutation when a RandomSampler checkpoint lacks saved loader
-  RNG state (40 focused checkpoint/API tests pass locally).
+- PR #62 rebase-merged at verified `main` SHA
+  `821beacdee235e9ed6e70781023126023120adef`; CI passed (run ID
+  `41594252050`). It verifies rejection before mutation when a RandomSampler
+  checkpoint lacks saved loader RNG state (40 focused checkpoint/API tests
+  passed locally).
 - **Verified base:** `main` at
-  `448ea9dc3d5969aa88d612bdfbbf11af682bc78d` after PR #61.
+  `821beacdee235e9ed6e70781023126023120adef` after PR #62.
 - **Probe:** [`T1 v5e-1 guide`](T1_V5E1_PROBE.md) and its
   [Kaggle/Colab notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb) test a tiny
   synthetic forward/backward and optimizer update, with optional `torch.compile`.
@@ -75,8 +77,8 @@
   forward/backward and AdamW pass on torch_tpu 0.2.0 with torch 2.14.1+cpu.
   Hardware generation and explicit compile remain unverified.
 - **Validation boundary:** PR #55 passed the full CPU suite (871 tests and 41
-  subtests) in Python 3.12.14 / torch 2.9.0+cpu / pytest 9.2.0. PRs #56–#61
-  passed GitHub pytest. PR #62's GitHub CI is pending. The last full
+  subtests) in Python 3.12.14 / torch 2.9.0+cpu / pytest 9.2.0. PRs #56–#62
+  passed GitHub pytest. The last full
   local suite reports 865 passed, 7 failed, and 41
   subtests. One failure is the wheel smoke blocked by missing `pip`; five Phi
   cases arise from the installed Transformers 5.0.0 missing
