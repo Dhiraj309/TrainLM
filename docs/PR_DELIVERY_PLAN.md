@@ -54,10 +54,12 @@ PR #51 rebase-merged at verified `main` SHA
 optimizer and scheduler type metadata and validates optimizer group layout
 before state restore. PR #52 rebase-merged optimizer slot and scheduler payload
 preflight at verified `main` SHA `9cf8d4ba0de0b91cc52908d9d98f984b29873a33`;
-CI run #304 passed. Branch `fix/23-trainer-state-preflight` validates saved
-progress counters and metric values before restore. Its full CPU suite passed
-(866 tests and 41 subtests in Python 3.12.14 / torch 2.9.0+cpu); GitHub CI is
-pending.
+CI run #304 passed. PR #53 validates saved progress counters and metric values
+before restore and rebase-merged at verified `main` SHA
+`8ea810c2e5e54f492cb4e29e0844a74c9935f23e`; CI run #306 passed. Branch
+`fix/24-packed-dataset-cursor-preflight` preflights packed-data cursor identity
+before trainer restore. Its full CPU suite passed (867 tests and 41 subtests
+in Python 3.12.14 / torch 2.9.0+cpu); GitHub CI is pending.
 This does not establish native multi-device launch or v5e-8 support. The
 old numbered cards below do not set the current work order; use [the T0–T11
 rebaseline](TORCHTPU_REBASELINE.md), [the handoff](HANDOFF.md), and
