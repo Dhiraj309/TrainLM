@@ -93,11 +93,12 @@ TorchTPU support. “Implemented” means present in that historical code path;
   out-of-range cursor before state mutation. PR #59 rebase-merged at verified
   `main` SHA `2985ef953546506f3cd6d84c8ff79739c6388a9b`; GitHub pytest passed
   (run ID `41582739096`). It proves legacy stateful custom iterables still
-  resume without the optional `validate_state_dict` hook. PR #60 is open from
-  `test/30-legacy-checkpoint-no-dataset-state`, based on that verified `main`;
-  its regression removes optional dataset cursor, loader RNG and optimizer/
-  scheduler type fields from a schema-v1 checkpoint and verifies exact resume
-  parity. The combined checkpoint/API lifecycle suites pass (39 tests). The
+  resume without the optional `validate_state_dict` hook. PR #60 rebase-merged
+  at verified `main` SHA `839d8fcc1f9320ff6193b7c54399c629881945f0`; GitHub
+  pytest passed (run ID `41585383984`). It removes optional dataset cursor,
+  loader RNG and optimizer/scheduler type fields from a schema-v1 checkpoint
+  and verifies exact resume parity. Its combined checkpoint/API lifecycle
+  suites passed (39 tests). The
   last full local suite had 865 passed, 7 failed and 41 subtests: missing `pip`
   blocked wheel smoke, five Phi cases hit a Transformers 5.0.0 config issue,
   and a TrainLM model reload test had mismatched weights. No full-suite rerun or
