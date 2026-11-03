@@ -170,6 +170,11 @@ for file discovery; this document remains the detailed implementation record.
   uninterrupted training. The checkpoint/API lifecycle suites passed (41
   tests; 44 including the roadmap contract). No full-suite rerun or TPU
   validation is claimed for PR #64.
+- A follow-up CPU regression also resumes exactly at a sequential loader's
+  epoch boundary (after all four distinct rows) and compares final weights
+  with uninterrupted training. The existing within-epoch resume remains
+  covered. The checkpoint/API suites pass (42 tests; 45 including the roadmap
+  contract); no full-suite or TPU validation is claimed.
 - The last full local suite, on PR #56's branch, produced 865 passed, 7 failed
   and 41 subtests: missing `pip` blocked the wheel smoke, five Phi cases hit the
   installed Transformers 5.0.0 `PhiConfig` missing `pad_token_id`, and a
