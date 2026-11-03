@@ -7,10 +7,12 @@ kernel backends.
 ## Start here: pretrain a language model from scratch
 
 The [Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb)
-uses TrainLM's public from-scratch API. It initializes random GPT-2 weights,
-learns a tokenizer from pinned raw text, prepares packed data, trains, evaluates,
-and exports a Hugging Face model. The native TorchTPU path is experimental; the
-starter run does not establish convergence or TPU performance.
+uses TrainLM's public from-scratch API. By default it initializes random GPT-2
+weights, learns a tokenizer from pinned raw text, prepares packed data, trains,
+evaluates, and exports a Hugging Face model. You can also select a registered
+Transformers causal-LM architecture and pass its config fields directly. The
+native TorchTPU path is experimental; the starter run does not establish
+convergence or TPU performance.
 
 ```python
 from trainlm import TrainLMPretrainingConfig, TrainLMTrainer
@@ -26,6 +28,35 @@ trainer.train()
 metrics = trainer.evaluate()
 trainer.save_model("runs/tinystories/model")
 ```
+
+For a different built-in Transformers causal-LM architecture, set `model_type`
+and pass its architecture-specific fields. TrainLM derives `vocab_size` and
+special-token IDs from the tokenizer it trained on your corpus:
+
+```python
+config = TrainLMPretrainingConfig(
+    output_dir="runs/tinystories-llama",
+    max_tokens=10_000,
+    sequence_length=128,
+    model_type="llama",
+    model_config_overrides={
+        "hidden_size": 512,
+        "intermediate_size": 1_376,
+        "num_hidden_layers": 8,
+        "num_attention_heads": 8,
+        "num_key_value_heads": 4,
+        "max_position_embeddings": 128,
+    },
+    accelerator="native_tpu",
+)
+trainer = TrainLMTrainer.from_scratch(config)
+```
+
+The default `model_embedding_size`, `model_layers`, and
+`model_attention_heads` settings apply to GPT-2. For other architectures,
+provide the relevant Transformers config fields in `model_config_overrides`.
+Only model types supported by `AutoModelForCausalLM` are suitable; TrainLM does
+not load custom remote model code in this scratch path.
 
 The config defaults to a pinned TinyStories revision. In a standard Python
 environment, install the package with `pip install 'trainlm[pretraining]'`.

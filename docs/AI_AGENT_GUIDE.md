@@ -27,8 +27,11 @@ follow the linked implementation and tests before making a change.
 - `TrainLMTrainer.from_scratch(TrainLMPretrainingConfig(...))` is the public
   raw-text entry point. It requires an immutable Hugging Face dataset revision
   and disjoint train/validation splits, then returns the familiar trainer for
-  `train()`, `evaluate()`, and `save_model()` calls. It currently initializes a
-  GPT-2 architecture; supply custom dimensions through the config.
+  `train()`, `evaluate()`, and `save_model()` calls. GPT-2 is the default;
+  `model_type` and `model_config_overrides` select a registered Transformers
+  causal-LM configuration for random initialization. TrainLM fills vocabulary
+  and special-token IDs from the newly trained tokenizer. The path does not
+  load custom remote model code.
 - Native TorchTPU still requires explicit `accelerator="native_tpu"` and is an
   experimental, single-device path. Package metadata and CPU lifecycle tests do
   not certify TPU training or performance.
