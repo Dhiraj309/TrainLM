@@ -39,7 +39,11 @@ approvals. T2 integrates the report into backend selection and the public UX.
 
 ## PR-by-PR serial execution
 
-**Status snapshot (2026-11-03):** PR #72 rebase-merged at verified `main` SHA
+**Status snapshot (2026-11-03):** PR #74 rebase-merged at verified `main` SHA
+`b0f81e91ad6c11aef865441efc05455202557677`; GitHub pytest passed (run ID
+`41636368557`). PR #73 rebase-merged at verified `main` SHA
+`6090ba72e32d9d920499807f0c7b5a15e8ae5861`; GitHub pytest passed (run ID
+`41635317392`). PR #72 rebase-merged at verified `main` SHA
 `df9f232dff191354b976b0059a2a174777792a5f`; GitHub pytest passed (run ID
 `41634659366`). PR #71 rebase-merged at verified `main` SHA
 `33094937a78e9a773ba8dbdd2007f73b10ec0a20`; GitHub pytest passed (run ID
@@ -139,7 +143,13 @@ restores sampler RNG/cursor state across an epoch boundary, and matches
 uninterrupted model weights through step three. The focused API lifecycle,
 trainer, and roadmap-contract suites passed (57 tests), and GitHub pytest
 passed (run ID `41634659366`). No full-suite or TPU validation is claimed for
-PR #72. The
+PR #72. PR #73 records the post-merge status correction. PR #74 extends the
+default shuffled-sampler resume check to a checkpoint exactly at epoch end
+(`micro_step=4`) as well as the within-epoch case; both resumed runs match
+uninterrupted model weights through step three. The focused API lifecycle,
+trainer, and roadmap-contract suites passed (58 tests), and GitHub pytest
+passed (run ID `41636368557`). No full-suite or TPU validation is claimed for
+PR #74. The
 old numbered cards below do not set the current work order; use [the T0–T11
 rebaseline](TORCHTPU_REBASELINE.md), [the handoff](HANDOFF.md), and
 owner-reviewed evidence to select the next scoped deliverable.

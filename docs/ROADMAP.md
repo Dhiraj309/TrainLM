@@ -156,13 +156,16 @@ TorchTPU support. “Implemented” means present in that historical code path;
   resumes across an epoch boundary, and matches uninterrupted model weights
   through step three. The focused API lifecycle, trainer, and roadmap-contract
   suites passed 57 tests. No full-suite or TPU validation is claimed for PR #72.
-  The current branch `test/40-random-sampler-epoch-boundary-resume` extends
-  that default shuffled-sampler regression to checkpoint both within an epoch
-  and exactly after all four loader batches are consumed (`micro_step=4`). Both
-  resumes reach step three with exact model-weight parity. The focused API
-  lifecycle, trainer, and roadmap-contract suites passed 58 tests. No full-suite
-  or TPU validation is claimed; the branch starts from verified `main` SHA
-  `6090ba72e32d9d920499807f0c7b5a15e8ae5861` and is not yet merged.
+  PR #73 rebase-merged the documentation status correction at verified `main`
+  SHA `6090ba72e32d9d920499807f0c7b5a15e8ae5861`; GitHub pytest passed (run ID
+  `41635317392`). PR #74 rebase-merged at verified `main` SHA
+  `b0f81e91ad6c11aef865441efc05455202557677`; GitHub pytest passed (run ID
+  `41636368557`). Commit `b0f81e9` extends default shuffled-sampler exact-resume
+  coverage to checkpoints both within an epoch and exactly after all four
+  batches are consumed (`micro_step=4`). Both resumes reach step three with
+  exact model-weight parity. The focused API lifecycle, trainer, and
+  roadmap-contract suites passed 58 tests. No full-suite or TPU validation is
+  claimed for PR #74.
   BF16 and checkpointing remain unvalidated on TPU. T1 source-level
   probes and the explicit `native_tpu` path are implemented; owner-run compile,
   lifecycle and v5e-8 collective evidence remain pending. Hosted Kaggle currently documents
