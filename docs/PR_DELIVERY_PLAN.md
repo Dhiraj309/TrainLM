@@ -39,7 +39,11 @@ approvals. T2 integrates the report into backend selection and the public UX.
 
 ## PR-by-PR serial execution
 
-**Status snapshot (2026-11-03):** PR #70 rebase-merged at verified `main` SHA
+**Status snapshot (2026-11-03):** PR #72 rebase-merged at verified `main` SHA
+`df9f232dff191354b976b0059a2a174777792a5f`; GitHub pytest passed (run ID
+`41634659366`). PR #71 rebase-merged at verified `main` SHA
+`33094937a78e9a773ba8dbdd2007f73b10ec0a20`; GitHub pytest passed (run ID
+`41633758016`). PR #70 rebase-merged at verified `main` SHA
 `2f0eafcbeb6d394496154fdddc22a55233aee5d0`; GitHub pytest passed (run ID
 `41632939362`). PR #69 rebase-merged at verified `main` SHA
 `bf57ebb20600eb69f4ea5f1666d427cf610d3870`; GitHub pytest passed (run ID
@@ -129,6 +133,13 @@ coverage for a one-row final batch with batch size two and gradient
 accumulation two; its checkpoint/API lifecycle suites passed (44 tests, or 47
 with the roadmap contract), and GitHub pytest passed (run ID `41632939362`).
 No full-suite or TPU validation is claimed for PR #70. The
+PR #71 records the post-merge status correction. PR #72 verifies exact resume
+with TrainLM's default shuffled sampler: it saves after the first update,
+restores sampler RNG/cursor state across an epoch boundary, and matches
+uninterrupted model weights through step three. The focused API lifecycle,
+trainer, and roadmap-contract suites passed (57 tests), and GitHub pytest
+passed (run ID `41634659366`). No full-suite or TPU validation is claimed for
+PR #72. The
 old numbered cards below do not set the current work order; use [the T0–T11
 rebaseline](TORCHTPU_REBASELINE.md), [the handoff](HANDOFF.md), and
 owner-reviewed evidence to select the next scoped deliverable.

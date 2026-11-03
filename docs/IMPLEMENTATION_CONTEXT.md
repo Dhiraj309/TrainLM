@@ -203,13 +203,17 @@ for file discovery; this document remains the detailed implementation record.
   without dropping or repeating rows; final weights match uninterrupted
   training. The checkpoint/API suites passed 44 tests (47 including the roadmap
   contract). No full-suite rerun or TPU validation is claimed for PR #70.
-- The current branch, `test/38-random-sampler-resume-parity`, adds exact-resume
-  parity coverage for the default TrainLM-owned random sampler. It saves after
-  the first update, resumes across the epoch boundary, and matches uninterrupted
-  model weights through step three. The focused API lifecycle, trainer, and
-  roadmap-contract suites passed (57 tests); no full-suite or TPU validation is
-  claimed. The branch is based on verified `main` SHA
-  `33094937a78e9a773ba8dbdd2007f73b10ec0a20` and is not yet merged.
+- PR #71 rebase-merged the documentation status correction at verified `main`
+  SHA `33094937a78e9a773ba8dbdd2007f73b10ec0a20`; GitHub pytest passed (run ID
+  `41633758016`).
+- PR #72 rebase-merged at verified `main` SHA
+  `df9f232dff191354b976b0059a2a174777792a5f`; GitHub pytest passed (run ID
+  `41634659366`). Commit `df9f232` adds CPU coverage for exact resume through
+  TrainLM's default shuffled, TrainLM-owned random sampler. It checkpoints after
+  the first update, restores sampler RNG/cursor state, crosses an epoch boundary,
+  and matches uninterrupted model weights through step three. The focused API
+  lifecycle, trainer, and roadmap-contract suites passed (57 tests). No
+  full-suite rerun or TPU validation is claimed for PR #72.
 - The last full local suite, on PR #56's branch, produced 865 passed, 7 failed
   and 41 subtests: missing `pip` blocked the wheel smoke, five Phi cases hit the
   installed Transformers 5.0.0 `PhiConfig` missing `pad_token_id`, and a
