@@ -40,20 +40,25 @@
   SHA `8ea810c2e5e54f492cb4e29e0844a74c9935f23e`; CI run #306 passed.
 - PR #54 rebase-merged packed-data cursor preflight at verified `main` SHA
   `6ab2b8c9fcde5895c71d5f8450808b7f5756c520`; CI run #308 passed.
+- PR #55 rebase-merged transient trainer-field rejection at verified `main`
+  SHA `ea9dbadfb86f17cd3713b2abcee808677c38e845`; GitHub CI passed (run ID
+  `41578130077`).
 - **Verified base:** `main` at
-  `6ab2b8c9fcde5895c71d5f8450808b7f5756c520` after PR #54.
+  `ea9dbadfb86f17cd3713b2abcee808677c38e845` after PR #55.
 - **Probe:** [`T1 v5e-1 guide`](T1_V5E1_PROBE.md) and its
   [Kaggle/Colab notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb) test a tiny
   synthetic forward/backward and optimizer update, with optional `torch.compile`.
 - **Evidence:** the owner reported an eager native TPU allocation,
   forward/backward and AdamW pass on torch_tpu 0.2.0 with torch 2.14.1+cpu.
   Hardware generation and explicit compile remain unverified.
-- **Validation boundary:** the temporary isolated Python 3.12.14 / torch
-  2.9.0+cpu / pytest 9.2.0 environment passed the current full CPU suite
-  (871 tests and 41 subtests), including 29 focused lifecycle tests. Gloo tests
-  used per-command network permission. `compileall` and `git diff --check`
-  passed; Ruff was unavailable. GitHub CI for the current branch and TPU
-  checkpoint validation are pending.
+- **Validation boundary:** PR #55 passed the full CPU suite (871 tests and 41
+  subtests) in Python 3.12.14 / torch 2.9.0+cpu / pytest 9.2.0. Current PR #56
+  adds a custom dataset state validator regression; its focused lifecycle suite
+  passes (30 tests). The current local full suite reports 865 passed, 7 failed,
+  and 41 subtests. One failure is the wheel smoke blocked by missing `pip`; five
+  Phi cases arise from the installed Transformers 5.0.0 missing
+  `PhiConfig.pad_token_id`; a separate TrainLM model reload test has mismatched
+  weights. GitHub CI and TPU checkpoint validation are pending.
   CPU tests, standalone device probes, and complete TPU training are separate
   evidence; no TPU generation, convergence, or performance result is claimed.
 - **Current T5 checkpoint work:** PR #49 added schema-v3 shard checksums and
@@ -64,10 +69,12 @@
   loadable. PR #52 adds preflight checks for common optimizer slot shapes and
   scalar steps, plus scheduler payload structure and invariants. PR #53
   validates trainer progress counters and metrics before state mutation. PR
-  #54 preflights packed-data cursors before restore. Active branch
-  `fix/25-checkpoint-trainer-fields` rejects non-persisted lifecycle fields in
-  saved trainer state. Its complete CPU suite passed locally (871 tests and 41
-  subtests); remote CI and native TPU checkpoint validation remain pending.
+  #54 preflights packed-data cursors before restore. PR #55 rejects
+  non-persisted lifecycle fields and is merged. PR #56 tests the optional
+  custom dataset `validate_state_dict` hook, which runs before state restore;
+  dataset implementations should keep that validator side-effect-free with
+  respect to active iteration. Native TPU checkpoint validation remains
+  pending.
 - **Older open PR stack:** PRs #22–#27 remain open on the older M8 branch chain.
   They are more than 250 commits behind current `main`; PR #22 is merge-conflicted and
   its recorded CPU run had 335 passed / 6 failed. Keep them separate until

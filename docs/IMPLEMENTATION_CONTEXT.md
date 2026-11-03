@@ -112,14 +112,24 @@ for file discovery; this document remains the detailed implementation record.
   `8ea810c2e5e54f492cb4e29e0844a74c9935f23e`; CI run #306 passed. It validates
   persisted counters and finite metrics before restore. PR #54 rebase-merged at
   verified `main` SHA `6ab2b8c9fcde5895c71d5f8450808b7f5756c520`; CI run #308
-  passed. It preflights packed-data cursor identity. Branch
-  `fix/25-checkpoint-trainer-fields` restricts serialized trainer state to
+  passed. It preflights packed-data cursor identity. PR #55 rebase-merged at
+  verified `main` SHA `ea9dbadfb86f17cd3713b2abcee808677c38e845`; GitHub CI
+  passed (run ID `41578130077`). It restricts serialized trainer state to
   durable counters and metrics, rejecting transient lifecycle fields before
   restore. Its focused lifecycle tests passed (29 tests), and the full CPU
   suite passed (871 tests and 41 subtests) in Python 3.12.14 with torch
-  2.9.0+cpu and pytest 9.2.0; Gloo tests used per-command network permission.
-  `compileall` and `git diff --check` passed; Ruff was unavailable. GitHub CI
-  and native TPU checkpoint validation are pending.
+  2.9.0+cpu and pytest 9.2.0.
+- PR #56 is open from `fix/26-custom-dataset-state-preflight`, based on verified
+  `main` `ea9dbadfb86f17cd3713b2abcee808677c38e845`. Commit `9ce3125` adds a
+  custom-dataset checkpoint preflight regression: an optional
+  `validate_state_dict` rejection leaves model, optimizer, scheduler, trainer,
+  and dataset position unchanged. The focused lifecycle suite passes (30
+  tests). The local full suite produced 865 passed, 7 failed and 41 subtests:
+  wheel smoke is blocked by missing `pip`, five Phi cases hit the installed
+  Transformers 5.0.0 `PhiConfig` missing `pad_token_id`, and a separate TrainLM
+  model reload test produced mismatched weights. These failures are outside the
+  checkpoint change.
+  GitHub CI and native TPU checkpoint validation are pending.
 - [T1 v5e-1 probe guide](T1_V5E1_PROBE.md) and the
   [Colab-openable Kaggle/Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TorchTPU_T1_v5e1_Probe.ipynb) describe
   synthetic smoke. The latest owner run at source `d3dea896` passed allocation,
