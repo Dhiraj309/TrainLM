@@ -15,9 +15,12 @@
   only on the eager smoke.
 - **Raw-text API:** `TrainLMPretrainingConfig` plus
   `TrainLMTrainer.from_scratch()` prepares pinned HF text, tokenizer, packed
-  data, and a random GPT-2 model, then returns the ordinary trainer lifecycle.
+  data, and a randomly initialized Transformers causal LM, then returns the
+  ordinary trainer lifecycle. GPT-2 remains the default; `model_type` and
+  `model_config_overrides` select another registered architecture. TrainLM
+  derives the vocabulary and special-token IDs from its trained tokenizer.
   The Colab/Kaggle notebook uses this public API. Native TorchTPU remains
-  experimental; the API work adds no TPU training evidence.
+  experimental; CPU/API work adds no TPU training evidence.
 - PR #28–#44 established the experimental single-device foundation and the
   from-scratch CPU data/train/checkpoint/export workflow. PR #44's CPU reload
   and generation check does not establish TPU generation or convergence.

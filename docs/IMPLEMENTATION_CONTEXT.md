@@ -14,10 +14,13 @@ for file discovery; this document remains the detailed implementation record.
 
 The public `TrainLMPretrainingConfig` and `TrainLMTrainer.from_scratch()` API
 accept raw text from a revision-pinned Hugging Face dataset, train a byte-level
-BPE tokenizer, prepare validated packed shards, initialize GPT-2 from random
-weights, and return a normal TrainLM trainer. The from-scratch Colab/Kaggle
-notebook calls this API with a concise token-budget and sequence-length setup.
-Native TPU remains experimental; the API adds no hardware validation. PR #77
+BPE tokenizer, prepare validated packed shards, and initialize random weights
+through a registered Transformers causal-LM config. GPT-2 remains the default;
+`model_type` and JSON-compatible `model_config_overrides` select other
+`AutoModelForCausalLM` architectures. The trained tokenizer supplies vocabulary
+and special-token IDs. The from-scratch Colab/Kaggle notebook calls this API
+with a concise token-budget and sequence-length setup. Native TPU remains
+experimental; the API adds no hardware validation. PR #77
 was rebase-merged to verified `main` at
 `f844d048b17640d4d71a127c4a860dd1f6d7d52c`; the public API is in commit
 `e340d7f604151ee869243d80bc5429c1bb008801`, and post-train evaluation support

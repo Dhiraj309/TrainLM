@@ -16,10 +16,11 @@ TorchTPU support. “Implemented” means present in that historical code path;
 **Current user-workflow update (2026-11-03):** the package exposes
 `TrainLMPretrainingConfig` and `TrainLMTrainer.from_scratch()` for raw text from
 a revision-pinned Hugging Face dataset. The API trains a byte-level tokenizer,
-prepares validated packed shards, initializes GPT-2 from random weights, and
-returns the familiar trainer lifecycle. The notebook uses this API; native TPU
-remains experimental and gains no end-to-end evidence from CPU/API tests. PR
-#77 was rebase-merged to verified `main` at SHA
+prepares validated packed shards, initializes GPT-2 by default (or a configured
+registered Transformers causal-LM architecture), and returns the familiar
+trainer lifecycle. Vocabulary and special-token IDs come from the trained
+tokenizer. The notebook uses this API; native TPU remains experimental and gains
+no end-to-end evidence from CPU/API tests. PR #77 was rebase-merged to verified `main` at SHA
 `f844d048b17640d4d71a127c4a860dd1f6d7d52c`. The rebase-preserved API commit
 is `e340d7f604151ee869243d80bc5429c1bb008801`; the post-train evaluation fix
 is `3fbac2a19209dfd035d021f7911f2fa0b4a2f91b`. The feature branch was deleted
