@@ -113,16 +113,16 @@ def discover_tpu(
 
 
 def select_auto_backend(report: dict[str, Any], *, cuda_available: bool) -> str:
-    """Preserve CPU/CUDA auto routing while native TPU training is unverified.
+    """Preserve CPU/CUDA auto routing while native TPU remains experimental.
 
     A detected TPU must not silently become a CPU run. Explicit ``tpu`` still
     selects the historical XLA coordinator until a native route is validated.
     """
     if report.get("device_type") == "tpu":
         raise RuntimeError(
-            "Native TorchTPU was detected, but TrainLM's native TPU training "
-            "route is not integrated. Use accelerator='tpu' only for the "
-            "existing PyTorch/XLA coordinator, or choose 'cpu'/'cuda' explicitly."
+            "Native TorchTPU was detected, but automatic TPU routing remains "
+            "disabled. Set accelerator='native_tpu' to opt into the experimental "
+            "single-device path, or choose 'cpu'/'cuda' explicitly."
         )
     if (report.get("torch_tpu_version") is not None
             and report.get("status") in {"api_unavailable", "query_failed"}):

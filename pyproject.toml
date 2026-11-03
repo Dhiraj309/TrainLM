@@ -50,6 +50,10 @@ dependencies = [
 trainlm = "trainlm.cli:main"
 
 [project.optional-dependencies]
+pretraining = [
+    "datasets>=3,<5",
+    "tokenizers>=0.21,<1",
+]
 tpu-xla = [
     "torch==2.9.0",
     "torch-xla[tpu]==2.9.0",

@@ -49,6 +49,11 @@ from trainlm.config import (
     TrainerConfig,
 )
 from trainlm.optimization import create_optimizer
+from trainlm.pretraining import (
+    TrainLMPretrainingConfig,
+    _preflight_scratch_backend,
+    _prepare_scratch_training,
+)
 from trainlm.runtime import Runtime
 from trainlm.runtime.torchtpu_discovery import (
     discover_tpu, normalize_worker_report, select_auto_backend,
@@ -321,6 +326,70 @@ class TrainLMTrainer:
         return cls(model=source, **kwargs)
 
     @classmethod
+    def from_scratch(
+        cls,
+        config: TrainLMPretrainingConfig,
+        *,
+        callbacks: Sequence[TrainerCallback] | None = None,
+    ) -> "TrainLMTrainer":
+        """Prepare a tokenizer/model from pinned HF text and return a trainer.
+
+        The method keeps the familiar ``trainer.train()``, ``evaluate()``, and
+        ``save_model()`` lifecycle while owning streaming tokenization and
+        packed-data preparation. Native TorchTPU must be explicitly selected
+        and remains an experimental single-device path.
+        """
+        if not isinstance(config, TrainLMPretrainingConfig):
+            raise TypeError("config must be a TrainLMPretrainingConfig instance.")
+        _preflight_scratch_backend(config)
+        model, tokenizer, train_dataset, eval_dataset = _prepare_scratch_training(
+            config
+        )
+        tokens_per_update = (
+            (config.sequence_length - 1)
+            * config.per_device_train_batch_size
+            * config.gradient_accumulation_steps
+        )
+        max_steps = math.ceil(config.max_tokens / tokens_per_update)
+        cadence = max(1, max_steps // 10)
+        args = TrainLMTrainingArguments(
+            output_dir=Path(config.output_dir) / "checkpoints",
+            max_steps=max_steps,
+            max_tokens=config.max_tokens,
+            per_device_train_batch_size=config.per_device_train_batch_size,
+            per_device_eval_batch_size=config.per_device_eval_batch_size,
+            sequence_length=config.sequence_length,
+            gradient_accumulation_steps=config.gradient_accumulation_steps,
+            learning_rate=config.learning_rate,
+            lr_scheduler_type="cosine",
+            warmup_steps=min(max_steps // 10, 100),
+            bf16=config.bf16,
+            accelerator=config.accelerator,
+            torch_compile=config.torch_compile,
+            logging_steps=config.logging_steps,
+            save_steps=cadence,
+            eval_steps=cadence,
+            max_eval_batches=config.max_eval_batches,
+            seed=config.seed,
+            weight_decay=config.weight_decay,
+        )
+        try:
+            trainer = cls(
+                model=model,
+                args=args,
+                train_dataset=train_dataset,
+                eval_dataset=eval_dataset,
+                tokenizer=tokenizer,
+                callbacks=callbacks,
+            )
+        except Exception:
+            train_dataset.close()
+            eval_dataset.close()
+            raise
+        trainer.pretraining_config = config
+        return trainer
+
+    @classmethod
     def from_config(
         cls,
         config: Mapping[str, Any] | str | Path,
@@ -498,6 +567,11 @@ class TrainLMTrainer:
                 "TrainLMTrainer; use accelerator='auto' for local execution."
             )
         if accelerator == "auto":
+            try:
+                import torch_tpu  # noqa: F401 - register the TPU for discovery
+            except ModuleNotFoundError as exc:
+                if exc.name != "torch_tpu":
+                    raise
             report = discover_tpu(
                 torch, verify_allocation=False, include_properties=False
             )
@@ -505,6 +579,14 @@ class TrainLMTrainer:
                 report, cuda_available=torch.cuda.is_available()
             )
         if accelerator == "native_tpu":
+            try:
+                import torch_tpu  # noqa: F401 - register the native TPU device
+            except ModuleNotFoundError as exc:
+                if exc.name != "torch_tpu":
+                    raise
+                raise RuntimeError(
+                    "accelerator='native_tpu' requires the torch-tpu package."
+                ) from exc
             from trainlm.runtime.torchtpu import TorchTPURuntime
 
             precision = "bf16" if self.args.bf16 else "fp16" if self.args.fp16 else "fp32"
