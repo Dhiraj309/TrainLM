@@ -23,9 +23,11 @@ follow the linked implementation and tests before making a change.
 
 - The from-scratch notebook is a small-scale implementation example. Its CPU
   lifecycle coverage does not establish TPU training, convergence, or
-  performance. Its downloadable report captures requested and exported model
-  configuration, model class, tokenizer vocabulary size, parameter counts, and
-  source/dataset revisions for run provenance.
+  performance. Its version 3 downloadable report captures requested and
+  exported model configuration, model class, tokenizer special-token IDs and
+  artifact hash, parameter counts, and source/dataset revisions. It records
+  Python, torch, Transformers, TorchTPU, libtpu, datasets, and tokenizers
+  versions. Missing optional distributions are reported as `null`.
 - `TrainLMTrainer.from_scratch(TrainLMPretrainingConfig(...))` is the public
   raw-text entry point. It requires an immutable Hugging Face dataset revision
   and disjoint train/validation splits, then returns the familiar trainer for

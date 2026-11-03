@@ -21,11 +21,15 @@
   derives the vocabulary and special-token IDs from its trained tokenizer.
   The Colab/Kaggle notebook uses this public API and includes the requested and
   exported model config, architecture class, vocabulary size, and parameter
-  counts in its downloadable report. Native TorchTPU remains experimental;
-  CPU/API work adds no TPU training evidence. PR #79 rebase-merged this
+  counts, tokenizer IDs/hash, and runtime package versions in its downloadable
+  schema v3 report. Missing optional packages are `null`. Native TorchTPU remains
+  experimental; CPU/API work adds no TPU training evidence. PR #79 rebase-merged this
   configurable Transformers model path at verified `main` SHA
   `ba5f4761c35c23403d35e44be5d564dbe7ffadb3`; GitHub CI passed 891 tests and
   41 subtests. No TPU run was performed.
+- PR #80 rebase-merged the model provenance report at verified `main` SHA
+  `e9b4a1bde4869d89c323ed457a6b6cebccb0ae40`; CI passed 891 tests and 41
+  subtests. It adds report schema v2; no TPU run was performed.
 - PR #28–#44 established the experimental single-device foundation and the
   from-scratch CPU data/train/checkpoint/export workflow. PR #44's CPU reload
   and generation check does not establish TPU generation or convergence.

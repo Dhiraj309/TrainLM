@@ -21,8 +21,11 @@ through a registered Transformers causal-LM config. GPT-2 remains the default;
 and special-token IDs. The from-scratch Colab/Kaggle notebook calls this API
 with a concise token-budget and sequence-length setup; its downloadable report
 records requested and effective model config, architecture class, vocabulary
-size, and parameter counts. Native TPU remains experimental; CPU/API evidence
-adds no hardware validation. PR #77
+size, tokenizer special-token IDs and artifact hash, runtime package versions,
+and parameter counts. Missing optional runtime packages are recorded as null.
+The current report schema is v3. Native TPU remains experimental; CPU/API
+evidence adds no hardware validation.
+PR #77
 was rebase-merged to verified `main` at
 `f844d048b17640d4d71a127c4a860dd1f6d7d52c`; the public API is in commit
 `e340d7f604151ee869243d80bc5429c1bb008801`, and post-train evaluation support
@@ -34,7 +37,10 @@ state-transition, and CLI-help checks pass. PR #79 adds explicit
 `AutoModelForCausalLM` config selection and rebase-merged at verified `main`
 SHA `ba5f4761c35c23403d35e44be5d564dbe7ffadb3`; CI passed 891 tests and 41
 subtests. These are CPU/software checks, not TPU training results. No TPU run
-was made. The feature
+was made. PR #80 added model config and parameter provenance to report schema
+v2 and rebase-merged to verified `main` at
+`e9b4a1bde4869d89c323ed457a6b6cebccb0ae40`; CI passed 891 tests and 41
+subtests. No TPU run was made. The feature
 is opt-in and does not change existing accelerator defaults or base dependency
 bounds, so existing workflows can continue without using it.
 
