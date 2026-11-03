@@ -98,11 +98,16 @@ TorchTPU support. “Implemented” means present in that historical code path;
   pytest passed (run ID `41585383984`). It removes optional dataset cursor,
   loader RNG and optimizer/scheduler type fields from a schema-v1 checkpoint
   and verifies exact resume parity. Its combined checkpoint/API lifecycle
-  suites passed (39 tests). The
-  last full local suite had 865 passed, 7 failed and 41 subtests: missing `pip`
-  blocked wheel smoke, five Phi cases hit a Transformers 5.0.0 config issue,
-  and a TrainLM model reload test had mismatched weights. No full-suite rerun or
-  TPU checkpoint validation is claimed for PR #60.
+  suites passed (39 tests). PR #61 rebase-merged status-document updates at
+  `448ea9dc3d5969aa88d612bdfbbf11af682bc78d`; GitHub pytest passed (run ID
+  `41585945140`). PR #62 is open from
+  `test/32-reject-random-resume-without-rng`; it checks that a RandomSampler
+  checkpoint without its saved loader RNG is rejected before trainer mutation.
+  The combined checkpoint/API lifecycle suites pass (40 tests); GitHub CI is
+  pending. The last full local suite had 865 passed, 7 failed and 41 subtests:
+  missing `pip` blocked wheel smoke, five Phi cases hit a Transformers 5.0.0
+  config issue, and a TrainLM model reload test had mismatched weights. No full-suite rerun or
+  TPU checkpoint validation is claimed for PR #62.
   BF16 and checkpointing remain unvalidated on TPU. T1 source-level
   probes and the explicit `native_tpu` path are implemented; owner-run compile,
   lifecycle and v5e-8 collective evidence remain pending. Hosted Kaggle currently documents
