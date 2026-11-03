@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from copy import deepcopy
 import json
 from types import SimpleNamespace
@@ -128,6 +129,99 @@ def test_packed_iterable_checkpoint_resume_matches_uninterrupted_training(tmp_pa
             reference_data.close()
     finally:
         resumed_data.close()
+
+
+class StatefulExamples(IterableDataset):
+    """Custom iterable with a small, versioned cursor contract."""
+
+    def __init__(self, examples, *, dataset_id="tiny-stateful-examples-v1"):
+        self.examples = examples
+        self.dataset_id = dataset_id
+        self.position = 0
+
+    def __iter__(self):
+        while self.position < len(self.examples):
+            example = self.examples[self.position]
+            self.position += 1
+            yield example
+
+    def state_dict(self):
+        return {
+            "schema_version": 1,
+            "dataset_id": self.dataset_id,
+            "position": self.position,
+        }
+
+    def validate_state_dict(self, state):
+        if not isinstance(state, Mapping) or state.get("schema_version") != 1:
+            raise ValueError("Unsupported custom iterable dataset state schema.")
+        if state.get("dataset_id") != self.dataset_id:
+            raise ValueError("Custom iterable dataset identity does not match.")
+        position = state.get("position")
+        if (
+            isinstance(position, bool)
+            or not isinstance(position, int)
+            or not 0 <= position <= len(self.examples)
+        ):
+            raise ValueError("Custom iterable dataset position is invalid.")
+
+    def load_state_dict(self, state):
+        self.validate_state_dict(state)
+        self.position = state["position"]
+
+
+def test_custom_stateful_iterable_resume_matches_uninterrupted_training(tmp_path):
+    examples = [
+        {
+            "input_ids": torch.tensor([(index + offset) % 8 for offset in range(4)]),
+            "labels": torch.tensor([(index + offset) % 8 for offset in range(4)]),
+        }
+        for index in range(8)
+    ]
+    initial_model = TinyCausalLM()
+
+    def make_trainer(model, dataset, output_dir, max_steps):
+        return TrainLMTrainer(
+            model=model,
+            train_dataset=dataset,
+            args=TrainLMTrainingArguments(
+                output_dir=output_dir,
+                max_steps=max_steps,
+                sequence_length=4,
+                accelerator="cpu",
+                per_device_train_batch_size=1,
+                learning_rate=1e-3,
+                weight_decay=0.0,
+                lr_scheduler_type="constant",
+                seed=31,
+            ),
+        )
+
+    first_data = StatefulExamples(deepcopy(examples))
+    first = make_trainer(
+        deepcopy(initial_model), first_data, tmp_path / "resumed", max_steps=2
+    )
+    assert first.train().step == 2
+    checkpoint = first.save_state(tmp_path / "checkpoint")
+    assert first_data.position == 2
+
+    resumed_data = StatefulExamples(deepcopy(examples))
+    resumed = make_trainer(
+        deepcopy(initial_model), resumed_data, tmp_path / "resumed", max_steps=4
+    )
+    assert resumed.train(resume_from_checkpoint=checkpoint).step == 4
+
+    reference_data = StatefulExamples(deepcopy(examples))
+    reference = make_trainer(
+        deepcopy(initial_model), reference_data, tmp_path / "reference", max_steps=4
+    )
+    assert reference.train().step == 4
+
+    assert resumed_data.position == reference_data.position == 4
+    for name, expected in reference.model.state_dict().items():
+        torch.testing.assert_close(
+            resumed.model.state_dict()[name], expected, rtol=0, atol=0
+        )
 
 
 def test_packed_cursor_preflight_rejects_stale_data_before_trainer_mutation(tmp_path):
