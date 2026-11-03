@@ -21,11 +21,12 @@ returns the familiar trainer lifecycle. The notebook uses this API; native TPU
 remains experimental and gains no end-to-end evidence from CPU/API tests. The
 implementation is on `feat/43-public-pretraining-api` from verified `main`
 `a3a7dd89f77ae713c7dca608d1070e300bf8b33e`; API commit
-`4048b43866809f96c571518a96ca80aa978de035` is pushed. Local syntax, notebook,
-config-guard, and CLI-help checks pass; the full CPU lifecycle test awaits CI
-because this workspace lacks its PyTorch/pytest dependencies. No TPU training
-was run. See the [coding-agent guide](AI_AGENT_GUIDE.md) for the entry point
-and limits.
+`4048b43866809f96c571518a96ca80aa978de035` and lifecycle fix
+`8cbcea5989887c442409fbdd66565a48b0ae1a5b` are pushed. PR #77's first CI run
+(360) reported four failures; the updated run (361) passed 890 tests and 41
+subtests on Python 3.11. Local syntax, notebook, config-guard,
+state-transition, and CLI-help checks pass. No TPU training was run. See the
+[coding-agent guide](AI_AGENT_GUIDE.md) for the entry point and limits.
 
 - **Historical product:** Hugging Face-native dense autoregressive training
 - **Historical TPU backend:** PyTorch/XLA
