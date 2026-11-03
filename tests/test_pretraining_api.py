@@ -138,8 +138,8 @@ def test_from_scratch_builds_a_configured_huggingface_causal_model(
     trainer = TrainLMTrainer.from_scratch(config)
 
     assert trainer.model.config.model_type == "llama"
-    assert trainer.model.config.vocab_size == len(trainer.tokenizer)
-    assert trainer.model.config.pad_token_id == trainer.tokenizer.pad_token_id
+    assert trainer.model.config.vocab_size == len(trainer.processing_class)
+    assert trainer.model.config.pad_token_id == trainer.processing_class.pad_token_id
     state = trainer.train()
     assert state.step == 1
     assert torch.isfinite(torch.tensor(trainer.evaluate()["eval_loss"]))
