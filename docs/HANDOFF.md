@@ -55,11 +55,13 @@
 - PR #59 rebase-merged legacy custom iterable resume compatibility at verified
   `main` SHA `2985ef953546506f3cd6d84c8ff79739c6388a9b`; CI passed (run ID
   `41582739096`).
-- PR #60 is open from `test/30-legacy-checkpoint-no-dataset-state`; it tests
-  exact resume from a schema-v1 checkpoint with optional dataset and newer
-  metadata fields removed (39 focused checkpoint/API tests pass locally).
+- PR #60 rebase-merged at verified `main` SHA
+  `839d8fcc1f9320ff6193b7c54399c629881945f0`; CI passed (run ID
+  `41585383984`). It tests exact resume from a schema-v1 checkpoint with
+  optional dataset and newer metadata fields removed (39 focused checkpoint/API
+  tests passed locally).
 - **Verified base:** `main` at
-  `2985ef953546506f3cd6d84c8ff79739c6388a9b` after PR #59.
+  `839d8fcc1f9320ff6193b7c54399c629881945f0` after PR #60.
 - **Probe:** [`T1 v5e-1 guide`](T1_V5E1_PROBE.md) and its
   [Kaggle/Colab notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb) test a tiny
   synthetic forward/backward and optimizer update, with optional `torch.compile`.
@@ -67,15 +69,14 @@
   forward/backward and AdamW pass on torch_tpu 0.2.0 with torch 2.14.1+cpu.
   Hardware generation and explicit compile remain unverified.
 - **Validation boundary:** PR #55 passed the full CPU suite (871 tests and 41
-  subtests) in Python 3.12.14 / torch 2.9.0+cpu / pytest 9.2.0. PRs #56–#59
-  passed GitHub pytest. Current PR #60 covers older checkpoint compatibility;
-  the focused checkpoint/API lifecycle suites pass (39 tests). The last full
+  subtests) in Python 3.12.14 / torch 2.9.0+cpu / pytest 9.2.0. PRs #56–#60
+  passed GitHub pytest. The last full
   local suite reports 865 passed, 7 failed, and 41
   subtests. One failure is the wheel smoke blocked by missing `pip`; five Phi
   cases arise from the installed Transformers 5.0.0 missing
   `PhiConfig.pad_token_id`; a separate TrainLM model reload test has mismatched
-  weights. PR #60 GitHub CI and TPU checkpoint validation are pending. CPU
-  tests, standalone device probes, and complete TPU training are separate
+  weights. TPU checkpoint validation remains pending. CPU tests, standalone
+  device probes, and complete TPU training are separate
   evidence; no TPU generation, convergence, or performance result is claimed.
 - **Current T5 checkpoint work:** PR #49 added schema-v3 shard checksums and
   coordinated distributed write/resume preflight; PR #50 added public trainer

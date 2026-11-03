@@ -138,14 +138,15 @@ for file discovery; this document remains the detailed implementation record.
   iterables that implement `state_dict()` and `load_state_dict()` but omit the
   optional `validate_state_dict()` hook. It requires exact model-tensor parity
   with uninterrupted training.
-- PR #60 is open from `test/30-legacy-checkpoint-no-dataset-state`, based on
-  verified `main` `2985ef953546506f3cd6d84c8ff79739c6388a9b`. Commit `fd9e61a`
-  adds a CPU regression that removes the optional dataset cursor, data-loader
-  RNG snapshot, and optimizer/scheduler type metadata from a schema-v1
-  checkpoint. Resume replays the saved micro-step count and matches
-  uninterrupted model weights exactly. The combined checkpoint/API lifecycle
-  suites pass (39 tests); compileall and `git diff --check` pass. No full-suite
-  rerun or TPU checkpoint validation is claimed for PR #60.
+- PR #60 rebase-merged at verified `main` SHA
+  `839d8fcc1f9320ff6193b7c54399c629881945f0`; GitHub pytest passed (run ID
+  `41585383984`). Commit `fd9e61a` adds a CPU regression that removes the
+  optional dataset cursor, data-loader RNG snapshot, and optimizer/scheduler
+  type metadata from a schema-v1 checkpoint. Resume replays the saved micro-step
+  count and matches uninterrupted model weights exactly. Its combined
+  checkpoint/API lifecycle suites passed (39 tests); compileall and
+  `git diff --check` passed. No full-suite rerun or TPU checkpoint validation
+  is claimed for PR #60.
 - The last full local suite, on PR #56's branch, produced 865 passed, 7 failed
   and 41 subtests: missing `pip` blocked the wheel smoke, five Phi cases hit the
   installed Transformers 5.0.0 `PhiConfig` missing `pad_token_id`, and a
