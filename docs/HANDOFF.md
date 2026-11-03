@@ -46,8 +46,11 @@
 - PR #56 rebase-merged custom dataset preflight coverage at verified `main`
   SHA `4aa3614858065c6255c4ecc2d0949c24ee715f70`; GitHub pytest passed in
   2m24s.
+- PR #57 rebase-merged custom iterable resume parity at verified `main` SHA
+  `e62052ae39d6216bce0dd5aec86fc42d9f10a837`; GitHub pytest passed (run ID
+  `41579944075`).
 - **Verified base:** `main` at
-  `4aa3614858065c6255c4ecc2d0949c24ee715f70` after PR #56.
+  `e62052ae39d6216bce0dd5aec86fc42d9f10a837` after PR #57.
 - **Probe:** [`T1 v5e-1 guide`](T1_V5E1_PROBE.md) and its
   [Kaggle/Colab notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb) test a tiny
   synthetic forward/backward and optimizer update, with optional `torch.compile`.
@@ -55,15 +58,14 @@
   forward/backward and AdamW pass on torch_tpu 0.2.0 with torch 2.14.1+cpu.
   Hardware generation and explicit compile remain unverified.
 - **Validation boundary:** PR #55 passed the full CPU suite (871 tests and 41
-  subtests) in Python 3.12.14 / torch 2.9.0+cpu / pytest 9.2.0. PR #56 passed
-  GitHub pytest. Current PR #57 adds a custom iterable dataset checkpoint
-  continuation comparison; the focused lifecycle and resume suites pass (35
-  tests), with exact final model-tensor equality. The last full local suite
-  reports 865 passed, 7 failed, and 41 subtests. One failure is the wheel smoke
-  blocked by missing `pip`; five Phi cases arise from the installed Transformers
-  5.0.0 missing `PhiConfig.pad_token_id`; a separate TrainLM model reload test
-  has mismatched weights. PR #57 full GitHub CI and TPU checkpoint validation
-  are pending.
+  subtests) in Python 3.12.14 / torch 2.9.0+cpu / pytest 9.2.0. PRs #56 and #57
+  passed GitHub pytest. Current PR #58 adds invalid identity/cursor checkpoint
+  cases for a custom iterable; the focused lifecycle and resume suites pass (37
+  tests). The last full local suite reports 865 passed, 7 failed, and 41
+  subtests. One failure is the wheel smoke blocked by missing `pip`; five Phi
+  cases arise from the installed Transformers 5.0.0 missing
+  `PhiConfig.pad_token_id`; a separate TrainLM model reload test has mismatched
+  weights. PR #58 full GitHub CI and TPU checkpoint validation are pending.
   CPU tests, standalone device probes, and complete TPU training are separate
   evidence; no TPU generation, convergence, or performance result is claimed.
 - **Current T5 checkpoint work:** PR #49 added schema-v3 shard checksums and
@@ -75,10 +77,10 @@
   scalar steps, plus scheduler payload structure and invariants. PR #53
   validates trainer progress counters and metrics before state mutation. PR
   #54 preflights packed-data cursors before restore. PR #55 rejects
-  non-persisted lifecycle fields, and PR #56 tests optional custom dataset
-  `validate_state_dict` preflight. PR #57 checks successful custom iterable
-  cursor continuation against uninterrupted training. Native TPU checkpoint
-  validation remains pending.
+  non-persisted lifecycle fields, PR #56 tests optional custom dataset
+  `validate_state_dict` preflight, and PR #57 checks exact custom iterable
+  continuation. PR #58 checks that identity/cursor corruption rejects before
+  trainer mutation. Native TPU checkpoint validation remains pending.
 - **Older open PR stack:** PRs #22–#27 remain open on the older M8 branch chain.
   They are more than 250 commits behind current `main`; PR #22 is merge-conflicted and
   its recorded CPU run had 335 passed / 6 failed. Keep them separate until

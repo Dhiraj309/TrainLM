@@ -59,11 +59,13 @@ rebase-merged at verified `main` SHA
 fields, with GitHub CI passed (run ID `41578130077`). The complete CPU suite
 passed locally (871 tests and 41 subtests in Python 3.12.14 with torch 2.9.0+cpu
 and pytest 9.2.0). PR #56 rebase-merged at verified `main` SHA
-`4aa3614858065c6255c4ecc2d0949c24ee715f70`; GitHub pytest passed. PR #57 is
-open for exact custom iterable resume parity; its focused lifecycle/data-resume
-suite passes (35 tests). The last local full suite reported 865 passed, 7
-unrelated environment failures, and 41 subtests. Native TPU checkpoint
-validation remains pending.
+`4aa3614858065c6255c4ecc2d0949c24ee715f70`; GitHub pytest passed. PR #57
+rebase-merged at verified `main` SHA
+`e62052ae39d6216bce0dd5aec86fc42d9f10a837`; GitHub pytest passed. PR #58 is
+open for custom iterable identity/cursor rejection; its focused
+lifecycle/data-resume suite passes (37 tests). The last local full suite
+reported 865 passed, 7 unrelated environment failures, and 41 subtests. Native
+TPU checkpoint validation remains pending.
 
 Owner direction allows CPU-verifiable implementation to proceed while scarce
 TPU slots are pending. A provisional, explicit `accelerator="native_tpu"`
@@ -119,7 +121,7 @@ reversible.
 | Item | Verified/recorded context | Required next action |
 |---|---|---|
 | Repository | `Dhiraj309/TrainLM` | Verify checkout, branch, origin, permissions |
-| Current base | PR #56 rebase-merged; verified `main` SHA `4aa3614858065c6255c4ecc2d0949c24ee715f70` | Verify exact resume parity for a custom stateful iterable; keep TPU execution gated |
+| Current base | PR #57 rebase-merged; verified `main` SHA `e62052ae39d6216bce0dd5aec86fc42d9f10a837` | Reject custom iterable identity/cursor corruption before checkpoint restore; keep TPU execution gated |
 | Legacy integration | PR #18 merged into `main` on 2026-10-28; merge commit `23959d29434fd2ae3f78b20469e1d61c6b1e18c9` | T0.1 inventory is complete; XLA-era PR cards are not the active queue |
 | Earlier salvage | PR #16 was merged into PR #18, which is now merged into `main` | Inventory its code as part of the merged tree; do not merge it again |
 | Existing TPU backend | Primarily PyTorch/XLA with historical measurements | Classify reusable vs XLA-specific components |

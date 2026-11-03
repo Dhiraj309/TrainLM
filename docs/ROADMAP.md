@@ -84,13 +84,17 @@ TorchTPU support. “Implemented” means present in that historical code path;
   state. PR #56 rebase-merged at verified `main` SHA
   `4aa3614858065c6255c4ecc2d0949c24ee715f70`; GitHub pytest passed in 2m24s.
   It documents and tests pre-restore validation for custom stateful datasets.
-  PR #57 is open from `test/27-custom-iterable-resume-parity`; 35 focused
-  lifecycle/data-resume tests pass, including exact equality between custom
-  iterable resumed and uninterrupted model weights. The last full local suite
-  had 865 passed, 7 failed and 41 subtests: missing `pip` blocked wheel smoke,
-  five Phi cases hit a Transformers 5.0.0 config issue, and a TrainLM model
-  reload test had mismatched weights. No full-suite rerun or TPU checkpoint
-  validation is claimed for PR #57.
+  PR #57 rebase-merged at verified `main` SHA
+  `e62052ae39d6216bce0dd5aec86fc42d9f10a837`; GitHub pytest passed (run ID
+  `41579944075`). Its custom iterable continuation test requires exact equality
+  between resumed and uninterrupted model weights. PR #58 is open from
+  `test/28-custom-iterable-state-validation`; 37 focused lifecycle/data-resume
+  tests pass, including pre-mutation rejection of a mismatched dataset ID and
+  an out-of-range cursor. The last full local suite had 865 passed, 7 failed and
+  41 subtests: missing `pip` blocked wheel smoke, five Phi cases hit a
+  Transformers 5.0.0 config issue, and a TrainLM model reload test had
+  mismatched weights. No full-suite rerun or TPU checkpoint validation is
+  claimed for PR #58.
   BF16 and checkpointing remain unvalidated on TPU. T1 source-level
   probes and the explicit `native_tpu` path are implemented; owner-run compile,
   lifecycle and v5e-8 collective evidence remain pending. Hosted Kaggle currently documents
