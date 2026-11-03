@@ -21,10 +21,13 @@ Native TPU remains experimental; the API adds no hardware validation. The
 implementation is on `feat/43-public-pretraining-api`, based on verified
 `origin/main` `a3a7dd89f77ae713c7dca608d1070e300bf8b33e`; code commit
 `4048b43866809f96c571518a96ca80aa978de035` adds the API and focused lifecycle
-tests. Local syntax, notebook, config-guard, and CLI-help checks pass. The full
-CPU lifecycle test is pending CI because this workspace has no PyTorch,
-Transformers, tokenizers, datasets, or pytest; no TPU run was made. The feature
-is opt-in and does not change existing accelerator defaults or dependency
+tests; `8cbcea5989887c442409fbdd66565a48b0ae1a5b` adds the public-symbol
+contract and permits read-only evaluation after training is finalized while
+keeping further training terminal. The first PR #77 CI run (360) found four
+failures across these new contracts; the follow-up CI run (361) passed all 890
+tests and 41 subtests on Python 3.11. Local syntax, notebook, config-guard,
+state-transition, and CLI-help checks pass. No TPU run was made. The feature
+is opt-in and does not change existing accelerator defaults or base dependency
 bounds, so existing workflows can continue without using it.
 
 - PR #18, including PR #16, PR #20, and PRs #28–#43 are merged.
