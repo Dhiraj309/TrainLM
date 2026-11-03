@@ -378,25 +378,44 @@ def test_resume_rejects_random_sampler_without_saved_rng_before_mutation(tmp_pat
 
 
 @pytest.mark.parametrize(
-    ("max_steps", "checkpoint_step"),
-    [(2, 1), (6, 4)],
-    ids=["within-epoch", "at-epoch-boundary"],
+    (
+        "max_steps",
+        "checkpoint_step",
+        "row_count",
+        "batch_size",
+        "gradient_accumulation_steps",
+    ),
+    [
+        (2, 1, 4, 1, 1),
+        (6, 4, 4, 1, 1),
+        (2, 1, 6, 2, 2),
+    ],
+    ids=["within-epoch", "at-epoch-boundary", "batched-gradient-accumulation"],
 )
 def test_resume_replays_sequential_loader_without_saved_rng(
-    tmp_path, max_steps, checkpoint_step
+    tmp_path,
+    max_steps,
+    checkpoint_step,
+    row_count,
+    batch_size,
+    gradient_accumulation_steps,
 ):
     rows = [
         {
-            "input_ids": torch.tensor([offset, offset + 1, offset + 2, offset + 3]),
-            "labels": torch.tensor([offset, offset + 1, offset + 2, offset + 3]),
+            "input_ids": torch.tensor(
+                [(offset + position) % 8 for position in range(4)]
+            ),
+            "labels": torch.tensor(
+                [(offset + position) % 8 for position in range(4)]
+            ),
         }
-        for offset in range(4)
+        for offset in range(row_count)
     ]
 
     def make_loader():
         return DataLoader(
             rows,
-            batch_size=1,
+            batch_size=batch_size,
             sampler=SequentialSampler(rows),
         )
 
@@ -411,6 +430,7 @@ def test_resume_replays_sequential_loader_without_saved_rng(
                 accelerator="cpu",
                 seed=17,
                 save_steps=save_steps,
+                gradient_accumulation_steps=gradient_accumulation_steps,
             ),
         )
 
@@ -433,6 +453,9 @@ def test_resume_replays_sequential_loader_without_saved_rng(
         / "trainer_state.pt"
     )
     payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    assert payload["trainer"]["micro_step"] == (
+        checkpoint_step * gradient_accumulation_steps
+    )
     assert payload["loader_generator_initial_state"] is None
     payload.pop("loader_generator_initial_state")
     torch.save(payload, checkpoint)
