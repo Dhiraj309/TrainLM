@@ -58,6 +58,10 @@ provide the relevant Transformers config fields in `model_config_overrides`.
 Only model types supported by `AutoModelForCausalLM` are suitable; TrainLM does
 not load custom remote model code in this scratch path.
 
+The notebook's downloadable ZIP includes an evidence report with the requested
+and effective model configuration, architecture class, tokenizer vocabulary
+size, parameter counts, source and dataset revisions, and training metrics.
+
 The config defaults to a pinned TinyStories revision. In a standard Python
 environment, install the package with `pip install 'trainlm[pretraining]'`.
 The notebook installs only missing `datasets` and `tokenizers` helpers; it

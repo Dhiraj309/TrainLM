@@ -19,8 +19,13 @@
   ordinary trainer lifecycle. GPT-2 remains the default; `model_type` and
   `model_config_overrides` select another registered architecture. TrainLM
   derives the vocabulary and special-token IDs from its trained tokenizer.
-  The Colab/Kaggle notebook uses this public API. Native TorchTPU remains
-  experimental; CPU/API work adds no TPU training evidence.
+  The Colab/Kaggle notebook uses this public API and includes the requested and
+  exported model config, architecture class, vocabulary size, and parameter
+  counts in its downloadable report. Native TorchTPU remains experimental;
+  CPU/API work adds no TPU training evidence. PR #79 rebase-merged this
+  configurable Transformers model path at verified `main` SHA
+  `ba5f4761c35c23403d35e44be5d564dbe7ffadb3`; GitHub CI passed 891 tests and
+  41 subtests. No TPU run was performed.
 - PR #28–#44 established the experimental single-device foundation and the
   from-scratch CPU data/train/checkpoint/export workflow. PR #44's CPU reload
   and generation check does not establish TPU generation or convergence.
