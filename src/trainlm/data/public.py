@@ -250,12 +250,24 @@ class PackedBinDataset(IterableDataset):
         )
         return {"schema_version": 1, "cursor": cursor.state.to_dict()}
 
+    def validate_state_dict(self, state: Mapping[str, Any]) -> None:
+        """Validate a saved cursor without changing the active iterator."""
+        self._validated_cursor(state)
+
     def load_state_dict(self, state: Mapping[str, Any]) -> None:
         """Restore a cursor after verifying its data and partition identity."""
-        if not isinstance(state, Mapping) or state.get("schema_version") != 1:
+        self._cursor = self._validated_cursor(state)
+
+    def _validated_cursor(self, state: Mapping[str, Any]) -> PackedDataCursor:
+        if (
+            not isinstance(state, Mapping)
+            or isinstance(state.get("schema_version"), bool)
+            or not isinstance(state.get("schema_version"), int)
+            or state["schema_version"] != 1
+        ):
             raise ValueError("Unsupported packed dataset state schema.")
         cursor_state = PackedDataCursorState.from_dict(state.get("cursor", {}))
-        self._cursor = PackedDataCursor.from_state(
+        return PackedDataCursor.from_state(
             self._partition,
             cursor_state,
             source_revision=self._source_revision,
