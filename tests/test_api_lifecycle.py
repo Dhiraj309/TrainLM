@@ -111,13 +111,44 @@ def test_facade_resumes_local_training_state(tmp_path):
         ("scheduler_type", "scheduler type does not match"),
         ("optimizer_groups", "parameter-group count does not match"),
         ("optimizer_slot_shape", "optimizer slot 'exp_avg' shape"),
-        ("optimizer_step_shape", "optimizer state 'step' must be a non-negative scalar"),
+        (
+            "optimizer_step_shape",
+            "optimizer state 'step' must be a non-negative scalar",
+        ),
         ("scheduler_lr_count", "scheduler field 'base_lrs' must contain one value"),
-        ("scheduler_epoch_type", "scheduler field 'last_epoch' has an incompatible value"),
+        (
+            "scheduler_epoch_type",
+            "scheduler field 'last_epoch' has an incompatible value",
+        ),
         ("scheduler_missing_field", "scheduler state is missing required fields"),
+        (
+            "trainer_epoch_negative",
+            "trainer field 'epoch' must be a non-negative integer",
+        ),
+        (
+            "trainer_tokens_bool",
+            "trainer field 'tokens_seen' must be a non-negative integer",
+        ),
+        (
+            "trainer_samples_type",
+            "trainer field 'samples_seen' must be a non-negative integer",
+        ),
+        (
+            "trainer_batch_negative",
+            "trainer field 'global_batch_size' must be a non-negative integer",
+        ),
+        (
+            "trainer_learning_rate_nan",
+            "trainer field 'learning_rate' must be a finite non-negative scalar",
+        ),
+        ("trainer_loss_infinite", "trainer field 'loss' must be a finite scalar"),
+        (
+            "trainer_grad_norm_negative",
+            "trainer field 'grad_norm' must be a finite non-negative scalar",
+        ),
     ],
 )
-def test_resume_preflights_optimizer_and_scheduler_before_mutation(
+def test_resume_preflights_checkpoint_state_before_mutation(
     tmp_path, corruption, message
 ):
     first = TrainLMTrainer(
@@ -149,6 +180,20 @@ def test_resume_preflights_optimizer_and_scheduler_before_mutation(
         payload["scheduler"]["last_epoch"] = "zero"
     elif corruption == "scheduler_missing_field":
         payload["scheduler"].pop("_last_lr")
+    elif corruption == "trainer_epoch_negative":
+        payload["trainer"]["epoch"] = -1
+    elif corruption == "trainer_tokens_bool":
+        payload["trainer"]["tokens_seen"] = True
+    elif corruption == "trainer_samples_type":
+        payload["trainer"]["samples_seen"] = "three"
+    elif corruption == "trainer_batch_negative":
+        payload["trainer"]["global_batch_size"] = -1
+    elif corruption == "trainer_learning_rate_nan":
+        payload["trainer"]["learning_rate"] = float("nan")
+    elif corruption == "trainer_loss_infinite":
+        payload["trainer"]["loss"] = float("inf")
+    elif corruption == "trainer_grad_norm_negative":
+        payload["trainer"]["grad_norm"] = -0.5
     else:
         payload["optimizer"]["param_groups"] = []
     torch.save(payload, checkpoint)
@@ -168,6 +213,7 @@ def test_resume_preflights_optimizer_and_scheduler_before_mutation(
         for key, value in resumed.model.state_dict().items()
     }
     before_scheduler = deepcopy(resumed.scheduler.state_dict())
+    before_trainer_state = deepcopy(resumed.engine.state)
 
     with pytest.raises(ValueError, match=message):
         resumed._load_training_checkpoint(resumed.engine, checkpoint)
@@ -178,7 +224,7 @@ def test_resume_preflights_optimizer_and_scheduler_before_mutation(
     )
     assert resumed.engine.optimizer.state == {}
     assert resumed.scheduler.state_dict() == before_scheduler
-    assert resumed.engine.state.step == 0
+    assert resumed.engine.state == before_trainer_state
 
 
 def test_token_scheduler_preflight_rejects_inconsistent_cursor_without_mutation():
