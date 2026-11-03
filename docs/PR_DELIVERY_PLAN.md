@@ -39,9 +39,11 @@ approvals. T2 integrates the report into backend selection and the public UX.
 
 ## PR-by-PR serial execution
 
-**Status snapshot (2026-11-03):** PR #58 rebase-merged at verified `main` SHA
-`e90697f99db29355e135161ea62e66d91bbc6047`; GitHub pytest passed (run ID
-`41581911584`). PR #57 rebase-merged at `e62052ae39d6216bce0dd5aec86fc42d9f10a837`
+**Status snapshot (2026-11-03):** PR #59 rebase-merged at verified `main` SHA
+`2985ef953546506f3cd6d84c8ff79739c6388a9b`; GitHub pytest passed (run ID
+`41582739096`). PR #58 rebase-merged at `e90697f99db29355e135161ea62e66d91bbc6047`
+and passed GitHub pytest (run ID `41581911584`). PR #57 rebase-merged at
+`e62052ae39d6216bce0dd5aec86fc42d9f10a837`
 and passed GitHub pytest (run ID `41579944075`). PR #56 rebase-merged at
 `4aa3614858065c6255c4ecc2d0949c24ee715f70`
 and passed GitHub pytest. PR #55 rebase-merged at `ea9dbadfb86f17cd3713b2abcee808677c38e845`
@@ -71,15 +73,19 @@ pre-restore validation, and PR #57 proves exact custom iterable checkpoint
 resume parity. PR #58 rebase-merged at verified `main` SHA
 `e90697f99db29355e135161ea62e66d91bbc6047`; GitHub pytest passed (run ID
 `41581911584`). It rejects incompatible custom dataset identity or cursor
-before mutation. PR #59 is open from `test/29-legacy-custom-dataset-resume`;
-its CPU regression proves that legacy custom stateful iterables without the
-optional preflight validator still resume with exact model-weight parity. The
-focused checkpoint suite passes (8 tests), and the combined checkpoint/API
-lifecycle suites pass (38 tests). The last full local suite reports 865 passed,
-7 failed, and 41 subtests: missing `pip` blocks the wheel smoke, five Phi cases
-fail because the installed Transformers 5.0.0 `PhiConfig` lacks
-`pad_token_id`, and a separate TrainLM model reload test has mismatched weights.
-No full-suite rerun or TPU validation is claimed for PR #59. This does not
+before mutation. PR #59 rebase-merged at verified `main` SHA
+`2985ef953546506f3cd6d84c8ff79739c6388a9b`; GitHub pytest passed (run ID
+`41582739096`). It proves legacy custom iterable resume without the optional
+preflight validator. PR #60 is open from
+`test/30-legacy-checkpoint-no-dataset-state`; its CPU regression removes the
+optional dataset cursor, data-loader RNG snapshot, and optimizer/scheduler
+type metadata from a schema-v1 checkpoint, then verifies exact resumed-weight
+parity. The combined checkpoint/API lifecycle suites pass (39 tests). The last
+full local suite reports 865 passed, 7 failed, and 41 subtests: missing `pip`
+blocks the wheel smoke, five Phi cases fail because the installed Transformers
+5.0.0 `PhiConfig` lacks `pad_token_id`, and a separate TrainLM model reload test
+has mismatched weights. No full-suite rerun or TPU validation is claimed for
+PR #60. This does not
 establish native multi-device launch or v5e-8 support. The
 old numbered cards below do not set the current work order; use [the T0–T11
 rebaseline](TORCHTPU_REBASELINE.md), [the handoff](HANDOFF.md), and

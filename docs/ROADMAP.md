@@ -90,16 +90,18 @@ TorchTPU support. “Implemented” means present in that historical code path;
   between resumed and uninterrupted model weights. PR #58 rebase-merged at
   verified `main` SHA `e90697f99db29355e135161ea62e66d91bbc6047`; GitHub pytest
   passed (run ID `41581911584`). It rejects a mismatched custom dataset ID or
-  out-of-range cursor before state mutation. PR #59 is open from
-  `test/29-legacy-custom-dataset-resume`, based on that verified `main`; its CPU
-  regression proves that custom stateful iterables without the optional
-  `validate_state_dict` hook still resume with exact model-weight parity. The
-  focused checkpoint suite passes (8 tests), and the combined checkpoint/API
-  lifecycle suites pass (38 tests). The last full local suite had 865 passed, 7
-  failed and 41 subtests: missing `pip` blocked wheel smoke, five Phi cases hit
-  a Transformers 5.0.0 config issue, and a TrainLM model reload test had
-  mismatched weights. No full-suite rerun or TPU checkpoint validation is
-  claimed for PR #59.
+  out-of-range cursor before state mutation. PR #59 rebase-merged at verified
+  `main` SHA `2985ef953546506f3cd6d84c8ff79739c6388a9b`; GitHub pytest passed
+  (run ID `41582739096`). It proves legacy stateful custom iterables still
+  resume without the optional `validate_state_dict` hook. PR #60 is open from
+  `test/30-legacy-checkpoint-no-dataset-state`, based on that verified `main`;
+  its regression removes optional dataset cursor, loader RNG and optimizer/
+  scheduler type fields from a schema-v1 checkpoint and verifies exact resume
+  parity. The combined checkpoint/API lifecycle suites pass (39 tests). The
+  last full local suite had 865 passed, 7 failed and 41 subtests: missing `pip`
+  blocked wheel smoke, five Phi cases hit a Transformers 5.0.0 config issue,
+  and a TrainLM model reload test had mismatched weights. No full-suite rerun or
+  TPU checkpoint validation is claimed for PR #60.
   BF16 and checkpointing remain unvalidated on TPU. T1 source-level
   probes and the explicit `native_tpu` path are implemented; owner-run compile,
   lifecycle and v5e-8 collective evidence remain pending. Hosted Kaggle currently documents
