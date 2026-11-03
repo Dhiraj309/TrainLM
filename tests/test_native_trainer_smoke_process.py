@@ -1,5 +1,6 @@
 """The trainer smoke launcher must remain usable before Torch is installed."""
 
+import ast
 import json
 from pathlib import Path
 import runpy
@@ -11,6 +12,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "examples/torchtpu_native_trainer_smoke.py"
+QUICKSTART = ROOT / "examples/torchtpu_pretraining_quickstart.py"
 NOTEBOOK = ROOT / "notebooks/TrainLM_Native_TorchTPU_Single_Device_Training.ipynb"
 
 
@@ -343,7 +345,7 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         self.assertIn("run_probe_process", source)
         self.assertIn("torchtpu_native_trainer_smoke.py", source)
 
-    def test_scratch_notebook_trains_tokenizer_on_the_train_split(self):
+    def test_scratch_notebook_keeps_beginner_setup_simple(self):
         notebook = json.loads(
             (ROOT / "notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb").read_text()
         )
@@ -357,23 +359,12 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
             for cell in notebook["cells"]
             if cell["cell_type"] == "markdown"
         )
-        self.assertIn("TOKENIZER_VOCAB_SIZE", source)
-        self.assertIn("--tokenizer-vocab-size", source)
-        self.assertIn("MODEL_EMBEDDING_SIZE", source)
-        self.assertIn("MODEL_LAYERS", source)
-        self.assertIn("MODEL_ATTENTION_HEADS", source)
-        self.assertIn("USE_BF16 = False", source)
-        self.assertIn("command.append(\"--bf16\")", source)
-        self.assertIn("USE_GRADIENT_CHECKPOINTING = False", source)
-        self.assertIn("command.append(\"--gradient-checkpointing\")", source)
-        self.assertIn("TRAIN_BATCH_SIZE = 1", source)
-        self.assertIn("EVAL_BATCH_SIZE = 1", source)
-        self.assertIn("TARGET_SUPERVISED_TOKENS = 1_000_000", source)
-        self.assertIn("--target-supervised-tokens", source)
-        self.assertIn("--per-device-train-batch-size", source)
-        self.assertIn("--per-device-eval-batch-size", source)
-        self.assertIn("LOGGING_STEPS = 10", source)
-        self.assertIn("--logging-steps", source)
+        self.assertIn("TARGET_SUPERVISED_TOKENS = 10_000", source)
+        self.assertIn("SEQUENCE_LENGTH = 128", source)
+        self.assertIn("torchtpu_pretraining_quickstart.py", source)
+        self.assertNotIn("MODEL_EMBEDDING_SIZE", source)
+        self.assertNotIn("USE_BF16", source)
+        self.assertNotIn("GRADIENT_ACCUMULATION_STEPS", source)
         self.assertIn('"baseline-export"', source)
         self.assertIn('arcname="report.json"', source)
         self.assertIn("zipfile.ZipFile", source)
@@ -381,24 +372,71 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         self.assertIn("model_export=not_included", source)
         self.assertIn("/kaggle/working", source)
         self.assertIn("files.download", source)
-        self.assertIn("reloads that export on CPU", markdown)
+        self.assertIn("does not establish convergence", markdown)
         self.assertIn("supervised next-token targets", markdown)
-        self.assertIn("LEARNING_RATE = 3e-4", source)
-        self.assertIn("WEIGHT_DECAY = 0.1", source)
-        self.assertIn("WARMUP_STEPS = None", source)
-        self.assertIn("SEED = 42", source)
-        self.assertIn("--learning-rate", source)
-        self.assertIn("--weight-decay", source)
-        self.assertIn("--warmup-steps", source)
-        self.assertIn("--seed", source)
         self.assertIn("DATASET_ID", source)
         self.assertIn("DATASET_REVISION", source)
         self.assertIn("TEXT_FIELD", source)
-        self.assertIn("--dataset-id", source)
-        self.assertIn("--text-field", source)
-        self.assertIn("trains a byte-level BPE tokenizer", markdown)
-        self.assertIn("builds the GPT-2 config locally", markdown)
-        self.assertIn("no pretrained model config, weights, or tokenizer are downloaded", markdown)
+        self.assertIn("report.json", source)
+
+    def test_scratch_notebook_code_cells_are_valid_python(self):
+        notebook = json.loads(
+            (ROOT / "notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb").read_text()
+        )
+        for index, cell in enumerate(notebook["cells"]):
+            if cell["cell_type"] == "code":
+                ast.parse("".join(cell["source"]), filename=f"scratch-notebook-cell-{index}")
+
+    def test_quickstart_maps_simple_choices_to_bounded_worker_defaults(self):
+        build_command = runpy.run_path(str(QUICKSTART))["build_training_command"]
+        command = build_command(
+            repo_root=ROOT,
+            output_dir=Path("/tmp/trainlm-output"),
+            target_supervised_tokens=2_000,
+            sequence_length=128,
+            dataset_id="org/stories",
+            dataset_revision="a" * 40,
+            train_split="train",
+            validation_split="validation",
+            text_field="content",
+        )
+
+        def value(option):
+            return command[command.index(option) + 1]
+
+        self.assertEqual(value("--target-supervised-tokens"), "2000")
+        self.assertEqual(value("--sequence-length"), "128")
+        self.assertEqual(value("--dataset-id"), "org/stories")
+        self.assertEqual(value("--dataset-revision"), "a" * 40)
+        self.assertEqual(value("--text-field"), "content")
+        self.assertEqual(value("--model-layers"), "6")
+        self.assertNotIn("--compile", command)
+        self.assertNotIn("--resume", command)
+
+    def test_quickstart_rejects_invalid_run_geometry(self):
+        build_command = runpy.run_path(str(QUICKSTART))["build_training_command"]
+        with self.assertRaisesRegex(ValueError, "positive integer"):
+            build_command(
+                repo_root=ROOT, output_dir=Path("/tmp/run"),
+                target_supervised_tokens=0, sequence_length=128,
+            )
+        with self.assertRaisesRegex(ValueError, "at least two"):
+            build_command(
+                repo_root=ROOT, output_dir=Path("/tmp/run"),
+                target_supervised_tokens=100, sequence_length=1,
+            )
+        with self.assertRaisesRegex(ValueError, "40-character"):
+            build_command(
+                repo_root=ROOT, output_dir=Path("/tmp/run"),
+                target_supervised_tokens=100, sequence_length=128,
+                dataset_revision="main",
+            )
+        with self.assertRaisesRegex(ValueError, "must differ"):
+            build_command(
+                repo_root=ROOT, output_dir=Path("/tmp/run"),
+                target_supervised_tokens=100, sequence_length=128,
+                train_split="train", validation_split="train",
+            )
 
 
 if __name__ == "__main__":
