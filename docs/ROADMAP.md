@@ -137,6 +137,11 @@ TorchTPU support. “Implemented” means present in that historical code path;
   through the next epoch rollover. The checkpoint/API suites passed 43 tests
   (46 including the roadmap contract). No full-suite or TPU validation is
   claimed for PR #68.
+  A further case leaves a one-row final batch in a five-row sequential loader
+  with batch size two and gradient accumulation two. Resume consumes that tail
+  and the next epoch's first batch exactly; final weights match uninterrupted
+  training. The checkpoint/API suites pass 44 tests (47 including the roadmap
+  contract). No full-suite or TPU validation is claimed for this follow-up.
   BF16 and checkpointing remain unvalidated on TPU. T1 source-level
   probes and the explicit `native_tpu` path are implemented; owner-run compile,
   lifecycle and v5e-8 collective evidence remain pending. Hosted Kaggle currently documents
