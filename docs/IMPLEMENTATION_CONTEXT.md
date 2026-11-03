@@ -104,13 +104,16 @@ for file discovery; this document remains the detailed implementation record.
   `c63e6903767f3a2aab2ff733e6248ff0c4e4bd3b`; GitHub CI run #302 passed. It
   records optimizer/scheduler class identity and checks optimizer group layout
   before restore, while accepting earlier schema-v1 checkpoints without the
-  optional type metadata. Branch `fix/22-optimizer-slot-state-preflight` adds
-  checks for common optimizer per-parameter slot shapes and scalar steps, plus
-  scheduler payload fields, ranges, and optimizer-group counts before restore.
-  Its focused checkpoint/lifecycle tests passed (39 tests), and the complete
-  CPU suite passed locally (859 tests and 41 subtests) in Python 3.12.14 with
-  torch 2.9.0+cpu and pytest 9.2.0. `compileall` and `git diff --check` passed;
-  Ruff was unavailable in the temporary environment. GitHub CI and native TPU
+  optional type metadata. PR #52 rebase-merged at verified `main` SHA
+  `9cf8d4ba0de0b91cc52908d9d98f984b29873a33`; CI run #304 passed. It adds
+  preflight checks for common optimizer slot shapes and scalar steps, plus
+  scheduler payload fields, ranges, and optimizer-group counts. Branch
+  `fix/23-trainer-state-preflight` validates persisted integer counters and
+  finite learning-rate/loss/gradient-norm metadata before restore. Its focused
+  lifecycle tests passed (25 tests), and the complete CPU suite passed (866
+  tests and 41 subtests) in Python 3.12.14 with torch 2.9.0+cpu and pytest
+  9.2.0; Gloo tests used per-command network permission. `compileall` and
+  `git diff --check` passed; Ruff was unavailable. GitHub CI and native TPU
   checkpoint validation are pending.
 - [T1 v5e-1 probe guide](T1_V5E1_PROBE.md) and the
   [Colab-openable Kaggle/Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TorchTPU_T1_v5e1_Probe.ipynb) describe

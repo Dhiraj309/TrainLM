@@ -47,11 +47,13 @@ PR #51 rebase-merged at verified `main` SHA
 `c63e6903767f3a2aab2ff733e6248ff0c4e4bd3b`; CI run #302 passed. It records
 optimizer and scheduler class identity and checks optimizer parameter-group
 compatibility before restore. Older schema-v1 checkpoints without the optional
-class metadata remain accepted. Branch `fix/22-optimizer-slot-state-preflight`
-adds optimizer slot-shape/step and scheduler-payload preflight. Its complete
-CPU suite passed locally (859 tests and 41 subtests in Python 3.12.14 with
-torch 2.9.0+cpu and pytest 9.2.0); GitHub CI is pending. Native TPU checkpoint
-validation remains pending.
+class metadata remain accepted. PR #52 rebase-merged optimizer slot-shape/step
+and scheduler-payload preflight at verified `main` SHA
+`9cf8d4ba0de0b91cc52908d9d98f984b29873a33`; CI run #304 passed. Branch
+`fix/23-trainer-state-preflight` validates saved progress counters and metrics
+before restore. The complete CPU suite passed locally (866 tests and 41
+subtests in Python 3.12.14 with torch 2.9.0+cpu and pytest 9.2.0); GitHub CI is
+pending. Native TPU checkpoint validation remains pending.
 
 Owner direction allows CPU-verifiable implementation to proceed while scarce
 TPU slots are pending. A provisional, explicit `accelerator="native_tpu"`
@@ -107,7 +109,7 @@ reversible.
 | Item | Verified/recorded context | Required next action |
 |---|---|---|
 | Repository | `Dhiraj309/TrainLM` | Verify checkout, branch, origin, permissions |
-| Current base | PR #51 rebase-merged; verified `main` SHA `c63e6903767f3a2aab2ff733e6248ff0c4e4bd3b` | Validate optimizer slot and scheduler payloads before checkpoint restore; keep TPU execution gated |
+| Current base | PR #52 rebase-merged; verified `main` SHA `9cf8d4ba0de0b91cc52908d9d98f984b29873a33` | Validate persisted trainer counters and metrics before checkpoint restore; keep TPU execution gated |
 | Legacy integration | PR #18 merged into `main` on 2026-10-28; merge commit `23959d29434fd2ae3f78b20469e1d61c6b1e18c9` | T0.1 inventory is complete; XLA-era PR cards are not the active queue |
 | Earlier salvage | PR #16 was merged into PR #18, which is now merged into `main` | Inventory its code as part of the merged tree; do not merge it again |
 | Existing TPU backend | Primarily PyTorch/XLA with historical measurements | Classify reusable vs XLA-specific components |
