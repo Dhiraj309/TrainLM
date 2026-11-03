@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 import torch
-from torch.utils.data import RandomSampler, SequentialSampler
+from torch.utils.data import Dataset, RandomSampler, SequentialSampler
 
 from trainlm import TrainLMTrainer, TrainLMTrainingArguments
 from trainlm.training import TokenWSD, TrainerCallback
@@ -40,6 +40,38 @@ def _dataset():
         }
         for _ in range(4)
     ]
+
+
+class StatefulListDataset(Dataset):
+    """Small custom dataset exercising the optional checkpoint preflight hook."""
+
+    def __init__(self):
+        self.position = 0
+        self.validation_calls = []
+        self.load_calls = 0
+
+    def __len__(self):
+        return 4
+
+    def __getitem__(self, index):
+        del index
+        return {
+            "input_ids": torch.tensor([0, 1, 2, 3]),
+            "labels": torch.tensor([0, 1, 2, 3]),
+        }
+
+    def state_dict(self):
+        return {"schema_version": 1, "position": self.position}
+
+    def validate_state_dict(self, state):
+        self.validation_calls.append(deepcopy(state))
+        if state.get("schema_version") != 1:
+            raise ValueError("Unsupported custom dataset state schema.")
+
+    def load_state_dict(self, state):
+        self.validate_state_dict(state)
+        self.position = state["position"]
+        self.load_calls += 1
 
 
 def test_facade_runs_eval_save_and_forwards_metrics(tmp_path):
@@ -102,6 +134,55 @@ def test_facade_resumes_local_training_state(tmp_path):
 
     assert state.step == 2
     assert state.micro_step == 2
+
+
+def test_custom_dataset_preflight_rejects_state_before_trainer_mutation(tmp_path):
+    source = TrainLMTrainer(
+        model=TinyModel(),
+        train_dataset=StatefulListDataset(),
+        args=TrainLMTrainingArguments(
+            output_dir=tmp_path / "source",
+            max_steps=1,
+            sequence_length=4,
+            accelerator="cpu",
+        ),
+    )
+    source.train()
+    checkpoint = source.save_state(tmp_path / "checkpoint")
+    payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    payload["train_dataset_state"]["schema_version"] = 2
+    torch.save(payload, checkpoint)
+
+    resumed_dataset = StatefulListDataset()
+    resumed = TrainLMTrainer(
+        model=TinyModel(),
+        train_dataset=resumed_dataset,
+        args=TrainLMTrainingArguments(
+            output_dir=tmp_path / "resume",
+            max_steps=2,
+            sequence_length=4,
+            accelerator="cpu",
+        ),
+    )
+    before_model = {
+        key: value.detach().clone() for key, value in resumed.model.state_dict().items()
+    }
+    before_scheduler = deepcopy(resumed.scheduler.state_dict())
+    before_trainer_state = deepcopy(resumed.engine.state)
+
+    with pytest.raises(ValueError, match="Unsupported custom dataset state schema"):
+        resumed._load_training_checkpoint(resumed.engine, checkpoint)
+
+    assert resumed_dataset.validation_calls == [payload["train_dataset_state"]]
+    assert resumed_dataset.load_calls == 0
+    assert resumed_dataset.position == 0
+    assert all(
+        torch.equal(before_model[key], value)
+        for key, value in resumed.model.state_dict().items()
+    )
+    assert resumed.engine.optimizer.state == {}
+    assert resumed.scheduler.state_dict() == before_scheduler
+    assert resumed.engine.state == before_trainer_state
 
 
 @pytest.mark.parametrize(
