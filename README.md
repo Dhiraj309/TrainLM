@@ -7,17 +7,36 @@ kernel backends.
 ## Start here: pretrain a language model from scratch
 
 The [Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb)
-shows the experimental native TorchTPU workflow: initialize model weights
-randomly, prepare training and validation data, train, checkpoint, and export a
-Hugging Face model. For a first run, choose a token budget and sequence length;
-the notebook handles the pinned sample dataset and setup. This is an
-educational smoke run, not evidence of convergence or TPU performance.
+uses TrainLM's public from-scratch API. It initializes random GPT-2 weights,
+learns a tokenizer from pinned raw text, prepares packed data, trains, evaluates,
+and exports a Hugging Face model. The native TorchTPU path is experimental; the
+starter run does not establish convergence or TPU performance.
+
+```python
+from trainlm import TrainLMPretrainingConfig, TrainLMTrainer
+
+config = TrainLMPretrainingConfig(
+    output_dir="runs/tinystories",
+    max_tokens=10_000,
+    sequence_length=128,
+    accelerator="native_tpu",  # Explicit, experimental single-device path.
+)
+trainer = TrainLMTrainer.from_scratch(config)
+trainer.train()
+metrics = trainer.evaluate()
+trainer.save_model("runs/tinystories/model")
+```
+
+The config defaults to a pinned TinyStories revision. In a standard Python
+environment, install the package with `pip install 'trainlm[pretraining]'`.
+The notebook installs only missing `datasets` and `tokenizers` helpers; it
+does not reinstall the Torch/TorchTPU packages supplied by the TPU runtime.
 
 - [Open the notebook in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb)
 - [Read the notebook source](notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb)
-- [Inspect the beginner notebook helper](examples/torchtpu_pretraining_quickstart.py)
-- [Inspect its training implementation](examples/torchtpu_native_trainer_smoke.py)
-- [Review CPU scratch-training coverage](tests/test_packed_scratch_training.py)
+- [Inspect the public pretraining config and raw-text preparation](src/trainlm/pretraining.py)
+- [Inspect the public trainer API](src/trainlm/api.py)
+- [Review the public API's CPU lifecycle coverage](tests/test_pretraining_api.py)
 - [Find files and current evidence for coding agents](docs/AI_AGENT_GUIDE.md)
 
 ## Project status and roadmap

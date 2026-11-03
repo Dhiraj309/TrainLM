@@ -13,12 +13,11 @@
   may continue behind explicit native selection while those hardware checks
   wait; do not enable automatic TPU routing or change dependency bounds based
   only on the eager smoke.
-- **Beginner workflow:** the from-scratch Colab/Kaggle notebook now exposes a
-  small token-budget and sequence-length configuration and delegates data
-  preparation, starter model settings, preflight, and worker launch to an
-  example helper. This improves notebook usability; it does not make the helper
-  a stable public API or change the experimental TPU evidence status. Four
-  focused CPU-side notebook/command-contract tests pass; no TPU run was made.
+- **Raw-text API:** `TrainLMPretrainingConfig` plus
+  `TrainLMTrainer.from_scratch()` prepares pinned HF text, tokenizer, packed
+  data, and a random GPT-2 model, then returns the ordinary trainer lifecycle.
+  The Colab/Kaggle notebook uses this public API. Native TorchTPU remains
+  experimental; the API work adds no TPU training evidence.
 - PR #28–#44 established the experimental single-device foundation and the
   from-scratch CPU data/train/checkpoint/export workflow. PR #44's CPU reload
   and generation check does not establish TPU generation or convergence.
