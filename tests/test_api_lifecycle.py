@@ -146,6 +146,10 @@ def test_facade_resumes_local_training_state(tmp_path):
             "trainer_grad_norm_negative",
             "trainer field 'grad_norm' must be a finite non-negative scalar",
         ),
+        ("trainer_phase", "trainer field 'phase' is not persisted"),
+        ("trainer_is_training", "trainer field 'is_training' is not persisted"),
+        ("trainer_should_stop", "trainer field 'should_stop' is not persisted"),
+        ("trainer_failure", "trainer field 'failure' is not persisted"),
     ],
 )
 def test_resume_preflights_checkpoint_state_before_mutation(
@@ -194,6 +198,14 @@ def test_resume_preflights_checkpoint_state_before_mutation(
         payload["trainer"]["loss"] = float("inf")
     elif corruption == "trainer_grad_norm_negative":
         payload["trainer"]["grad_norm"] = -0.5
+    elif corruption == "trainer_phase":
+        payload["trainer"]["phase"] = "failed"
+    elif corruption == "trainer_is_training":
+        payload["trainer"]["is_training"] = True
+    elif corruption == "trainer_should_stop":
+        payload["trainer"]["should_stop"] = True
+    elif corruption == "trainer_failure":
+        payload["trainer"]["failure"] = "stale failure"
     else:
         payload["optimizer"]["param_groups"] = []
     torch.save(payload, checkpoint)
