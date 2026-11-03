@@ -192,12 +192,17 @@ for file discovery; this document remains the detailed implementation record.
   epoch rollover. The checkpoint/API suites passed 43 tests (46 including the
   roadmap contract). No full-suite rerun or TPU validation is claimed for PR
   #68.
-- A further CPU case uses five sequential rows, batch size two, and gradient
-  accumulation two, leaving a one-row final batch. Resume consumes that partial
-  batch and the next epoch's first batch without dropping or repeating rows;
-  final weights match uninterrupted training. The checkpoint/API suites pass
-  (44 tests; 47 including the roadmap contract); no full-suite or TPU
-  validation is claimed.
+- PR #69 rebase-merged the status update at verified `main` SHA
+  `bf57ebb20600eb69f4ea5f1666d427cf610d3870`; GitHub pytest passed (run ID
+  `41632033098`).
+- PR #70 rebase-merged at verified `main` SHA
+  `2f0eafcbeb6d394496154fdddc22a55233aee5d0`; GitHub pytest passed (run ID
+  `41632939362`). Commit `2383d35` adds CPU coverage for a five-row sequential
+  `DataLoader` with batch size two, `drop_last=False`, and gradient accumulation
+  two. Resume consumes the one-row final batch and the next epoch's first batch
+  without dropping or repeating rows; final weights match uninterrupted
+  training. The checkpoint/API suites passed 44 tests (47 including the roadmap
+  contract). No full-suite rerun or TPU validation is claimed for PR #70.
 - The last full local suite, on PR #56's branch, produced 865 passed, 7 failed
   and 41 subtests: missing `pip` blocked the wheel smoke, five Phi cases hit the
   installed Transformers 5.0.0 `PhiConfig` missing `pad_token_id`, and a
