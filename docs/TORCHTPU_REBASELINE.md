@@ -121,7 +121,7 @@ reversible.
 | Item | Verified/recorded context | Required next action |
 |---|---|---|
 | Repository | `Dhiraj309/TrainLM` | Verify checkout, branch, origin, permissions |
-| Current base | PR #57 rebase-merged; verified `main` SHA `e62052ae39d6216bce0dd5aec86fc42d9f10a837` | Reject custom iterable identity/cursor corruption before checkpoint restore; keep TPU execution gated |
+| Current base | PR #59 rebase-merged; verified `main` SHA `2985ef953546506f3cd6d84c8ff79739c6388a9b` | PR #60 adds CPU resume coverage for schema-v1 checkpoints without optional dataset state; keep TPU execution gated |
 | Legacy integration | PR #18 merged into `main` on 2026-10-28; merge commit `23959d29434fd2ae3f78b20469e1d61c6b1e18c9` | T0.1 inventory is complete; XLA-era PR cards are not the active queue |
 | Earlier salvage | PR #16 was merged into PR #18, which is now merged into `main` | Inventory its code as part of the merged tree; do not merge it again |
 | Existing TPU backend | Primarily PyTorch/XLA with historical measurements | Classify reusable vs XLA-specific components |
