@@ -43,11 +43,12 @@ PR #50 rebase-merged the T5 public trainer checkpoint preflight at verified
 `main` SHA
 `f57d6d71339753a6a3cee4082a43dfa2f5113017`; CI run #299 passed.
 
-The active branch `fix/21-optimizer-scheduler-preflight` records optimizer and
-scheduler class identity and checks optimizer parameter-group compatibility
-before restore. Older schema-v1 checkpoints without the optional class metadata
-remain accepted. The full CPU suite passed locally (853 tests and 41 subtests
-in Python 3.12.14 with torch 2.9.0+cpu and pytest 9.2.0); GitHub CI is pending.
+PR #51 on `fix/21-optimizer-scheduler-preflight` records optimizer and scheduler
+class identity and checks optimizer parameter-group compatibility before
+restore. Older schema-v1 checkpoints without the optional class metadata remain
+accepted. The full CPU suite passed locally (853 tests and 41 subtests in
+Python 3.12.14 with torch 2.9.0+cpu and pytest 9.2.0); GitHub CI run #301
+passed.
 
 Owner direction allows CPU-verifiable implementation to proceed while scarce
 TPU slots are pending. A provisional, explicit `accelerator="native_tpu"`
