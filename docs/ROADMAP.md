@@ -147,6 +147,13 @@ TorchTPU support. “Implemented” means present in that historical code path;
   weights match uninterrupted training. The checkpoint/API suites passed 44
   tests (47 including the roadmap contract). No full-suite or TPU validation is
   claimed for PR #70.
+  The current branch `test/38-random-sampler-resume-parity` adds exact-resume
+  coverage for the default TrainLM-owned random sampler. It saves after the
+  first update, resumes across an epoch boundary, and matches uninterrupted
+  model weights through step three. The focused API lifecycle, trainer, and
+  roadmap-contract suites passed 57 tests. No full-suite or TPU validation is
+  claimed; this branch starts from verified `main` SHA
+  `33094937a78e9a773ba8dbdd2007f73b10ec0a20` and is not yet merged.
   BF16 and checkpointing remain unvalidated on TPU. T1 source-level
   probes and the explicit `native_tpu` path are implemented; owner-run compile,
   lifecycle and v5e-8 collective evidence remain pending. Hosted Kaggle currently documents
