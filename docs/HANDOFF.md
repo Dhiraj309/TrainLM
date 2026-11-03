@@ -105,8 +105,16 @@
   `41634659366`). It verifies exact resume with TrainLM's default random
   sampler across an epoch boundary (57 focused API/trainer/contract tests
   passed locally).
+- PR #73 rebase-merged the documentation status correction at verified `main`
+  SHA `6090ba72e32d9d920499807f0c7b5a15e8ae5861`; CI passed (run ID
+  `41635317392`).
+- PR #74 rebase-merged at verified `main` SHA
+  `b0f81e91ad6c11aef865441efc05455202557677`; CI passed (run ID
+  `41636368557`). It verifies exact resume both within an epoch and at the
+  shuffled sampler's epoch boundary (58 focused API/trainer/contract tests
+  passed locally).
 - **Verified base:** `main` at
-  `df9f232dff191354b976b0059a2a174777792a5f` after PR #72.
+  `b0f81e91ad6c11aef865441efc05455202557677` after PR #74.
 - **Probe:** [`T1 v5e-1 guide`](T1_V5E1_PROBE.md) and its
   [Kaggle/Colab notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb) test a tiny
   synthetic forward/backward and optimizer update, with optional `torch.compile`.
@@ -114,7 +122,7 @@
   forward/backward and AdamW pass on torch_tpu 0.2.0 with torch 2.14.1+cpu.
   Hardware generation and explicit compile remain unverified.
 - **Validation boundary:** PR #55 passed the full CPU suite (871 tests and 41
-  subtests) in Python 3.12.14 / torch 2.9.0+cpu / pytest 9.2.0. PRs #56–#72
+  subtests) in Python 3.12.14 / torch 2.9.0+cpu / pytest 9.2.0. PRs #56–#74
   passed GitHub pytest. The last full
   local suite reports 865 passed, 7 failed, and 41
   subtests. One failure is the wheel smoke blocked by missing `pip`; five Phi
