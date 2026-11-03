@@ -39,9 +39,10 @@ approvals. T2 integrates the report into backend selection and the public UX.
 
 ## PR-by-PR serial execution
 
-**Status snapshot (2026-11-03):** PR #61 rebase-merged at verified `main` SHA
-`448ea9dc3d5969aa88d612bdfbbf11af682bc78d`; GitHub pytest passed (run ID
-`41585945140`). PR #60 rebase-merged at `839d8fcc1f9320ff6193b7c54399c629881945f0`
+**Status snapshot (2026-11-03):** PR #62 rebase-merged at verified `main` SHA
+`821beacdee235e9ed6e70781023126023120adef`; GitHub pytest passed (run ID
+`41594252050`). PR #61 rebase-merged at `448ea9dc3d5969aa88d612bdfbbf11af682bc78d`
+and passed GitHub pytest (run ID `41585945140`). PR #60 rebase-merged at `839d8fcc1f9320ff6193b7c54399c629881945f0`
 and passed GitHub pytest (run ID `41585383984`). PR #59 rebase-merged at
 `2985ef953546506f3cd6d84c8ff79739c6388a9b`
 and passed GitHub pytest (run ID `41582739096`). PR #58 rebase-merged at
@@ -87,10 +88,12 @@ RNG snapshot and optimizer/scheduler type metadata from a schema-v1 checkpoint,
 then verifies exact resumed-weight parity. The combined checkpoint/API
 lifecycle suites passed (39 tests). PR #61 is a documentation-only status
 correction at verified `main` `448ea9dc3d5969aa88d612bdfbbf11af682bc78d`.
-PR #62 is open from `test/32-reject-random-resume-without-rng`; its CPU test
-checks rejection before mutation when a RandomSampler checkpoint lacks saved
-loader RNG state. The combined checkpoint/API lifecycle suites pass (40 tests),
-and GitHub CI is pending. The last full local suite reports 865 passed, 7
+PR #62 rebase-merged at verified `main` SHA
+`821beacdee235e9ed6e70781023126023120adef`; GitHub pytest passed (run ID
+`41594252050`). Its CPU test checks rejection before mutation when a
+RandomSampler checkpoint lacks saved loader RNG state. The combined
+checkpoint/API lifecycle suites passed (40 tests). The last full local suite
+reports 865 passed, 7
 failed, and 41 subtests: missing `pip` blocks the wheel smoke, five Phi cases
 fail because the installed Transformers
 5.0.0 `PhiConfig` lacks `pad_token_id`, and a separate TrainLM model reload test
