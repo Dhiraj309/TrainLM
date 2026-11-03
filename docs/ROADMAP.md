@@ -56,6 +56,8 @@ TorchTPU support. “Implemented” means present in that historical code path;
   run passed.
   PR #49 rebase-merged T5 checkpoint integrity at verified `main` SHA
   `01a71f990fc5578b77be6e2e0a84473486fbe488`; CI runs #296 and #297 passed.
+  PR #50 rebase-merged public trainer checkpoint preflight at verified `main`
+  SHA `f57d6d71339753a6a3cee4082a43dfa2f5113017`; CI run #299 passed.
   CPU/Gloo regressions and backend-gated logic now cover global valid-token
   gradient weighting, synchronized distributed `max_tokens` stopping, and
   global loss/progress reporting. The focused CPU/Gloo and related
@@ -63,11 +65,12 @@ TorchTPU support. “Implemented” means present in that historical code path;
   torch 2.9.0+cpu, pytest 9.2.0 environment (79 tests); PR #48's GitHub CI
   passed. T5 rank-sharded checkpoints now use schema-v3 shard digests and
   coordinated CPU/Gloo write/resume preflight; native TPU validation remains
-  unverified. The active follow-on branch
-  `fix/20-trainer-checkpoint-preflight` validates public trainer checkpoints,
-  including runtime metadata, before state restore. Its full CPU suite passed
-  locally (850 tests and 41 subtests); GitHub CI and TPU checkpoint validation
-  are pending.
+  unverified. Public trainer checkpoint preflight is merged. The active branch
+  `fix/21-optimizer-scheduler-preflight` records optimizer/scheduler class
+  identity and checks optimizer group compatibility before state restore; old
+  schema-v1 checkpoints without type metadata remain accepted. Its full CPU
+  suite passed locally (853 tests and 41 subtests); GitHub CI and TPU checkpoint
+  validation are pending.
   BF16 and checkpointing remain unvalidated on TPU. T1 source-level
   probes and the explicit `native_tpu` path are implemented; owner-run compile,
   lifecycle and v5e-8 collective evidence remain pending. Hosted Kaggle currently documents

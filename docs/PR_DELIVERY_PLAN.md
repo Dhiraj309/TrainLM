@@ -39,8 +39,8 @@ approvals. T2 integrates the report into backend selection and the public UX.
 
 ## PR-by-PR serial execution
 
-**Status snapshot (2026-11-03):** PR #49 rebase-merged at verified `main` SHA
-`01a71f990fc5578b77be6e2e0a84473486fbe488`. PRs #45 and #47 refreshed
+**Status snapshot (2026-11-03):** PR #50 rebase-merged at verified `main` SHA
+`f57d6d71339753a6a3cee4082a43dfa2f5113017`. PRs #45 and #47 refreshed
 agent-facing documentation and live status; neither added runtime or
 accelerator evidence. PRs #28–#44 established the experimental native
 single-device foundation and the from-scratch CPU workflow. T4 distributed
@@ -48,11 +48,11 @@ token weighting, synchronized global `max_tokens` stopping, and global
 loss/progress reporting are merged; 79 focused CPU tests and the full GitHub
 CI passed. PR #49 added schema-v3 rank-shard checksums and coordinated
 multi-rank save/resume preflight; its full Python 3.11 GitHub CI runs #296 and
-#297 passed. The active T5 follow-on on
-`fix/20-trainer-checkpoint-preflight` validates public trainer checkpoint
-compatibility, including runtime metadata, before restoring state. Its full CPU
-suite passed locally (850 tests and 41 subtests in Python 3.12.14 / torch
-2.9.0+cpu); GitHub CI is pending.
+#297 passed. PR #50 added public checkpoint preflight and passed CI run #299.
+The active follow-on on `fix/21-optimizer-scheduler-preflight` records optimizer
+and scheduler type metadata and validates optimizer group layout before state
+restore. The full CPU suite passed locally (853 tests and 41 subtests in Python
+3.12.14 / torch 2.9.0+cpu); GitHub CI is pending.
 This does not establish native multi-device launch or v5e-8 support. The
 old numbered cards below do not set the current work order; use [the T0–T11
 rebaseline](TORCHTPU_REBASELINE.md), [the handoff](HANDOFF.md), and

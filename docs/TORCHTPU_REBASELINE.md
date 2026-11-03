@@ -39,11 +39,15 @@ PR #49 rebase-merged T5 rank-shard integrity at verified `main` SHA
 and coordinated CPU/Gloo preflight catches corruption or rank-local write
 failures before state restore. Native TPU checkpoint validation is pending.
 
-The active T5 follow-on branch `fix/20-trainer-checkpoint-preflight` validates
-the public trainer checkpoint's schema, model keys/shapes, trainer fields,
-runtime metadata, RNG state and data-cursor compatibility before mutation. Its
-full CPU suite passed locally (850 tests and 41 subtests in Python 3.12.14 with
-torch 2.9.0+cpu and pytest 9.2.0); GitHub CI is pending.
+PR #50 rebase-merged the T5 public trainer checkpoint preflight at verified
+`main` SHA
+`f57d6d71339753a6a3cee4082a43dfa2f5113017`; CI run #299 passed.
+
+The active branch `fix/21-optimizer-scheduler-preflight` records optimizer and
+scheduler class identity and checks optimizer parameter-group compatibility
+before restore. Older schema-v1 checkpoints without the optional class metadata
+remain accepted. The full CPU suite passed locally (853 tests and 41 subtests
+in Python 3.12.14 with torch 2.9.0+cpu and pytest 9.2.0); GitHub CI is pending.
 
 Owner direction allows CPU-verifiable implementation to proceed while scarce
 TPU slots are pending. A provisional, explicit `accelerator="native_tpu"`
@@ -99,7 +103,7 @@ reversible.
 | Item | Verified/recorded context | Required next action |
 |---|---|---|
 | Repository | `Dhiraj309/TrainLM` | Verify checkout, branch, origin, permissions |
-| Current base | PR #49 rebase-merged; verified `main` SHA `01a71f990fc5578b77be6e2e0a84473486fbe488` | Continue public trainer checkpoint preflight on CPU; keep TPU execution gated |
+| Current base | PR #50 rebase-merged; verified `main` SHA `f57d6d71339753a6a3cee4082a43dfa2f5113017` | Continue optimizer/scheduler checkpoint preflight on CPU; keep TPU execution gated |
 | Legacy integration | PR #18 merged into `main` on 2026-10-28; merge commit `23959d29434fd2ae3f78b20469e1d61c6b1e18c9` | T0.1 inventory is complete; XLA-era PR cards are not the active queue |
 | Earlier salvage | PR #16 was merged into PR #18, which is now merged into `main` | Inventory its code as part of the merged tree; do not merge it again |
 | Existing TPU backend | Primarily PyTorch/XLA with historical measurements | Classify reusable vs XLA-specific components |

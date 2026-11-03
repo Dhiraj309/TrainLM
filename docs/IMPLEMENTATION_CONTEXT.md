@@ -56,7 +56,9 @@ for file discovery; this document remains the detailed implementation record.
   verified `main` SHA `7ae837d085fbbaab9f6c2d3617ff129b89dd454e`; its full
   Python 3.11 GitHub CI run passed. PR #49 rebase-merged checkpoint integrity
   at verified `main` SHA `01a71f990fc5578b77be6e2e0a84473486fbe488`; CI runs
-  #296 and #297 passed.
+  #296 and #297 passed. PR #50 rebase-merged public trainer checkpoint
+  preflight at verified `main` SHA `f57d6d71339753a6a3cee4082a43dfa2f5113017`;
+  CI run #299 passed.
 - T0.1 code inventory is recorded in `TORCHTPU_SALVAGE_INVENTORY.md`. The
   mapped legacy cards remain candidates, not an approved implementation queue.
 - Current implementation backend: PyTorch/XLA. Target: native TorchTPU on
@@ -94,14 +96,16 @@ for file discovery; this document remains the detailed implementation record.
   are coordinated across ranks; legacy v1/v2 loading remains supported. PR
   #49 merged at `01a71f990fc5578b77be6e2e0a84473486fbe488`; CI runs #296 and
   #297 passed. Native TPU checkpoint validation remains pending.
-- The active T5 follow-on is `fix/20-trainer-checkpoint-preflight`. The public
-  trainer loader now preflights checkpoint schema, model keys/shapes, trainer
-  fields, runtime compatibility, RNG state and data-cursor compatibility before
-  restoring model or optimizer state. CPU regressions verify state stays
-  unchanged for incompatible model shapes and runtime metadata. The full CPU
-  suite passed locally (850 tests and 41 subtests) in Python 3.12.14 with torch
-  2.9.0+cpu and pytest 9.2.0. GitHub CI and TPU checkpoint validation are
-  pending.
+- PR #50 added public trainer checkpoint preflight for schema, model
+  keys/shapes, trainer fields, runtime compatibility, RNG state and data cursor
+  before restoring model or optimizer state. It merged at
+  `f57d6d71339753a6a3cee4082a43dfa2f5113017`; CI run #299 passed. The active
+  follow-on branch `fix/21-optimizer-scheduler-preflight` records optimizer and
+  scheduler class identity and checks optimizer parameter-group layout before
+  restore, while accepting earlier schema-v1 checkpoints without the optional
+  type metadata. The full CPU suite passed locally (853 tests and 41 subtests)
+  in Python 3.12.14 with torch 2.9.0+cpu and pytest 9.2.0. GitHub CI and native
+  TPU checkpoint validation are pending.
 - [T1 v5e-1 probe guide](T1_V5E1_PROBE.md) and the
   [Colab-openable Kaggle/Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TorchTPU_T1_v5e1_Probe.ipynb) describe
   synthetic smoke. The latest owner run at source `d3dea896` passed allocation,

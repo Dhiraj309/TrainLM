@@ -42,11 +42,12 @@ suite passed locally (79 tests in an isolated Python 3.12.14, torch 2.9.0+cpu,
 pytest 9.2.0 environment). This does not establish native multi-device TPU
 support. PR #49 merged rank-shard checksums and coordinated CPU/Gloo checkpoint
 failure handling at `01a71f990fc5578b77be6e2e0a84473486fbe488`; GitHub CI runs
-#296 and #297 passed. The current follow-on branch
-`fix/20-trainer-checkpoint-preflight` checks public checkpoint and runtime
-compatibility before restore. The full CPU suite passes locally (850 tests and
-41 subtests);
-GitHub CI and native TPU checkpoint validation remain pending.
+#296 and #297 passed. PR #50 added public checkpoint/runtime preflight at
+`f57d6d71339753a6a3cee4082a43dfa2f5113017` and CI run #299 passed. The active
+branch `fix/21-optimizer-scheduler-preflight` checks saved optimizer/scheduler
+identity and optimizer group layout before restore. The full CPU suite passes
+locally (853 tests and 41 subtests); GitHub CI and native TPU checkpoint
+validation remain pending.
 T1 software probes cover shared hardware and capability discovery, dependency
 metadata and process lifecycle, and a distributed entry check; owner-run
 compile, lifecycle and v5e-8 collective evidence remain pending. Use v5e-1 for
