@@ -18,13 +18,13 @@ TorchTPU support. “Implemented” means present in that historical code path;
 a revision-pinned Hugging Face dataset. The API trains a byte-level tokenizer,
 prepares validated packed shards, initializes GPT-2 from random weights, and
 returns the familiar trainer lifecycle. The notebook uses this API; native TPU
-remains experimental and gains no end-to-end evidence from CPU/API tests. The
-implementation is on `feat/43-public-pretraining-api` from verified `main`
-`a3a7dd89f77ae713c7dca608d1070e300bf8b33e`; API commit
-`4048b43866809f96c571518a96ca80aa978de035` and lifecycle fix
-`8cbcea5989887c442409fbdd66565a48b0ae1a5b` are pushed. PR #77's first CI run
-(360) reported four failures; the updated run (361) passed 890 tests and 41
-subtests on Python 3.11. Local syntax, notebook, config-guard,
+remains experimental and gains no end-to-end evidence from CPU/API tests. PR
+#77 was rebase-merged to verified `main` at SHA
+`f844d048b17640d4d71a127c4a860dd1f6d7d52c`. The rebase-preserved API commit
+is `e340d7f604151ee869243d80bc5429c1bb008801`; the post-train evaluation fix
+is `3fbac2a19209dfd035d021f7911f2fa0b4a2f91b`. The feature branch was deleted
+after verification. CI run 360 first found four failures; final run 362 passed
+890 tests and 41 subtests on Python 3.11. Local syntax, notebook, config-guard,
 state-transition, and CLI-help checks pass. No TPU training was run. See the
 [coding-agent guide](AI_AGENT_GUIDE.md) for the entry point and limits.
 
