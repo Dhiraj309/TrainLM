@@ -12,13 +12,20 @@ The [coding-agent guide](AI_AGENT_GUIDE.md) maps common pretraining tasks to
 the current notebook, implementation, tests, and validation limits. Prefer it
 for file discovery; this document remains the detailed implementation record.
 
-The from-scratch Colab/Kaggle notebook now exposes a concise token-budget and
-sequence-length setup. Its example helper owns the pinned dataset defaults,
-tokenizer/packing setup, starter GPT-2 configuration, package preflight, and
-isolated worker launch. This is a notebook usability layer, not yet a stable
-public high-level pretraining API; TPU training remains experimental and has
-not been validated by this change. Four focused CPU-side notebook/command
-contract tests and notebook code-cell syntax checks pass.
+The public `TrainLMPretrainingConfig` and `TrainLMTrainer.from_scratch()` API
+accept raw text from a revision-pinned Hugging Face dataset, train a byte-level
+BPE tokenizer, prepare validated packed shards, initialize GPT-2 from random
+weights, and return a normal TrainLM trainer. The from-scratch Colab/Kaggle
+notebook calls this API with a concise token-budget and sequence-length setup.
+Native TPU remains experimental; the API adds no hardware validation. The
+implementation is on `feat/43-public-pretraining-api`, based on verified
+`origin/main` `a3a7dd89f77ae713c7dca608d1070e300bf8b33e`; code commit
+`4048b43866809f96c571518a96ca80aa978de035` adds the API and focused lifecycle
+tests. Local syntax, notebook, config-guard, and CLI-help checks pass. The full
+CPU lifecycle test is pending CI because this workspace has no PyTorch,
+Transformers, tokenizers, datasets, or pytest; no TPU run was made. The feature
+is opt-in and does not change existing accelerator defaults or dependency
+bounds, so existing workflows can continue without using it.
 
 - PR #18, including PR #16, PR #20, and PRs #28–#43 are merged.
   PR #28

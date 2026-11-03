@@ -13,13 +13,19 @@ that existed at the time, primarily PyTorch/XLA. They do not imply native
 TorchTPU support. “Implemented” means present in that historical code path;
 “partial” means validation remained; “deferred” means it was not delivered.
 
-**Current user-workflow update (2026-11-03):** the from-scratch Colab/Kaggle
-notebook now asks for a small token budget and sequence length, while an
-example helper owns the pinned data defaults, tokenizer/packing, starter model,
-package preflight, and isolated worker invocation. This reduces notebook
-setup; it does not promote the helper to a stable public API or establish
-end-to-end native TPU training evidence. See the [coding-agent guide](AI_AGENT_GUIDE.md)
-for the current entry point and its limits.
+**Current user-workflow update (2026-11-03):** the package exposes
+`TrainLMPretrainingConfig` and `TrainLMTrainer.from_scratch()` for raw text from
+a revision-pinned Hugging Face dataset. The API trains a byte-level tokenizer,
+prepares validated packed shards, initializes GPT-2 from random weights, and
+returns the familiar trainer lifecycle. The notebook uses this API; native TPU
+remains experimental and gains no end-to-end evidence from CPU/API tests. The
+implementation is on `feat/43-public-pretraining-api` from verified `main`
+`a3a7dd89f77ae713c7dca608d1070e300bf8b33e`; API commit
+`4048b43866809f96c571518a96ca80aa978de035` is pushed. Local syntax, notebook,
+config-guard, and CLI-help checks pass; the full CPU lifecycle test awaits CI
+because this workspace lacks its PyTorch/pytest dependencies. No TPU training
+was run. See the [coding-agent guide](AI_AGENT_GUIDE.md) for the entry point
+and limits.
 
 - **Historical product:** Hugging Face-native dense autoregressive training
 - **Historical TPU backend:** PyTorch/XLA
