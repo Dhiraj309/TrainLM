@@ -320,6 +320,63 @@ def test_resume_preflights_checkpoint_state_before_mutation(
     assert resumed.engine.state == before_trainer_state
 
 
+def test_resume_rejects_random_sampler_without_saved_rng_before_mutation(tmp_path):
+    source = TrainLMTrainer(
+        model=TinyModel(),
+        train_dataset=_dataset(),
+        args=TrainLMTrainingArguments(
+            output_dir=tmp_path / "source",
+            max_steps=1,
+            sequence_length=4,
+            accelerator="cpu",
+            seed=31,
+        ),
+    )
+    assert isinstance(source.engine.train_dataloader.sampler, RandomSampler)
+    assert source.train().step == 1
+    checkpoint = source.save_state(tmp_path / "checkpoint")
+    payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    assert "loader_generator_initial_state" in payload
+    payload.pop("loader_generator_initial_state")
+    torch.save(payload, checkpoint)
+
+    resumed = TrainLMTrainer(
+        model=TinyModel(),
+        train_dataset=_dataset(),
+        args=TrainLMTrainingArguments(
+            output_dir=tmp_path / "resume",
+            max_steps=2,
+            sequence_length=4,
+            accelerator="cpu",
+            seed=31,
+        ),
+    )
+    assert isinstance(resumed.engine.train_dataloader.sampler, RandomSampler)
+    before_model = {
+        key: value.detach().clone()
+        for key, value in resumed.model.state_dict().items()
+    }
+    before_optimizer = deepcopy(resumed.optimizer.state_dict())
+    before_scheduler = deepcopy(resumed.scheduler.state_dict())
+    before_trainer_state = deepcopy(resumed.engine.state)
+    before_loader_rng = resumed._train_loader_generator.get_state().clone()
+
+    with pytest.raises(
+        ValueError,
+        match="Exact resume requires a TrainLM-owned deterministic train loader",
+    ):
+        resumed._load_training_checkpoint(resumed.engine, checkpoint)
+
+    assert all(
+        torch.equal(before_model[key], value)
+        for key, value in resumed.model.state_dict().items()
+    )
+    assert resumed.optimizer.state_dict() == before_optimizer
+    assert resumed.scheduler.state_dict() == before_scheduler
+    assert resumed.engine.state == before_trainer_state
+    assert torch.equal(resumed._train_loader_generator.get_state(), before_loader_rng)
+
+
 def test_token_scheduler_preflight_rejects_inconsistent_cursor_without_mutation():
     parameter = torch.nn.Parameter(torch.ones(()))
     optimizer = torch.optim.SGD([parameter], lr=0.1)
