@@ -99,6 +99,96 @@ def test_facade_resumes_local_training_state(tmp_path):
     assert state.micro_step == 2
 
 
+def test_resume_preflights_model_shapes_before_mutating_trainer(tmp_path):
+    first = TrainLMTrainer(
+        model=TinyModel(),
+        train_dataset=_dataset(),
+        args=TrainLMTrainingArguments(
+            output_dir=tmp_path / "source",
+            max_steps=1,
+            sequence_length=4,
+            accelerator="cpu",
+        ),
+    )
+    first.train()
+    checkpoint = first.save_state(tmp_path / "checkpoint")
+    payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    payload["model"]["projection.bias"] = torch.zeros(1)
+    torch.save(payload, checkpoint)
+
+    resumed = TrainLMTrainer(
+        model=TinyModel(),
+        train_dataset=_dataset(),
+        args=TrainLMTrainingArguments(
+            output_dir=tmp_path / "resume",
+            max_steps=2,
+            sequence_length=4,
+            accelerator="cpu",
+        ),
+    )
+    before = {
+        key: value.detach().clone()
+        for key, value in resumed.model.state_dict().items()
+    }
+
+    with pytest.raises(ValueError, match="model tensor shape mismatch"):
+        resumed.train(resume_from_checkpoint=checkpoint)
+
+    assert all(
+        torch.equal(before[key], value)
+        for key, value in resumed.model.state_dict().items()
+    )
+    assert resumed.engine.optimizer.state == {}
+    assert resumed.engine.state.step == 0
+
+
+def test_resume_preflights_runtime_state_before_mutating_trainer(tmp_path):
+    first = TrainLMTrainer(
+        model=TinyModel(),
+        train_dataset=_dataset(),
+        args=TrainLMTrainingArguments(
+            output_dir=tmp_path / "source",
+            max_steps=1,
+            sequence_length=4,
+            accelerator="cpu",
+        ),
+    )
+    checkpoint = first.save_state(tmp_path / "checkpoint")
+
+    resumed = TrainLMTrainer(
+        model=TinyModel(),
+        train_dataset=_dataset(),
+        args=TrainLMTrainingArguments(
+            output_dir=tmp_path / "resume",
+            max_steps=2,
+            sequence_length=4,
+            accelerator="cpu",
+        ),
+    )
+    before = {
+        key: value.detach().clone()
+        for key, value in resumed.model.state_dict().items()
+    }
+    validated = []
+
+    def reject_runtime_state(state):
+        validated.append(state)
+        raise ValueError("runtime state is incompatible")
+
+    resumed.runtime.validate_state_dict = reject_runtime_state
+
+    with pytest.raises(ValueError, match="runtime state is incompatible"):
+        resumed._load_training_checkpoint(resumed.engine, checkpoint)
+
+    assert validated == [{}]
+    assert all(
+        torch.equal(before[key], value)
+        for key, value in resumed.model.state_dict().items()
+    )
+    assert resumed.engine.optimizer.state == {}
+    assert resumed.engine.state.step == 0
+
+
 def test_manual_state_export_is_resumable(tmp_path):
     first = TrainLMTrainer(
         model=TinyModel(),

@@ -125,6 +125,10 @@ def test_native_runtime_checkpoints_and_restores_device_rng(monkeypatch):
     runtime._compile_enabled = False
 
     payload = runtime.state_dict()
+    runtime.validate_state_dict(payload)
+
+    assert restored == []
+
     runtime.load_state_dict(payload)
 
     assert payload["backend"] == "torchtpu"
