@@ -52,7 +52,9 @@ for file discovery; this document remains the detailed implementation record.
   `d983408221b92d631aea817bee7539e07de1bbf5`; it adds no runtime or TPU
   evidence. PR #47 aligned the live status and historical labels at verified
   `main` SHA `e109ad253754303e44eb6162aacb046c415b990b`; it also adds no runtime
-  or TPU evidence.
+  or TPU evidence. PR #48 rebase-merged distributed token correctness at
+  verified `main` SHA `7ae837d085fbbaab9f6c2d3617ff129b89dd454e`; its full
+  Python 3.11 GitHub CI run passed.
 - T0.1 code inventory is recorded in `TORCHTPU_SALVAGE_INVENTORY.md`. The
   mapped legacy cards remain candidates, not an approved implementation queue.
 - Current implementation backend: PyTorch/XLA. Target: native TorchTPU on
@@ -76,14 +78,24 @@ for file discovery; this document remains the detailed implementation record.
   reduce update losses and effective global batch size; callback progress
   counters are summed across distributed ranks. Two CPU/Gloo regressions cover
   accumulated unequal-mask parity, rank-consistent budget stopping, and global
-  reporting. In a temporary Python 3.12.14 environment with torch 2.9.0+cpu and
-  pytest 9.2.0, the focused CPU/Gloo and related trainer/runtime/API suite
-  passed (79 tests). GitHub CI is still pending. `TrainerState.tokens_seen` and `samples_seen` remain
+  reporting. A temporary Python 3.12.14 environment with torch 2.9.0+cpu and
+  pytest 9.2.0 passed the focused CPU/Gloo and related trainer/runtime/API suite
+  (79 tests); PR #48's full GitHub CI also passed. `TrainerState.tokens_seen` and `samples_seen` remain
   per-rank; callback progress and the stopping threshold use global counts.
   The DDP-style token-indexed scheduler and `global_batch_size` use global
   counts too. The final microbatch can take the run past the requested budget.
   Native TorchTPU launch, distributed
   runtime, checkpointing, and v5e-8 training remain unimplemented or unverified.
+- The active T5 slice is on `feat/19-distributed-checkpoint-resume`. Private
+  rank-sharded checkpoints now write schema v3 SHA-256/size metadata and verify
+  the current rank's artifact and payload before restoring state. Distributed
+  shard-write and manifest-publication failures are reduced across ranks;
+  resume preflight verifies each rank's shard before any rank mutates restored
+  state. Legacy v1/v2 loading remains supported. The full CPU suite passed
+  (848 tests and 41 subtests) in the isolated Python 3.12.14, torch 2.9.0+cpu,
+  pytest 9.2.0 environment; this includes two-rank Gloo checkpoint success and
+  coordinated failure cases. GitHub CI and native TPU checkpoint validation
+  remain pending.
 - [T1 v5e-1 probe guide](T1_V5E1_PROBE.md) and the
   [Colab-openable Kaggle/Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TorchTPU_T1_v5e1_Probe.ipynb) describe
   synthetic smoke. The latest owner run at source `d3dea896` passed allocation,
