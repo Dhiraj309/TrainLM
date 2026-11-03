@@ -170,6 +170,35 @@ class StatefulExamples(IterableDataset):
         self.position = state["position"]
 
 
+class LegacyStatefulExamples(IterableDataset):
+    """Stateful iterable using the pre-validator checkpoint protocol."""
+
+    def __init__(self, examples):
+        self.examples = examples
+        self.position = 0
+
+    def __iter__(self):
+        while self.position < len(self.examples):
+            example = self.examples[self.position]
+            self.position += 1
+            yield example
+
+    def state_dict(self):
+        return {"schema_version": 1, "position": self.position}
+
+    def load_state_dict(self, state):
+        if not isinstance(state, Mapping) or state.get("schema_version") != 1:
+            raise ValueError("Unsupported legacy iterable dataset state schema.")
+        position = state.get("position")
+        if (
+            isinstance(position, bool)
+            or not isinstance(position, int)
+            or not 0 <= position <= len(self.examples)
+        ):
+            raise ValueError("Legacy iterable dataset position is invalid.")
+        self.position = position
+
+
 def test_custom_stateful_iterable_resume_matches_uninterrupted_training(tmp_path):
     examples = [
         {
@@ -212,6 +241,61 @@ def test_custom_stateful_iterable_resume_matches_uninterrupted_training(tmp_path
     assert resumed.train(resume_from_checkpoint=checkpoint).step == 4
 
     reference_data = StatefulExamples(deepcopy(examples))
+    reference = make_trainer(
+        deepcopy(initial_model), reference_data, tmp_path / "reference", max_steps=4
+    )
+    assert reference.train().step == 4
+
+    assert resumed_data.position == reference_data.position == 4
+    for name, expected in reference.model.state_dict().items():
+        torch.testing.assert_close(
+            resumed.model.state_dict()[name], expected, rtol=0, atol=0
+        )
+
+
+def test_legacy_stateful_iterable_without_preflight_hook_still_resumes(tmp_path):
+    examples = [
+        {
+            "input_ids": torch.tensor([(index + offset) % 8 for offset in range(4)]),
+            "labels": torch.tensor([(index + offset) % 8 for offset in range(4)]),
+        }
+        for index in range(8)
+    ]
+    initial_model = TinyCausalLM()
+
+    def make_trainer(model, dataset, output_dir, max_steps):
+        return TrainLMTrainer(
+            model=model,
+            train_dataset=dataset,
+            args=TrainLMTrainingArguments(
+                output_dir=output_dir,
+                max_steps=max_steps,
+                sequence_length=4,
+                accelerator="cpu",
+                per_device_train_batch_size=1,
+                learning_rate=1e-3,
+                weight_decay=0.0,
+                lr_scheduler_type="constant",
+                seed=31,
+            ),
+        )
+
+    first_data = LegacyStatefulExamples(deepcopy(examples))
+    first = make_trainer(
+        deepcopy(initial_model), first_data, tmp_path / "resumed", max_steps=2
+    )
+    assert first.train().step == 2
+    checkpoint = first.save_state(tmp_path / "checkpoint")
+    assert first_data.position == 2
+
+    resumed_data = LegacyStatefulExamples(deepcopy(examples))
+    assert not callable(getattr(resumed_data, "validate_state_dict", None))
+    resumed = make_trainer(
+        deepcopy(initial_model), resumed_data, tmp_path / "resumed", max_steps=4
+    )
+    assert resumed.train(resume_from_checkpoint=checkpoint).step == 4
+
+    reference_data = LegacyStatefulExamples(deepcopy(examples))
     reference = make_trainer(
         deepcopy(initial_model), reference_data, tmp_path / "reference", max_steps=4
     )
