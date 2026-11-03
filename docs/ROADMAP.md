@@ -118,11 +118,15 @@ TorchTPU support. “Implemented” means present in that historical code path;
   verifies exact weights after resuming from an intermediate checkpoint. The
   checkpoint/API lifecycle suites passed (41 tests; 44 including the roadmap
   contract). No full-suite or TPU validation is claimed for PR #64.
-  A follow-up regression now covers both a within-epoch resume and a checkpoint
-  exactly after the four-row sequential loader is exhausted; resumed weights
-  match uninterrupted training in both cases. The checkpoint/API suites pass
-  42 tests (45 including the roadmap contract). No full-suite or TPU validation
-  is claimed for this follow-up.
+  PR #65 rebase-merged the status update at verified `main` SHA
+  `908e21fa2fedd34a0de47203a0f12c5d4a473ef3`; GitHub pytest passed (run ID
+  `41596201261`). PR #66 rebase-merged at verified `main` SHA
+  `4a877768a1c8fcaae654be6c18e88ce374bdce25`; GitHub pytest passed (run ID
+  `41596764595`). Its CPU regression covers both within-epoch resume and a
+  checkpoint exactly after the four-row sequential loader is exhausted;
+  resumed weights match uninterrupted training in both cases. The checkpoint/API
+  suites passed 42 tests (45 including the roadmap contract). No full-suite or
+  TPU validation is claimed for PR #66.
   BF16 and checkpointing remain unvalidated on TPU. T1 source-level
   probes and the explicit `native_tpu` path are implemented; owner-run compile,
   lifecycle and v5e-8 collective evidence remain pending. Hosted Kaggle currently documents

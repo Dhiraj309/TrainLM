@@ -170,11 +170,16 @@ for file discovery; this document remains the detailed implementation record.
   uninterrupted training. The checkpoint/API lifecycle suites passed (41
   tests; 44 including the roadmap contract). No full-suite rerun or TPU
   validation is claimed for PR #64.
-- A follow-up CPU regression also resumes exactly at a sequential loader's
-  epoch boundary (after all four distinct rows) and compares final weights
-  with uninterrupted training. The existing within-epoch resume remains
-  covered. The checkpoint/API suites pass (42 tests; 45 including the roadmap
-  contract); no full-suite or TPU validation is claimed.
+- PR #65 rebase-merged the status update at verified `main` SHA
+  `908e21fa2fedd34a0de47203a0f12c5d4a473ef3`; GitHub pytest passed (run ID
+  `41596201261`).
+- PR #66 rebase-merged at verified `main` SHA
+  `4a877768a1c8fcaae654be6c18e88ce374bdce25`; GitHub pytest passed (run ID
+  `41596764595`). Commit `11f383a` extends the sequential-loader CPU regression
+  with a checkpoint at the exact epoch boundary, after all four distinct rows.
+  Both the within-epoch and boundary resumes match uninterrupted final model
+  weights. The checkpoint/API suites passed 42 tests (45 including the roadmap
+  contract). No full-suite rerun or TPU validation is claimed for PR #66.
 - The last full local suite, on PR #56's branch, produced 865 passed, 7 failed
   and 41 subtests: missing `pip` blocked the wheel smoke, five Phi cases hit the
   installed Transformers 5.0.0 `PhiConfig` missing `pad_token_id`, and a
