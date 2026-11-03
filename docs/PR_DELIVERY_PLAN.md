@@ -39,7 +39,10 @@ approvals. T2 integrates the report into backend selection and the public UX.
 
 ## PR-by-PR serial execution
 
-**Status snapshot (2026-11-03):** PR #64 rebase-merged at verified `main` SHA
+**Status snapshot (2026-11-03):** PR #66 rebase-merged at verified `main` SHA
+`4a877768a1c8fcaae654be6c18e88ce374bdce25`; GitHub pytest passed (run ID
+`41596764595`). PR #65 rebase-merged at `908e21fa2fedd34a0de47203a0f12c5d4a473ef3`
+and passed GitHub pytest (run ID `41596201261`). PR #64 rebase-merged at
 `dd3cf7bcea791f370ea0c58d3e863a1702dfc79f`; GitHub pytest passed (run ID
 `41595632995`). PR #63 rebase-merged at `97a061df7bc96fc311d1bab341d91f92c8a43b61`
 and passed GitHub pytest (run ID `41594915207`). PR #62 rebase-merged at
@@ -104,8 +107,11 @@ has mismatched weights. No full-suite rerun or TPU validation is claimed for
 PR #62. PR #63 records the post-merge status correction. PR #64 verifies exact
 resume parity for a caller-provided sequential loader without saved loader RNG;
 the checkpoint/API lifecycle suites passed (41 tests, or 44 with the roadmap
-contract), and GitHub pytest passed (run ID `41595632995`). No full-suite or TPU
-validation is claimed for PR #64. This does not
+contract), and GitHub pytest passed (run ID `41595632995`). PR #65 records the
+post-merge status update. PR #66 extends sequential-loader parity coverage to
+the exact epoch boundary; its checkpoint/API lifecycle suites passed (42 tests,
+or 45 with the roadmap contract), and GitHub pytest passed (run ID
+`41596764595`). No full-suite or TPU validation is claimed for PR #66. This does not
 establish native multi-device launch or v5e-8 support. The
 old numbered cards below do not set the current work order; use [the T0–T11
 rebaseline](TORCHTPU_REBASELINE.md), [the handoff](HANDOFF.md), and
