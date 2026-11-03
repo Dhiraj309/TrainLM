@@ -39,9 +39,11 @@ approvals. T2 integrates the report into backend selection and the public UX.
 
 ## PR-by-PR serial execution
 
-**Status snapshot (2026-11-03):** PR #60 rebase-merged at verified `main` SHA
-`839d8fcc1f9320ff6193b7c54399c629881945f0`; GitHub pytest passed (run ID
-`41585383984`). PR #59 rebase-merged at `2985ef953546506f3cd6d84c8ff79739c6388a9b`
+**Status snapshot (2026-11-03):** PR #61 rebase-merged at verified `main` SHA
+`448ea9dc3d5969aa88d612bdfbbf11af682bc78d`; GitHub pytest passed (run ID
+`41585945140`). PR #60 rebase-merged at `839d8fcc1f9320ff6193b7c54399c629881945f0`
+and passed GitHub pytest (run ID `41585383984`). PR #59 rebase-merged at
+`2985ef953546506f3cd6d84c8ff79739c6388a9b`
 and passed GitHub pytest (run ID `41582739096`). PR #58 rebase-merged at
 `e90697f99db29355e135161ea62e66d91bbc6047` and passed GitHub pytest (run ID
 `41581911584`). PR #57 rebase-merged at
@@ -83,12 +85,17 @@ preflight validator. PR #60 rebase-merged at verified `main` SHA
 `41585383984`). Its CPU regression removes optional dataset cursor, data-loader
 RNG snapshot and optimizer/scheduler type metadata from a schema-v1 checkpoint,
 then verifies exact resumed-weight parity. The combined checkpoint/API
-lifecycle suites passed (39 tests). The last
-full local suite reports 865 passed, 7 failed, and 41 subtests: missing `pip`
-blocks the wheel smoke, five Phi cases fail because the installed Transformers
+lifecycle suites passed (39 tests). PR #61 is a documentation-only status
+correction at verified `main` `448ea9dc3d5969aa88d612bdfbbf11af682bc78d`.
+PR #62 is open from `test/32-reject-random-resume-without-rng`; its CPU test
+checks rejection before mutation when a RandomSampler checkpoint lacks saved
+loader RNG state. The combined checkpoint/API lifecycle suites pass (40 tests),
+and GitHub CI is pending. The last full local suite reports 865 passed, 7
+failed, and 41 subtests: missing `pip` blocks the wheel smoke, five Phi cases
+fail because the installed Transformers
 5.0.0 `PhiConfig` lacks `pad_token_id`, and a separate TrainLM model reload test
 has mismatched weights. No full-suite rerun or TPU validation is claimed for
-PR #60. This does not
+PR #62. This does not
 establish native multi-device launch or v5e-8 support. The
 old numbered cards below do not set the current work order; use [the T0–T11
 rebaseline](TORCHTPU_REBASELINE.md), [the handoff](HANDOFF.md), and

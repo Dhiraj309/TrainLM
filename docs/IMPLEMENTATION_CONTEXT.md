@@ -147,6 +147,16 @@ for file discovery; this document remains the detailed implementation record.
   checkpoint/API lifecycle suites passed (39 tests); compileall and
   `git diff --check` passed. No full-suite rerun or TPU checkpoint validation
   is claimed for PR #60.
+- PR #61 rebase-merged a documentation-only current-status correction at
+  verified `main` SHA `448ea9dc3d5969aa88d612bdfbbf11af682bc78d`; GitHub pytest
+  passed (run ID `41585945140`).
+- PR #62 is open from `test/32-reject-random-resume-without-rng`, based on
+  `main` `448ea9dc3d5969aa88d612bdfbbf11af682bc78d`. Commit `31742a5` removes
+  a schema-v1 checkpoint's data-loader RNG snapshot and asserts that a
+  RandomSampler resume rejects before model, optimizer, scheduler, trainer, or
+  loader-generator state changes. The checkpoint/API lifecycle suites pass
+  (40 tests); compileall and `git diff --check` pass. GitHub CI and TPU
+  checkpoint validation are pending.
 - The last full local suite, on PR #56's branch, produced 865 passed, 7 failed
   and 41 subtests: missing `pip` blocked the wheel smoke, five Phi cases hit the
   installed Transformers 5.0.0 `PhiConfig` missing `pad_token_id`, and a
