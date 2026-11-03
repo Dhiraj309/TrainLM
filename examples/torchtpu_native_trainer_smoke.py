@@ -17,207 +17,39 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 MODEL_ID = "distilbert/distilgpt2"
 MODEL_REVISION = "2290a62682d06624634c1f46a6ad5be0f47f38aa"
-DATASET_ID = "roneneldan/TinyStories"
-DATASET_REVISION = "f54c09fd23315a6f9c86f9dc80f725de7d8f9c64"
 sys.path.insert(0, str(ROOT / "src"))
 
 
-def _token_documents(
-    dataset, tokenizer, *, max_examples: int, batch_size: int = 64,
-    text_field: str = "text",
-):
-    """Yield EOS-separated tokenized documents without materializing a split."""
-    eos_token_id = tokenizer.eos_token_id
-    if isinstance(eos_token_id, bool) or not isinstance(eos_token_id, int):
-        raise RuntimeError(
-            "The selected tokenizer must define an integer EOS token."
-        )
-
-    pending: list[str] = []
-    seen = 0
-
-    def encode(texts: list[str]):
-        encoded = tokenizer(texts, add_special_tokens=False, truncation=False)
-        for token_ids in encoded["input_ids"]:
-            yield [int(token) for token in token_ids] + [eos_token_id]
-
-    for row in dataset:
-        if seen >= max_examples:
-            break
-        text = row.get(text_field) if isinstance(row, dict) else None
-        if not isinstance(text, str):
-            raise ValueError(
-                f"Training rows must contain a string {text_field!r} field."
-            )
-        pending.append(text)
-        seen += 1
-        if len(pending) == batch_size:
-            yield from encode(pending)
-            pending.clear()
-    if pending:
-        yield from encode(pending)
-    if seen == 0:
-        raise ValueError("The selected dataset split contains no text examples.")
+DATASET_ID = "roneneldan/TinyStories"
+DATASET_REVISION = "f54c09fd23315a6f9c86f9dc80f725de7d8f9c64"
 
 
-def _train_byte_level_tokenizer(
-    dataset, *, max_examples: int, vocab_size: int, text_field: str = "text",
-):
-    """Train a compact tokenizer from the training text without caching it."""
-    if max_examples < 1:
-        raise ValueError("Tokenizer training examples must be positive.")
-    if vocab_size < 260:
-        raise ValueError("Byte-level BPE vocab_size must be at least 260.")
+# Keep --help and argument validation usable before importing PyTorch. The
+# package is loaded only when a validated training run reaches these helpers.
+def _pretraining_helper(name):
+    from trainlm import pretraining
 
-    from tokenizers import Tokenizer, decoders, models, pre_tokenizers, trainers
-    from transformers import PreTrainedTokenizerFast
-
-    seen = 0
-
-    def text_documents():
-        nonlocal seen
-        for row in dataset:
-            if seen >= max_examples:
-                break
-            text = row.get(text_field) if isinstance(row, dict) else None
-            if not isinstance(text, str):
-                raise ValueError(
-                    f"Tokenizer rows must contain a string {text_field!r} field."
-                )
-            seen += 1
-            yield text
-        if seen == 0:
-            raise ValueError("The tokenizer training split contains no text examples.")
-
-    core = Tokenizer(models.BPE(unk_token="[UNK]"))
-    core.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False)
-    core.train_from_iterator(
-        text_documents(),
-        trainer=trainers.BpeTrainer(
-            vocab_size=vocab_size,
-            special_tokens=["[UNK]", "<|pad|>", "<|bos|>", "<|eos|>"],
-            initial_alphabet=pre_tokenizers.ByteLevel.alphabet(),
-        ),
-    )
-    core.decoder = decoders.ByteLevel()
-    tokenizer = PreTrainedTokenizerFast(
-        tokenizer_object=core,
-        unk_token="[UNK]",
-        pad_token="<|pad|>",
-        bos_token="<|bos|>",
-        eos_token="<|eos|>",
-    )
-    if not all(
-        isinstance(token_id, int)
-        for token_id in (
-            tokenizer.unk_token_id,
-            tokenizer.pad_token_id,
-            tokenizer.bos_token_id,
-            tokenizer.eos_token_id,
-        )
-    ):
-        raise RuntimeError("The trained tokenizer is missing a special token ID.")
-    return tokenizer, seen
+    return getattr(pretraining, name)
 
 
-def _validate_scratch_dataset_source(
-    *, dataset_id: str, dataset_revision: str, train_split: str,
-    validation_split: str, text_field: str,
-) -> None:
-    if not isinstance(dataset_id, str) or not re.fullmatch(
-        r"[A-Za-z0-9._-]{1,96}/[A-Za-z0-9._-]{1,96}", dataset_id
-    ):
-        raise ValueError("dataset_id must be a Hugging Face owner/name ID.")
-    if not isinstance(dataset_revision, str) or not re.fullmatch(
-        r"[0-9a-f]{40}", dataset_revision
-    ):
-        raise ValueError("dataset_revision must be an immutable 40-character commit SHA.")
-    if (
-        not isinstance(train_split, str)
-        or not train_split.strip()
-        or not re.fullmatch(r"[A-Za-z0-9._+-]{1,96}", train_split)
-        or not isinstance(validation_split, str)
-        or not validation_split.strip()
-        or not re.fullmatch(r"[A-Za-z0-9._+-]{1,96}", validation_split)
-        or train_split == validation_split
-    ):
-        raise ValueError("Use distinct non-empty training and validation split names.")
-    if not isinstance(text_field, str) or not re.fullmatch(
-        r"[A-Za-z0-9._+-]{1,96}", text_field
-    ):
-        raise ValueError("text_field must name a dataset text column.")
+def _resolve_training_steps(**kwargs):
+    return _pretraining_helper("_resolve_training_steps")(**kwargs)
 
 
-def _scratch_gpt2_config(
-    *, vocab_size: int, sequence_length: int, embedding_size: int,
-    layers: int, attention_heads: int, pad_token_id: int,
-    bos_token_id: int, eos_token_id: int,
-):
-    """Build GPT-2 architecture locally, without downloading a model config."""
-    if min(vocab_size, sequence_length, embedding_size, layers, attention_heads) < 1:
-        raise ValueError("Scratch GPT-2 dimensions and vocabulary must be positive.")
-    if embedding_size % attention_heads:
-        raise ValueError("model embedding size must be divisible by attention heads.")
-
-    from transformers import GPT2Config
-
-    return GPT2Config(
-        vocab_size=vocab_size,
-        n_positions=sequence_length,
-        n_ctx=sequence_length,
-        n_embd=embedding_size,
-        n_layer=layers,
-        n_head=attention_heads,
-        pad_token_id=pad_token_id,
-        bos_token_id=bos_token_id,
-        eos_token_id=eos_token_id,
-    )
+def _scratch_gpt2_config(**kwargs):
+    return _pretraining_helper("_scratch_gpt2_config")(**kwargs)
 
 
-def _resolve_training_steps(
-    *, max_steps: int | None,
-    target_supervised_tokens: int | None,
-    from_scratch: bool,
-    sequence_length: int,
-    train_batch_size: int,
-    gradient_accumulation_steps: int,
-) -> tuple[int, int]:
-    """Derive a safe step horizon from packed supervised-token geometry."""
-    if max_steps is not None and (
-        isinstance(max_steps, bool) or not isinstance(max_steps, int) or max_steps < 1
-    ):
-        raise ValueError("max_steps must be a positive integer when configured.")
-    if target_supervised_tokens is not None:
-        if (isinstance(target_supervised_tokens, bool)
-                or not isinstance(target_supervised_tokens, int)
-                or target_supervised_tokens < 1):
-            raise ValueError("target_supervised_tokens must be a positive integer.")
-        if not from_scratch:
-            raise ValueError(
-                "target_supervised_tokens is supported for packed scratch runs."
-            )
-        if max_steps is not None:
-            raise ValueError(
-                "Set either max_steps or target_supervised_tokens, not both."
-            )
-        if sequence_length < 2:
-            raise ValueError(
-                "Token-budgeted causal training needs sequence_length >= 2."
-            )
-        supervised_tokens_per_update = (
-            (sequence_length - 1) * train_batch_size * gradient_accumulation_steps
-        )
-        resolved_steps = math.ceil(
-            target_supervised_tokens / supervised_tokens_per_update
-        )
-        return resolved_steps, supervised_tokens_per_update
+def _token_documents(*args, **kwargs):
+    return _pretraining_helper("_token_documents")(*args, **kwargs)
 
-    resolved_steps = 3 if max_steps is None else max_steps
-    supervised_tokens_per_update = (
-        (sequence_length - 1) * train_batch_size * gradient_accumulation_steps
-        if sequence_length >= 2 else 0
-    )
-    return resolved_steps, supervised_tokens_per_update
+
+def _train_byte_level_tokenizer(*args, **kwargs):
+    return _pretraining_helper("_train_byte_level_tokenizer")(*args, **kwargs)
+
+
+def _validate_scratch_dataset_source(**kwargs):
+    return _pretraining_helper("_validate_scratch_dataset_source")(**kwargs)
 
 
 def _enable_gradient_checkpointing(model) -> tuple[bool, bool | None]:

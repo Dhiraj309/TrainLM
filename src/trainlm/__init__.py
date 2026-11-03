@@ -11,6 +11,7 @@ from .data import (
     HuggingFaceShardSpec,
     PackedBinDataset,
 )
+from .pretraining import TrainLMPretrainingConfig
 
 __all__ = [
     "DEPRECATED_CONFIG_KEYS",
@@ -18,6 +19,7 @@ __all__ = [
     "HuggingFaceShardSpec",
     "PUBLIC_API_VERSION",
     "PackedBinDataset",
+    "TrainLMPretrainingConfig",
     "TrainLMTrainer",
     "TrainLMTrainingArguments",
 ]
