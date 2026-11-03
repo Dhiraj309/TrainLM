@@ -377,7 +377,14 @@ def test_resume_rejects_random_sampler_without_saved_rng_before_mutation(tmp_pat
     assert torch.equal(resumed._train_loader_generator.get_state(), before_loader_rng)
 
 
-def test_resume_replays_sequential_loader_without_saved_rng(tmp_path):
+@pytest.mark.parametrize(
+    ("max_steps", "checkpoint_step"),
+    [(2, 1), (6, 4)],
+    ids=["within-epoch", "at-epoch-boundary"],
+)
+def test_resume_replays_sequential_loader_without_saved_rng(
+    tmp_path, max_steps, checkpoint_step
+):
     rows = [
         {
             "input_ids": torch.tensor([offset, offset + 1, offset + 2, offset + 3]),
@@ -399,7 +406,7 @@ def test_resume_replays_sequential_loader_without_saved_rng(tmp_path):
             train_dataset=make_loader(),
             args=TrainLMTrainingArguments(
                 output_dir=output_dir,
-                max_steps=2,
+                max_steps=max_steps,
                 sequence_length=4,
                 accelerator="cpu",
                 seed=17,
@@ -413,11 +420,18 @@ def test_resume_replays_sequential_loader_without_saved_rng(tmp_path):
     expected = deepcopy(uninterrupted.model.state_dict())
 
     torch.manual_seed(17)
-    first = make_trainer(tmp_path / "source", save_steps=1)
+    first = make_trainer(
+        tmp_path / "source", save_steps=checkpoint_step
+    )
     assert isinstance(first.engine.train_dataloader.sampler, SequentialSampler)
     assert first._train_loader_generator is None
     first.train()
-    checkpoint = tmp_path / "source" / "checkpoint-1" / "trainer_state.pt"
+    checkpoint = (
+        tmp_path
+        / "source"
+        / f"checkpoint-{checkpoint_step}"
+        / "trainer_state.pt"
+    )
     payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
     assert payload["loader_generator_initial_state"] is None
     payload.pop("loader_generator_initial_state")
