@@ -214,6 +214,13 @@ for file discovery; this document remains the detailed implementation record.
   and matches uninterrupted model weights through step three. The focused API
   lifecycle, trainer, and roadmap-contract suites passed (57 tests). No
   full-suite rerun or TPU validation is claimed for PR #72.
+- The current branch, `test/40-random-sampler-epoch-boundary-resume`, extends
+  that regression to checkpoint both within the epoch and exactly at its end
+  (`micro_step=4` after four shuffled-loader batches). Both resumes reach step
+  three with exact model-weight parity. The focused API lifecycle, trainer, and
+  roadmap-contract suites passed (58 tests); no full-suite or TPU validation is
+  claimed. The branch starts from verified `main` SHA
+  `6090ba72e32d9d920499807f0c7b5a15e8ae5861` and is not yet merged.
 - The last full local suite, on PR #56's branch, produced 865 passed, 7 failed
   and 41 subtests: missing `pip` blocked the wheel smoke, five Phi cases hit the
   installed Transformers 5.0.0 `PhiConfig` missing `pad_token_id`, and a

@@ -478,7 +478,14 @@ def test_resume_replays_sequential_loader_without_saved_rng(
     )
 
 
-def test_resume_replays_trainlm_random_sampler_across_epoch_boundary(tmp_path):
+@pytest.mark.parametrize(
+    ("checkpoint_step", "expected_micro_step"),
+    [(1, 2), (2, 4)],
+    ids=["within-epoch", "exact-epoch-boundary"],
+)
+def test_resume_replays_trainlm_random_sampler_across_epoch_boundary(
+    tmp_path, checkpoint_step, expected_micro_step
+):
     rows = [
         {
             "input_ids": torch.tensor(
@@ -513,12 +520,19 @@ def test_resume_replays_trainlm_random_sampler_across_epoch_boundary(tmp_path):
     expected = deepcopy(uninterrupted.model.state_dict())
 
     torch.manual_seed(29)
-    first = make_trainer(tmp_path / "source", save_steps=1)
+    first = make_trainer(
+        tmp_path / "source", save_steps=checkpoint_step
+    )
     assert isinstance(first.engine.train_dataloader.sampler, RandomSampler)
     first.train()
-    checkpoint = tmp_path / "source" / "checkpoint-1" / "trainer_state.pt"
+    checkpoint = (
+        tmp_path
+        / "source"
+        / f"checkpoint-{checkpoint_step}"
+        / "trainer_state.pt"
+    )
     payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
-    assert payload["trainer"]["micro_step"] == 2
+    assert payload["trainer"]["micro_step"] == expected_micro_step
     assert payload["loader_generator_initial_state"] is not None
 
     resumed = make_trainer(tmp_path / "resume")
