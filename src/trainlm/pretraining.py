@@ -275,6 +275,37 @@ def _train_byte_level_tokenizer(
     return tokenizer, seen
 
 
+def _scratch_gpt2_config(
+    *,
+    vocab_size: int,
+    sequence_length: int,
+    embedding_size: int,
+    layers: int,
+    attention_heads: int,
+    pad_token_id: int,
+    bos_token_id: int,
+    eos_token_id: int,
+):
+    """Build the starter GPT-2 config from explicit dimensions."""
+    if min(vocab_size, sequence_length, embedding_size, layers, attention_heads) < 1:
+        raise ValueError("Scratch GPT-2 dimensions and vocabulary must be positive.")
+    if embedding_size % attention_heads:
+        raise ValueError("model embedding size must be divisible by attention heads.")
+    from transformers import GPT2Config
+
+    return GPT2Config(
+        vocab_size=vocab_size,
+        n_positions=sequence_length,
+        n_ctx=sequence_length,
+        n_embd=embedding_size,
+        n_layer=layers,
+        n_head=attention_heads,
+        pad_token_id=pad_token_id,
+        bos_token_id=bos_token_id,
+        eos_token_id=eos_token_id,
+    )
+
+
 def _scratch_huggingface_config(
     config: TrainLMPretrainingConfig,
     *,
