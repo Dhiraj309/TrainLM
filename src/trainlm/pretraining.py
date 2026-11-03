@@ -75,7 +75,9 @@ class TrainLMPretrainingConfig:
         ):
             raise ValueError("Dataset splits and text_field must be simple names.")
         if self.train_split == self.validation_split:
-            raise ValueError("Training and validation split names must differ.")
+            raise ValueError(
+                "Training and validation split names must be distinct."
+            )
 
         for name in (
             "max_tokens", "sequence_length", "max_train_examples",
@@ -282,7 +284,7 @@ def _validate_scratch_dataset_source(
     ):
         raise ValueError("Dataset splits and text_field must be simple names.")
     if train_split == validation_split:
-        raise ValueError("Training and validation split names must differ.")
+        raise ValueError("Training and validation split names must be distinct.")
 
 
 def _resolve_training_steps(

@@ -611,7 +611,7 @@ class Trainer:
             yield self._evaluation_step(batch)
 
     def evaluate(self) -> dict[str, float]:
-        """Run evaluation over the evaluation dataloader."""
+        """Run evaluation, including after training has finalized."""
 
         if self.eval_dataloader is None:
             raise RuntimeError(
@@ -623,6 +623,7 @@ class Trainer:
             TrainerPhase.CREATED,
             TrainerPhase.PREPARED,
             TrainerPhase.TRAINING,
+            TrainerPhase.FINALIZED,
         }:
             raise RuntimeError(
                 f"Cannot evaluate trainer in phase '{previous_phase.value}'."
