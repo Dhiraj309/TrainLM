@@ -909,6 +909,9 @@ class TrainLMTrainer:
                     "Exact iterable dataset resume requires "
                     "dataloader_num_workers=0."
                 )
+            # Stateful custom datasets may provide this optional, read-only
+            # hook to reject incompatible cursors before any trainer state is
+            # restored. Their load_state_dict still runs after core preflight.
             validate_dataset_state = getattr(dataset, "validate_state_dict", None)
             if callable(validate_dataset_state):
                 validate_dataset_state(dataset_state)
