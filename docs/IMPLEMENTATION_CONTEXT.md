@@ -158,6 +158,12 @@ for file discovery; this document remains the detailed implementation record.
   checkpoint/API lifecycle suites passed (40 tests); compileall and
   `git diff --check` passed. No full-suite rerun or TPU checkpoint validation
   is claimed for PR #62.
+- An additional CPU regression covers a caller-provided `SequentialSampler`
+  `DataLoader` without TrainLM-owned loader RNG. It removes the optional loader
+  RNG checkpoint field, resumes from an intermediate checkpoint, and requires
+  exact model-weight parity with uninterrupted training. The combined
+  checkpoint/API lifecycle suites pass (41 tests); this is not full-suite or
+  TPU validation.
 - The last full local suite, on PR #56's branch, produced 865 passed, 7 failed
   and 41 subtests: missing `pip` blocked the wheel smoke, five Phi cases hit the
   installed Transformers 5.0.0 `PhiConfig` missing `pad_token_id`, and a
