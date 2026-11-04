@@ -20,11 +20,11 @@
   first core-current job passed. The first minimum run failed under Transformers
   5.0 (887 passed, six failed, 41 subtests); commit `bbf1b2e` raises the minimum
   to 5.15.0. Its retry exposed that Transformers 5.15 requires Hub 1.5.0;
-  commit `cfc05ed` aligns the project floor and minimum lock. The corrected run
-  is pending. The old 2.14.1 mismatch and unrelated parsed IPython-to-Jedi
-  warning are handled by the branch. An owner-runtime report refresh is also
-  pending. This does not establish a native TPU install profile or end-to-end
-  training support.
+  commit `cfc05ed` aligns the project floor and minimum lock. CI run
+  `41752008510` passed 893 tests and 41 subtests in each profile. The old 2.14.1
+  mismatch and unrelated parsed IPython-to-Jedi warning are handled by the
+  branch. An owner-runtime report refresh is also pending. This does not
+  establish a native TPU install profile or end-to-end training support.
 - **Raw-text API:** `TrainLMPretrainingConfig` plus
   `TrainLMTrainer.from_scratch()` prepares pinned HF text, tokenizer, packed
   data, and a randomly initialized Transformers causal LM, then returns the
@@ -151,8 +151,8 @@
   shuffled sampler's epoch boundary (58 focused API/trainer/contract tests
   passed locally).
 - **Verified base for the current compatibility branch:** fetched `main` at
-  `4107f2f2ab86c2e90d43428ad1a779a25fe86cac`; branch head currently includes
-  implementation commit `e3b9f24`.
+  `4107f2f2ab86c2e90d43428ad1a779a25fe86cac`; the compatibility work is under
+  review in PR #83.
 - **Probe:** [`T1 v5e-1 guide`](T1_V5E1_PROBE.md) and its
   [Kaggle/Colab notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb) test a tiny
   synthetic forward/backward and optimizer update, with optional `torch.compile`.
@@ -161,7 +161,8 @@
   Hardware generation and explicit compile remain unverified.
 - **Validation boundary:** PR #55 passed the full CPU suite (871 tests and 41
   subtests) in Python 3.12.14 / torch 2.9.0+cpu / pytest 9.2.0. PRs #56–#74
-  passed GitHub pytest. The last full
+  passed GitHub pytest. PR #83 passed 893 tests and 41 subtests in both its
+  minimum and current CPU profiles (run `41752008510`). The last full
   local suite reports 865 passed, 7 failed, and 41
   subtests. One failure is the wheel smoke blocked by missing `pip`; five Phi
   cases arise from the installed Transformers 5.0.0 missing

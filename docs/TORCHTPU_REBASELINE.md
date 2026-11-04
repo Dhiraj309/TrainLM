@@ -128,7 +128,7 @@ reversible.
 | Native TorchTPU | Explicit single-device software path exists; owner-reported standalone eager v5e-1 smoke passed; native install profile and production training remain unverified | Continue only with explicit selection; verify compile/lifecycle on v5e-1 and collectives on v5e-8 before changing support claims |
 | GitHub access | Previous authenticated collaborator `Dignity045` branch push succeeded | Recheck actual identity each task; owner account not assumed |
 | CPU tests | PR #18 snapshot: 700 passed / 21 failed under Python 3.12.14, torch 2.9.0+cpu, Transformers 5.0.0, Hub 1.3.5, pytest 9.1.1 | Re-run on merged `main` before the next code PR; failure groups are recorded in `HANDOFF.md` |
-| CPU profiles | `core-minimum` Python 3.10/torch 2.9/Transformers 5.15/Hub 1.5; `core-current` Python 3.13/torch 2.14.1/Transformers 5.20.2 | Current profile passed; rerun minimum with its compatible package locks; do not infer accelerator certification |
+| CPU profiles | `core-minimum` Python 3.10/torch 2.9/Transformers 5.15/Hub 1.5; `core-current` Python 3.13/torch 2.14.1/Transformers 5.20.2/Hub 1.33 | Both profiles passed 893 tests and 41 subtests in CI run `41752008510`; do not infer accelerator certification |
 
 The old report that GitHub pushes were unverified is superseded by the
 verified branch-write exercise. Do not claim current shell authentication
