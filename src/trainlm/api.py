@@ -24,7 +24,7 @@ import yaml
 import torch
 from torch import nn
 from torch.optim import Optimizer
-from torch.optim.lr_scheduler import LRScheduler
+from torch.optim.lr_scheduler import CosineAnnealingLR, LRScheduler
 from torch.utils.data import (
     DataLoader,
     Dataset,
@@ -158,6 +158,114 @@ def _run_configuration_fingerprint(configuration: Mapping[str, Any]) -> str:
         allow_nan=False,
     )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _validate_scratch_budget_extension(
+    previous: Mapping[str, Any], candidate: Mapping[str, Any]
+) -> None:
+    """Allow only a strictly larger, internally consistent scratch token budget."""
+    previous_configuration = previous.get("configuration")
+    candidate_configuration = candidate.get("configuration")
+    previous_fingerprint = previous.get("fingerprint")
+    if (
+        previous.get("schema_version") != 1
+        or isinstance(previous.get("schema_version"), bool)
+        or not isinstance(previous_configuration, Mapping)
+        or not isinstance(previous_fingerprint, str)
+        or previous_fingerprint
+        != _run_configuration_fingerprint(previous_configuration)
+        or not isinstance(candidate_configuration, Mapping)
+    ):
+        raise ValueError("The existing scratch run configuration is invalid.")
+
+    normalized_previous = deepcopy(dict(previous_configuration))
+    normalized_candidate = deepcopy(dict(candidate_configuration))
+    mutable_paths = (
+        ("pretraining", "max_tokens"),
+        ("training_args", "max_tokens"),
+        ("training_args", "max_steps"),
+        ("training_args", "warmup_steps"),
+        ("training_args", "save_steps"),
+        ("training_args", "eval_steps"),
+        ("scheduler", "training_horizon_steps"),
+        ("scheduler", "warmup_steps"),
+    )
+    try:
+        for path in mutable_paths:
+            previous_parent = normalized_previous
+            candidate_parent = normalized_candidate
+            for key in path[:-1]:
+                previous_parent = previous_parent[key]
+                candidate_parent = candidate_parent[key]
+            candidate_parent[path[-1]] = deepcopy(previous_parent[path[-1]])
+    except (KeyError, TypeError) as exc:
+        raise ValueError(
+            "The scratch run configuration cannot be extended safely."
+        ) from exc
+
+    if normalized_candidate != normalized_previous:
+        raise ValueError(
+            "Budget extension can change only max_tokens and its derived step, "
+            "warmup, save, and evaluation cadence. Model, data, optimizer, "
+            "precision, and runtime settings must remain identical."
+        )
+
+    def budget_values(configuration: Mapping[str, Any]) -> tuple[int, int, int]:
+        pretraining = configuration["pretraining"]
+        training_args = configuration["training_args"]
+        scheduler = configuration["scheduler"]
+        if not all(
+            isinstance(section, Mapping)
+            for section in (pretraining, training_args, scheduler)
+        ):
+            raise ValueError("Budget extension configuration sections are invalid.")
+        tokens = pretraining["max_tokens"]
+        max_steps = training_args["max_steps"]
+        warmup_steps = training_args["warmup_steps"]
+        if (
+            type(tokens) is not int
+            or type(max_steps) is not int
+            or type(warmup_steps) is not int
+            or tokens < 1
+            or max_steps < 1
+            or warmup_steps < 0
+            or training_args.get("max_tokens") != tokens
+            or scheduler.get("training_horizon_steps") != max_steps
+            or scheduler.get("schedule") != "cosine"
+            or training_args.get("lr_scheduler_type") != "cosine"
+        ):
+            raise ValueError(
+                "Budget extension requires a valid cosine pretraining run."
+            )
+        sequence_length = training_args.get("sequence_length")
+        batch_size = training_args.get("per_device_train_batch_size")
+        accumulation = training_args.get("gradient_accumulation_steps")
+        if any(
+            type(value) is not int or value < 1
+            for value in (sequence_length, batch_size, accumulation)
+        ):
+            raise ValueError("Budget extension has invalid training geometry.")
+        tokens_per_update = (sequence_length - 1) * batch_size * accumulation
+        expected_steps = math.ceil(tokens / tokens_per_update)
+        cadence = max(1, expected_steps // 10)
+        expected_warmup = min(expected_steps // 10, 100)
+        if (
+            expected_steps != max_steps
+            or training_args.get("save_steps") != cadence
+            or training_args.get("eval_steps") != cadence
+            or warmup_steps != expected_warmup
+            or scheduler.get("warmup_steps") != expected_warmup
+        ):
+            raise ValueError("Budget extension has inconsistent derived settings.")
+        return tokens, max_steps, warmup_steps
+
+    old_tokens, old_steps, _ = budget_values(previous_configuration)
+    new_tokens, new_steps, _ = budget_values(candidate_configuration)
+    if new_tokens <= old_tokens or new_steps <= old_steps:
+        raise ValueError(
+            "extend_training_budget=True requires a strictly larger token budget "
+            "and training horizon."
+        )
 
 
 def _latest_training_checkpoint(output_dir: Path) -> Path | None:
@@ -401,6 +509,7 @@ class TrainLMTrainer:
         config: TrainLMPretrainingConfig,
         *,
         callbacks: Sequence[TrainerCallback] | None = None,
+        extend_training_budget: bool = False,
     ) -> "TrainLMTrainer":
         """Prepare a tokenizer/model from pinned HF text and return a trainer.
 
@@ -408,10 +517,15 @@ class TrainLMTrainer:
         ``save_model()`` lifecycle while owning streaming tokenization and
         packed-data preparation. Matching inputs reuse integrity-checked
         tokenizer and packed-shard artifacts in ``config.output_dir``. Native
-        TorchTPU must be explicitly selected and remains experimental.
+        TorchTPU must be explicitly selected and remains experimental. Set
+        ``extend_training_budget=True`` only when resuming an existing scratch
+        run with a larger ``max_tokens``; model and optimizer state are kept,
+        then a new cosine schedule starts at the configured learning rate.
         """
         if not isinstance(config, TrainLMPretrainingConfig):
             raise TypeError("config must be a TrainLMPretrainingConfig instance.")
+        if not isinstance(extend_training_budget, bool):
+            raise TypeError("extend_training_budget must be a boolean.")
         _preflight_scratch_backend(config)
         model, tokenizer, train_dataset, eval_dataset = _prepare_scratch_training(
             config
@@ -464,6 +578,7 @@ class TrainLMTrainer:
                 tokenizer=tokenizer,
                 train_dataset=train_dataset,
                 eval_dataset=eval_dataset,
+                extend_training_budget=extend_training_budget,
             )
         except Exception:
             train_dataset.close()
@@ -541,6 +656,8 @@ class TrainLMTrainer:
         self._last_metrics: dict[str, Any] = {}
         self._native_tpu_worker_report: dict[str, Any] | None = None
         self._run_configuration_manifest: dict[str, Any] | None = None
+        self._pending_scratch_run_configuration: dict[str, Any] | None = None
+        self._scratch_budget_extension_checkpoint = False
         self._train_loader_generator: torch.Generator | None = None
         self._train_loader_generator_initial_state: torch.Tensor | None = None
         self._tpu_coordinator = None
@@ -805,6 +922,16 @@ class TrainLMTrainer:
         ``args.output_dir``. It raises ``FileNotFoundError`` when none exists.
         """
 
+        if (
+            self._pending_scratch_run_configuration is not None
+            and resume_from_checkpoint is None
+        ):
+            raise ValueError(
+                "A larger scratch training budget requires resuming from an "
+                "existing checkpoint. Set resume_from_checkpoint='latest' or "
+                "provide a checkpoint path."
+            )
+
         if resume_from_checkpoint == "latest":
             resume_from_checkpoint = _latest_training_checkpoint(
                 Path(self.args.output_dir)
@@ -826,6 +953,20 @@ class TrainLMTrainer:
         if resume_from_checkpoint is not None:
             self._validate_native_resume_data(self.engine)
             self.engine.load_checkpoint(Path(resume_from_checkpoint))
+            if self._pending_scratch_run_configuration is not None:
+                if self._scratch_budget_extension_checkpoint:
+                    manifest = self._pending_scratch_run_configuration
+                    path = Path(self.pretraining_config.output_dir) / "run_config.json"
+                    if path.is_symlink():
+                        raise ValueError(
+                            f"Run configuration manifest cannot be a symlink: {path}"
+                        )
+                    self._write_scratch_run_configuration(path, manifest)
+                    self._run_configuration_manifest = manifest
+                    self._pending_scratch_run_configuration = None
+                    self._scratch_budget_extension_checkpoint = False
+                else:
+                    self._activate_scratch_budget_extension()
         return self.engine.train()
 
     def _consume_tpu_result(self, result: dict[str, Any]) -> dict[str, Any]:
@@ -898,6 +1039,7 @@ class TrainLMTrainer:
         tokenizer: Any,
         train_dataset: Any,
         eval_dataset: Any,
+        extend_training_budget: bool = False,
     ) -> None:
         """Persist the exact from-scratch settings used to create checkpoints."""
         if self.engine is None:
@@ -1017,29 +1159,91 @@ class TrainLMTrainer:
                     f"Cannot read run configuration {path}; "
                     "choose a fresh output_dir."
                 ) from exc
-            if not isinstance(existing, dict) or existing != manifest:
+            if not isinstance(existing, dict):
                 raise RuntimeError(
                     "This output_dir is already bound to a different from-scratch "
                     "run configuration. Use a fresh output_dir for changed model, "
                     "data, optimizer, schedule, precision, or runtime settings."
                 )
+            if existing != manifest:
+                if not extend_training_budget:
+                    raise RuntimeError(
+                        "This output_dir is already bound to a different from-scratch "
+                        "run configuration. Use a fresh output_dir for changed model, "
+                        "data, optimizer, schedule, precision, or runtime settings."
+                    )
+                try:
+                    _validate_scratch_budget_extension(existing, manifest)
+                except (KeyError, TypeError, ValueError) as exc:
+                    raise RuntimeError(
+                        "extend_training_budget=True only permits a strictly larger "
+                        "max_tokens budget with the same model, data, optimizer, "
+                        "precision, and runtime settings."
+                    ) from exc
+                if _latest_training_checkpoint(Path(self.args.output_dir)) is None:
+                    raise RuntimeError(
+                        "Budget extension requires an existing completed checkpoint "
+                        "under args.output_dir."
+                    )
+                self._run_configuration_manifest = existing
+                self._pending_scratch_run_configuration = manifest
+                return
         else:
+            if extend_training_budget:
+                raise ValueError(
+                    "Budget extension requires an existing from-scratch run. "
+                    "Start the run first, then increase max_tokens to extend it."
+                )
             if _latest_training_checkpoint(Path(self.args.output_dir)) is not None:
                 raise RuntimeError(
                     "Existing checkpoints have no from-scratch run configuration "
                     "manifest and cannot be safely resumed. Use a fresh output_dir."
                 )
-            temporary = root / "run_config.json.tmp"
-            if temporary.exists() or temporary.is_symlink():
-                raise FileExistsError(
-                    f"A pending run configuration write already exists: {temporary}"
-                )
-            temporary.write_text(
-                json.dumps(manifest, indent=2, sort_keys=True) + "\n",
-                encoding="utf-8",
-            )
-            temporary.replace(path)
+            self._write_scratch_run_configuration(path, manifest)
         self._run_configuration_manifest = manifest
+
+    @staticmethod
+    def _write_scratch_run_configuration(
+        path: Path, manifest: Mapping[str, Any]
+    ) -> None:
+        """Atomically publish the active scratch-run compatibility manifest."""
+        temporary = path.with_name(f"{path.name}.tmp")
+        if temporary.exists() or temporary.is_symlink():
+            raise FileExistsError(
+                f"A pending run configuration write already exists: {temporary}"
+            )
+        temporary.write_text(
+            json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        temporary.replace(path)
+
+    def _activate_scratch_budget_extension(self) -> None:
+        """Start a fresh cosine phase after a compatible checkpoint is restored."""
+        if self.engine is None or self._pending_scratch_run_configuration is None:
+            raise RuntimeError("No pending scratch budget extension is active.")
+        if type(self.engine.scheduler) is not CosineAnnealingLR:
+            raise RuntimeError(
+                "Scratch budget extension currently requires CosineAnnealingLR."
+            )
+        if self.args.max_steps is None or self.args.max_steps <= self.engine.state.step:
+            raise ValueError(
+                "The extended training horizon must leave at least one update "
+                "after the resumed checkpoint."
+            )
+
+        remaining_steps = self.args.max_steps - self.engine.state.step
+        for group in self.engine.optimizer.param_groups:
+            group["lr"] = self.args.learning_rate
+            group["initial_lr"] = self.args.learning_rate
+        scheduler = CosineAnnealingLR(
+            self.engine.optimizer,
+            T_max=remaining_steps,
+            eta_min=0.0,
+        )
+        self.scheduler = scheduler
+        self.engine.scheduler = scheduler
+        self._run_configuration_manifest = self._pending_scratch_run_configuration
 
     def _preflight_run_configuration(self, payload: Mapping[str, Any]) -> None:
         """Reject changed or unverified scratch settings before state mutation."""
@@ -1076,9 +1280,81 @@ class TrainLMTrainer:
                 "Training checkpoint run-configuration manifest is invalid."
             )
         if saved != expected:
+            pending = self._pending_scratch_run_configuration
+            if pending is not None and saved == pending:
+                self._validate_extended_budget_checkpoint(payload, pending)
+                self._scratch_budget_extension_checkpoint = True
+                return
             raise ValueError(
                 "Training checkpoint run configuration does not match the active "
                 "model, data, optimizer, schedule, or runtime settings."
+            )
+
+    @staticmethod
+    def _validate_extended_budget_checkpoint(
+        payload: Mapping[str, Any], manifest: Mapping[str, Any]
+    ) -> None:
+        """Ensure a pending extension checkpoint already carries its new schedule."""
+        configuration = manifest.get("configuration")
+        trainer_state = payload.get("trainer")
+        scheduler_state = payload.get("scheduler")
+        if not all(
+            isinstance(section, Mapping)
+            for section in (configuration, trainer_state, scheduler_state)
+        ):
+            raise ValueError("Extended training checkpoint state is invalid.")
+        training_args = configuration.get("training_args")
+        optimizer = configuration.get("optimizer")
+        if not isinstance(training_args, Mapping) or not isinstance(optimizer, Mapping):
+            raise ValueError("Extended training checkpoint configuration is invalid.")
+        step = trainer_state.get("step")
+        last_epoch = scheduler_state.get("last_epoch")
+        horizon = training_args.get("max_steps")
+        scheduler_horizon = scheduler_state.get("T_max")
+        scheduler_type = payload.get("scheduler_type")
+        if (
+            type(step) is not int
+            or type(last_epoch) is not int
+            or type(horizon) is not int
+            or type(scheduler_horizon) is not int
+            or step < 1
+            or last_epoch < 1
+            or scheduler_horizon < 1
+            or scheduler_horizon + step - last_epoch != horizon
+            or scheduler_type
+            != f"{CosineAnnealingLR.__module__}.{CosineAnnealingLR.__qualname__}"
+            or scheduler_state.get("eta_min") != 0.0
+        ):
+            raise ValueError(
+                "Extended training checkpoint does not contain the expected "
+                "cosine schedule phase."
+            )
+        parameter_groups = optimizer.get("parameter_groups")
+        base_lrs = scheduler_state.get("base_lrs")
+        if (
+            not isinstance(parameter_groups, list)
+            or not isinstance(base_lrs, (list, tuple))
+            or len(parameter_groups) != len(base_lrs)
+        ):
+            raise ValueError(
+                "Extended training checkpoint scheduler groups are invalid."
+            )
+        expected_lrs = []
+        for group in parameter_groups:
+            settings = group.get("settings") if isinstance(group, Mapping) else None
+            if not isinstance(settings, Mapping) or "lr" not in settings:
+                raise ValueError(
+                    "Extended training checkpoint optimizer groups are invalid."
+                )
+            expected_lrs.append(settings["lr"])
+        if any(
+            not _is_finite_real(saved_lr)
+            or float(saved_lr) != float(expected_lr)
+            for saved_lr, expected_lr in zip(base_lrs, expected_lrs)
+        ):
+            raise ValueError(
+                "Extended training checkpoint cosine schedule has an unexpected "
+                "starting learning rate."
             )
 
     def _validate_native_resume_data(self, engine: EngineTrainer) -> None:
@@ -1132,6 +1408,22 @@ class TrainLMTrainer:
         temporary = path / "trainer_state.pt.tmp"
         torch.save(payload, temporary)
         temporary.replace(path / "trainer_state.pt")
+        if self._pending_scratch_run_configuration is not None:
+            manifest_path = (
+                Path(self.pretraining_config.output_dir) / "run_config.json"
+            )
+            if manifest_path.is_symlink():
+                raise ValueError(
+                    f"Run configuration manifest cannot be a symlink: {manifest_path}"
+                )
+            self._write_scratch_run_configuration(
+                manifest_path,
+                self._pending_scratch_run_configuration,
+            )
+            self._run_configuration_manifest = (
+                self._pending_scratch_run_configuration
+            )
+            self._pending_scratch_run_configuration = None
         return path
 
     def _preflight_training_checkpoint(

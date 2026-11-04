@@ -44,10 +44,16 @@ file hashes, packed-shard manifests, training arguments, optimizer parameter
 groups, scheduler horizon, and runtime identity in `run_config.json`; the same
 fingerprinted record is embedded in every checkpoint. Resume compares it before
 restoring model, optimizer, scheduler, RNG, or dataset state. Use a fresh output
-directory after changing run settings. Scratch checkpoints created before this
-manifest was introduced are rejected by `from_scratch()` resume because their
-full compatibility cannot be established; non-scratch legacy checkpoints keep
-their existing compatibility.
+directory after changing run settings, except for the explicit token-budget
+extension path. `from_scratch(..., extend_training_budget=True)` permits only a
+strictly larger `max_tokens` and the derived horizon/cadence fields. Once a
+compatible checkpoint is restored, the API retains model and optimizer state,
+starts a new cosine phase at the configured learning rate over the remaining
+steps, and atomically updates the run manifest. This can raise the learning
+rate, so it is a deliberate schedule restart, not exact scheduler continuation.
+Scratch checkpoints created before this manifest was introduced are rejected
+by `from_scratch()` resume because their full compatibility cannot be
+established; non-scratch legacy checkpoints keep their existing compatibility.
 
 PR #85's verified `main` base is `476bc68ff535cd49f3472316c5bc809bc38e7ae5`.
 PR #86 added whole-run checkpoint compatibility validation and rebase-merged
