@@ -85,6 +85,22 @@ def test_from_scratch_builds_and_trains_a_small_cpu_model(tmp_path, monkeypatch)
         ("org/tiny-stories", "a" * 40, "validation", True),
     ]
 
+    # A valid prepared cache must avoid even importing the optional dataset
+    # package, let alone reconnecting to the pinned streaming source. A changed
+    # sequence length can use the same tokenized corpus.
+    monkeypatch.delitem(sys.modules, "datasets", raising=False)
+    cached_trainer = TrainLMTrainer.from_scratch(
+        _config(config.output_dir, sequence_length=4)
+    )
+    assert cached_trainer.model.config.model_type == "gpt2"
+    assert cached_trainer.model.config.n_positions == 4
+    assert calls == [
+        ("org/tiny-stories", "a" * 40, "train", True),
+        ("org/tiny-stories", "a" * 40, "train", True),
+        ("org/tiny-stories", "a" * 40, "validation", True),
+    ]
+    assert (tmp_path / "run" / "preparation_cache.json").is_file()
+
     state = trainer.train()
     metrics = trainer.evaluate()
     export = trainer.save_model(tmp_path / "run" / "model")
@@ -96,6 +112,60 @@ def test_from_scratch_builds_and_trains_a_small_cpu_model(tmp_path, monkeypatch)
     assert (export / "model.safetensors").is_file()
     assert (export / "tokenizer_config.json").is_file()
     assert (tmp_path / "run" / "tokenizer" / "tokenizer.json").is_file()
+
+
+def test_preparation_cache_rejects_changed_data_settings(tmp_path, monkeypatch):
+    rows = [
+        {"text": f"Tiny story about data cache {index}. " * 4}
+        for index in range(16)
+    ]
+    calls = []
+
+    class StreamingRows:
+        def __iter__(self):
+            return iter(rows)
+
+    def load_dataset(dataset_id, *, revision, split, streaming):
+        calls.append((dataset_id, revision, split, streaming))
+        return StreamingRows()
+
+    datasets_module = ModuleType("datasets")
+    datasets_module.load_dataset = load_dataset
+    monkeypatch.setitem(sys.modules, "datasets", datasets_module)
+    output_dir = tmp_path / "run"
+    TrainLMTrainer.from_scratch(_config(output_dir))
+
+    with pytest.raises(ValueError, match="different dataset/tokenizer settings"):
+        TrainLMTrainer.from_scratch(
+            _config(output_dir, dataset_revision="b" * 40)
+        )
+    assert len(calls) == 3
+
+
+def test_preparation_cache_rejects_corrupted_packed_payload(tmp_path, monkeypatch):
+    rows = [
+        {"text": f"Tiny story about packed payload {index}. " * 4}
+        for index in range(16)
+    ]
+
+    class StreamingRows:
+        def __iter__(self):
+            return iter(rows)
+
+    datasets_module = ModuleType("datasets")
+    datasets_module.load_dataset = lambda *args, **kwargs: StreamingRows()
+    monkeypatch.setitem(sys.modules, "datasets", datasets_module)
+    output_dir = tmp_path / "run"
+    TrainLMTrainer.from_scratch(_config(output_dir))
+
+    packed_data = output_dir / "data" / "train" / "train.bin"
+    with packed_data.open("r+b") as stream:
+        first_byte = stream.read(1)
+        stream.seek(0)
+        stream.write(bytes([first_byte[0] ^ 1]))
+
+    with pytest.raises(RuntimeError, match="Prepared-data cache failed validation"):
+        TrainLMTrainer.from_scratch(_config(output_dir))
 
 
 def test_from_scratch_builds_a_configured_huggingface_causal_model(

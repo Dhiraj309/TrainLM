@@ -357,8 +357,9 @@ class TrainLMTrainer:
 
         The method keeps the familiar ``trainer.train()``, ``evaluate()``, and
         ``save_model()`` lifecycle while owning streaming tokenization and
-        packed-data preparation. Native TorchTPU must be explicitly selected
-        and remains an experimental single-device path.
+        packed-data preparation. Matching inputs reuse integrity-checked
+        tokenizer and packed-shard artifacts in ``config.output_dir``. Native
+        TorchTPU must be explicitly selected and remains experimental.
         """
         if not isinstance(config, TrainLMPretrainingConfig):
             raise TypeError("config must be a TrainLMPretrainingConfig instance.")
