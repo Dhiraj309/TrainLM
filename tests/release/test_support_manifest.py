@@ -17,6 +17,9 @@ def test_published_support_manifest_is_valid_and_honest():
 
     assert manifest.schema_version == 1
     assert manifest.torchtpu == {"status": "deferred", "milestone": "M15"}
+    assert manifest.package_versions["huggingface-hub"] == ">=1.5,<2"
+    assert manifest.package_versions["torch"] == ">=2.9,<2.15"
+    assert manifest.package_versions["transformers"] == ">=5.15,<6"
     assert {item["backend"] for item in manifest.hardware} == {
         "cpu",
         "cuda",
