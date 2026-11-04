@@ -7,6 +7,9 @@
 The machine-readable source for this page is
 [`support/dense_ar_v1.json`](../../support/dense_ar_v1.json). It describes the
 current development release, not a completed hardware certification.
+Its package ranges follow the current core dependency declaration; the
+hardware and execution classifications below remain the recorded XLA-era
+snapshot and do not certify native TorchTPU.
 
 ## Recorded `0.1.0-dev` support snapshot (PyTorch/XLA era)
 

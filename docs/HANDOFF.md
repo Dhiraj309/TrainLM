@@ -13,12 +13,18 @@
   may continue behind explicit native selection while those hardware checks
   wait; do not enable automatic TPU routing or treat a core dependency change
   as native TorchTPU certification.
-- **Core dependency follow-up:** branch `fix/83-torchtpu-package-profile` widens
-  the Torch range to `>=2.9,<2.15`, aligns the Python 3.13 current profile to
-  Torch 2.14.1, and adds constrained minimum/current CPU CI. The old 2.14.1
-  mismatch and unrelated parsed IPython-to-Jedi warning are handled by the
-  branch; CI and an owner-runtime report refresh are pending. This does not
-  establish a native TPU install profile or end-to-end training support.
+- **Core dependency follow-up:** PR #83 widens the Torch range to `>=2.9,<2.15`,
+  raises the Transformers floor to `5.15` and Hub floor to `1.5`, aligns the
+  Python 3.13 current profile to Torch 2.14.1, and adds constrained
+  minimum/current CPU CI. The
+  first core-current job passed. The first minimum run failed under Transformers
+  5.0 (887 passed, six failed, 41 subtests); commit `bbf1b2e` raises the minimum
+  to 5.15.0. Its retry exposed that Transformers 5.15 requires Hub 1.5.0;
+  commit `cfc05ed` aligns the project floor and minimum lock. The corrected run
+  is pending. The old 2.14.1 mismatch and unrelated parsed IPython-to-Jedi
+  warning are handled by the branch. An owner-runtime report refresh is also
+  pending. This does not establish a native TPU install profile or end-to-end
+  training support.
 - **Raw-text API:** `TrainLMPretrainingConfig` plus
   `TrainLMTrainer.from_scratch()` prepares pinned HF text, tokenizer, packed
   data, and a randomly initialized Transformers causal LM, then returns the

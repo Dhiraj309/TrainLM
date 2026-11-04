@@ -273,9 +273,13 @@ context to report schema v4 and rebase-merged at verified `main` SHA
   mode rather than a dependency gap. Other package incompatibilities remain
   visible. Pip conflict details are parsed from both common `pip check` output
   forms; the latest owner report identifies the IPython-to-Jedi conflict. The
-  compatibility follow-up on `fix/83-torchtpu-package-profile` aligns the core
-  current profile to Torch 2.14.1 and adds minimum/current CPU CI. No full-suite
-  result for that matrix or refreshed owner package report is claimed yet.
+  compatibility PR #83 aligns core-current to Torch 2.14.1, raises the
+  Transformers minimum to 5.15.0 and Hub minimum to 1.5.0, and adds
+  minimum/current CPU CI. The first current-profile run passed; the initial
+  Transformers 5.0 minimum run had 887 passes and six failures. Its first retry
+  exposed the old Hub lock, so commits `bbf1b2e` and `cfc05ed` align the minimum
+  package pair. The corrected matrix run is pending. No refreshed owner package
+  report is claimed yet.
   The 18 old PR cards are candidates, not the active queue.
 
 - **Current implementation continuation (experimental):** the owner asked to
