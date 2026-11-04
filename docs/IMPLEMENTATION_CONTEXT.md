@@ -488,9 +488,11 @@ rebase-merged at verified `main` SHA
   Transformers floor and minimum lock to 5.15.0, matching a previously passing
   full suite. Its first retry exposed that this Transformers version requires
   Hub 1.5.0; commit `cfc05ed` raises the project Hub floor and minimum lock to
-  match. The corrected matrix run is pending. An owner-runtime metadata refresh
-  also remains pending. This does not certify CUDA, native TorchTPU training,
-  compile, lifecycle or distributed execution.
+  match. CI run `41752008510` passed 893 tests and 41 subtests in both profiles:
+  Python 3.10 / Torch 2.9 / Transformers 5.15 / Hub 1.5, and Python 3.13 /
+  Torch 2.14.1 / Transformers 5.20.2 / Hub 1.33. An owner-runtime metadata
+  refresh also remains pending. This does not certify CUDA, native TorchTPU
+  training, compile, lifecycle or distributed execution.
 
 ## Historical XLA development record
 

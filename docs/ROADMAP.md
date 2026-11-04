@@ -278,8 +278,9 @@ context to report schema v4 and rebase-merged at verified `main` SHA
   minimum/current CPU CI. The first current-profile run passed; the initial
   Transformers 5.0 minimum run had 887 passes and six failures. Its first retry
   exposed the old Hub lock, so commits `bbf1b2e` and `cfc05ed` align the minimum
-  package pair. The corrected matrix run is pending. No refreshed owner package
-  report is claimed yet.
+  package pair. CI run `41752008510` then passed 893 tests and 41 subtests in
+  both minimum and current profiles. No refreshed owner package report is
+  claimed yet.
   The 18 old PR cards are candidates, not the active queue.
 
 - **Current implementation continuation (experimental):** the owner asked to

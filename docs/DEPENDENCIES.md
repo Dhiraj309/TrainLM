@@ -29,8 +29,9 @@ profile uses Python 3.13 and the owner's observed Torch 2.14.1 package set. Its
 first job passed. The initial minimum job exposed tests failing under
 Transformers 5.0.0; the first retry then showed Transformers 5.15.0 requires
 Hub 1.5.0, so the minimum constraints and project floor now match that resolver
-requirement. The corrected matrix run is pending. This does not certify CUDA or
-native TPU. No TorchTPU-specific install extra or support claim is added.
+requirement. CI run `41752008510` passed both full suites: 893 tests and 41
+subtests in each profile. This validates the constrained CPU profiles, not CUDA
+or native TPU. No TorchTPU-specific install extra or support claim is added.
 
 The read-only preflight reports environment-wide `pip check` findings. A fully
 parsed conflict unrelated to TrainLM's training stack, such as IPython requiring
@@ -64,10 +65,9 @@ tests had left `accelerator="auto"` on a TPU host, the wheel smoke required
 test-harness issues were corrected locally. Twelve loss-layout failures came
 from counting ignored targets in the mean denominator, and a scalar-count test
 expected one snapshot although the trainer records both loss and gradient
-norm. These fixes were made after that run. The initial current-profile CI job
-passed. The minimum retry first exposed the Hub lower-bound mismatch; the
-minimum lock now uses Hub 1.5.0 alongside Transformers 5.15.0, and the corrected
-run is pending.
+norm. These fixes were made after that run. CI run `41752008510` passed 893
+tests and 41 subtests for both the minimum and current profiles. The minimum
+lock uses Hub 1.5.0 alongside Transformers 5.15.0.
 
 ### Read-only native install-profile check
 
@@ -96,11 +96,11 @@ the current report, and use CI for CPU conformance.
 | TPU XLA + Pallas | 3.10–3.13 | 2.9.0 | 5.15.0 | XLA/libtpu above, JAX/jaxlib 0.7.1 | Pending M5/kernel validation |
 
 The checked-in CI workflow runs the full test suite against the constrained
-core-minimum (Python 3.10) and core-current (Python 3.13) profiles. The initial
-core-current job passed; the minimum run is being repeated with the compatible
-Hub 1.5.0 / Transformers 5.15.0 pair. A passing CPU job verifies only that
-profile on CPU; it does not certify CUDA or TPU. The T0.1 CPU baseline was
-separately run in Python 3.12.14.
+core-minimum (Python 3.10) and core-current (Python 3.13) profiles. Run
+`41752008510` passed 893 tests and 41 subtests in each profile, including the
+compatible Hub 1.5.0 / Transformers 5.15.0 pair. These results verify the
+tested package sets on CPU; they do not certify CUDA or TPU. The T0.1 CPU
+baseline was separately run in Python 3.12.14.
 
 The broad core package contract is PyTorch `>=2.9,<2.15`, Transformers
 `>=5.15,<6`, and Hugging Face Hub `>=1.5,<2`. Exact constraint profiles are the
