@@ -40,8 +40,10 @@
   training evidence. The current continuation iteration adds a stable notebook
   run directory, a `RESUME_FROM_CHECKPOINT` setting, and public
   `resume_from_checkpoint="latest"` lookup over completed checkpoints. Colab
-  Drive and Kaggle output persistence are documented; hardware resume remains
-  unverified. PR #79 rebase-merged this
+  Drive and Kaggle output persistence are documented. Matching pinned data and
+  tokenizer settings reuse validated preparation artifacts; changed settings
+  require a fresh run directory. Hardware resume remains unverified. PR #79
+  rebase-merged this
   configurable Transformers model path at verified `main` SHA
   `ba5f4761c35c23403d35e44be5d564dbe7ffadb3`; GitHub CI passed 891 tests and
   41 subtests. No TPU run was performed.

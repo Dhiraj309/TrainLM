@@ -35,6 +35,10 @@ checkpoint (`trainer_state.pt`) or native TPU checkpoint (`manifest.json`); a
 missing checkpoint raises an actionable error. Notebook instructions describe
 Colab Drive and Kaggle output persistence. CPU/API coverage verifies lookup and
 resume behavior; native TPU checkpoint recovery remains owner-validated work.
+The same output directory also caches preparation artifacts behind a source
+fingerprint, tokenizer file hashes, and the packed-shard manifests. A cache hit
+reuses them without importing `datasets`; changed dataset/tokenizer settings
+fail before overwriting the prior run, while altered artifacts fail validation.
 
 PR #77
 was rebase-merged to verified `main` at

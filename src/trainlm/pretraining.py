@@ -9,11 +9,14 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+import hashlib
 import json
 import math
 from numbers import Real
+import os
 from pathlib import Path
 import re
+import tempfile
 from typing import Any, Literal
 
 
@@ -22,6 +25,8 @@ DEFAULT_DATASET_REVISION = "f54c09fd23315a6f9c86f9dc80f725de7d8f9c64"
 _DATASET_ID = re.compile(r"[A-Za-z0-9._-]{1,96}/[A-Za-z0-9._-]{1,96}\Z")
 _COMMIT_SHA = re.compile(r"[0-9a-f]{40}\Z")
 _FIELD_NAME = re.compile(r"[A-Za-z0-9._+-]{1,96}\Z")
+_PREPARATION_CACHE_SCHEMA = 1
+_PREPARATION_ALGORITHM = "byte-level-bpe-v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,7 +35,9 @@ class TrainLMPretrainingConfig:
 
     The starter path uses a revision-pinned streaming dataset, learns a
     byte-level BPE tokenizer from the training split, and writes validated
-    packed shards under ``output_dir`` before constructing a trainer.
+    packed shards under ``output_dir`` before constructing a trainer. Matching
+    pinned preparation inputs reuse integrity-checked tokenizer and shard
+    artifacts from that directory.
     """
 
     output_dir: str | Path = Path("runs/pretraining")
@@ -458,87 +465,66 @@ def _preflight_scratch_backend(config: TrainLMPretrainingConfig) -> None:
     select_auto_backend(report, cuda_available=torch.cuda.is_available())
 
 
-def _prepare_scratch_training(config: TrainLMPretrainingConfig):
-    """Build the model and validated packed streams for the public trainer."""
-    try:
-        from datasets import load_dataset
-    except ImportError as exc:
-        raise ImportError(
-            "Raw-text Hub pretraining needs the optional 'datasets' package. "
-            "Install datasets, then restart the Python runtime."
-        ) from exc
+def _preparation_cache_inputs(config: TrainLMPretrainingConfig) -> dict[str, Any]:
+    """Return the settings that define tokenizer and packed-shard contents."""
+    return {
+        "algorithm": _PREPARATION_ALGORITHM,
+        "dataset_id": config.dataset_id,
+        "dataset_revision": config.dataset_revision,
+        "train_split": config.train_split,
+        "validation_split": config.validation_split,
+        "text_field": config.text_field,
+        "max_train_examples": config.max_train_examples,
+        "max_eval_examples": config.max_eval_examples,
+        "tokenizer_vocab_size": config.tokenizer_vocab_size,
+    }
 
-    import torch
-    from transformers import AutoModelForCausalLM
 
-    from trainlm.data import PackedBinDataset
-    from trainlm.data.writer import write_packed_binary_shard
+def _preparation_cache_fingerprint(inputs: Mapping[str, Any]) -> str:
+    canonical = json.dumps(inputs, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
-    root = Path(config.output_dir)
-    data_root = root / "data"
-    train_source = load_dataset(
-        config.dataset_id,
-        revision=config.dataset_revision,
-        split=config.train_split,
-        streaming=True,
-    )
-    tokenizer, _ = _train_byte_level_tokenizer(
-        train_source,
-        max_examples=config.max_train_examples,
-        vocab_size=config.tokenizer_vocab_size,
-        text_field=config.text_field,
-    )
-    tokenizer.save_pretrained(root / "tokenizer")
 
-    # Reopen the immutable stream after fitting the tokenizer on training text.
-    train_source = load_dataset(
-        config.dataset_id,
-        revision=config.dataset_revision,
-        split=config.train_split,
-        streaming=True,
-    )
-    validation_source = load_dataset(
-        config.dataset_id,
-        revision=config.dataset_revision,
-        split=config.validation_split,
-        streaming=True,
-    )
-    train_manifest = write_packed_binary_shard(
-        _token_documents(
-            train_source,
-            tokenizer,
-            max_examples=config.max_train_examples,
-            text_field=config.text_field,
-        ),
-        data_root / "train",
-        shard_id="train",
-        vocab_size=len(tokenizer),
-    )
-    validation_manifest = write_packed_binary_shard(
-        _token_documents(
-            validation_source,
-            tokenizer,
-            max_examples=config.max_eval_examples,
-            text_field=config.text_field,
-        ),
-        data_root / "validation",
-        shard_id="validation",
-        vocab_size=len(tokenizer),
-    )
-    del train_manifest, validation_manifest
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
-    train_dataset = PackedBinDataset.from_directory(
-        data_root / "train",
-        sequence_length=config.sequence_length,
-        split="train",
-        seed=config.seed,
+
+def _tokenizer_cache_hashes(tokenizer_dir: Path) -> dict[str, str]:
+    if tokenizer_dir.is_symlink() or not tokenizer_dir.is_dir():
+        raise ValueError("Prepared tokenizer directory is missing or unsafe.")
+    files: dict[str, str] = {}
+    for path in sorted(tokenizer_dir.rglob("*")):
+        if path.is_symlink():
+            raise ValueError("Prepared tokenizer cache cannot contain symlinks.")
+        if path.is_file():
+            files[path.relative_to(tokenizer_dir).as_posix()] = _sha256_file(path)
+    if "tokenizer.json" not in files:
+        raise ValueError("Prepared tokenizer cache is missing tokenizer.json.")
+    return files
+
+
+def _scratch_tokenizer_identity(tokenizer: Any) -> dict[str, Any]:
+    return {
+        "vocab_size": len(tokenizer),
+        "special_token_ids": {
+            name: getattr(tokenizer, f"{name}_token_id")
+            for name in ("unk", "pad", "bos", "eos")
+        },
+    }
+
+
+def _check_scratch_dataset_sizes(
+    config: TrainLMPretrainingConfig,
+    train_dataset: Any,
+    eval_dataset: Any,
+) -> None:
+    required_train_sequences = math.ceil(
+        config.max_tokens / (config.sequence_length - 1)
     )
-    eval_dataset = PackedBinDataset.from_directory(
-        data_root / "validation",
-        sequence_length=config.sequence_length,
-        split="validation",
-    )
-    required_train_sequences = math.ceil(config.max_tokens / (config.sequence_length - 1))
     if len(train_dataset) < required_train_sequences:
         available = len(train_dataset)
         train_dataset.close()
@@ -552,6 +538,237 @@ def _prepare_scratch_training(config: TrainLMPretrainingConfig):
         train_dataset.close()
         eval_dataset.close()
         raise ValueError("The validation split does not contain a full sequence.")
+
+
+def _load_scratch_preparation_cache(
+    config: TrainLMPretrainingConfig,
+    *,
+    root: Path,
+    packed_dataset_type: Any,
+) -> tuple[Any, Any, Any] | None:
+    """Load only a matching cache whose tokenizer and packed shards validate."""
+    cache_path = root / "preparation_cache.json"
+    if cache_path.is_symlink():
+        raise ValueError(f"Prepared-data cache cannot be a symlink: {cache_path}")
+    if not cache_path.exists():
+        return None
+    if not cache_path.is_file():
+        raise ValueError(f"Prepared-data cache is not a regular file: {cache_path}")
+    try:
+        payload = json.loads(cache_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(
+            f"Cannot read prepared-data cache {cache_path}; use a fresh output_dir."
+        ) from exc
+    if (
+        not isinstance(payload, dict)
+        or payload.get("schema_version") != _PREPARATION_CACHE_SCHEMA
+    ):
+        raise RuntimeError(
+            f"Prepared-data cache {cache_path} has an unsupported format; "
+            "use a fresh output_dir."
+        )
+    inputs = _preparation_cache_inputs(config)
+    if (
+        payload.get("inputs") != inputs
+        or payload.get("fingerprint") != _preparation_cache_fingerprint(inputs)
+    ):
+        raise ValueError(
+            "This output_dir already contains prepared data for different "
+            "dataset/tokenizer settings. Choose a fresh output_dir to preserve "
+            "the existing data and checkpoints."
+        )
+
+    tokenizer_dir = root / "tokenizer"
+    expected_tokenizer_files = payload.get("tokenizer_files")
+    if not isinstance(expected_tokenizer_files, dict):
+        raise RuntimeError(
+            f"Prepared tokenizer cache metadata is malformed: {cache_path}"
+        )
+    actual_tokenizer_files = _tokenizer_cache_hashes(tokenizer_dir)
+    if actual_tokenizer_files != expected_tokenizer_files:
+        raise RuntimeError(
+            f"Prepared tokenizer cache failed integrity validation at {tokenizer_dir}; "
+            "use a fresh output_dir to preserve existing checkpoints."
+        )
+
+    expected_shards = payload.get("shard_manifests")
+    if not isinstance(expected_shards, dict):
+        raise RuntimeError(f"Prepared shard cache metadata is malformed: {cache_path}")
+    for split in ("train", "validation"):
+        manifest_path = root / "data" / split / f"{split}.manifest.json"
+        expected_digest = expected_shards.get(split)
+        if (
+            not isinstance(expected_digest, str)
+            or manifest_path.is_symlink()
+            or not manifest_path.is_file()
+            or _sha256_file(manifest_path) != expected_digest
+        ):
+            raise RuntimeError(
+                f"Prepared {split} shard manifest failed integrity validation at "
+                f"{manifest_path}; use a fresh output_dir to preserve checkpoints."
+            )
+
+    train_dataset = None
+    try:
+        from transformers import PreTrainedTokenizerFast
+
+        tokenizer = PreTrainedTokenizerFast.from_pretrained(
+            tokenizer_dir, local_files_only=True
+        )
+        if _scratch_tokenizer_identity(tokenizer) != payload.get("tokenizer"):
+            raise ValueError("Cached tokenizer identity does not match its metadata.")
+        train_dataset = packed_dataset_type.from_directory(
+            root / "data" / "train",
+            sequence_length=config.sequence_length,
+            split="train",
+            seed=config.seed,
+        )
+        eval_dataset = packed_dataset_type.from_directory(
+            root / "data" / "validation",
+            sequence_length=config.sequence_length,
+            split="validation",
+        )
+    except Exception as exc:
+        if train_dataset is not None:
+            train_dataset.close()
+        raise RuntimeError(
+            f"Prepared-data cache failed validation under {root}; use a fresh "
+            "output_dir rather than overwriting data associated with checkpoints."
+        ) from exc
+    _check_scratch_dataset_sizes(config, train_dataset, eval_dataset)
+    return tokenizer, train_dataset, eval_dataset
+
+
+def _write_scratch_preparation_cache(
+    config: TrainLMPretrainingConfig,
+    *,
+    root: Path,
+    tokenizer: Any,
+) -> None:
+    payload = {
+        "schema_version": _PREPARATION_CACHE_SCHEMA,
+        "inputs": _preparation_cache_inputs(config),
+        "fingerprint": _preparation_cache_fingerprint(
+            _preparation_cache_inputs(config)
+        ),
+        "tokenizer": _scratch_tokenizer_identity(tokenizer),
+        "tokenizer_files": _tokenizer_cache_hashes(root / "tokenizer"),
+        "shard_manifests": {
+            split: _sha256_file(
+                root / "data" / split / f"{split}.manifest.json"
+            )
+            for split in ("train", "validation")
+        },
+    }
+    cache_path = root / "preparation_cache.json"
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=".preparation-cache-", suffix=".tmp", dir=root
+    )
+    temporary_path = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            stream.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+            stream.flush()
+        os.replace(temporary_path, cache_path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+
+def _prepare_scratch_training(config: TrainLMPretrainingConfig):
+    """Build the model and reuse integrity-checked prepared data when possible."""
+    import torch
+    from transformers import AutoModelForCausalLM
+
+    from trainlm.data import PackedBinDataset
+    from trainlm.data.writer import write_packed_binary_shard
+
+    root = Path(config.output_dir)
+    data_root = root / "data"
+    root.mkdir(parents=True, exist_ok=True)
+    cached = _load_scratch_preparation_cache(
+        config, root=root, packed_dataset_type=PackedBinDataset
+    )
+    if cached is not None:
+        tokenizer, train_dataset, eval_dataset = cached
+    else:
+        try:
+            from datasets import load_dataset
+        except ImportError as exc:
+            raise ImportError(
+                "Raw-text Hub pretraining needs the optional 'datasets' package. "
+                "Install datasets, then restart the Python runtime."
+            ) from exc
+
+        train_source = load_dataset(
+            config.dataset_id,
+            revision=config.dataset_revision,
+            split=config.train_split,
+            streaming=True,
+        )
+        tokenizer, _ = _train_byte_level_tokenizer(
+            train_source,
+            max_examples=config.max_train_examples,
+            vocab_size=config.tokenizer_vocab_size,
+            text_field=config.text_field,
+        )
+        tokenizer.save_pretrained(root / "tokenizer")
+
+        # Reopen the immutable stream after fitting the tokenizer on training text.
+        train_source = load_dataset(
+            config.dataset_id,
+            revision=config.dataset_revision,
+            split=config.train_split,
+            streaming=True,
+        )
+        validation_source = load_dataset(
+            config.dataset_id,
+            revision=config.dataset_revision,
+            split=config.validation_split,
+            streaming=True,
+        )
+        write_packed_binary_shard(
+            _token_documents(
+                train_source,
+                tokenizer,
+                max_examples=config.max_train_examples,
+                text_field=config.text_field,
+            ),
+            data_root / "train",
+            shard_id="train",
+            vocab_size=len(tokenizer),
+        )
+        write_packed_binary_shard(
+            _token_documents(
+                validation_source,
+                tokenizer,
+                max_examples=config.max_eval_examples,
+                text_field=config.text_field,
+            ),
+            data_root / "validation",
+            shard_id="validation",
+            vocab_size=len(tokenizer),
+        )
+
+        train_dataset = PackedBinDataset.from_directory(
+            data_root / "train",
+            sequence_length=config.sequence_length,
+            split="train",
+            seed=config.seed,
+        )
+        try:
+            eval_dataset = PackedBinDataset.from_directory(
+                data_root / "validation",
+                sequence_length=config.sequence_length,
+                split="validation",
+            )
+        except Exception:
+            train_dataset.close()
+            raise
+        _check_scratch_dataset_sizes(config, train_dataset, eval_dataset)
+        _write_scratch_preparation_cache(
+            config, root=root, tokenizer=tokenizer
+        )
 
     model_config = _scratch_huggingface_config(
         config,

@@ -35,7 +35,10 @@ follow the linked implementation and tests before making a change.
   and disjoint train/validation splits, then returns the familiar trainer for
   `train()`, `evaluate()`, and `save_model()` calls. Use
   `trainer.train(resume_from_checkpoint="latest")` to resume from the newest
-  completed checkpoint under the trainer output directory. GPT-2 is the default;
+  completed checkpoint under the trainer output directory. Matching pinned
+  preparation settings reuse validated tokenizer and packed-data artifacts in
+  `config.output_dir`; change the output directory when changing the dataset or
+  tokenizer inputs. GPT-2 is the default;
   `model_type` and `model_config_overrides` select a registered Transformers
   causal-LM configuration for random initialization. TrainLM fills vocabulary
   and special-token IDs from the newly trained tokenizer. The path does not

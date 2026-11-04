@@ -33,6 +33,11 @@ silently starting over. For Colab reset recovery, users can mount Drive and
 point `RUN_DIR` to persistent storage; Kaggle users can retain `/kaggle/working`
 outputs by saving a notebook version. CPU tests cover committed-checkpoint
 selection and resume; native TPU checkpoint recovery remains unvalidated.
+Matching pinned dataset/tokenizer settings now reuse the fingerprinted,
+integrity-checked tokenizer and packed shards under the same output directory.
+Changed preparation inputs require a new output directory so existing run data
+and checkpoints are preserved. A cache hit avoids importing `datasets` or
+reopening the Hugging Face stream.
 
 The notebook uses this API; native TPU remains experimental and gains no
 end-to-end evidence from CPU/API tests. PR #81 added tokenizer and runtime
