@@ -74,16 +74,25 @@ When periodic checkpointing is enabled, the shared trainer now publishes the
 final successful optimizer step if it falls between save intervals. It avoids
 a duplicate when the cadence saved that step, skips final saves after failures,
 and leaves automatic saving disabled when no interval is configured.
+The public `trainer.latest_checkpoint` property returns the newest published
+local checkpoint or committed native TPU checkpoint path, or `None`; passing
+`resume_from_checkpoint="latest"` uses the same resolver. The notebook prints
+this path for copying into run notes and includes it in failure output when
+available.
 
 PR #88 rebase-merged scratch budget extension at verified `main`
 `ab11f59fc362684c3ba6da5111d7a30d2d77f8f2`, with both GitHub dependency CI
 profiles passing. This retention implementation starts from that base.
 PR #89 rebase-merged checkpoint retention at verified `main`
 `a45432dfbee58713ee647aec8d3860dfd4fd885c`; both CI profiles passed 924 tests
-and 41 subtests. The final-checkpoint change is on
-`feat/90-final-training-checkpoint`, based on that verified SHA. It adds no TPU
-checkpoint-recovery evidence. Focused CPU lifecycle tests passed 69 tests, the
-roadmap consistency test passed 3 tests, and the changed trainer module compiled.
+and 41 subtests. PR #90 rebase-merged final-step checkpoint saving at verified
+`main` SHA `5bab4b5c62ffe014b2700d2ea7157bb910d9f621` from head
+`6f185a87a109140fb4aed62f60edb8542e152f86`; both CI profiles passed 928 tests
+and 41 subtests. Focused CPU lifecycle tests passed 69 tests, the roadmap
+consistency test passed 3 tests, and the changed trainer module compiled. No TPU
+checkpoint recovery was run. The public checkpoint-path change starts on
+`feat/91-public-latest-checkpoint` from that verified `main` SHA. Its focused
+CPU/API, notebook, and roadmap checks passed 52 tests; no TPU runtime was used.
 
 PR #85's verified `main` base is `476bc68ff535cd49f3472316c5bc809bc38e7ae5`.
 PR #86 added whole-run checkpoint compatibility validation and rebase-merged

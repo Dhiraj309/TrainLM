@@ -926,6 +926,15 @@ class TrainLMTrainer:
             ),
         )
 
+    @property
+    def latest_checkpoint(self) -> Path | None:
+        """Return the newest published checkpoint path, or ``None`` if absent.
+
+        Local training checkpoints and committed native TPU checkpoint
+        manifests use the same lookup as ``resume_from_checkpoint="latest"``.
+        """
+        return _latest_training_checkpoint(Path(self.args.output_dir))
+
     def train(self, *, resume_from_checkpoint: str | Path | None = None):
         """Run training, optionally resuming from a path or ``"latest"``.
 
@@ -944,9 +953,7 @@ class TrainLMTrainer:
             )
 
         if resume_from_checkpoint == "latest":
-            resume_from_checkpoint = _latest_training_checkpoint(
-                Path(self.args.output_dir)
-            )
+            resume_from_checkpoint = self.latest_checkpoint
             if resume_from_checkpoint is None:
                 raise FileNotFoundError(
                     "No committed training checkpoints were found under "
