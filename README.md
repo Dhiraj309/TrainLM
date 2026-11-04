@@ -77,11 +77,15 @@ provide the relevant Transformers config fields in `model_config_overrides`.
 Only model types supported by `AutoModelForCausalLM` are suitable; TrainLM does
 not load custom remote model code in this scratch path.
 
-The notebook's downloadable ZIP includes a version 4 evidence report with the
+The notebook's downloadable ZIP includes a version 5 evidence report with the
 requested and effective training settings, optimizer and scheduler details,
 selected backend, runtime TPU discovery and device properties, model config,
 tokenizer vocabulary and special-token IDs, tokenizer artifact hash, parameter
 counts, source and dataset revisions, package versions, and training metrics.
+The top-level `checkpoint.latest_path` field records the newest published
+checkpoint path, including on failed runs when a prior checkpoint remains.
+This path belongs to the notebook runtime; keep `RUN_DIR` on persistent storage
+such as Google Drive if it must remain available after a reset.
 Optional distributions and unavailable hardware properties are recorded as
 `null`. Property discovery does not allocate a device; the report labels its
 unverified query separately from the active runtime's status.

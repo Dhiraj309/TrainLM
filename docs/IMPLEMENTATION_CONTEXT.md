@@ -20,12 +20,14 @@ through a registered Transformers causal-LM config. GPT-2 remains the default;
 `AutoModelForCausalLM` architectures. The trained tokenizer supplies vocabulary
 and special-token IDs. The from-scratch Colab/Kaggle notebook calls this API
 with a concise token-budget and sequence-length setup; its downloadable schema
-v4 report records requested and effective training settings, optimizer and
+v5 report records requested and effective training settings, optimizer and
 scheduler details, resolved backend/runtime, bounded TPU property discovery,
 model config and parameter counts, tokenizer special-token IDs and artifact
-hash, dataset revisions, and runtime package versions. Property-only discovery
-does not allocate a device and is labeled unverified. Missing optional runtime
-packages and unavailable hardware properties are recorded as null. Native TPU
+hash, dataset revisions, runtime package versions, and the newest published
+checkpoint path when available. The path is local to the notebook runtime, so
+`RUN_DIR` must be on persistent storage to survive resets. Property-only
+discovery does not allocate a device and is labeled unverified. Missing optional
+runtime packages and unavailable hardware properties are recorded as null. Native TPU
 remains experimental; CPU/API evidence adds no hardware validation.
 
 The scratch notebook now uses a stable configurable `RUN_DIR` and exposes
@@ -90,9 +92,14 @@ and 41 subtests. PR #90 rebase-merged final-step checkpoint saving at verified
 `6f185a87a109140fb4aed62f60edb8542e152f86`; both CI profiles passed 928 tests
 and 41 subtests. Focused CPU lifecycle tests passed 69 tests, the roadmap
 consistency test passed 3 tests, and the changed trainer module compiled. No TPU
-checkpoint recovery was run. The public checkpoint-path change starts on
-`feat/91-public-latest-checkpoint` from that verified `main` SHA. Its focused
-CPU/API, notebook, and roadmap checks passed 52 tests; no TPU runtime was used.
+checkpoint recovery was run. PR #91 exposed `trainer.latest_checkpoint` and was
+rebase-merged at verified `main` SHA
+`2a68f781655d80ccbac91ed03e582e32539c0900` from head
+`1c1a963486e9c42aff14f96d2ac78f1327a17a06`; both CI profiles passed 928 tests
+and 41 subtests. Its focused CPU/API, notebook, and roadmap checks passed 52
+tests. The current report change starts on `feat/92-report-checkpoint-path`
+from that verified `main` SHA; it updates the downloadable report to schema v5
+and adds no TPU validation.
 
 PR #85's verified `main` base is `476bc68ff535cd49f3472316c5bc809bc38e7ae5`.
 PR #86 added whole-run checkpoint compatibility validation and rebase-merged
