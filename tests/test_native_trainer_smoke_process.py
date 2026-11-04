@@ -376,7 +376,14 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         self.assertIn('trainer.latest_checkpoint', source)
         self.assertIn('latest_checkpoint=', source)
         self.assertIn('arcname="report.json"', source)
-        self.assertIn('"schema_version": 4', source)
+        self.assertIn('"schema_version": 5', source)
+        self.assertIn('"checkpoint": checkpoint_report', source)
+        self.assertEqual(source.count('"checkpoint": checkpoint_report'), 2)
+        self.assertIn('except Exception as exc', source)
+        self.assertIn(
+            '"latest_path": str(latest_checkpoint) if latest_checkpoint else None',
+            source,
+        )
         self.assertIn('"requested_model_type": pretraining_config.model_type', source)
         self.assertIn('"requested_config_overrides"', source)
         self.assertIn('"effective_config"', source)

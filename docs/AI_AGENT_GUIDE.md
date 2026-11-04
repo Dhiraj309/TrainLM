@@ -43,13 +43,15 @@ follow the linked implementation and tests before making a change.
   resolved path after training and when its training cell handles an error.
 - The from-scratch notebook is a small-scale implementation example. Its CPU
   lifecycle coverage does not establish TPU training, convergence, or
-  performance. Its version 4 downloadable report captures requested and
+  performance. Its version 5 downloadable report captures requested and
   effective training settings (including optimizer and scheduler), selected
   backend, runtime TPU discovery and device properties, model and tokenizer
   provenance, package versions, source/dataset revisions, and training
-  metrics. A property-only device query does not allocate a device and is
-  labeled unverified. Missing optional packages and unavailable properties are
-  reported as `null`.
+  metrics. Its top-level `checkpoint.latest_path` gives the newest published
+  checkpoint path when one is available. This is a runtime path, so persistent
+  `RUN_DIR` storage is required to use it after a session reset. A property-only
+  device query does not allocate a device and is labeled unverified. Missing
+  optional packages and unavailable properties are reported as `null`.
 - `TrainLMTrainer.from_scratch(TrainLMPretrainingConfig(...))` is the public
   raw-text entry point. It requires an immutable Hugging Face dataset revision
   and disjoint train/validation splits, then returns the familiar trainer for

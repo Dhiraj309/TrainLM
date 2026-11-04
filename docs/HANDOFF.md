@@ -31,13 +31,14 @@
   ordinary trainer lifecycle. GPT-2 remains the default; `model_type` and
   `model_config_overrides` select another registered architecture. TrainLM
   derives the vocabulary and special-token IDs from its trained tokenizer.
-  The Colab/Kaggle notebook uses this public API and its downloadable schema v4
+  The Colab/Kaggle notebook uses this public API and its downloadable schema v5
   report captures requested and effective training settings, optimizer and
   scheduler details, model/tokenizer provenance, runtime versions, selected
-  backend, and bounded TPU properties. Property-only discovery does not allocate
-  a device and is labeled unverified. Missing optional packages and properties
-  are `null`. Native TorchTPU remains experimental; CPU/API work adds no TPU
-  training evidence. The current continuation iteration adds a stable notebook
+  backend, bounded TPU properties, and the newest checkpoint path when present.
+  Property-only discovery does not allocate a device and is labeled unverified.
+  Missing optional packages and properties are `null`. Native TorchTPU remains
+  experimental; CPU/API work adds no TPU training evidence. Earlier continuation
+  work added a stable notebook
   run directory, a `RESUME_FROM_CHECKPOINT` setting, and public
   `resume_from_checkpoint="latest"` lookup over completed checkpoints. Colab
   Drive and Kaggle output persistence are documented. Matching pinned data and

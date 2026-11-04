@@ -19,11 +19,13 @@ a revision-pinned Hugging Face dataset. The API trains a byte-level tokenizer,
 prepares validated packed shards, initializes GPT-2 by default (or a configured
 registered Transformers causal-LM architecture), and returns the familiar
 trainer lifecycle. Vocabulary and special-token IDs come from the trained
-tokenizer. The notebook's version 4 downloadable report records requested and
+tokenizer. The notebook's version 5 downloadable report records requested and
 effective training settings, optimizer and scheduler details, selected backend,
 bounded runtime TPU discovery and properties, model/tokenizer provenance,
-runtime versions, and training metrics. Property-only discovery is labeled
-unverified and does not allocate a device.
+runtime versions, training metrics, and `checkpoint.latest_path` when a
+published checkpoint exists. Property-only discovery is labeled unverified
+and does not allocate a device. The checkpoint path refers to the notebook
+runtime, so `RUN_DIR` must use persistent storage to survive a reset.
 
 The from-scratch notebook now keeps its run in an editable stable directory and
 passes an optional `RESUME_FROM_CHECKPOINT` value through the public trainer
@@ -94,7 +96,10 @@ verified `main` SHA `a45432dfbee58713ee647aec8d3860dfd4fd885c`; both CI profiles
 passed 924 tests and 41 subtests. PR #90 added final-step checkpoint saving
 and rebase-merged at verified `main` SHA
 `5bab4b5c62ffe014b2700d2ea7157bb910d9f621`; both CI profiles passed 928 tests
-and 41 subtests. The public checkpoint-path change starts from that SHA and
+and 41 subtests. PR #91 exposed the public latest-checkpoint path and
+rebase-merged at verified `main` SHA
+`2a68f781655d80ccbac91ed03e582e32539c0900`; both CI profiles passed 928 tests
+and 41 subtests. The current report-schema update starts from that SHA and
 adds no TPU checkpoint-recovery evidence.
 
 The notebook uses this API; native TPU remains experimental and gains no
