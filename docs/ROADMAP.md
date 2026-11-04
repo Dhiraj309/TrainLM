@@ -33,16 +33,24 @@ silently starting over. For Colab reset recovery, users can mount Drive and
 point `RUN_DIR` to persistent storage; Kaggle users can retain `/kaggle/working`
 outputs by saving a notebook version. CPU tests cover committed-checkpoint
 selection and resume; native TPU checkpoint recovery remains unvalidated.
+An explicit `extend_training_budget=True` option now permits resuming with a
+strictly larger `max_tokens` value while requiring all model, data, optimizer,
+precision, and runtime settings to match. After checkpoint validation, it
+retains model and optimizer state, updates the run manifest, and starts a new
+cosine schedule from the configured learning rate across the remaining steps.
+This opt-in schedule restart can raise the learning rate; CPU tests cover the
+transition, while native TPU checkpoint recovery remains unvalidated.
 Matching pinned dataset/tokenizer settings now reuse the fingerprinted,
 integrity-checked tokenizer and packed shards under the same output directory.
 The scratch workflow also writes `run_config.json` and embeds its full
 fingerprint and configuration in each checkpoint. Resume rejects changed model,
 tokenizer, packed data, optimizer, schedule, precision, or runtime settings
-before restoring training state. Use a fresh output directory for a different
-run configuration; older scratch checkpoints without this record cannot be
-resumed through the guarded scratch API. Generic legacy checkpoint behavior is
-unchanged. A cache hit avoids importing `datasets` or reopening the Hugging Face
-stream.
+before restoring training state, except when the opt-in budget-extension path
+validates a larger token target and its derived schedule horizon. Other changed
+settings require a fresh output directory; older scratch checkpoints without
+this record cannot be resumed through the guarded scratch API. Generic legacy
+checkpoint behavior is unchanged. A cache hit avoids importing `datasets` or
+reopening the Hugging Face stream.
 
 PR #85 added the integrity-checked preparation cache and was rebase-merged to
 verified `main` at `476bc68ff535cd49f3472316c5bc809bc38e7ae5`. The current

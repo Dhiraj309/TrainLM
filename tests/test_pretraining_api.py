@@ -177,6 +177,158 @@ def test_scratch_resume_rejects_changed_run_settings_before_state_restore(
     assert resumed.train_dataset.state_dict() == before_dataset_state
 
 
+def test_scratch_resume_can_extend_token_budget_with_cosine_restart(
+    tmp_path, monkeypatch
+):
+    rows = [
+        {"text": f"A deterministic packed training example number {index}. " * 5}
+        for index in range(16)
+    ]
+
+    class StreamingRows:
+        def __iter__(self):
+            return iter(rows)
+
+    datasets_module = ModuleType("datasets")
+    datasets_module.load_dataset = lambda *args, **kwargs: StreamingRows()
+    monkeypatch.setitem(sys.modules, "datasets", datasets_module)
+
+    output_dir = tmp_path / "extendable-run"
+    initial = TrainLMTrainer.from_scratch(_config(output_dir, max_tokens=8))
+    initial_state = initial.train()
+    assert initial_state.step == 2
+    checkpoint_path = output_dir / "checkpoints" / "checkpoint-2" / "trainer_state.pt"
+    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    saved_optimizer_steps = [
+        int(state["step"].item())
+        for state in checkpoint["optimizer"]["state"].values()
+        if "step" in state
+    ]
+    assert saved_optimizer_steps and max(saved_optimizer_steps) == 2
+
+    run_config_path = output_dir / "run_config.json"
+    original_manifest = json.loads(run_config_path.read_text(encoding="utf-8"))
+    extended = TrainLMTrainer.from_scratch(
+        _config(output_dir, max_tokens=22),
+        extend_training_budget=True,
+    )
+    assert json.loads(run_config_path.read_text(encoding="utf-8")) == original_manifest
+    assert extended.args.max_steps == 4
+
+    state = extended.train(resume_from_checkpoint="latest")
+
+    assert state.step == 4
+    assert state.tokens_seen >= 22
+    assert extended.scheduler.T_max == 2
+    assert extended.scheduler.last_epoch == 2
+    assert extended.optimizer.param_groups[0]["lr"] == pytest.approx(0.0)
+    final_manifest = json.loads(run_config_path.read_text(encoding="utf-8"))
+    assert final_manifest["configuration"]["pretraining"]["max_tokens"] == 22
+    assert final_manifest["configuration"]["scheduler"]["training_horizon_steps"] == 4
+    extension_checkpoint = torch.load(
+        output_dir / "checkpoints" / "checkpoint-3" / "trainer_state.pt",
+        map_location="cpu",
+        weights_only=False,
+    )
+    assert extension_checkpoint["scheduler"]["T_max"] == 2
+    assert extension_checkpoint["scheduler"]["base_lrs"] == [pytest.approx(3e-4)]
+    optimizer_steps = [
+        int(state["step"].item())
+        for state in extended.optimizer.state.values()
+        if "step" in state
+    ]
+    assert optimizer_steps and max(optimizer_steps) == 4
+
+
+def test_scratch_budget_extension_rejects_non_budget_changes(tmp_path, monkeypatch):
+    rows = [
+        {"text": f"A deterministic packed training example number {index}. " * 5}
+        for index in range(16)
+    ]
+
+    class StreamingRows:
+        def __iter__(self):
+            return iter(rows)
+
+    datasets_module = ModuleType("datasets")
+    datasets_module.load_dataset = lambda *args, **kwargs: StreamingRows()
+    monkeypatch.setitem(sys.modules, "datasets", datasets_module)
+
+    output_dir = tmp_path / "fixed-run"
+    trainer = TrainLMTrainer.from_scratch(_config(output_dir, max_tokens=8))
+    trainer.train()
+    run_config_path = output_dir / "run_config.json"
+    original_manifest = json.loads(run_config_path.read_text(encoding="utf-8"))
+
+    with pytest.raises(RuntimeError, match="already bound to a different"):
+        TrainLMTrainer.from_scratch(_config(output_dir, max_tokens=22))
+    with pytest.raises(RuntimeError, match="only permits a strictly larger"):
+        TrainLMTrainer.from_scratch(
+            _config(output_dir, max_tokens=22, learning_rate=6e-4),
+            extend_training_budget=True,
+        )
+    assert json.loads(run_config_path.read_text(encoding="utf-8")) == original_manifest
+
+
+def test_scratch_budget_extension_recovers_after_checkpoint_publish(
+    tmp_path, monkeypatch
+):
+    rows = [
+        {"text": f"A deterministic packed training example number {index}. " * 5}
+        for index in range(16)
+    ]
+
+    class StreamingRows:
+        def __iter__(self):
+            return iter(rows)
+
+    datasets_module = ModuleType("datasets")
+    datasets_module.load_dataset = lambda *args, **kwargs: StreamingRows()
+    monkeypatch.setitem(sys.modules, "datasets", datasets_module)
+
+    output_dir = tmp_path / "recoverable-run"
+    initial = TrainLMTrainer.from_scratch(_config(output_dir, max_tokens=8))
+    initial.train()
+    run_config_path = output_dir / "run_config.json"
+    original_manifest = json.loads(run_config_path.read_text(encoding="utf-8"))
+
+    extending = TrainLMTrainer.from_scratch(
+        _config(output_dir, max_tokens=22),
+        extend_training_budget=True,
+    )
+
+    def fail_manifest_publish(*args, **kwargs):
+        raise OSError("simulated manifest publish interruption")
+
+    monkeypatch.setattr(
+        extending,
+        "_write_scratch_run_configuration",
+        fail_manifest_publish,
+    )
+    with pytest.raises(OSError, match="simulated manifest publish interruption"):
+        extending.train(resume_from_checkpoint="latest")
+    assert json.loads(run_config_path.read_text(encoding="utf-8")) == original_manifest
+    published = torch.load(
+        output_dir / "checkpoints" / "checkpoint-3" / "trainer_state.pt",
+        map_location="cpu",
+        weights_only=False,
+    )
+    assert published["run_configuration"]["configuration"]["pretraining"][
+        "max_tokens"
+    ] == 22
+
+    recovered = TrainLMTrainer.from_scratch(
+        _config(output_dir, max_tokens=22),
+        extend_training_budget=True,
+    )
+    state = recovered.train(resume_from_checkpoint="latest")
+
+    assert state.step == 4
+    assert json.loads(run_config_path.read_text(encoding="utf-8")) == published[
+        "run_configuration"
+    ]
+
+
 def test_preparation_cache_rejects_changed_data_settings(tmp_path, monkeypatch):
     rows = [
         {"text": f"Tiny story about data cache {index}. " * 4}
