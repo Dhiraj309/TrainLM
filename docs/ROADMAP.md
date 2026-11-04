@@ -40,6 +40,17 @@ retains model and optimizer state, updates the run manifest, and starts a new
 cosine schedule from the configured learning rate across the remaining steps.
 This opt-in schedule restart can raise the learning rate; CPU tests cover the
 transition, while native TPU checkpoint recovery remains unvalidated.
+The public trainer and scratch config now accept `save_total_limit`: `None`
+keeps all saves, while a positive limit keeps the new automatic checkpoint and
+the newest other owned saves. The notebook selects three. Cleanup happens only
+after checkpoint and run metadata publication; failed saves leave previous
+checkpoints intact. Unmarked legacy checkpoints, incomplete saves, symlinks,
+manual backups under separate names, and directories with extra files are
+preserved. Retention is excluded from training fingerprints so existing scratch
+checkpoints and changes to storage policy remain compatible. This is a
+single-device CPU/CUDA/explicit native TPU feature; distributed/XLA coordinator
+retention is rejected and TPU hardware validation remains pending. See the
+[retention and resume evidence](AI_AGENT_GUIDE.md#evidence-and-limits).
 Matching pinned dataset/tokenizer settings now reuse the fingerprinted,
 integrity-checked tokenizer and packed shards under the same output directory.
 The scratch workflow also writes `run_config.json` and embeds its full
@@ -53,7 +64,7 @@ checkpoint behavior is unchanged. A cache hit avoids importing `datasets` or
 reopening the Hugging Face stream.
 
 PR #85 added the integrity-checked preparation cache and was rebase-merged to
-verified `main` at `476bc68ff535cd49f3472316c5bc809bc38e7ae5`. The current
+verified `main` at `476bc68ff535cd49f3472316c5bc809bc38e7ae5`.
 PR #86 added whole-run compatibility checks to scratch checkpoints and was
 rebase-merged at verified `main` SHA
 `32776292a7e6436a0b2a02fb2232ce0185d1b245` from head
@@ -65,6 +76,11 @@ six loopback-dependent failures passed in the permitted rerun, while the
 remaining environment baseline includes missing `pip`, Transformers 5.0 Phi
 fixtures lacking `pad_token_id`, and an existing model reload mismatch. No TPU
 training was run.
+
+PR #88 added opt-in scratch budget extension and was rebase-merged at verified
+`main` SHA `ab11f59fc362684c3ba6da5111d7a30d2d77f8f2`. Both dependency CI
+profiles passed after restoring the notebook's Google Drive instructions. The
+retention work builds on that verified base; it adds no accelerator evidence.
 
 The notebook uses this API; native TPU remains experimental and gains no
 end-to-end evidence from CPU/API tests. PR #81 added tokenizer and runtime

@@ -21,6 +21,7 @@ config = TrainLMPretrainingConfig(
     output_dir="runs/tinystories",
     max_tokens=10_000,
     sequence_length=128,
+    save_total_limit=3,  # Keep up to three automatic training checkpoints.
     accelerator="native_tpu",  # Explicit, experimental single-device path.
 )
 trainer = TrainLMTrainer.from_scratch(config)
@@ -28,6 +29,16 @@ trainer.train()
 metrics = trainer.evaluate()
 trainer.save_model("runs/tinystories/model")
 ```
+
+`save_total_limit` also works in `TrainLMTrainingArguments` for single-device
+CPU, CUDA, and explicit native TorchTPU training. The API default, `None`, keeps
+all saves; the notebook selects `3`. Cleanup runs after a successful save and
+preserves the new checkpoint. Unmarked legacy checkpoints, incomplete saves,
+symlinks, separately named manual backups, and folders with exports or user
+files are excluded, so the directory may contain more than the configured
+limit. The limit can change on resume without changing training compatibility.
+Distributed retention and the legacy XLA coordinator are not supported yet;
+native TPU behavior still requires hardware validation.
 
 For a different built-in Transformers causal-LM architecture, set `model_type`
 and pass its architecture-specific fields. TrainLM derives `vocab_size` and

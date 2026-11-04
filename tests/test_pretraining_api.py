@@ -90,8 +90,9 @@ def test_from_scratch_builds_and_trains_a_small_cpu_model(tmp_path, monkeypatch)
     # the optional dataset package, let alone reconnecting to the pinned stream.
     monkeypatch.delitem(sys.modules, "datasets", raising=False)
     cached_trainer = TrainLMTrainer.from_scratch(
-        _config(config.output_dir)
+        _config(config.output_dir, save_total_limit=2)
     )
+    assert cached_trainer.args.save_total_limit == 2
     assert cached_trainer.model.config.model_type == "gpt2"
     assert calls == [
         ("org/tiny-stories", "a" * 40, "train", True),
@@ -105,6 +106,8 @@ def test_from_scratch_builds_and_trains_a_small_cpu_model(tmp_path, monkeypatch)
     assert run_manifest["configuration"]["training_args"]["learning_rate"] == 3e-4
     assert "AdamW" in run_manifest["configuration"]["optimizer"]["type"]
     assert run_manifest["configuration"]["scheduler"]["schedule"] == "cosine"
+    assert "save_total_limit" not in run_manifest["configuration"]["training_args"]
+    assert "save_total_limit" not in run_manifest["configuration"]["pretraining"]
 
     checkpoint = trainer._save_training_checkpoint(
         trainer.engine, "checkpoint-0"
@@ -293,7 +296,7 @@ def test_scratch_budget_extension_recovers_after_checkpoint_publish(
     original_manifest = json.loads(run_config_path.read_text(encoding="utf-8"))
 
     extending = TrainLMTrainer.from_scratch(
-        _config(output_dir, max_tokens=22),
+        _config(output_dir, max_tokens=22, save_total_limit=1),
         extend_training_budget=True,
     )
 
@@ -308,6 +311,7 @@ def test_scratch_budget_extension_recovers_after_checkpoint_publish(
     with pytest.raises(OSError, match="simulated manifest publish interruption"):
         extending.train(resume_from_checkpoint="latest")
     assert json.loads(run_config_path.read_text(encoding="utf-8")) == original_manifest
+    assert (output_dir / "checkpoints" / "checkpoint-2" / "trainer_state.pt").is_file()
     published = torch.load(
         output_dir / "checkpoints" / "checkpoint-3" / "trainer_state.pt",
         map_location="cpu",
@@ -318,12 +322,17 @@ def test_scratch_budget_extension_recovers_after_checkpoint_publish(
     ] == 22
 
     recovered = TrainLMTrainer.from_scratch(
-        _config(output_dir, max_tokens=22),
+        _config(output_dir, max_tokens=22, save_total_limit=1),
         extend_training_budget=True,
     )
     state = recovered.train(resume_from_checkpoint="latest")
 
     assert state.step == 4
+    # Publication failed before checkpoint-3 gained its ownership marker. It
+    # stays protected even after a later complete save prunes checkpoints 1/2.
+    assert {path.name for path in (output_dir / "checkpoints").iterdir()} == {
+        "checkpoint-3", "checkpoint-4"
+    }
     assert json.loads(run_config_path.read_text(encoding="utf-8")) == published[
         "run_configuration"
     ]

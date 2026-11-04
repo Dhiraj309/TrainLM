@@ -49,6 +49,7 @@ from trainlm.config import (
     TrainConfig,
     TrainerConfig,
 )
+from trainlm.checkpoint.retention import maintain_local_checkpoints
 from trainlm.optimization import create_optimizer
 from trainlm.pretraining import (
     TrainLMPretrainingConfig,
@@ -394,6 +395,7 @@ class TrainLMTrainingArguments:
         "auto", "causal_lm", "model", "chunked_linear"
     ] = "auto"
     logits_chunk_size: int | None = None
+    save_total_limit: int | None = None
 
     def __post_init__(self) -> None:
         if self.max_steps is None and self.max_tokens is None:
@@ -402,6 +404,7 @@ class TrainLMTrainingArguments:
             "max_steps",
             "max_tokens",
             "save_steps",
+            "save_total_limit",
             "eval_steps",
             "max_eval_batches",
         ):
@@ -430,6 +433,11 @@ class TrainLMTrainingArguments:
             raise ValueError("bf16 and fp16 cannot both be enabled.")
         if self.accelerator not in {"auto", "cpu", "cuda", "tpu", "native_tpu"}:
             raise ValueError(f"Unsupported accelerator: {self.accelerator}")
+        if self.accelerator == "tpu" and self.save_total_limit is not None:
+            raise ValueError(
+                "save_total_limit supports single-device CPU, CUDA, and native_tpu "
+                "training; retention for the legacy XLA coordinator is not supported."
+            )
         if self.torch_compile and self.accelerator != "native_tpu":
             raise ValueError(
                 "torch_compile is currently supported only with "
@@ -553,6 +561,7 @@ class TrainLMTrainer:
             torch_compile=config.torch_compile,
             logging_steps=config.logging_steps,
             save_steps=cadence,
+            save_total_limit=config.save_total_limit,
             eval_steps=cadence,
             max_eval_batches=config.max_eval_batches,
             seed=config.seed,
@@ -700,6 +709,8 @@ class TrainLMTrainer:
             )
         self.model = self._resolve_model(model)
         self.runtime = runtime or self._make_runtime()
+        if self.args.save_total_limit is not None and self.runtime.is_distributed:
+            raise ValueError("save_total_limit requires a single-device trainer.")
         self.optimizer = optimizer or self._make_optimizer()
         self.scheduler = scheduler or self._make_scheduler()
         self.engine = EngineTrainer(
@@ -1051,6 +1062,10 @@ class TrainLMTrainer:
         pretraining.pop("output_dir", None)
         training_args = asdict(self.args)
         training_args.pop("output_dir", None)
+        # Retention controls disk usage, not training semantics. Excluding it
+        # also preserves fingerprints of checkpoints saved before this option.
+        pretraining.pop("save_total_limit", None)
+        training_args.pop("save_total_limit", None)
         model_config = getattr(self.model, "config", None)
         model_config_dict = (
             model_config.to_dict()
@@ -1403,9 +1418,13 @@ class TrainLMTrainer:
         self._validate_native_resume_data(engine)
         root = Path(self.args.output_dir)
         path = root / str(destination or f"checkpoint-{engine.state.step}")
+        if path.is_symlink():
+            raise ValueError(f"Checkpoint directory cannot be a symlink: {path}")
         path.mkdir(parents=True, exist_ok=True)
         payload = self._training_checkpoint_payload(engine)
         temporary = path / "trainer_state.pt.tmp"
+        if temporary.is_symlink():
+            raise ValueError(f"Checkpoint temporary file cannot be a symlink: {temporary}")
         torch.save(payload, temporary)
         temporary.replace(path / "trainer_state.pt")
         if self._pending_scratch_run_configuration is not None:
@@ -1424,6 +1443,13 @@ class TrainLMTrainer:
                 self._pending_scratch_run_configuration
             )
             self._pending_scratch_run_configuration = None
+        if not engine.runtime.is_distributed:
+            maintain_local_checkpoints(
+                output_dir=root,
+                just_saved=path,
+                step=engine.state.step,
+                limit=self.args.save_total_limit,
+            )
         return path
 
     def _preflight_training_checkpoint(
