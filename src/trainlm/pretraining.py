@@ -67,6 +67,7 @@ class TrainLMPretrainingConfig:
     seed: int = 42
     model_type: str = "gpt2"
     model_config_overrides: Mapping[str, Any] | None = None
+    save_total_limit: int | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "output_dir", Path(self.output_dir).expanduser())
@@ -101,6 +102,12 @@ class TrainLMPretrainingConfig:
                 raise ValueError(f"{name} must be a positive integer.")
         if self.sequence_length < 2:
             raise ValueError("sequence_length must be at least two.")
+        if self.save_total_limit is not None and (
+            isinstance(self.save_total_limit, bool)
+            or not isinstance(self.save_total_limit, int)
+            or self.save_total_limit < 1
+        ):
+            raise ValueError("save_total_limit must be positive when configured.")
         if self.tokenizer_vocab_size < 260:
             raise ValueError("Byte-level BPE needs tokenizer_vocab_size >= 260.")
         if self.tokenizer_vocab_size > 65_536:

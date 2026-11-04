@@ -1,6 +1,7 @@
 """HF-like facade lifecycle, cadence, metrics, and local resume."""
 
 from copy import deepcopy
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -168,6 +169,115 @@ def test_latest_checkpoint_recognizes_published_tpu_manifest(tmp_path):
     )
 
     assert _latest_training_checkpoint(tmp_path) == tmp_path / "checkpoint-9"
+
+
+@pytest.mark.parametrize("limit", [None, 1, 2])
+def test_checkpoint_retention_preserves_latest_resume_parity(tmp_path, limit):
+    torch.manual_seed(97)
+    model = TinyModel()
+
+    def make_trainer(path, steps, keep):
+        return TrainLMTrainer(
+            model=deepcopy(model),
+            train_dataset=_dataset(),
+            args=TrainLMTrainingArguments(
+                output_dir=path, max_steps=steps, sequence_length=4,
+                accelerator="cpu", lr_scheduler_type="constant", save_steps=1,
+                save_total_limit=keep,
+            ),
+        )
+
+    root = tmp_path / "resumed"
+    first = make_trainer(root, 3, limit)
+    first.train()
+    expected = range(1, 4) if limit is None else range(4 - limit, 4)
+    assert {path.name for path in root.iterdir()} == {
+        f"checkpoint-{step}" for step in expected
+    }
+    resumed = make_trainer(root, 5, 1)
+    result = resumed.train(resume_from_checkpoint="latest")
+    reference = make_trainer(tmp_path / "reference", 5, None)
+    reference.train()
+
+    assert result.step == 5
+    assert {path.name for path in root.iterdir()} == {"checkpoint-5"}
+    for name, tensor in reference.model.state_dict().items():
+        torch.testing.assert_close(resumed.model.state_dict()[name], tensor, rtol=0, atol=0)
+
+
+@pytest.mark.parametrize("failure", ["serialize", "publish"])
+def test_checkpoint_retention_waits_for_successful_save(tmp_path, monkeypatch, failure):
+    trainer = TrainLMTrainer(
+        model=TinyModel(), train_dataset=_dataset(),
+        args=TrainLMTrainingArguments(
+            output_dir=tmp_path, max_steps=2, sequence_length=4,
+            accelerator="cpu", save_steps=1,
+        ),
+    )
+    trainer.train()
+    limited = TrainLMTrainer(
+        model=TinyModel(), train_dataset=_dataset(),
+        args=TrainLMTrainingArguments(
+            output_dir=tmp_path, max_steps=3, sequence_length=4,
+            accelerator="cpu", save_total_limit=1,
+        ),
+    )
+    if failure == "serialize":
+        def fail_save(payload, path):
+            Path(path).write_bytes(b"partial write")
+            raise OSError("simulated serialization failure")
+        monkeypatch.setattr(torch, "save", fail_save)
+    else:
+        original_replace = Path.replace
+
+        def fail_publish(path, target):
+            if Path(target).name == "trainer_state.pt":
+                raise OSError("simulated publication failure")
+            return original_replace(path, target)
+        monkeypatch.setattr(Path, "replace", fail_publish)
+
+    # A failed overwrite of an existing save must not trigger any cleanup.
+    limited.engine.state.step = 2
+    with pytest.raises(OSError, match="simulated"):
+        limited._save_training_checkpoint(limited.engine, "checkpoint-2")
+    assert _latest_training_checkpoint(tmp_path) == tmp_path / "checkpoint-2"
+    assert (tmp_path / "checkpoint-1" / "trainer_state.pt").is_file()
+    assert (tmp_path / "checkpoint-2" / "trainer_state.pt").is_file()
+
+
+@pytest.mark.parametrize("link", ["directory", "temporary"])
+def test_checkpoint_save_refuses_symlink_destinations(tmp_path, link):
+    root = tmp_path / "run"
+    root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    protected = outside / "trainer_state.pt"
+    protected.write_bytes(b"preserve user file")
+    checkpoint = root / "checkpoint-1"
+    if link == "directory":
+        checkpoint.symlink_to(outside, target_is_directory=True)
+    else:
+        checkpoint.mkdir()
+        (checkpoint / "trainer_state.pt.tmp").symlink_to(protected)
+    trainer = TrainLMTrainer(
+        model=TinyModel(), train_dataset=_dataset(),
+        args=TrainLMTrainingArguments(
+            output_dir=root, max_steps=1, sequence_length=4,
+            accelerator="cpu", save_steps=1, save_total_limit=1,
+        ),
+    )
+    with pytest.raises(ValueError, match="cannot be a symlink"):
+        trainer.train()
+    assert protected.read_bytes() == b"preserve user file"
+
+
+def test_checkpoint_retention_rejects_distributed_runtime(tmp_path):
+    with pytest.raises(ValueError, match="requires a single-device"):
+        TrainLMTrainer(
+            model=TinyModel(), train_dataset=_dataset(),
+            runtime=SimpleNamespace(is_distributed=True),
+            args=TrainLMTrainingArguments(output_dir=tmp_path, save_total_limit=2),
+        )
 
 
 def test_custom_dataset_preflight_rejects_state_before_trainer_mutation(tmp_path):

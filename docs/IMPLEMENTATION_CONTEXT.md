@@ -55,6 +55,26 @@ Scratch checkpoints created before this manifest was introduced are rejected
 by `from_scratch()` resume because their full compatibility cannot be
 established; non-scratch legacy checkpoints keep their existing compatibility.
 
+Automatic checkpoint storage now has an opt-in `save_total_limit` in both
+public argument classes. The library default remains unlimited; the notebook
+uses three. New numbered local saves receive `.trainlm-checkpoint.json` only
+after state and pending run metadata have been published. Cleanup retains the
+new save plus the newest other owned saves, and excludes unmarked legacy
+directories, temporary files, symlinks, exports, and separately named manual
+backups. Filesystem cleanup errors warn without invalidating the new save.
+Retention is deliberately excluded from both sections of the scratch run
+fingerprint: it affects storage, not training, and older fingerprints still
+match. CPU tests cover exact resumed-weight parity after pruning, failures
+before publication, conservative exclusions, and budget-extension recovery.
+Distributed runtimes and the legacy XLA coordinator reject this option until
+coordinated retention is implemented. No TPU validation is claimed.
+Focused local validation passed 89 tests covering retention, public lifecycle,
+scratch resume, checkpoint contracts, roadmap consistency, and notebook cells.
+
+PR #88 rebase-merged scratch budget extension at verified `main`
+`ab11f59fc362684c3ba6da5111d7a30d2d77f8f2`, with both GitHub dependency CI
+profiles passing. This retention implementation starts from that base.
+
 PR #85's verified `main` base is `476bc68ff535cd49f3472316c5bc809bc38e7ae5`.
 PR #86 added whole-run checkpoint compatibility validation and rebase-merged
 at verified `main` SHA `32776292a7e6436a0b2a02fb2232ce0185d1b245` from head
