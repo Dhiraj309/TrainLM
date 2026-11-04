@@ -51,6 +51,10 @@ checkpoints and changes to storage policy remain compatible. This is a
 single-device CPU/CUDA/explicit native TPU feature; distributed/XLA coordinator
 retention is rejected and TPU hardware validation remains pending. See the
 [retention and resume evidence](AI_AGENT_GUIDE.md#evidence-and-limits).
+When periodic checkpointing is enabled, a successful run also saves its final
+optimizer step if the configured cadence missed it. The save occurs before
+train-end callbacks; runs that fail do not publish this final save, and
+`save_steps=None` keeps automatic saves disabled.
 Matching pinned dataset/tokenizer settings now reuse the fingerprinted,
 integrity-checked tokenizer and packed shards under the same output directory.
 The scratch workflow also writes `run_config.json` and embeds its full
@@ -81,6 +85,10 @@ PR #88 added opt-in scratch budget extension and was rebase-merged at verified
 `main` SHA `ab11f59fc362684c3ba6da5111d7a30d2d77f8f2`. Both dependency CI
 profiles passed after restoring the notebook's Google Drive instructions. The
 retention work builds on that verified base; it adds no accelerator evidence.
+PR #89 then added configurable checkpoint retention and rebase-merged at
+verified `main` SHA `a45432dfbee58713ee647aec8d3860dfd4fd885c`; both CI profiles
+passed 924 tests and 41 subtests. The current final-checkpoint change starts
+from that SHA and adds no TPU checkpoint-recovery evidence.
 
 The notebook uses this API; native TPU remains experimental and gains no
 end-to-end evidence from CPU/API tests. PR #81 added tokenizer and runtime

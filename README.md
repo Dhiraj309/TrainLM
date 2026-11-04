@@ -33,7 +33,9 @@ trainer.save_model("runs/tinystories/model")
 `save_total_limit` also works in `TrainLMTrainingArguments` for single-device
 CPU, CUDA, and explicit native TorchTPU training. The API default, `None`, keeps
 all saves; the notebook selects `3`. Cleanup runs after a successful save and
-preserves the new checkpoint. Unmarked legacy checkpoints, incomplete saves,
+preserves the new checkpoint. When `save_steps` is configured, TrainLM also
+saves a final checkpoint after a successful run if its last step falls between
+periodic save steps. Unmarked legacy checkpoints, incomplete saves,
 symlinks, separately named manual backups, and folders with exports or user
 files are excluded, so the directory may contain more than the configured
 limit. The limit can change on resume without changing training compatibility.

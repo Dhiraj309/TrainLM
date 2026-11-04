@@ -70,10 +70,20 @@ Distributed runtimes and the legacy XLA coordinator reject this option until
 coordinated retention is implemented. No TPU validation is claimed.
 Focused local validation passed 89 tests covering retention, public lifecycle,
 scratch resume, checkpoint contracts, roadmap consistency, and notebook cells.
+When periodic checkpointing is enabled, the shared trainer now publishes the
+final successful optimizer step if it falls between save intervals. It avoids
+a duplicate when the cadence saved that step, skips final saves after failures,
+and leaves automatic saving disabled when no interval is configured.
 
 PR #88 rebase-merged scratch budget extension at verified `main`
 `ab11f59fc362684c3ba6da5111d7a30d2d77f8f2`, with both GitHub dependency CI
 profiles passing. This retention implementation starts from that base.
+PR #89 rebase-merged checkpoint retention at verified `main`
+`a45432dfbee58713ee647aec8d3860dfd4fd885c`; both CI profiles passed 924 tests
+and 41 subtests. The final-checkpoint change is on
+`feat/90-final-training-checkpoint`, based on that verified SHA. It adds no TPU
+checkpoint-recovery evidence. Focused CPU lifecycle tests passed 69 tests, the
+roadmap consistency test passed 3 tests, and the changed trainer module compiled.
 
 PR #85's verified `main` base is `476bc68ff535cd49f3472316c5bc809bc38e7ae5`.
 PR #86 added whole-run checkpoint compatibility validation and rebase-merged

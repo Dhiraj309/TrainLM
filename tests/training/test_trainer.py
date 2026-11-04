@@ -198,6 +198,7 @@ def create_trainer(
     task=None,
     checkpoint_saver=None,
     checkpoint_loader=None,
+    callbacks=None,
 ):
     model = DummyModel()
 
@@ -231,6 +232,7 @@ def create_trainer(
         loss_fn=None if task is not None else (loss_fn or LanguageModelLoss()),
         train_dataloader=train_dataloader,
         eval_dataloader=eval_dataloader,
+        callbacks=callbacks,
         checkpoint_saver=checkpoint_saver,
         checkpoint_loader=checkpoint_loader,
     )
@@ -456,6 +458,63 @@ def test_training_honors_evaluation_and_checkpoint_cadence():
     trainer.train()
 
     assert events == ["checkpoint-1"]
+
+
+def test_training_saves_final_step_after_configured_cadence():
+    events = []
+    trainer = create_trainer(
+        checkpoint_saver=lambda trainer, path: events.append(path)
+    )
+    trainer.config.checkpoint = SimpleNamespace(save_training_every_steps=2)
+
+    trainer.train()
+
+    assert events == ["checkpoint-1"]
+
+
+def test_training_does_not_save_final_checkpoint_when_periodic_saving_disabled():
+    events = []
+    trainer = create_trainer(
+        checkpoint_saver=lambda trainer, path: events.append(path)
+    )
+    trainer.config.checkpoint = SimpleNamespace(save_training_every_steps=None)
+
+    trainer.train()
+
+    assert events == []
+
+
+def test_training_does_not_resave_a_checkpoint_at_the_restored_terminal_step():
+    events = []
+    trainer = create_trainer(
+        checkpoint_saver=lambda trainer, path: events.append(path),
+        checkpoint_loader=lambda trainer, path: setattr(trainer.state, "step", 1),
+    )
+    trainer.config.checkpoint = SimpleNamespace(save_training_every_steps=1)
+
+    trainer.load_checkpoint("checkpoint-1")
+    trainer.train()
+
+    assert events == []
+
+
+def test_failed_training_does_not_save_final_checkpoint():
+    events = []
+
+    class StopWithError(TrainerCallback):
+        def on_step_end(self, state, control):
+            raise RuntimeError("training interrupted")
+
+    trainer = create_trainer(
+        checkpoint_saver=lambda trainer, path: events.append(path),
+        callbacks=[StopWithError()],
+    )
+    trainer.config.checkpoint = SimpleNamespace(save_training_every_steps=2)
+
+    with pytest.raises(RuntimeError, match="training interrupted"):
+        trainer.train()
+
+    assert events == []
 
 
 class RecordingRuntime(Runtime):
