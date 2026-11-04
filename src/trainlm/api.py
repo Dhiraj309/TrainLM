@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
 from dataclasses import asdict, dataclass, replace
+import hashlib
 import json
 import math
 from numbers import Real
@@ -53,6 +54,7 @@ from trainlm.pretraining import (
     TrainLMPretrainingConfig,
     _preflight_scratch_backend,
     _prepare_scratch_training,
+    _tokenizer_cache_hashes,
 )
 from trainlm.runtime import Runtime
 from trainlm.runtime.torchtpu_discovery import (
@@ -109,6 +111,53 @@ _PERSISTED_TRAINER_STATE_FIELDS = frozenset(
 def _checkpoint_component_type(value: Any) -> str:
     component_type = type(value)
     return f"{component_type.__module__}.{component_type.__qualname__}"
+
+
+def _normalize_run_config_value(value: Any) -> Any:
+    """Convert effective run settings to deterministic JSON-compatible values."""
+    if value is None or isinstance(value, (str, bool, int)):
+        return value
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            raise ValueError("Run configuration values must be finite.")
+        return value
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, torch.dtype):
+        return str(value)
+    if isinstance(value, Mapping):
+        normalized = {}
+        for key, item in value.items():
+            if not isinstance(key, (str, int)) or isinstance(key, bool):
+                raise TypeError(
+                    "Run configuration mapping keys must be strings or integers."
+                )
+            normalized_key = str(key)
+            if normalized_key in normalized:
+                raise ValueError(
+                    "Run configuration keys collide after JSON normalization."
+                )
+            normalized[normalized_key] = _normalize_run_config_value(item)
+        return dict(sorted(normalized.items()))
+    if isinstance(value, (list, tuple)):
+        return [_normalize_run_config_value(item) for item in value]
+    if hasattr(value, "value") and isinstance(value.value, (str, int)):
+        return value.value
+    raise TypeError(
+        "Run configuration contains a value that cannot be represented as JSON: "
+        f"{type(value).__module__}.{type(value).__qualname__}."
+    )
+
+
+def _run_configuration_fingerprint(configuration: Mapping[str, Any]) -> str:
+    canonical = json.dumps(
+        configuration,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _latest_training_checkpoint(output_dir: Path) -> Path | None:
@@ -409,6 +458,17 @@ class TrainLMTrainer:
             eval_dataset.close()
             raise
         trainer.pretraining_config = config
+        try:
+            trainer._initialize_scratch_run_configuration(
+                config,
+                tokenizer=tokenizer,
+                train_dataset=train_dataset,
+                eval_dataset=eval_dataset,
+            )
+        except Exception:
+            train_dataset.close()
+            eval_dataset.close()
+            raise
         return trainer
 
     @classmethod
@@ -480,6 +540,7 @@ class TrainLMTrainer:
         self.loaded: LoadedCausalLM | None = None
         self._last_metrics: dict[str, Any] = {}
         self._native_tpu_worker_report: dict[str, Any] | None = None
+        self._run_configuration_manifest: dict[str, Any] | None = None
         self._train_loader_generator: torch.Generator | None = None
         self._train_loader_generator_initial_state: torch.Tensor | None = None
         self._tpu_coordinator = None
@@ -815,6 +876,10 @@ class TrainLMTrainer:
             "cuda_rng_state": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
             "loader_generator_initial_state": self._train_loader_generator_initial_state,
         }
+        if self._run_configuration_manifest is not None:
+            payload["run_configuration"] = deepcopy(
+                self._run_configuration_manifest
+            )
         loader = engine.train_dataloader
         dataset = getattr(loader, "dataset", None)
         dataset_state_dict = getattr(dataset, "state_dict", None)
@@ -825,6 +890,196 @@ class TrainLMTrainer:
         ):
             payload["train_dataset_state"] = dataset_state_dict()
         return payload
+
+    def _initialize_scratch_run_configuration(
+        self,
+        config: TrainLMPretrainingConfig,
+        *,
+        tokenizer: Any,
+        train_dataset: Any,
+        eval_dataset: Any,
+    ) -> None:
+        """Persist the exact from-scratch settings used to create checkpoints."""
+        if self.engine is None:
+            raise RuntimeError(
+                "Scratch run configuration requires a local trainer engine."
+            )
+
+        pretraining = asdict(config)
+        pretraining.pop("output_dir", None)
+        training_args = asdict(self.args)
+        training_args.pop("output_dir", None)
+        model_config = getattr(self.model, "config", None)
+        model_config_dict = (
+            model_config.to_dict()
+            if callable(getattr(model_config, "to_dict", None))
+            else None
+        )
+
+        parameter_names = {
+            id(parameter): name
+            for name, parameter in self.model.named_parameters()
+        }
+        optimizer_groups = []
+        for group in self.engine.optimizer.param_groups:
+            settings = {
+                name: value for name, value in group.items() if name != "params"
+            }
+            optimizer_groups.append(
+                {
+                    "settings": settings,
+                    "parameters": sorted(
+                        parameter_names.get(id(parameter), "<unknown-parameter>")
+                        for parameter in group["params"]
+                    ),
+                }
+            )
+
+        def dataset_identity(dataset: Any) -> dict[str, Any]:
+            shards = getattr(dataset, "shards", None)
+            if not isinstance(shards, tuple):
+                raise TypeError(
+                    "From-scratch run configuration requires manifest-backed datasets."
+                )
+            return {
+                "type": _checkpoint_component_type(dataset),
+                "split": getattr(dataset, "split", None),
+                "sequence_length": getattr(dataset, "sequence_length", None),
+                "source_revision": getattr(dataset, "_source_revision", None),
+                "shards": [shard.manifest.to_dict() for shard in shards],
+            }
+
+        configuration = _normalize_run_config_value({
+            "schema_version": 1,
+            "kind": "from_scratch",
+            "pretraining": pretraining,
+            "training_args": training_args,
+            "model": {
+                "type": _checkpoint_component_type(self.model),
+                "config": model_config_dict,
+                "parameter_count": sum(
+                    parameter.numel() for parameter in self.model.parameters()
+                ),
+                "trainable_parameter_count": sum(
+                    parameter.numel()
+                    for parameter in self.model.parameters()
+                    if parameter.requires_grad
+                ),
+            },
+            "tokenizer": {
+                "type": _checkpoint_component_type(tokenizer),
+                "vocab_size": len(tokenizer),
+                "special_token_ids": {
+                    name: getattr(tokenizer, f"{name}_token_id", None)
+                    for name in ("unk", "pad", "bos", "eos")
+                },
+                "files": _tokenizer_cache_hashes(
+                    Path(config.output_dir) / "tokenizer"
+                ),
+            },
+            "datasets": {
+                "train": dataset_identity(train_dataset),
+                "evaluation": dataset_identity(eval_dataset),
+            },
+            "optimizer": {
+                "type": _checkpoint_component_type(self.engine.optimizer),
+                "parameter_groups": optimizer_groups,
+            },
+            "scheduler": {
+                "type": _checkpoint_component_type(self.engine.scheduler),
+                "training_horizon_steps": self.args.max_steps,
+                "warmup_steps": self.args.warmup_steps,
+                "schedule": self.args.lr_scheduler_type,
+            },
+            "runtime": {
+                "requested_accelerator": self.args.accelerator,
+                "resolved_runtime": getattr(self.runtime, "name", None),
+                "torch_version": torch.__version__,
+            },
+        })
+        manifest = {
+            "schema_version": 1,
+            "fingerprint": _run_configuration_fingerprint(configuration),
+            "configuration": configuration,
+        }
+        root = Path(config.output_dir)
+        root.mkdir(parents=True, exist_ok=True)
+        path = root / "run_config.json"
+        if path.is_symlink():
+            raise ValueError(
+                f"Run configuration manifest cannot be a symlink: {path}"
+            )
+        if path.exists():
+            try:
+                existing = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise RuntimeError(
+                    f"Cannot read run configuration {path}; "
+                    "choose a fresh output_dir."
+                ) from exc
+            if not isinstance(existing, dict) or existing != manifest:
+                raise RuntimeError(
+                    "This output_dir is already bound to a different from-scratch "
+                    "run configuration. Use a fresh output_dir for changed model, "
+                    "data, optimizer, schedule, precision, or runtime settings."
+                )
+        else:
+            if _latest_training_checkpoint(Path(self.args.output_dir)) is not None:
+                raise RuntimeError(
+                    "Existing checkpoints have no from-scratch run configuration "
+                    "manifest and cannot be safely resumed. Use a fresh output_dir."
+                )
+            temporary = root / "run_config.json.tmp"
+            if temporary.exists() or temporary.is_symlink():
+                raise FileExistsError(
+                    f"A pending run configuration write already exists: {temporary}"
+                )
+            temporary.write_text(
+                json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            temporary.replace(path)
+        self._run_configuration_manifest = manifest
+
+    def _preflight_run_configuration(self, payload: Mapping[str, Any]) -> None:
+        """Reject changed or unverified scratch settings before state mutation."""
+        expected = self._run_configuration_manifest
+        saved = payload.get("run_configuration")
+        if expected is None:
+            if saved is not None:
+                raise ValueError(
+                    "This checkpoint belongs to a from-scratch run; resume it with "
+                    "TrainLMTrainer.from_scratch() and the matching configuration."
+                )
+            return
+        if not isinstance(saved, Mapping):
+            raise ValueError(
+                "From-scratch checkpoint has no run-configuration manifest; its "
+                "model, data, optimizer, and schedule compatibility cannot be verified."
+            )
+        saved_configuration = saved.get("configuration")
+        fingerprint = saved.get("fingerprint")
+        try:
+            valid_fingerprint = (
+                isinstance(saved_configuration, Mapping)
+                and isinstance(fingerprint, str)
+                and fingerprint == _run_configuration_fingerprint(saved_configuration)
+            )
+        except (TypeError, ValueError):
+            valid_fingerprint = False
+        if (
+            isinstance(saved.get("schema_version"), bool)
+            or saved.get("schema_version") != 1
+            or not valid_fingerprint
+        ):
+            raise ValueError(
+                "Training checkpoint run-configuration manifest is invalid."
+            )
+        if saved != expected:
+            raise ValueError(
+                "Training checkpoint run configuration does not match the active "
+                "model, data, optimizer, schedule, or runtime settings."
+            )
 
     def _validate_native_resume_data(self, engine: EngineTrainer) -> None:
         """Reject native checkpoints whose data position cannot be replayed."""
@@ -907,6 +1162,7 @@ class TrainLMTrainer:
                 "TrainLM training checkpoint is missing required state: "
                 f"{sorted(missing)}."
             )
+        self._preflight_run_configuration(payload)
 
         model_payload = payload["model"]
         if not isinstance(model_payload, Mapping):

@@ -39,6 +39,25 @@ The same output directory also caches preparation artifacts behind a source
 fingerprint, tokenizer file hashes, and the packed-shard manifests. A cache hit
 reuses them without importing `datasets`; changed dataset/tokenizer settings
 fail before overwriting the prior run, while altered artifacts fail validation.
+Each scratch run now also records its effective model configuration, tokenizer
+file hashes, packed-shard manifests, training arguments, optimizer parameter
+groups, scheduler horizon, and runtime identity in `run_config.json`; the same
+fingerprinted record is embedded in every checkpoint. Resume compares it before
+restoring model, optimizer, scheduler, RNG, or dataset state. Use a fresh output
+directory after changing run settings. Scratch checkpoints created before this
+manifest was introduced are rejected by `from_scratch()` resume because their
+full compatibility cannot be established; non-scratch legacy checkpoints keep
+their existing compatibility.
+
+PR #85's verified `main` base is `476bc68ff535cd49f3472316c5bc809bc38e7ae5`.
+Current branch `feat/86-scratch-run-config-resume` adds whole-run checkpoint
+compatibility validation. Focused API/lifecycle/roadmap tests pass (50 tests),
+and CPU/Gloo checkpoint plus token-weighting suites pass when run with
+per-command network permission (22 tests). The initial full local test run had
+885 passed and 13 failures. The six loopback-dependent failures passed in the
+permitted rerun; remaining failures are the environment's missing `pip`, five
+Transformers 5.0 Phi fixture errors (`pad_token_id` absent), and one existing
+model reload mismatch. No TPU training or certification was performed.
 
 PR #77
 was rebase-merged to verified `main` at
