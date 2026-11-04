@@ -27,6 +27,15 @@ hash, dataset revisions, and runtime package versions. Property-only discovery
 does not allocate a device and is labeled unverified. Missing optional runtime
 packages and unavailable hardware properties are recorded as null. Native TPU
 remains experimental; CPU/API evidence adds no hardware validation.
+
+The scratch notebook now uses a stable configurable `RUN_DIR` and exposes
+`RESUME_FROM_CHECKPOINT`. The public trainer accepts the sentinel
+`resume_from_checkpoint="latest"`, selecting the newest published local
+checkpoint (`trainer_state.pt`) or native TPU checkpoint (`manifest.json`); a
+missing checkpoint raises an actionable error. Notebook instructions describe
+Colab Drive and Kaggle output persistence. CPU/API coverage verifies lookup and
+resume behavior; native TPU checkpoint recovery remains owner-validated work.
+
 PR #77
 was rebase-merged to verified `main` at
 `f844d048b17640d4d71a127c4a860dd1f6d7d52c`; the public API is in commit

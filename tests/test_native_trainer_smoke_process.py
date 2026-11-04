@@ -368,6 +368,11 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         self.assertNotIn("GRADIENT_ACCUMULATION_STEPS", source)
         self.assertNotIn("torchtpu_native_trainer_smoke.py", source)
         self.assertIn('"baseline-export"', source)
+        self.assertIn('RUN_DIR = Path("/content/trainlm-pretraining")', source)
+        self.assertIn('RESUME_FROM_CHECKPOINT = None', source)
+        self.assertIn(
+            'trainer.train(resume_from_checkpoint=RESUME_FROM_CHECKPOINT)', source
+        )
         self.assertIn('arcname="report.json"', source)
         self.assertIn('"schema_version": 4', source)
         self.assertIn('"requested_model_type": pretraining_config.model_type', source)
@@ -410,6 +415,8 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         self.assertIn("files.download", source)
         self.assertIn("does not establish convergence", markdown)
         self.assertIn("token budget", markdown)
+        self.assertIn('RESUME_FROM_CHECKPOINT = "latest"', markdown)
+        self.assertIn("mount Google Drive", markdown)
         self.assertIn("DATASET_ID", source)
         self.assertIn("DATASET_REVISION", source)
         self.assertIn("TEXT_FIELD", source)
