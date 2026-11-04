@@ -47,7 +47,10 @@ is opt-in and does not change existing accelerator defaults or base dependency
 bounds, so existing workflows can continue without using it. PR #81 added
 tokenizer and runtime provenance in report schema v3 and was rebase-merged to
 `main` at `4cfacae39e4e677f442208dfa098bb51009cfd46`; it adds no TPU training
-evidence.
+evidence. PR #82 added requested/effective run context in report schema v4 and
+rebase-merged at verified `main` SHA
+`4107f2f2ab86c2e90d43428ad1a779a25fe86cac`; GitHub pytest passed (run
+`41746021087`). No TPU training was run.
 
 - PR #18, including PR #16, PR #20, and PRs #28–#43 are merged.
   PR #28
@@ -275,12 +278,13 @@ evidence.
   shared notebook output did not show the VM image or topology; Colab may have
   hidden those details. Lifecycle and production integration remain
   unverified. Native `torch.compile` is now an opt-in on the one-device trainer
-  path but remains unverified on TPU hardware. The package profile was
-  incompatible: the notebook correctly ran in `source_checkout` mode, torch
-  2.14.1+cpu exceeds TrainLM's `<2.14` constraint, and `pip check` found that
-  IPython 7.34.0 requires missing `jedi`. Jedi is not a TrainLM dependency.
-  The eager smoke is not CPU conformance or native trainer compatibility;
-  leave dependency pins unchanged until CPU conformance is demonstrated.
+  path but remains unverified on TPU hardware. At the time of that report, the
+  package profile flagged the old `<2.14` Torch bound and an IPython 7.34.0 →
+  missing Jedi environment warning. The current compatibility change widens
+  the core bound to `<2.15`, and parsed unrelated environment conflicts remain
+  visible without blocking the TrainLM profile. The eager smoke is not CPU
+  conformance or native trainer compatibility; the minimum/current CPU CI
+  matrix is still pending.
 - The [utility inventory and UX plan](TORCHTPU_UTILITIES.md) maps public upstream
   APIs to T1–T11 and reusable repository contracts. A source-level
   report now observes native TPU availability, device properties, versions and
@@ -306,8 +310,10 @@ evidence.
   `accelerator="auto"` selects CUDA/CPU only when native TPU is not detected;
   it now raises on detected TPU or broken TorchTPU discovery rather than
   silently falling back. Explicit `tpu` still uses the XLA coordinator.
-  `torch<2.14` excludes the successful standalone probe's torch version; no
-  native install profile or dependency change is approved yet.
+  The successful standalone probe's Torch version prompted a separate core
+  compatibility change: the current branch widens the source requirement to
+  `torch<2.15` and adds constrained minimum/current CPU CI. This does not create
+  a native TorchTPU install profile or certify native training.
 - The native T1 single-device process can write a normalized JSON discovery
   artifact with `--report-json`. Trainer result handling accepts the same
   bounded `native_tpu_report` field from a worker summary and shows it in
@@ -399,11 +405,14 @@ evidence.
   metadata checker and a trainer-specific classifier. Missing distributions,
   TorchTPU requirement mismatches, training-stack `pip check` conflicts and
   unclassified conflicts block the run and produce a shareable blocked report.
-  The owner-observed Torch 2.14 source-range mismatch and unrelated
-  IPython/Jedi conflict are marked `experimental_mismatch` and may proceed
-  through the explicit smoke; this does not approve the dependency profile.
-  No package installation or pin change is performed. The gate awaits an
-  owner Colab run; local validation is source-level only.
+  In the earlier implementation, a source-Torch mismatch and unrelated
+  IPython/Jedi conflict were both summarized as `experimental_mismatch` for
+  the explicit smoke. The current compatibility change removes the observed
+  Torch 2.14.1 mismatch from the core contract and classifies a parsed unrelated
+  Jedi conflict as a nonblocking environment warning. Training-stack or
+  unclassified conflicts remain blocking. This metadata change does not certify
+  a native TorchTPU install or training run; the owner should refresh the
+  Colab report after the branch is available.
   The native fine-tuning smoke pins its `distilbert/distilgpt2` model and
   tokenizer to Hub commit `2290a62682d06624634c1f46a6ad5be0f47f38aa`. The
   separate scratch path now trains a byte-level BPE tokenizer only on pinned
@@ -458,9 +467,23 @@ evidence.
   and `pip check` conflicts remain visible and can still make the profile
   incompatible. The pip conflict parser accepts both `has requirement` and
   `requires` output forms; the latest owner report identifies the unrelated
-  IPython 7.34.0 → missing Jedi conflict. The doctor overall remains failed
-  because of the Torch requirement mismatch; native discovery and eager smoke
-  passed, while compile, lifecycle and distributed probes remain unrun.
+  IPython 7.34.0 → missing Jedi conflict. That captured doctor report predates
+  the current `<2.15` core requirement and still records its original failed
+  outcome; a refreshed report has not been supplied. Native discovery and
+  eager smoke passed, while compile, lifecycle, distributed probes and full
+  native trainer execution remain unrun.
+
+- Current compatibility follow-up on `fix/83-torchtpu-package-profile` is based
+  on fetched `main` SHA `4107f2f2ab86c2e90d43428ad1a779a25fe86cac`. Commit
+  `e3b9f24` widens the core Torch range to `>=2.9,<2.15`, aligns the current
+  Python 3.13 profile with Torch 2.14.1 / Transformers 5.20.2 / Hub 1.33.0,
+  adds a minimum/current CI matrix, and lets the preflight report unrelated,
+  fully parsed `pip check` warnings without blocking. Focused local source tests
+  pass (26 unittest cases plus five dependency-matrix contract checks); Python
+  and PyTorch are unavailable in this container, so the full CPU suite has not
+  run locally. CI and an owner-runtime metadata refresh remain pending. This
+  change does not certify CUDA, native TorchTPU training, compile, lifecycle or
+  distributed execution.
 
 ## Historical XLA development record
 

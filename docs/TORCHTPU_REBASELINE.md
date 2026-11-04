@@ -121,14 +121,14 @@ reversible.
 | Item | Verified/recorded context | Required next action |
 |---|---|---|
 | Repository | `Dhiraj309/TrainLM` | Verify checkout, branch, origin, permissions |
-| Current base | PR #74 rebase-merged; verified `main` SHA `b0f81e91ad6c11aef865441efc05455202557677` | Continue CPU checkpoint coverage while TPU execution remains gated pending owner-run v5e-1 lifecycle and v5e-8 evidence |
+| Current base | Fetched `main` SHA `4107f2f2ab86c2e90d43428ad1a779a25fe86cac`; compatibility work is on `fix/83-torchtpu-package-profile` | Keep native TPU execution gated pending owner-run v5e-1 lifecycle and v5e-8 evidence |
 | Legacy integration | PR #18 merged into `main` on 2026-10-28; merge commit `23959d29434fd2ae3f78b20469e1d61c6b1e18c9` | T0.1 inventory is complete; XLA-era PR cards are not the active queue |
 | Earlier salvage | PR #16 was merged into PR #18, which is now merged into `main` | Inventory its code as part of the merged tree; do not merge it again |
 | Existing TPU backend | Primarily PyTorch/XLA with historical measurements | Classify reusable vs XLA-specific components |
-| Native TorchTPU | Explicit single-device software path exists; owner-reported standalone eager v5e-1 smoke passed; package compatibility and production training remain unverified | Continue only with explicit selection; verify compile/lifecycle on v5e-1 and collectives on v5e-8 before changing support claims |
+| Native TorchTPU | Explicit single-device software path exists; owner-reported standalone eager v5e-1 smoke passed; native install profile and production training remain unverified | Continue only with explicit selection; verify compile/lifecycle on v5e-1 and collectives on v5e-8 before changing support claims |
 | GitHub access | Previous authenticated collaborator `Dignity045` branch push succeeded | Recheck actual identity each task; owner account not assumed |
 | CPU tests | PR #18 snapshot: 700 passed / 21 failed under Python 3.12.14, torch 2.9.0+cpu, Transformers 5.0.0, Hub 1.3.5, pytest 9.1.1 | Re-run on merged `main` before the next code PR; failure groups are recorded in `HANDOFF.md` |
-| CPU profiles | `core-minimum` Python 3.12/torch 2.9; `core-current` Python 3.13/torch 2.13 | Inspect actual environment and constraints |
+| CPU profiles | `core-minimum` Python 3.10/torch 2.9; `core-current` Python 3.13/torch 2.14.1 | Run the constrained minimum/current CI matrix; do not infer accelerator certification |
 
 The old report that GitHub pushes were unverified is superseded by the
 verified branch-write exercise. Do not claim current shell authentication
