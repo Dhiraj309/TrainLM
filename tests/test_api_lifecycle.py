@@ -93,6 +93,7 @@ def test_facade_runs_eval_save_and_forwards_metrics(tmp_path):
             save_steps=1,
         ),
     )
+    assert trainer.latest_checkpoint is None
 
     state = trainer.train()
 
@@ -100,6 +101,7 @@ def test_facade_runs_eval_save_and_forwards_metrics(tmp_path):
     assert any("loss" in metrics for metrics in recorder.metrics)
     assert any("eval_loss" in metrics for metrics in recorder.metrics)
     assert (tmp_path / "checkpoint-1" / "trainer_state.pt").is_file()
+    assert trainer.latest_checkpoint == tmp_path / "checkpoint-1"
 
 
 def test_facade_resumes_local_training_state(tmp_path):
@@ -151,7 +153,9 @@ def test_latest_resume_requires_a_committed_checkpoint(tmp_path):
             accelerator="cpu",
         ),
     )
+    assert trainer.latest_checkpoint is None
     (tmp_path / "checkpoint-2").mkdir()
+    assert trainer.latest_checkpoint is None
 
     with pytest.raises(FileNotFoundError, match="No committed training checkpoints"):
         trainer.train(resume_from_checkpoint="latest")
@@ -169,6 +173,17 @@ def test_latest_checkpoint_recognizes_published_tpu_manifest(tmp_path):
     )
 
     assert _latest_training_checkpoint(tmp_path) == tmp_path / "checkpoint-9"
+    trainer = TrainLMTrainer(
+        model=TinyModel(),
+        train_dataset=_dataset(),
+        args=TrainLMTrainingArguments(
+            output_dir=tmp_path,
+            max_steps=1,
+            sequence_length=4,
+            accelerator="cpu",
+        ),
+    )
+    assert trainer.latest_checkpoint == tmp_path / "checkpoint-9"
 
 
 @pytest.mark.parametrize("limit", [None, 1, 2])

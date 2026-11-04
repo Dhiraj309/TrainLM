@@ -55,6 +55,10 @@ When periodic checkpointing is enabled, a successful run also saves its final
 optimizer step if the configured cadence missed it. The save occurs before
 train-end callbacks; runs that fail do not publish this final save, and
 `save_steps=None` keeps automatic saves disabled.
+The public `trainer.latest_checkpoint` property returns the newest committed
+checkpoint path or `None`, using the same lookup as
+`train(resume_from_checkpoint="latest")`. The notebook prints the path after
+training so users can copy it or select `latest` on the next run.
 Matching pinned dataset/tokenizer settings now reuse the fingerprinted,
 integrity-checked tokenizer and packed shards under the same output directory.
 The scratch workflow also writes `run_config.json` and embeds its full
@@ -87,8 +91,11 @@ profiles passed after restoring the notebook's Google Drive instructions. The
 retention work builds on that verified base; it adds no accelerator evidence.
 PR #89 then added configurable checkpoint retention and rebase-merged at
 verified `main` SHA `a45432dfbee58713ee647aec8d3860dfd4fd885c`; both CI profiles
-passed 924 tests and 41 subtests. The current final-checkpoint change starts
-from that SHA and adds no TPU checkpoint-recovery evidence.
+passed 924 tests and 41 subtests. PR #90 added final-step checkpoint saving
+and rebase-merged at verified `main` SHA
+`5bab4b5c62ffe014b2700d2ea7157bb910d9f621`; both CI profiles passed 928 tests
+and 41 subtests. The public checkpoint-path change starts from that SHA and
+adds no TPU checkpoint-recovery evidence.
 
 The notebook uses this API; native TPU remains experimental and gains no
 end-to-end evidence from CPU/API tests. PR #81 added tokenizer and runtime

@@ -42,6 +42,12 @@ limit. The limit can change on resume without changing training compatibility.
 Distributed retention and the legacy XLA coordinator are not supported yet;
 native TPU behavior still requires hardware validation.
 
+After training, `trainer.latest_checkpoint` returns the newest published
+checkpoint as a `Path`, or `None` if no checkpoint exists. To resume in a new
+session, create a trainer with the same `output_dir` and call
+`trainer.train(resume_from_checkpoint="latest")`; the notebook prints the
+resolved path for easy copying.
+
 For a different built-in Transformers causal-LM architecture, set `model_type`
 and pass its architecture-specific fields. TrainLM derives `vocab_size` and
 special-token IDs from the tokenizer it trained on your corpus:

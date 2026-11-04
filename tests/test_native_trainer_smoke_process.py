@@ -373,6 +373,8 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         self.assertIn(
             'trainer.train(resume_from_checkpoint=RESUME_FROM_CHECKPOINT)', source
         )
+        self.assertIn('trainer.latest_checkpoint', source)
+        self.assertIn('latest_checkpoint=', source)
         self.assertIn('arcname="report.json"', source)
         self.assertIn('"schema_version": 4', source)
         self.assertIn('"requested_model_type": pretraining_config.model_type', source)
