@@ -70,6 +70,7 @@ class Trainer:
 
         self._checkpoint_saver = checkpoint_saver
         self._checkpoint_loader = checkpoint_loader
+        self._last_checkpoint_step: int | None = None
 
         self._train_iterator: Iterator | None = None
         self._global_tokens_seen: int | None = None
@@ -172,9 +173,9 @@ class Trainer:
 
         self.state.is_training = False
         self.state.should_stop = self.state.should_stop or self.control.should_stop
-        if self.state.phase != TrainerPhase.FAILED:
-            self.state.transition(TrainerPhase.STOPPING)
         try:
+            self._save_final_training_checkpoint()
+            self.state.transition(TrainerPhase.STOPPING)
             self.callback_handler.on_train_end(
                 self.state,
                 self.control,
@@ -199,6 +200,20 @@ class Trainer:
                         self.state.transition(TrainerPhase.STOPPING)
                     if self.state.phase == TrainerPhase.STOPPING:
                         self.state.transition(TrainerPhase.FINALIZED)
+
+    def _save_final_training_checkpoint(self) -> None:
+        """Save a successful terminal step when periodic saves are enabled."""
+        checkpoint = getattr(self.config, "checkpoint", None)
+        save_interval = getattr(checkpoint, "save_training_every_steps", None)
+        if (
+            self.state.phase == TrainerPhase.FAILED
+            or save_interval is None
+            or self._checkpoint_saver is None
+            or self.state.step < 1
+            or self._last_checkpoint_step == self.state.step
+        ):
+            return
+        self.save_checkpoint(f"checkpoint-{self.state.step}")
 
     def _should_stop(self) -> bool:
         if self.control.should_stop or self.state.should_stop:
@@ -691,12 +706,14 @@ class Trainer:
                 f"Cannot save checkpoint in phase '{previous_phase.value}'."
             )
         name = str(destination) if destination is not None else "manual"
+        saved_step = self.state.step
         self.state.transition(TrainerPhase.SAVING)
         success = False
         try:
             self.runtime.before_checkpoint(name)
             result = self._checkpoint_saver(self, destination)
             self.callback_handler.on_save_checkpoint(self.state, self.control)
+            self._last_checkpoint_step = saved_step
             success = True
             return result
         except BaseException as exc:
@@ -731,6 +748,7 @@ class Trainer:
             self.runtime.before_checkpoint("resume")
             result = self._checkpoint_loader(self, source)
             self.callback_handler.on_resume(self.state, self.control)
+            self._last_checkpoint_step = self.state.step
             success = True
             return result
         except BaseException as exc:

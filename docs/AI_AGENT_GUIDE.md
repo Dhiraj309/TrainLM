@@ -11,7 +11,7 @@ documentation describes the PyTorch/XLA era.
 | --- | --- | --- |
 | Pretrain a causal language model from raw Hugging Face text | [Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) · [notebook source](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) | [`TrainLMPretrainingConfig` and data preparation](../src/trainlm/pretraining.py), [`TrainLMTrainer.from_scratch`](../src/trainlm/api.py), [API tests](../tests/test_pretraining_api.py) |
 | Resume a scratch run with a larger token budget | [Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) · [resume instructions](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) | [`extend_training_budget`](../src/trainlm/api.py), [API tests](../tests/test_pretraining_api.py) |
-| Limit automatic checkpoint storage during training | [public example](../README.md), [notebook](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) | [retention implementation](../src/trainlm/checkpoint/retention.py), [filesystem safety tests](../tests/checkpoint/test_retention.py), [resume parity tests](../tests/test_api_lifecycle.py) |
+| Retain checkpoints and save the final training step | [public example](../README.md), [notebook](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) | [retention policy](../src/trainlm/checkpoint/retention.py), [trainer lifecycle](../src/trainlm/training/trainer.py), [lifecycle tests](../tests/training/test_trainer.py), [filesystem and resume tests](../tests/checkpoint/test_retention.py) |
 | Prepare or inspect packed token data | [packed-data contracts](data/PACKED_BINARY_MANIFEST.md) | [packed data writer](../src/trainlm/data/writer.py), [dataset tests](../tests/test_packed_dataset_resume.py) |
 | Check native TPU availability and package compatibility | [T1 v5e-1 guide](T1_V5E1_PROBE.md) | [hardware discovery](../src/trainlm/runtime/torchtpu_discovery.py), [package preflight](../src/trainlm/runtime/torchtpu_trainer_preflight.py) |
 | Understand supported behavior and validation status | [current handoff](HANDOFF.md) | [dense-AR support scope](SCOPE.md), [T0–T11 roadmap](TORCHTPU_REBASELINE.md) |
@@ -33,7 +33,10 @@ follow the linked implementation and tests before making a change.
   is excluded from the scratch run fingerprint, preserving older fingerprints
   and allowing the limit to change at resume. Cleanup errors warn while keeping
   the new checkpoint. Distributed/XLA coordinator retention is rejected; CPU
-  tests do not certify native TPU checkpoint recovery.
+  tests do not certify native TPU checkpoint recovery. When periodic checkpoint
+  saving is enabled, a successful run also saves its final step if the cadence
+  did not already save it. Failed runs do not get this final save; `save_steps=None`
+  keeps automatic saving disabled.
 - The from-scratch notebook is a small-scale implementation example. Its CPU
   lifecycle coverage does not establish TPU training, convergence, or
   performance. Its version 4 downloadable report captures requested and
