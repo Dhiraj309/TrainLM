@@ -87,7 +87,7 @@ ecosystem references, not prerequisites for the basic trainer.
 | `src/trainlm/checkpoint/`, `training/` | Resume, export, trainer and metric contracts | Reuse and re-prove device RNG, distributed state and clean-process resume. |
 | `src/trainlm/optimization/`, `monitoring/telemetry.py` | Capability plans, explanations, provider gates and metric schema | Extend the existing report instead of a second independent planner. |
 | `examples/torchtpu_t1_v5e1_probe.py` and T1 notebook | Shared device-owned discovery, bounded JSON artifact and labeled CPU fallback; no production native routing | Keep T1 evidence separate from trainer support; verify hardware identity and install profile before enabling a native worker. |
-| `pyproject.toml` | `torch>=2.9,<2.14` | Owner's 2.14.1 smoke is outside the package contract. Test a separate native profile before changing ranges; the script pass is not a TrainLM install test. |
+| `pyproject.toml` | `torch>=2.9,<2.15` | Core contract now includes the owner's 2.14.1 version; the minimum/current CPU CI matrix must pass. This does not certify native TorchTPU installation or training. |
 
 ## Desired user experience and internal discovery contract
 
@@ -197,18 +197,21 @@ multi-device checks. A one-device run on a larger slice remains labeled with
 that hardware. No need to wait for eight devices to implement/test pure
 discovery contracts, and no distributed certification from a single rank.
 
-Before dependencies change or a provider defaults on, require explicit
-version/hardware evidence. Next, run the T1.2/T1.3 owner hardware checks and
-the opt-in T1.4 collective on an isolated v5e-8 host; use the results to
-decide the native dependency profile and T2 integration scope. Current work
-does not implement native training or change dependency pins.
+Before enabling a provider by default, require explicit version/hardware
+evidence. The core dependency range now includes the observed Torch 2.14.1
+package and the CI workflow tests constrained minimum/current CPU profiles.
+Next, run the T1.2/T1.3 owner hardware checks and the opt-in T1.4 collective on
+an isolated v5e-8 host; use the results to decide the native dependency profile
+and T2 integration scope. Core CPU compatibility is separate from native
+TorchTPU support.
 
 Latest owner-run T1.2 observation: native allocation, forward/backward and
 AdamW update passed; runtime properties reported one visible device named
 `TPU v5e`; the owner confirmed v5e-1. The shared Colab output may omit VM
 image/topology details. Compilation and repeat-process behavior remain
-unrecorded. The same environment failed package-profile checks because
-TrainLM was not installed, torch 2.14.1+cpu lies outside its current `<2.14`
-contract, and `pip check` found conflicts. Treat this as a successful eager
-runtime smoke with an unresolved compatibility profile, not a clean-install
-or v5e VM shape certification.
+unrecorded. The captured package-profile result predates the current `<2.15`
+core contract and identified an unrelated IPython-to-Jedi `pip check` warning;
+the preflight now leaves a fully parsed unrelated warning visible but
+nonblocking. The owner should refresh the report against the current source.
+Treat the hardware result as a successful eager runtime smoke, not native
+trainer, clean-install or v5e VM shape certification.

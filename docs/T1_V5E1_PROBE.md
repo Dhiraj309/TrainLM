@@ -79,18 +79,20 @@ and one process-visible device; the owner confirmed this was v5e-1. The shared
 Colab output did not include topology or VM image details, which Colab may
 hide. Python was 3.13.18 with
 torch 2.14.1+cpu, torch_tpu 0.2.0 and libtpu 0.0.50. The read-only package
-profile was `incompatible`: TrainLM was absent from installed metadata, torch
-2.14.1+cpu is outside TrainLM's declared `<2.14` range, and `pip check`
-reported conflicts. TorchTPU's own torch requirement matched this version.
-No packages were installed or changed by the notebook. Explicit compile and
-repeat-process lifecycle checks were skipped.
+profile was `incompatible` at the source revision tested: TrainLM was absent
+from installed metadata, torch 2.14.1+cpu was outside the then-declared `<2.14`
+range, and `pip check` reported an IPython-to-Jedi conflict. TorchTPU's own
+torch requirement matched this version. The current compatibility branch
+expands the core range to `<2.15` and keeps fully parsed unrelated environment
+conflicts visible but nonblocking. That revised profile has not yet been rerun
+in Colab. No packages were installed or changed by the notebook; explicit
+compile and repeat-process lifecycle checks were skipped.
 
-Before resolving the dependency profile, run the check in a clean environment
-with TrainLM installed from this source revision. Record the actual accelerator
-and VM image, then repeat on a torch version inside TrainLM's declared range
-that is supported by the installed TorchTPU wheel. Keep compatibility and
-hardware results separate; do not widen dependency bounds from this Colab
-runtime alone.
+After the compatibility change is available on `main`, rerun the read-only
+profile check in the same Colab runtime and, separately, in a clean environment
+with TrainLM installed from source. Record the actual accelerator and VM image.
+Keep package, CPU-conformance and hardware results separate: a matching core
+version does not verify native trainer behavior or TorchTPU support.
 
 Compilation may take longer than eager execution. Preserve the complete output
 and any runtime/compiler error; do not silently fall back to eager mode. TPU

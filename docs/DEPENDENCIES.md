@@ -1,8 +1,8 @@
 # Dependency and Compatibility Policy
 
-> **Current:** CPU/CUDA core and optional PyTorch/XLA profiles are documented.
-> **Target:** native TorchTPU has no verified package profile yet. Do not infer
-> support from the proposed T0–T11 architecture or the XLA constraints below.
+> **Current core contract:** CPU compatibility CI is configured for the minimum
+> and current profiles, including PyTorch 2.14.1. **Native TorchTPU:** a
+> supported install profile and end-to-end training remain unverified.
 
 **Matrix:** [`compatibility/dependency_matrix_v1.json`](../compatibility/dependency_matrix_v1.json)
 
@@ -10,51 +10,60 @@ TrainLM separates portable model/trainer dependencies from accelerator-specific
 runtime and kernel packages. Core imports must work without CUDA, PyTorch/XLA,
 JAX, libtpu, or profiling packages installed.
 
-## Proposed native TorchTPU migration profile
+## Native TorchTPU status
 
 The source-level salvage classification is recorded in
 [the T0.1 inventory](TORCHTPU_SALVAGE_INVENTORY.md).
 
-[The T0–T11 rebaseline](TORCHTPU_REBASELINE.md) targets native TorchTPU
-rather than PyTorch/XLA as the long-term TPU backend. The existing matrix
-below remains the documented CPU/CUDA/XLA profile, **not** a verified
-TorchTPU installation. T0/T1 must verify actual TorchTPU package versions,
-Python compatibility, device discovery, autograd, distributed operations
-and compilation on Kaggle v5e-8 before adding extras or claiming support.
-Do not guess package versions or assume Pallas/Helion/Tokamax compatibility.
+[The T0–T11 rebaseline](TORCHTPU_REBASELINE.md) targets native TorchTPU rather
+than PyTorch/XLA as the long-term TPU backend. The owner has reported a v5e-1
+eager allocation, forward/backward and optimizer-update smoke with Python
+3.13.18, torch 2.14.1+cpu, torch_tpu 0.2.0 and libtpu 0.0.50. This does not
+validate TrainLM's full trainer, compilation, lifecycle, distributed execution
+or performance.
+
+The current compatibility change widens the core Torch contract to
+`>=2.9,<2.15` and adds CPU CI for both the minimum and current core profiles.
+The current profile uses Python 3.13 and the owner's observed Torch 2.14.1
+package set. Until those CI jobs pass, the expanded range is proposed rather
+than verified by this checkout. It does not certify CUDA or native TPU. No
+TorchTPU-specific install extra or support claim is added.
+
+The read-only preflight reports environment-wide `pip check` findings. A fully
+parsed conflict unrelated to TrainLM's training stack, such as IPython requiring
+missing Jedi, remains visible but does not block the TrainLM profile. Conflicts
+involving TrainLM, Torch, TorchTPU, Transformers, Hub, PyYAML or datasets, and
+unclassified output, still block it. A clean TrainLM environment and a passing
+preflight have not yet been re-observed on the owner's runtime.
 
 ## Owner-reported native probe profile
 
 The owner supplied repeated passing standalone eager smokes with Python 3.13.18,
 torch 2.14.1+cpu, torch_tpu 0.2.0 and libtpu 0.0.50; tpu-info 0.14.2 was
-installed. The latest report correctly identifies a source checkout (TrainLM
-need not be installed as a distribution for the notebook to import it). It
-also reports that `torch>=2.9,<2.14` excludes 2.14.1 and that IPython 7.34.0
-requires missing `jedi`; Jedi is unrelated to TrainLM's declared dependencies.
-The TorchTPU package's own Torch range accepts 2.14.1, but that is not proof of
-TrainLM CPU or trainer compatibility. Keep the range unchanged until CPU
-conformance is run. Explicit compile, lifecycle and distributed evidence are
-pending.
+installed. The notebook correctly identifies a source checkout (TrainLM need
+not be installed as a distribution to import it). The earlier report's Torch
+range mismatch is addressed by the current core contract, while its unrelated
+IPython 7.34.0 → missing Jedi finding remains a visible, nonblocking warning.
+Explicit compile, lifecycle, distributed and full trainer evidence are pending.
 
 The [utility inventory](TORCHTPU_UTILITIES.md) distinguishes versioned API
 documentation from the current public API policy. Experimental utilities
 need guarded adapters; monitoring, profiling and kernel extras remain optional.
-An experimental `accelerator="native_tpu"` single-device adapter is being
-implemented behind explicit opt-in. It does not create a supported TorchTPU
-install profile or relax the `torch<2.14` core range; the owner's Torch 2.14.1
-runtime remains outside TrainLM's declared compatibility contract.
+An experimental `accelerator="native_tpu"` single-device adapter exists behind
+explicit opt-in. The widened core range does not create a supported TorchTPU
+install profile or certify that adapter on hardware.
 The v5e-1 notebook also runs the repository CPU test suite against the runtime's
 already installed Python/PyTorch versions. Its result is recorded separately
 from TPU discovery and eager execution, and it does not install packages. The
 owner run at source `08f02fb` produced 746 passes and 17 failures. Two facade
 tests had left `accelerator="auto"` on a TPU host, the wheel smoke required
-`venv`/`ensurepip`, and the roadmap contract used an obsolete heading; these
-test-harness issues were corrected locally. The 12 loss-layout failures came
-from counting ignored targets in the mean denominator, now fixed in the
-chunked loss. The scalar-count assertion expected one snapshot but the trainer
-records both loss and gradient norm at the configured cadence; the test now
-checks those two snapshots. Rerun CPU conformance before deciding whether to
-expand the Torch range; the current evidence is not sufficient to do so.
+`venv`/`ensurepip`, and the roadmap contract used an obsolete heading; those
+test-harness issues were corrected locally. Twelve loss-layout failures came
+from counting ignored targets in the mean denominator, and a scalar-count test
+expected one snapshot although the trainer records both loss and gradient
+norm. These fixes were made after that run. The new minimum/current CI matrix
+is the next full CPU conformance check; no full-suite result for that matrix is
+claimed here.
 
 ### Read-only native install-profile check
 
@@ -66,31 +75,33 @@ result of `pip check`. It does not import torch, initialize a TPU, install
 packages or change the declared dependency range. Its JSON result distinguishes
 `metadata_compatible`, `incomplete`, `incompatible` and `check_failed`.
 The command exits zero only for `metadata_compatible`; that status validates
-package metadata, not device behavior or native trainer support. The observed
-torch 2.14.1+cpu probe profile conflicts with the current source requirement
-`torch<2.14`, so the range remains unresolved pending clean-install and CPU/
-TPU evidence.
+package metadata, not device behavior or native trainer support. Its source
+requirements now accept Torch 2.14.1. It reports parsed unrelated environment
+conflicts without treating them as TrainLM blockers; stack conflicts and
+unclassified output remain blocking. Re-run it on the owner runtime to confirm
+the current report, and use CI for CPU conformance.
 
 ## Existing support profiles (CPU/CUDA and historical XLA)
 
 | Profile | Python | PyTorch | Transformers | Accelerator packages | Status |
 |---|---|---|---|---|---|
 | Core minimum | 3.10 | 2.9.0 | 5.0.0 | None | Required CPU CI |
-| Core current | 3.13 | 2.13.0 | 5.15.0 | None | Required CPU CI |
-| CUDA portability | 3.13 | 2.13.0 | 5.15.0 | Official matching CUDA wheel | Smoke when available |
+| Core current | 3.13 | 2.14.1 | 5.20.2 | None | Required CPU CI |
+| CUDA portability | 3.13 | 2.14.1 | 5.20.2 | Official matching CUDA wheel | Shared package set; CPU CI does not certify CUDA |
 | TPU XLA stable | 3.10–3.13 | 2.9.0 | 5.15.0 | torch-xla 2.9.0, libtpu 0.0.21 | Pending M5 TPU validation |
 | TPU XLA + Pallas | 3.10–3.13 | 2.9.0 | 5.15.0 | XLA/libtpu above, JAX/jaxlib 0.7.1 | Pending M5/kernel validation |
 
-The checked-in CI workflow currently installs the unconstrained development
-extra on Python 3.11; the minimum/current profiles below are documented
-compatibility targets, not both exercised by that workflow. The T0.1 CPU
-baseline was separately run in Python 3.12.14.
+The checked-in CI workflow runs the full test suite against the constrained
+core-minimum (Python 3.10) and core-current (Python 3.13) profiles. A passing
+CPU job verifies only that profile on CPU; it does not certify CUDA or TPU.
+The T0.1 CPU baseline was separately run in Python 3.12.14.
 
-The broad core package contract is PyTorch `>=2.9,<2.14`, Transformers
+The broad core package contract is PyTorch `>=2.9,<2.15`, Transformers
 `>=5.0,<6`, and Hugging Face Hub `>=1.0,<2`. Exact constraint profiles are the
-reproducible CI and TPU environments. The minimum profile locks Hub 1.3.5; the
-current and TPU profiles lock Hub 1.16.4. A version inside the broad range is
-not hardware Certified merely because dependency resolution succeeds.
+reproducible CI and TPU environments. The minimum profile locks Hub 1.3.5;
+core-current locks Hub 1.33.0; the historical TPU/XLA constraints lock Hub
+1.16.4. A version inside the broad range is not hardware certified merely
+because dependency resolution succeeds.
 
 ## Installation profiles
 

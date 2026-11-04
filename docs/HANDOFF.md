@@ -11,8 +11,14 @@
   compatibility, TrainLM training on TPU, explicit compile, repeated lifecycle,
   and v5e-8 collective results remain unverified. CPU-verifiable implementation
   may continue behind explicit native selection while those hardware checks
-  wait; do not enable automatic TPU routing or change dependency bounds based
-  only on the eager smoke.
+  wait; do not enable automatic TPU routing or treat a core dependency change
+  as native TorchTPU certification.
+- **Core dependency follow-up:** branch `fix/83-torchtpu-package-profile` widens
+  the Torch range to `>=2.9,<2.15`, aligns the Python 3.13 current profile to
+  Torch 2.14.1, and adds constrained minimum/current CPU CI. The old 2.14.1
+  mismatch and unrelated parsed IPython-to-Jedi warning are handled by the
+  branch; CI and an owner-runtime report refresh are pending. This does not
+  establish a native TPU install profile or end-to-end training support.
 - **Raw-text API:** `TrainLMPretrainingConfig` plus
   `TrainLMTrainer.from_scratch()` prepares pinned HF text, tokenizer, packed
   data, and a randomly initialized Transformers causal LM, then returns the
@@ -35,6 +41,9 @@
 - PR #81 rebase-merged tokenizer and runtime provenance at verified `main` SHA
   `4cfacae39e4e677f442208dfa098bb51009cfd46`; its report schema is v3. No TPU
   run was performed.
+- PR #82 rebase-merged effective run context in report schema v4 at verified
+  `main` SHA `4107f2f2ab86c2e90d43428ad1a779a25fe86cac`; GitHub pytest passed
+  (run `41746021087`). No TPU run was performed.
 - PR #28–#44 established the experimental single-device foundation and the
   from-scratch CPU data/train/checkpoint/export workflow. PR #44's CPU reload
   and generation check does not establish TPU generation or convergence.
@@ -135,8 +144,9 @@
   `41636368557`). It verifies exact resume both within an epoch and at the
   shuffled sampler's epoch boundary (58 focused API/trainer/contract tests
   passed locally).
-- **Verified base:** `main` at
-  `b0f81e91ad6c11aef865441efc05455202557677` after PR #74.
+- **Verified base for the current compatibility branch:** fetched `main` at
+  `4107f2f2ab86c2e90d43428ad1a779a25fe86cac`; branch head currently includes
+  implementation commit `e3b9f24`.
 - **Probe:** [`T1 v5e-1 guide`](T1_V5E1_PROBE.md) and its
   [Kaggle/Colab notebook](../notebooks/TorchTPU_T1_v5e1_Probe.ipynb) test a tiny
   synthetic forward/backward and optimizer update, with optional `torch.compile`.

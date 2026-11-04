@@ -39,7 +39,10 @@ rebase-merged at verified `main` SHA
 `e9b4a1bde4869d89c323ed457a6b6cebccb0ae40`; CI passed 891 tests and 41
 subtests. CI run 360 first found four failures; final run 362 passed
 890 tests and 41 subtests on Python 3.11. Local syntax, notebook, config-guard,
-state-transition, and CLI-help checks pass. No TPU training was run. See the
+state-transition, and CLI-help checks pass. PR #82 added the effective run
+context to report schema v4 and rebase-merged at verified `main` SHA
+`4107f2f2ab86c2e90d43428ad1a779a25fe86cac`; GitHub pytest passed (run
+`41746021087`). No TPU training was run. See the
 [coding-agent guide](AI_AGENT_GUIDE.md) for the entry point and limits.
 
 - **Historical product:** Hugging Face-native dense autoregressive training
@@ -231,9 +234,10 @@ state-transition, and CLI-help checks pass. No TPU training was run. See the
   selected auto on a TPU host, the wheel smoke required `venv`, and a roadmap
   check used a stale heading; these harness failures are corrected locally.
   Twelve loss-layout cases were caused by ignored labels in the mean-loss
-  denominator; that is fixed locally. The scalar test now counts both loss and
-  gradient-norm snapshots at the logging cadence. Rerun before deciding on
-  Torch 2.14.
+  denominator; that is fixed in the current tree. The scalar test now counts
+  both loss and gradient-norm snapshots at the logging cadence. This 746/17
+  result is historical; the new minimum/current CI matrix is the next full CPU
+  conformance check for the expanded Torch range.
   Process
   cleanup and fatal teardown checks
   are covered on CPU; the export preserves skipped checks and package
@@ -243,9 +247,10 @@ state-transition, and CLI-help checks pass. No TPU training was run. See the
   autograd and AdamW update with a runtime-reported `TPU v5e` device and one
   visible device. The owner confirmed the hardware was v5e-1; the shared Colab
   output did not show image or topology details. The package profile correctly
-  reports `source_checkout`; torch 2.14.1+cpu remains outside `<2.14`, and
-  `pip check` found that IPython 7.34.0 requires missing `jedi`. The latter is
-  unrelated to TrainLM's declared dependencies. An opt-in `torch_compile=True`
+  reports `source_checkout`. Its captured Torch 2.14.1 mismatch predates the
+  current `>=2.9,<2.15` core contract. IPython 7.34.0's missing Jedi remains a
+  visible but nonblocking environment warning when fully parsed; training-stack
+  or unclassified conflicts still block. An opt-in `torch_compile=True`
   argument now routes the native runtime through `torch.compile`; it defaults
   off, is limited to `accelerator="native_tpu"`, and resume rejects a changed
   compile mode. This software path has not been validated on TPU hardware.
@@ -255,8 +260,9 @@ state-transition, and CLI-help checks pass. No TPU training was run. See the
   remains pending.
   The bounded lifecycle harness can now repeat either eager or compiled smoke
   processes, and the notebook records which mode it ran. Eager/compiled
-  lifecycle and T1.4 collective remain unrun. Keep the native dependency profile
-  unresolved pending CPU conformance and native runtime evidence.
+  lifecycle and T1.4 collective remain unrun. The expanded core range has a
+  constrained CPU CI matrix pending; the native TorchTPU package profile
+  remains unverified pending owner runtime and trainer evidence.
   Software follow-up adds `trainlm doctor` as one read-only report for package
   compatibility and native TPU discovery. It does not install packages or
   train; dependency and hardware support remain evidence-gated.
@@ -266,7 +272,10 @@ state-transition, and CLI-help checks pass. No TPU training was run. See the
   a missing installed `trainlm` distribution is identified as source-checkout
   mode rather than a dependency gap. Other package incompatibilities remain
   visible. Pip conflict details are parsed from both common `pip check` output
-  forms; the latest owner report identifies the IPython-to-Jedi conflict.
+  forms; the latest owner report identifies the IPython-to-Jedi conflict. The
+  compatibility follow-up on `fix/83-torchtpu-package-profile` aligns the core
+  current profile to Torch 2.14.1 and adds minimum/current CPU CI. No full-suite
+  result for that matrix or refreshed owner package report is claimed yet.
   The 18 old PR cards are candidates, not the active queue.
 
 - **Current implementation continuation (experimental):** the owner asked to
@@ -312,10 +321,11 @@ state-transition, and CLI-help checks pass. No TPU training was run. See the
   source-level validation only; the owner has not run the native trainer smoke.
   The notebook now runs the read-only T1 package checker before downloading
   `distilgpt2`. It blocks missing or conflicting training-stack dependencies
-  and preserves a downloadable blocked report. The observed Colab Torch 2.14
-  source-range mismatch plus unrelated IPython/Jedi conflict is explicitly
-  labeled experimental, allowing the opt-in smoke without changing pins or
-  implying package support. This gate has source-level tests only.
+  and preserves a downloadable blocked report. The earlier Colab Torch 2.14
+  source-range mismatch is addressed by the current core requirement; a fully
+  parsed unrelated IPython/Jedi conflict remains visible but nonblocking.
+  Training-stack and unclassified conflicts still block. This gate has
+  source-level tests; a refreshed owner report remains pending.
   The trainer smoke pins `distilbert/distilgpt2` and its tokenizer to Hub commit
   `2290a62682d06624634c1f46a6ad5be0f47f38aa`; the downloadable evidence records
   that model revision for repeatable runs. No TPU trainer result is claimed.
