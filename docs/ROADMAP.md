@@ -46,8 +46,11 @@ stream.
 
 PR #85 added the integrity-checked preparation cache and was rebase-merged to
 verified `main` at `476bc68ff535cd49f3472316c5bc809bc38e7ae5`. The current
-`feat/86-scratch-run-config-resume` work adds whole-run compatibility checks to
-scratch checkpoints. Focused API, lifecycle, and roadmap tests pass (50 tests);
+PR #86 added whole-run compatibility checks to scratch checkpoints and was
+rebase-merged at verified `main` SHA
+`32776292a7e6436a0b2a02fb2232ce0185d1b245` from head
+`15670a2856affe641488f4b48addc9b6cf1cd52b`. Both GitHub CI profiles passed.
+Focused API, lifecycle, and roadmap tests pass (50 tests);
 the CPU/Gloo checkpoint and token-weighting suites pass with per-command network
 permission (22 tests). The full local run reports 885 passed and 13 failures;
 six loopback-dependent failures passed in the permitted rerun, while the

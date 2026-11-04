@@ -50,8 +50,10 @@ full compatibility cannot be established; non-scratch legacy checkpoints keep
 their existing compatibility.
 
 PR #85's verified `main` base is `476bc68ff535cd49f3472316c5bc809bc38e7ae5`.
-Current branch `feat/86-scratch-run-config-resume` adds whole-run checkpoint
-compatibility validation. Focused API/lifecycle/roadmap tests pass (50 tests),
+PR #86 added whole-run checkpoint compatibility validation and rebase-merged
+at verified `main` SHA `32776292a7e6436a0b2a02fb2232ce0185d1b245` from head
+`15670a2856affe641488f4b48addc9b6cf1cd52b`; both GitHub CI profiles passed.
+Focused API/lifecycle/roadmap tests pass (50 tests),
 and CPU/Gloo checkpoint plus token-weighting suites pass when run with
 per-command network permission (22 tests). The initial full local test run had
 885 passed and 13 failures. The six loopback-dependent failures passed in the
