@@ -41,7 +41,7 @@ class TrainerPreflightTests(unittest.TestCase):
         self.assertTrue(result["proceed"])
         self.assertIn("metadata_only", result["limitations"])
 
-    def test_owner_observed_colab_mismatch_is_explicit_experiment(self):
+    def test_owner_observed_colab_stack_is_compatible_with_unrelated_warning(self):
         def ipython_conflict(*args, **kwargs):
             return SimpleNamespace(
                 returncode=1,
@@ -53,9 +53,9 @@ class TrainerPreflightTests(unittest.TestCase):
             {**self.versions, "torch": "2.14.1+cpu"},
             pip_runner=ipython_conflict,
         ))
-        self.assertEqual(result["status"], "experimental_mismatch")
+        self.assertEqual(result["status"], "metadata_compatible")
         self.assertTrue(result["proceed"])
-        self.assertTrue(result["source_torch_mismatch"])
+        self.assertFalse(result["source_torch_mismatch"])
         self.assertEqual(result["unrelated_pip_conflict_count"], 1)
 
     def test_missing_or_upstream_conflicting_tpu_stack_blocks(self):

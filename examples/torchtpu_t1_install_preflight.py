@@ -30,6 +30,10 @@ from packaging.version import InvalidVersion, Version
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGES = ("trainlm", "torch", "torch_tpu", "libtpu", "transformers", "huggingface-hub")
 OPTIONAL_PACKAGES = ("datasets", "tpu-info", "torch-xla", "jax", "jaxlib")
+_TRAINING_STACK = {
+    "trainlm", "torch", "torch-tpu", "libtpu", "transformers",
+    "huggingface-hub", "pyyaml", "datasets",
+}
 
 
 def _version(name: str, provider: object) -> str | None:
@@ -167,6 +171,17 @@ def inspect_profile(
         pip_status = "failed"
 
     checks = source_checks + upstream_checks
+    pip_conflicts_blocking = False
+    if pip_status == "conflicts":
+        pip_conflicts_blocking = (
+            pip_problem_count != len(pip_conflict_details)
+            or any(
+                conflict["package"] in _TRAINING_STACK
+                or conflict["dependency"] in _TRAINING_STACK
+                for conflict in pip_conflict_details
+            )
+        )
+
     issues = []
     if python_compatible is False:
         issues.append("source_python_mismatch")
@@ -175,7 +190,7 @@ def inspect_profile(
     if any(check["status"] in {"mismatch", "invalid_requirement", "direct_url_not_checked"}
            for check in checks):
         issues.append("requirement_conflict")
-    if pip_status == "conflicts":
+    if pip_conflicts_blocking:
         issues.append("pip_conflicts")
     if any(value is None for name, value in versions.items() if name != "trainlm") or any(
         check["status"] == "missing" for check in checks
@@ -204,7 +219,9 @@ def inspect_profile(
         "optional_versions": optional_versions,
         "source_requirements": source_checks,
         "torch_tpu_requirements": upstream_checks,
-        "pip_check": {"status": pip_status, "problem_count": pip_problem_count,
+        "pip_check": {"status": pip_status, "scope": "environment_wide",
+                      "blocking": pip_conflicts_blocking,
+                      "problem_count": pip_problem_count,
                       "affected_packages": pip_conflict_packages,
                       "conflicts": pip_conflict_details},
         "issues": sorted(set(issues)),

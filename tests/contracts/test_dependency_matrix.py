@@ -41,7 +41,7 @@ def test_core_dependencies_are_portable_and_transformers_v5():
     assert set(project["dependencies"]) == {
         "PyYAML>=6,<7",
         "huggingface-hub>=1.0,<2",
-        "torch>=2.9,<2.14",
+        "torch>=2.9,<2.15",
         "transformers>=5.0,<6",
     }
     assert all("xla" not in dependency.lower() for dependency in project["dependencies"])
@@ -67,10 +67,11 @@ def test_matrix_profiles_match_their_constraint_files():
     matrix = _matrix()
 
     assert matrix["schema_version"] == 1
+    assert matrix["matrix_version"] == 3
     assert matrix["core_contract"] == {
         "python": ">=3.10",
         "huggingface-hub": ">=1.0,<2",
-        "torch": ">=2.9,<2.14",
+        "torch": ">=2.9,<2.15",
         "transformers": ">=5.0,<6",
         "policy": (
             "CPU compatibility CI covers the minimum and current profiles. "
@@ -83,6 +84,13 @@ def test_matrix_profiles_match_their_constraint_files():
             for name, version in profile["packages"].items()
         }
         assert _constraints(profile["constraints"]) == expected_packages
+
+    assert matrix["profiles"]["core-current"]["packages"] == {
+        "huggingface-hub": "1.33.0",
+        "PyYAML": "6.0.3",
+        "torch": "2.14.1",
+        "transformers": "5.20.2",
+    }
 
 
 def test_xla_package_metadata_pins_are_preserved_by_tpu_profiles():
