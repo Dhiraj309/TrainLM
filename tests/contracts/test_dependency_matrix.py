@@ -40,7 +40,7 @@ def test_core_dependencies_are_portable_and_transformers_v5():
     assert project["requires-python"] == ">=3.10"
     assert set(project["dependencies"]) == {
         "PyYAML>=6,<7",
-        "huggingface-hub>=1.0,<2",
+        "huggingface-hub>=1.5,<2",
         "torch>=2.9,<2.15",
         "transformers>=5.15,<6",
     }
@@ -67,10 +67,10 @@ def test_matrix_profiles_match_their_constraint_files():
     matrix = _matrix()
 
     assert matrix["schema_version"] == 1
-    assert matrix["matrix_version"] == 4
+    assert matrix["matrix_version"] == 5
     assert matrix["core_contract"] == {
         "python": ">=3.10",
-        "huggingface-hub": ">=1.0,<2",
+        "huggingface-hub": ">=1.5,<2",
         "torch": ">=2.9,<2.15",
         "transformers": ">=5.15,<6",
         "policy": (
@@ -94,6 +94,10 @@ def test_matrix_profiles_match_their_constraint_files():
     assert (
         matrix["profiles"]["core-minimum"]["packages"]["transformers"]
         == "5.15.0"
+    )
+    assert (
+        matrix["profiles"]["core-minimum"]["packages"]["huggingface-hub"]
+        == "1.5.0"
     )
 
 

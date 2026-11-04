@@ -3,9 +3,10 @@
   "release": "0.1.0-dev",
   "package_versions": {
     "python": ">=3.10",
-    "torch": ">=2.9,<2.14",
+    "huggingface-hub": ">=1.5,<2",
+    "torch": ">=2.9,<2.15",
     "torch_xla": "2.9.0",
-    "transformers": ">=5.0,<6"
+    "transformers": ">=5.15,<6"
   },
   "hardware": [
     {"backend": "cpu", "hardware": "generic CPU", "support_level": "compatible"},
