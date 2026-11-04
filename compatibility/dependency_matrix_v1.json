@@ -1,12 +1,12 @@
 {
   "schema_version": 1,
   "matrix_id": "trainlm-dependencies",
-  "matrix_version": 2,
-  "reviewed_on": "2026-08-23",
+  "matrix_version": 3,
+  "reviewed_on": "2026-11-04",
   "core_contract": {
     "python": ">=3.10",
     "huggingface-hub": ">=1.0,<2",
-    "torch": ">=2.9,<2.14",
+    "torch": ">=2.9,<2.15",
     "transformers": ">=5.0,<6",
     "policy": "CPU compatibility CI covers the minimum and current profiles. TPU certification uses exact backend profiles."
   },
@@ -27,9 +27,10 @@
       "platform": "cpu",
       "python": "3.13",
       "packages": {
-        "huggingface-hub": "1.16.4",
-        "torch": "2.13.0",
-        "transformers": "5.15.0"
+        "huggingface-hub": "1.33.0",
+        "PyYAML": "6.0.3",
+        "torch": "2.14.1",
+        "transformers": "5.20.2"
       },
       "constraints": "constraints/core-current.txt"
     },
@@ -38,9 +39,10 @@
       "platform": "cuda",
       "python": "3.13",
       "packages": {
-        "huggingface-hub": "1.16.4",
-        "torch": "2.13.0",
-        "transformers": "5.15.0"
+        "huggingface-hub": "1.33.0",
+        "PyYAML": "6.0.3",
+        "torch": "2.14.1",
+        "transformers": "5.20.2"
       },
       "installation_note": "Install the official PyTorch wheel matching the selected CUDA runtime before installing TrainLM.",
       "constraints": "constraints/core-current.txt"

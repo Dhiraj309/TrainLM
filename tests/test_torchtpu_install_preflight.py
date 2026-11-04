@@ -56,15 +56,48 @@ class InstallPreflightTests(unittest.TestCase):
         self.assertEqual(report["scope"], "installed_metadata_only")
         self.assertEqual(report["pip_check"]["status"], "passed")
 
-    def test_owner_observed_torch_version_conflicts_with_source_range(self):
+    def test_owner_observed_torch_version_matches_source_and_upstream_ranges(self):
         versions = {**self.versions, "torch": "2.14.1+cpu"}
         provider = FakeMetadata(versions, ["torch==2.14.1", "libtpu==0.0.50"])
         report = INSPECT(ROOT, provider=provider, pip_runner=pip_ok)
-        self.assertEqual(report["status"], "incompatible")
+        self.assertEqual(report["status"], "metadata_compatible")
         torch_check = next(item for item in report["source_requirements"]
                            if item["package"] == "torch")
-        self.assertEqual(torch_check["status"], "mismatch")
-        self.assertIn("requirement_conflict", report["issues"])
+        self.assertEqual(torch_check["required"], "<2.15,>=2.9")
+        self.assertEqual(torch_check["status"], "matched")
+
+    def test_unrelated_ipython_conflict_is_visible_but_not_blocking(self):
+        def ipython_conflict(*args, **kwargs):
+            return SimpleNamespace(
+                returncode=1,
+                stdout="ipython 7.34.0 requires jedi, which is not installed.\n",
+                stderr="",
+            )
+
+        versions = {**self.versions, "torch": "2.14.1+cpu"}
+        report = INSPECT(
+            ROOT,
+            provider=FakeMetadata(versions, ["torch==2.14.1", "libtpu==0.0.50"]),
+            pip_runner=ipython_conflict,
+        )
+        self.assertEqual(report["status"], "metadata_compatible")
+        self.assertEqual(report["pip_check"]["status"], "conflicts")
+        self.assertFalse(report["pip_check"]["blocking"])
+        self.assertEqual(report["pip_check"]["affected_packages"], ["ipython"])
+        self.assertNotIn("pip_conflicts", report["issues"])
+
+    def test_training_stack_pip_conflict_is_blocking(self):
+        def torch_conflict(*args, **kwargs):
+            return SimpleNamespace(
+                returncode=1,
+                stdout="transformers 5.15.0 requires torch<2.13, but you have torch 2.13.0.\n",
+                stderr="",
+            )
+
+        report = INSPECT(ROOT, provider=FakeMetadata(self.versions), pip_runner=torch_conflict)
+        self.assertEqual(report["status"], "incompatible")
+        self.assertTrue(report["pip_check"]["blocking"])
+        self.assertIn("pip_conflicts", report["issues"])
 
     def test_missing_tpu_packages_are_incomplete(self):
         versions = {key: value for key, value in self.versions.items()

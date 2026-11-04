@@ -1,4 +1,5 @@
 # Current core and CUDA-portability compatibility profile.
-huggingface-hub==1.16.4
-torch==2.13.0
-transformers==5.15.0
+huggingface-hub==1.33.0
+PyYAML==6.0.3
+torch==2.14.1
+transformers==5.20.2

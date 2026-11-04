@@ -42,8 +42,12 @@ class EvidenceTests(unittest.TestCase):
         profile = {"schema_version": 1, "status": "incompatible",
                    "issues": ["requirement_conflict"],
                    "installed_versions": {"torch": "2.14.1+cpu"},
-                   "source_requirements": [{"package": "torch", "required": "<2.14,>=2.9",
-                                             "status": "mismatch"}],
+                   "source_requirements": [
+                       {"package": "torch", "required": "<2.15,>=2.9",
+                        "status": "matched"},
+                       {"package": "transformers", "required": "<5.0",
+                        "status": "mismatch"},
+                   ],
                    "torch_tpu_requirements": []}
         report = build(package_process=process(json.dumps(profile),
                                                status="failed", exit_code=1),

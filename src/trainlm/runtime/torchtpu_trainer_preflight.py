@@ -24,9 +24,9 @@ _KNOWN_ISSUES = {
 def assess_trainer_profile(
     profile: Mapping[str, Any], *, require_datasets: bool = False,
 ) -> dict[str, Any]:
-    """Allow only a narrow, explicit source-Torch mismatch experiment.
+    """Block training-stack conflicts while preserving unrelated pip warnings.
 
-    An unrelated, fully parsed pip conflict may coexist with that experiment;
+    A source-Torch mismatch remains an explicit experimental exception;
     missing dependencies, upstream mismatches, and unknown conflicts block it.
     """
     issues = profile.get("issues")
@@ -98,7 +98,7 @@ def assess_trainer_profile(
     if pip_status == "conflicts":
         conflicts = pip_check.get("conflicts")
         count = pip_check.get("problem_count")
-        if (not isinstance(conflicts, list) or type(count) is not int
+        if (not isinstance(conflicts, list) or type(count) is not int or count < 1
                 or count != len(conflicts)):
             reasons.append("unclassified_pip_conflict")
         else:
@@ -127,7 +127,7 @@ def assess_trainer_profile(
     if type(require_datasets) is not bool:
         reasons.append("invalid_preflight_options")
     status = ("blocked" if reasons else
-              "experimental_mismatch" if source_torch_mismatch or pip_status == "conflicts"
+              "experimental_mismatch" if source_torch_mismatch
               else "metadata_compatible")
     return {
         "schema_version": 1,
