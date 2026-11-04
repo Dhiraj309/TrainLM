@@ -111,6 +111,27 @@ def _checkpoint_component_type(value: Any) -> str:
     return f"{component_type.__module__}.{component_type.__qualname__}"
 
 
+def _latest_training_checkpoint(output_dir: Path) -> Path | None:
+    """Find the newest atomically published local or native TPU checkpoint."""
+    if not output_dir.is_dir():
+        return None
+    candidates: list[tuple[int, Path]] = []
+    for path in output_dir.glob("checkpoint-*"):
+        if path.is_symlink() or not path.is_dir():
+            continue
+        suffix = path.name.removeprefix("checkpoint-")
+        if not suffix.isdecimal():
+            continue
+        local_state = path / "trainer_state.pt"
+        tpu_manifest = path / "manifest.json"
+        if (
+            (local_state.is_file() and not local_state.is_symlink())
+            or (tpu_manifest.is_file() and not tpu_manifest.is_symlink())
+        ):
+            candidates.append((int(suffix), path))
+    return max(candidates, key=lambda item: item[0])[1] if candidates else None
+
+
 def _is_finite_real(value: Any) -> bool:
     if isinstance(value, bool) or not isinstance(value, Real):
         return False
@@ -716,7 +737,21 @@ class TrainLMTrainer:
         )
 
     def train(self, *, resume_from_checkpoint: str | Path | None = None):
-        """Run training and return the TrainLM trainer state."""
+        """Run training, optionally resuming from a path or ``"latest"``.
+
+        ``"latest"`` selects the newest atomically published checkpoint under
+        ``args.output_dir``. It raises ``FileNotFoundError`` when none exists.
+        """
+
+        if resume_from_checkpoint == "latest":
+            resume_from_checkpoint = _latest_training_checkpoint(
+                Path(self.args.output_dir)
+            )
+            if resume_from_checkpoint is None:
+                raise FileNotFoundError(
+                    "No committed training checkpoints were found under "
+                    f"{Path(self.args.output_dir)}."
+                )
 
         if self._tpu_coordinator is not None:
             return self._consume_tpu_result(

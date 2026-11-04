@@ -24,6 +24,16 @@ effective training settings, optimizer and scheduler details, selected backend,
 bounded runtime TPU discovery and properties, model/tokenizer provenance,
 runtime versions, and training metrics. Property-only discovery is labeled
 unverified and does not allocate a device.
+
+The from-scratch notebook now keeps its run in an editable stable directory and
+passes an optional `RESUME_FROM_CHECKPOINT` value through the public trainer
+API. `train(resume_from_checkpoint="latest")` resolves the newest published
+CPU or native TPU checkpoint and rejects a missing checkpoint instead of
+silently starting over. For Colab reset recovery, users can mount Drive and
+point `RUN_DIR` to persistent storage; Kaggle users can retain `/kaggle/working`
+outputs by saving a notebook version. CPU tests cover committed-checkpoint
+selection and resume; native TPU checkpoint recovery remains unvalidated.
+
 The notebook uses this API; native TPU remains experimental and gains no
 end-to-end evidence from CPU/API tests. PR #81 added tokenizer and runtime
 provenance to report schema v3 and was rebase-merged to `main` on 2026-11-03

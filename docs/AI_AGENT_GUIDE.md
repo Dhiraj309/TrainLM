@@ -33,7 +33,9 @@ follow the linked implementation and tests before making a change.
 - `TrainLMTrainer.from_scratch(TrainLMPretrainingConfig(...))` is the public
   raw-text entry point. It requires an immutable Hugging Face dataset revision
   and disjoint train/validation splits, then returns the familiar trainer for
-  `train()`, `evaluate()`, and `save_model()` calls. GPT-2 is the default;
+  `train()`, `evaluate()`, and `save_model()` calls. Use
+  `trainer.train(resume_from_checkpoint="latest")` to resume from the newest
+  completed checkpoint under the trainer output directory. GPT-2 is the default;
   `model_type` and `model_config_overrides` select a registered Transformers
   causal-LM configuration for random initialization. TrainLM fills vocabulary
   and special-token IDs from the newly trained tokenizer. The path does not

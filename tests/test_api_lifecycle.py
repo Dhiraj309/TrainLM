@@ -8,6 +8,7 @@ import torch
 from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
 
 from trainlm import TrainLMTrainer, TrainLMTrainingArguments
+from trainlm.api import _latest_training_checkpoint
 from trainlm.training import TokenWSD, TrainerCallback
 
 
@@ -113,6 +114,8 @@ def test_facade_resumes_local_training_state(tmp_path):
         ),
     )
     first.train()
+    # An interrupted write must not hide the last published checkpoint.
+    (tmp_path / "checkpoint-99").mkdir()
     checkpoint = tmp_path / "checkpoint-1"
     checkpoint_state = checkpoint / "trainer_state.pt"
     payload = torch.load(checkpoint_state, map_location="cpu", weights_only=False)
@@ -130,10 +133,41 @@ def test_facade_resumes_local_training_state(tmp_path):
             accelerator="cpu",
         ),
     )
-    state = resumed.train(resume_from_checkpoint=checkpoint)
+    state = resumed.train(resume_from_checkpoint="latest")
 
     assert state.step == 2
     assert state.micro_step == 2
+
+
+def test_latest_resume_requires_a_committed_checkpoint(tmp_path):
+    trainer = TrainLMTrainer(
+        model=TinyModel(),
+        train_dataset=_dataset(),
+        args=TrainLMTrainingArguments(
+            output_dir=tmp_path,
+            max_steps=1,
+            sequence_length=4,
+            accelerator="cpu",
+        ),
+    )
+    (tmp_path / "checkpoint-2").mkdir()
+
+    with pytest.raises(FileNotFoundError, match="No committed training checkpoints"):
+        trainer.train(resume_from_checkpoint="latest")
+
+
+def test_latest_checkpoint_recognizes_published_tpu_manifest(tmp_path):
+    (tmp_path / "checkpoint-9").mkdir()
+    (tmp_path / "checkpoint-9" / "manifest.json").write_text(
+        '{"status":"committed"}\n', encoding="utf-8"
+    )
+    (tmp_path / "checkpoint-10").mkdir()
+    (tmp_path / "checkpoint-100").mkdir()
+    (tmp_path / "checkpoint-100" / "manifest.json.tmp").write_text(
+        '{"status":"committed"}\n', encoding="utf-8"
+    )
+
+    assert _latest_training_checkpoint(tmp_path) == tmp_path / "checkpoint-9"
 
 
 def test_custom_dataset_preflight_rejects_state_before_trainer_mutation(tmp_path):
