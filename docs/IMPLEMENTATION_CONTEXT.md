@@ -19,12 +19,14 @@ through a registered Transformers causal-LM config. GPT-2 remains the default;
 `model_type` and JSON-compatible `model_config_overrides` select other
 `AutoModelForCausalLM` architectures. The trained tokenizer supplies vocabulary
 and special-token IDs. The from-scratch Colab/Kaggle notebook calls this API
-with a concise token-budget and sequence-length setup; its downloadable report
-records requested and effective model config, architecture class, vocabulary
-size, tokenizer special-token IDs and artifact hash, runtime package versions,
-and parameter counts. Missing optional runtime packages are recorded as null.
-The current report schema is v3. Native TPU remains experimental; CPU/API
-evidence adds no hardware validation.
+with a concise token-budget and sequence-length setup; its downloadable schema
+v4 report records requested and effective training settings, optimizer and
+scheduler details, resolved backend/runtime, bounded TPU property discovery,
+model config and parameter counts, tokenizer special-token IDs and artifact
+hash, dataset revisions, and runtime package versions. Property-only discovery
+does not allocate a device and is labeled unverified. Missing optional runtime
+packages and unavailable hardware properties are recorded as null. Native TPU
+remains experimental; CPU/API evidence adds no hardware validation.
 PR #77
 was rebase-merged to verified `main` at
 `f844d048b17640d4d71a127c4a860dd1f6d7d52c`; the public API is in commit
@@ -42,7 +44,10 @@ v2 and rebase-merged to verified `main` at
 `e9b4a1bde4869d89c323ed457a6b6cebccb0ae40`; CI passed 891 tests and 41
 subtests. No TPU run was made. The feature
 is opt-in and does not change existing accelerator defaults or base dependency
-bounds, so existing workflows can continue without using it.
+bounds, so existing workflows can continue without using it. PR #81 added
+tokenizer and runtime provenance in report schema v3 and was rebase-merged to
+`main` at `4cfacae39e4e677f442208dfa098bb51009cfd46`; it adds no TPU training
+evidence.
 
 - PR #18, including PR #16, PR #20, and PRs #28–#43 are merged.
   PR #28

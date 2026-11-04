@@ -58,12 +58,14 @@ provide the relevant Transformers config fields in `model_config_overrides`.
 Only model types supported by `AutoModelForCausalLM` are suitable; TrainLM does
 not load custom remote model code in this scratch path.
 
-The notebook's downloadable ZIP includes a version 3 evidence report with the
-requested and effective model configuration, architecture class, tokenizer
-vocabulary and special-token IDs, tokenizer artifact hash, and parameter
-counts. It records Python, torch, Transformers, torch-tpu, libtpu, datasets,
-and tokenizers versions, plus source and dataset revisions and training
-metrics. Optional distributions that are not installed are recorded as `null`.
+The notebook's downloadable ZIP includes a version 4 evidence report with the
+requested and effective training settings, optimizer and scheduler details,
+selected backend, runtime TPU discovery and device properties, model config,
+tokenizer vocabulary and special-token IDs, tokenizer artifact hash, parameter
+counts, source and dataset revisions, package versions, and training metrics.
+Optional distributions and unavailable hardware properties are recorded as
+`null`. Property discovery does not allocate a device; the report labels its
+unverified query separately from the active runtime's status.
 
 The config defaults to a pinned TinyStories revision. In a standard Python
 environment, install the package with `pip install 'trainlm[pretraining]'`.
