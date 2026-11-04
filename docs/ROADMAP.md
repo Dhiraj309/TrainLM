@@ -35,9 +35,25 @@ outputs by saving a notebook version. CPU tests cover committed-checkpoint
 selection and resume; native TPU checkpoint recovery remains unvalidated.
 Matching pinned dataset/tokenizer settings now reuse the fingerprinted,
 integrity-checked tokenizer and packed shards under the same output directory.
-Changed preparation inputs require a new output directory so existing run data
-and checkpoints are preserved. A cache hit avoids importing `datasets` or
-reopening the Hugging Face stream.
+The scratch workflow also writes `run_config.json` and embeds its full
+fingerprint and configuration in each checkpoint. Resume rejects changed model,
+tokenizer, packed data, optimizer, schedule, precision, or runtime settings
+before restoring training state. Use a fresh output directory for a different
+run configuration; older scratch checkpoints without this record cannot be
+resumed through the guarded scratch API. Generic legacy checkpoint behavior is
+unchanged. A cache hit avoids importing `datasets` or reopening the Hugging Face
+stream.
+
+PR #85 added the integrity-checked preparation cache and was rebase-merged to
+verified `main` at `476bc68ff535cd49f3472316c5bc809bc38e7ae5`. The current
+`feat/86-scratch-run-config-resume` work adds whole-run compatibility checks to
+scratch checkpoints. Focused API, lifecycle, and roadmap tests pass (50 tests);
+the CPU/Gloo checkpoint and token-weighting suites pass with per-command network
+permission (22 tests). The full local run reports 885 passed and 13 failures;
+six loopback-dependent failures passed in the permitted rerun, while the
+remaining environment baseline includes missing `pip`, Transformers 5.0 Phi
+fixtures lacking `pad_token_id`, and an existing model reload mismatch. No TPU
+training was run.
 
 The notebook uses this API; native TPU remains experimental and gains no
 end-to-end evidence from CPU/API tests. PR #81 added tokenizer and runtime

@@ -1,5 +1,6 @@
 """Public raw-text pretraining API contracts and a tiny CPU lifecycle smoke."""
 
+import json
 from pathlib import Path
 import sys
 from types import ModuleType
@@ -85,25 +86,32 @@ def test_from_scratch_builds_and_trains_a_small_cpu_model(tmp_path, monkeypatch)
         ("org/tiny-stories", "a" * 40, "validation", True),
     ]
 
-    # A valid prepared cache must avoid even importing the optional dataset
-    # package, let alone reconnecting to the pinned streaming source. A changed
-    # sequence length can use the same tokenized corpus.
+    # A valid prepared cache and matching run manifest must avoid even importing
+    # the optional dataset package, let alone reconnecting to the pinned stream.
     monkeypatch.delitem(sys.modules, "datasets", raising=False)
     cached_trainer = TrainLMTrainer.from_scratch(
-        _config(config.output_dir, sequence_length=4)
+        _config(config.output_dir)
     )
     assert cached_trainer.model.config.model_type == "gpt2"
-    assert cached_trainer.model.config.n_positions == 4
     assert calls == [
         ("org/tiny-stories", "a" * 40, "train", True),
         ("org/tiny-stories", "a" * 40, "train", True),
         ("org/tiny-stories", "a" * 40, "validation", True),
     ]
     assert (tmp_path / "run" / "preparation_cache.json").is_file()
+    run_manifest = json.loads(
+        (tmp_path / "run" / "run_config.json").read_text(encoding="utf-8")
+    )
+    assert run_manifest["configuration"]["training_args"]["learning_rate"] == 3e-4
+    assert "AdamW" in run_manifest["configuration"]["optimizer"]["type"]
+    assert run_manifest["configuration"]["scheduler"]["schedule"] == "cosine"
 
-    state = trainer.train()
-    metrics = trainer.evaluate()
-    export = trainer.save_model(tmp_path / "run" / "model")
+    checkpoint = trainer._save_training_checkpoint(
+        trainer.engine, "checkpoint-0"
+    )
+    state = cached_trainer.train(resume_from_checkpoint=checkpoint)
+    metrics = cached_trainer.evaluate()
+    export = cached_trainer.save_model(tmp_path / "run" / "model")
 
     assert state.step == 2
     assert state.tokens_seen >= config.max_tokens
@@ -112,6 +120,61 @@ def test_from_scratch_builds_and_trains_a_small_cpu_model(tmp_path, monkeypatch)
     assert (export / "model.safetensors").is_file()
     assert (export / "tokenizer_config.json").is_file()
     assert (tmp_path / "run" / "tokenizer" / "tokenizer.json").is_file()
+    checkpoint = torch.load(
+        tmp_path / "run" / "checkpoints" / "checkpoint-1" / "trainer_state.pt",
+        map_location="cpu",
+        weights_only=False,
+    )
+    assert checkpoint["run_configuration"] == run_manifest
+    with pytest.raises(RuntimeError, match="already bound to a different"):
+        TrainLMTrainer.from_scratch(
+            _config(config.output_dir, learning_rate=6e-4)
+        )
+
+
+def test_scratch_resume_rejects_changed_run_settings_before_state_restore(
+    tmp_path, monkeypatch
+):
+    rows = [
+        {"text": f"Tiny deterministic training sample {index}. " * 5}
+        for index in range(16)
+    ]
+
+    class StreamingRows:
+        def __iter__(self):
+            return iter(rows)
+
+    datasets_module = ModuleType("datasets")
+    datasets_module.load_dataset = lambda *args, **kwargs: StreamingRows()
+    monkeypatch.setitem(sys.modules, "datasets", datasets_module)
+
+    source = TrainLMTrainer.from_scratch(_config(tmp_path / "source"))
+    checkpoint = source._save_training_checkpoint(source.engine, "checkpoint-0")
+    resumed = TrainLMTrainer.from_scratch(
+        _config(tmp_path / "resume", learning_rate=6e-4)
+    )
+    before_model = {
+        name: value.detach().clone()
+        for name, value in resumed.model.state_dict().items()
+    }
+    before_optimizer = resumed.optimizer.state_dict()
+    before_scheduler = resumed.scheduler.state_dict().copy()
+    before_trainer_state = resumed.engine.state
+    before_rng_state = torch.get_rng_state().clone()
+    before_dataset_state = resumed.train_dataset.state_dict()
+
+    with pytest.raises(ValueError, match="run configuration does not match"):
+        resumed.train(resume_from_checkpoint=checkpoint)
+
+    assert all(
+        torch.equal(before_model[name], value)
+        for name, value in resumed.model.state_dict().items()
+    )
+    assert resumed.optimizer.state_dict() == before_optimizer
+    assert resumed.scheduler.state_dict() == before_scheduler
+    assert resumed.engine.state is before_trainer_state
+    assert torch.equal(torch.get_rng_state(), before_rng_state)
+    assert resumed.train_dataset.state_dict() == before_dataset_state
 
 
 def test_preparation_cache_rejects_changed_data_settings(tmp_path, monkeypatch):
