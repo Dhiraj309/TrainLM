@@ -87,7 +87,7 @@ ecosystem references, not prerequisites for the basic trainer.
 | `src/trainlm/checkpoint/`, `training/` | Resume, export, trainer and metric contracts | Reuse and re-prove device RNG, distributed state and clean-process resume. |
 | `src/trainlm/optimization/`, `monitoring/telemetry.py` | Capability plans, explanations, provider gates and metric schema | Extend the existing report instead of a second independent planner. |
 | `examples/torchtpu_t1_v5e1_probe.py` and T1 notebook | Shared device-owned discovery, bounded JSON artifact and labeled CPU fallback; no production native routing | Keep T1 evidence separate from trainer support; verify hardware identity and install profile before enabling a native worker. |
-| `pyproject.toml` | `torch>=2.9,<2.15` | Core contract now includes the owner's 2.14.1 version; the minimum/current CPU CI matrix must pass. This does not certify native TorchTPU installation or training. |
+| `pyproject.toml` | `torch>=2.9,<2.15`, `transformers>=5.15,<6` | Core contract now includes the owner's 2.14.1 version; the minimum/current CPU CI matrix must pass. This does not certify native TorchTPU installation or training. |
 
 ## Desired user experience and internal discovery contract
 

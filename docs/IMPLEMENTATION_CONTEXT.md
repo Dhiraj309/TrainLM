@@ -481,9 +481,16 @@ rebase-merged at verified `main` SHA
   fully parsed `pip check` warnings without blocking. Focused local source tests
   pass (26 unittest cases plus five dependency-matrix contract checks); Python
   and PyTorch are unavailable in this container, so the full CPU suite has not
-  run locally. CI and an owner-runtime metadata refresh remain pending. This
-  change does not certify CUDA, native TorchTPU training, compile, lifecycle or
-  distributed execution.
+  run locally. The first GitHub matrix run passed core-current; core-minimum at
+  Python 3.10 / Torch 2.9 / Transformers 5.0 had 887 passed, six failed and 41
+  subtests. Five failures hit the old PhiConfig's missing `pad_token_id`, and
+  one was TrainLM model reload parity. Commit `bbf1b2e` raises the declared
+  Transformers floor and minimum lock to 5.15.0, matching a previously passing
+  full suite. Its first retry exposed that this Transformers version requires
+  Hub 1.5.0; commit `cfc05ed` raises the project Hub floor and minimum lock to
+  match. The corrected matrix run is pending. An owner-runtime metadata refresh
+  also remains pending. This does not certify CUDA, native TorchTPU training,
+  compile, lifecycle or distributed execution.
 
 ## Historical XLA development record
 

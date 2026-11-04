@@ -23,11 +23,14 @@ validate TrainLM's full trainer, compilation, lifecycle, distributed execution
 or performance.
 
 The current compatibility change widens the core Torch contract to
-`>=2.9,<2.15` and adds CPU CI for both the minimum and current core profiles.
-The current profile uses Python 3.13 and the owner's observed Torch 2.14.1
-package set. Until those CI jobs pass, the expanded range is proposed rather
-than verified by this checkout. It does not certify CUDA or native TPU. No
-TorchTPU-specific install extra or support claim is added.
+`>=2.9,<2.15`, raises the Transformers floor to `5.15` and the Hub floor to
+`1.5`, and adds CPU CI for both the minimum and current profiles. The current
+profile uses Python 3.13 and the owner's observed Torch 2.14.1 package set. Its
+first job passed. The initial minimum job exposed tests failing under
+Transformers 5.0.0; the first retry then showed Transformers 5.15.0 requires
+Hub 1.5.0, so the minimum constraints and project floor now match that resolver
+requirement. The corrected matrix run is pending. This does not certify CUDA or
+native TPU. No TorchTPU-specific install extra or support claim is added.
 
 The read-only preflight reports environment-wide `pip check` findings. A fully
 parsed conflict unrelated to TrainLM's training stack, such as IPython requiring
@@ -61,9 +64,10 @@ tests had left `accelerator="auto"` on a TPU host, the wheel smoke required
 test-harness issues were corrected locally. Twelve loss-layout failures came
 from counting ignored targets in the mean denominator, and a scalar-count test
 expected one snapshot although the trainer records both loss and gradient
-norm. These fixes were made after that run. The new minimum/current CI matrix
-is the next full CPU conformance check; no full-suite result for that matrix is
-claimed here.
+norm. These fixes were made after that run. The initial current-profile CI job
+passed. The minimum retry first exposed the Hub lower-bound mismatch; the
+minimum lock now uses Hub 1.5.0 alongside Transformers 5.15.0, and the corrected
+run is pending.
 
 ### Read-only native install-profile check
 
@@ -85,20 +89,22 @@ the current report, and use CI for CPU conformance.
 
 | Profile | Python | PyTorch | Transformers | Accelerator packages | Status |
 |---|---|---|---|---|---|
-| Core minimum | 3.10 | 2.9.0 | 5.0.0 | None | Required CPU CI |
+| Core minimum | 3.10 | 2.9.0 | 5.15.0 | None | Required CPU CI; Hub 1.5.0 |
 | Core current | 3.13 | 2.14.1 | 5.20.2 | None | Required CPU CI |
 | CUDA portability | 3.13 | 2.14.1 | 5.20.2 | Official matching CUDA wheel | Shared package set; CPU CI does not certify CUDA |
 | TPU XLA stable | 3.10–3.13 | 2.9.0 | 5.15.0 | torch-xla 2.9.0, libtpu 0.0.21 | Pending M5 TPU validation |
 | TPU XLA + Pallas | 3.10–3.13 | 2.9.0 | 5.15.0 | XLA/libtpu above, JAX/jaxlib 0.7.1 | Pending M5/kernel validation |
 
 The checked-in CI workflow runs the full test suite against the constrained
-core-minimum (Python 3.10) and core-current (Python 3.13) profiles. A passing
-CPU job verifies only that profile on CPU; it does not certify CUDA or TPU.
-The T0.1 CPU baseline was separately run in Python 3.12.14.
+core-minimum (Python 3.10) and core-current (Python 3.13) profiles. The initial
+core-current job passed; the minimum run is being repeated with the compatible
+Hub 1.5.0 / Transformers 5.15.0 pair. A passing CPU job verifies only that
+profile on CPU; it does not certify CUDA or TPU. The T0.1 CPU baseline was
+separately run in Python 3.12.14.
 
 The broad core package contract is PyTorch `>=2.9,<2.15`, Transformers
-`>=5.0,<6`, and Hugging Face Hub `>=1.0,<2`. Exact constraint profiles are the
-reproducible CI and TPU environments. The minimum profile locks Hub 1.3.5;
+`>=5.15,<6`, and Hugging Face Hub `>=1.5,<2`. Exact constraint profiles are the
+reproducible CI and TPU environments. The minimum profile locks Hub 1.5.0;
 core-current locks Hub 1.33.0; the historical TPU/XLA constraints lock Hub
 1.16.4. A version inside the broad range is not hardware certified merely
 because dependency resolution succeeds.
