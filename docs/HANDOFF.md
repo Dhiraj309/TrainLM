@@ -41,6 +41,10 @@
   not contain the optimizer checkpoints or packed data. The example keeps the
   same budget and only retries an already pending extension. Missing run files
   stop it before trainer construction. No checkpoint means no resume script.
+  For a one-click notebook recovery, set `RESUME_FROM_REPORT = True` in the
+  setup cell with the original `RUN_DIR` and run all cells. Setup pins the
+  source revision from the report; the recovery cell restores its settings and
+  checks installed package versions and saved run files before training.
   Property-only discovery does not allocate a device and is labeled unverified.
   Missing optional packages and properties are `null`. Native TorchTPU remains
   experimental; CPU/API work adds no TPU training evidence. Earlier continuation
