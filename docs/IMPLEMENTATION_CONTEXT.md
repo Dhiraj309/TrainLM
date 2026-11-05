@@ -20,15 +20,26 @@ through a registered Transformers causal-LM config. GPT-2 remains the default;
 `AutoModelForCausalLM` architectures. The trained tokenizer supplies vocabulary
 and special-token IDs. The from-scratch Colab/Kaggle notebook calls this API
 with a concise token-budget and sequence-length setup; its downloadable schema
-v5 report records requested and effective training settings, optimizer and
+v6 report records requested and effective training settings, optimizer and
 scheduler details, resolved backend/runtime, bounded TPU property discovery,
 model config and parameter counts, tokenizer special-token IDs and artifact
 hash, dataset revisions, runtime package versions, and the newest published
 checkpoint path when available. The path is local to the notebook runtime, so
 `RUN_DIR` must be on persistent storage to survive resets. Property-only
 discovery does not allocate a device and is labeled unverified. Missing optional
-runtime packages and unavailable hardware properties are recorded as null. Native TPU
-remains experimental; CPU/API evidence adds no hardware validation.
+runtime packages and unavailable hardware properties are recorded as null.
+With a checkpoint, `resume.code` preserves every pretraining setting and an
+executable example also displayed and bundled as `resume.py`. It targets the
+recorded checkpoint with the same token budget, and retries only a previously
+requested budget extension whose configuration publication is still pending.
+The example checks for the original run files before constructing a trainer.
+Restore the full run directory and match source/package versions; the model
+export ZIP does not contain the optimizer checkpoints or packed data. If no
+checkpoint is available or lookup fails, code is null and no resume script is
+included. The
+private notebook helper does not load checkpoint state while making the
+report. Native TPU remains experimental; CPU/API evidence adds no hardware
+validation.
 
 The scratch notebook now uses a stable configurable `RUN_DIR` and exposes
 `RESUME_FROM_CHECKPOINT`. The public trainer accepts the sentinel
@@ -97,9 +108,17 @@ rebase-merged at verified `main` SHA
 `2a68f781655d80ccbac91ed03e582e32539c0900` from head
 `1c1a963486e9c42aff14f96d2ac78f1327a17a06`; both CI profiles passed 928 tests
 and 41 subtests. Its focused CPU/API, notebook, and roadmap checks passed 52
-tests. The current report change starts on `feat/92-report-checkpoint-path`
-from that verified `main` SHA; it updates the downloadable report to schema v5
-and adds no TPU validation.
+tests. PR #92 added the checkpoint path to report schema v5 and rebase-merged
+at verified `main` SHA `16984722897d6cf2b1f25b8548c4a1c6039ce94d` from head
+`fccca1c9147580afa215456a86c32a8a11489e9d`; both dependency CI profiles passed.
+Its local notebook/roadmap suite passed 24 tests and 14 subtests. The current
+schema-v6 resume-example change starts on `feat/93-notebook-resume-snippet`
+from that verified `main` SHA and adds no TPU validation.
+Focused CPU validation passed 47 tests and 14 subtests across executable
+resume/ZIP coverage, notebook contracts, the public pretraining API, and roadmap
+consistency. It exercises actual checkpoint restore, pending/committed budget
+extensions, safe quoting of settings/paths, and refusal to construct a trainer
+when the original run files are missing. No TPU runtime was used.
 
 PR #85's verified `main` base is `476bc68ff535cd49f3472316c5bc809bc38e7ae5`.
 PR #86 added whole-run checkpoint compatibility validation and rebase-merged

@@ -13,19 +13,26 @@ that existed at the time, primarily PyTorch/XLA. They do not imply native
 TorchTPU support. “Implemented” means present in that historical code path;
 “partial” means validation remained; “deferred” means it was not delivered.
 
-**Current user-workflow update (2026-11-04):** the package exposes
+**Current user-workflow update (2026-11-05):** the package exposes
 `TrainLMPretrainingConfig` and `TrainLMTrainer.from_scratch()` for raw text from
 a revision-pinned Hugging Face dataset. The API trains a byte-level tokenizer,
 prepares validated packed shards, initializes GPT-2 by default (or a configured
 registered Transformers causal-LM architecture), and returns the familiar
 trainer lifecycle. Vocabulary and special-token IDs come from the trained
-tokenizer. The notebook's version 5 downloadable report records requested and
+tokenizer. The notebook's version 6 downloadable report records requested and
 effective training settings, optimizer and scheduler details, selected backend,
 bounded runtime TPU discovery and properties, model/tokenizer provenance,
 runtime versions, training metrics, and `checkpoint.latest_path` when a
 published checkpoint exists. Property-only discovery is labeled unverified
 and does not allocate a device. The checkpoint path refers to the notebook
 runtime, so `RUN_DIR` must use persistent storage to survive a reset.
+When a checkpoint exists, `resume.code` captures all pretraining settings and
+an executable example that is also displayed and bundled as `resume.py`.
+The example targets the recorded checkpoint with the same token budget and
+only retries a previously requested extension while its publication remains
+pending. It checks for the original run files before constructing a trainer.
+Restore the full run directory with matching source and package versions;
+the model export ZIP alone cannot restore optimizer or packed-data state.
 
 The from-scratch notebook now keeps its run in an editable stable directory and
 passes an optional `RESUME_FROM_CHECKPOINT` value through the public trainer
@@ -99,8 +106,13 @@ and rebase-merged at verified `main` SHA
 and 41 subtests. PR #91 exposed the public latest-checkpoint path and
 rebase-merged at verified `main` SHA
 `2a68f781655d80ccbac91ed03e582e32539c0900`; both CI profiles passed 928 tests
-and 41 subtests. The current report-schema update starts from that SHA and
-adds no TPU checkpoint-recovery evidence.
+and 41 subtests. PR #92 added the checkpoint path to report schema v5 and
+rebase-merged at verified `main` SHA
+`16984722897d6cf2b1f25b8548c4a1c6039ce94d`; both dependency CI profiles passed.
+The schema-v6 resume-example change starts from that SHA and adds no TPU
+checkpoint-recovery evidence.
+Its focused CPU resume, ZIP, notebook, API, and roadmap suite passed 47 tests
+and 14 subtests; native TPU checkpoint recovery is still owner-validated work.
 
 The notebook uses this API; native TPU remains experimental and gains no
 end-to-end evidence from CPU/API tests. PR #81 added tokenizer and runtime
