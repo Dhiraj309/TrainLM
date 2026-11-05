@@ -33,6 +33,10 @@ only retries a previously requested extension while its publication remains
 pending. It checks for the original run files before constructing a trainer.
 Restore the full run directory with matching source and package versions;
 the model export ZIP alone cannot restore optimizer or packed-data state.
+The notebook can load this report directly: keep the original `RUN_DIR`, set
+`RESUME_FROM_REPORT = True`, and run all cells. It restores the recorded source
+revision and pretraining config, checks packages and run files, and continues
+through train/evaluate/export before refreshing the report.
 
 The from-scratch notebook now keeps its run in an editable stable directory and
 passes an optional `RESUME_FROM_CHECKPOINT` value through the public trainer
@@ -109,10 +113,11 @@ rebase-merged at verified `main` SHA
 and 41 subtests. PR #92 added the checkpoint path to report schema v5 and
 rebase-merged at verified `main` SHA
 `16984722897d6cf2b1f25b8548c4a1c6039ce94d`; both dependency CI profiles passed.
-The schema-v6 resume-example change starts from that SHA and adds no TPU
-checkpoint-recovery evidence.
-Its focused CPU resume, ZIP, notebook, API, and roadmap suite passed 47 tests
-and 14 subtests; native TPU checkpoint recovery is still owner-validated work.
+PR #93 added the schema-v6 `resume.py` artifact and rebase-merged at verified
+`main` SHA `4de50666874592866fc50debd4261e465ffdaabe`; both profiles passed
+940 tests and 41 subtests. Its focused CPU suite passed 47 tests and 14
+subtests. The current report-driven recovery cell starts on
+`feat/94-notebook-report-recovery` from that base; it adds no TPU validation.
 
 The notebook uses this API; native TPU remains experimental and gains no
 end-to-end evidence from CPU/API tests. PR #81 added tokenizer and runtime

@@ -40,6 +40,10 @@ included. The
 private notebook helper does not load checkpoint state while making the
 report. Native TPU remains experimental; CPU/API evidence adds no hardware
 validation.
+The notebook's optional `RESUME_FROM_REPORT` path reads the saved config and
+checkpoint directly. It checks schema, source revision, runtime package
+versions, report directory, and required run artifacts before using the normal
+training/evaluation/export flow; it does not execute code stored in the report.
 
 The scratch notebook now uses a stable configurable `RUN_DIR` and exposes
 `RESUME_FROM_CHECKPOINT`. The public trainer accepts the sentinel
@@ -111,14 +115,17 @@ and 41 subtests. Its focused CPU/API, notebook, and roadmap checks passed 52
 tests. PR #92 added the checkpoint path to report schema v5 and rebase-merged
 at verified `main` SHA `16984722897d6cf2b1f25b8548c4a1c6039ce94d` from head
 `fccca1c9147580afa215456a86c32a8a11489e9d`; both dependency CI profiles passed.
-Its local notebook/roadmap suite passed 24 tests and 14 subtests. The current
-schema-v6 resume-example change starts on `feat/93-notebook-resume-snippet`
-from that verified `main` SHA and adds no TPU validation.
-Focused CPU validation passed 47 tests and 14 subtests across executable
-resume/ZIP coverage, notebook contracts, the public pretraining API, and roadmap
-consistency. It exercises actual checkpoint restore, pending/committed budget
-extensions, safe quoting of settings/paths, and refusal to construct a trainer
-when the original run files are missing. No TPU runtime was used.
+Its local notebook/roadmap suite passed 24 tests and 14 subtests. PR #93 added
+the schema-v6 resume script and rebase-merged at verified `main` SHA
+`4de50666874592866fc50debd4261e465ffdaabe` from head
+`4a089e373ec003be507cd4115165d78025cbf75a`; both CI profiles passed 940 tests
+and 41 subtests. Its focused local suite passed 47 tests and 14 subtests across
+resume/ZIP coverage, notebook contracts, the public pretraining API, and
+roadmap consistency. It covered actual checkpoint restore, pending/committed
+budget extensions, safe quoting, and refusal to construct a trainer when run
+files are missing. No TPU runtime was used. The current report-driven notebook
+recovery cell starts on `feat/94-notebook-report-recovery` from that verified
+`main` SHA and adds no TPU validation.
 
 PR #85's verified `main` base is `476bc68ff535cd49f3472316c5bc809bc38e7ae5`.
 PR #86 added whole-run checkpoint compatibility validation and rebase-merged

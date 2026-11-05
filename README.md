@@ -95,6 +95,11 @@ the optimizer checkpoints or packed data needed for training recovery. The
 example keeps the saved token budget; use the notebook's explicit extension
 settings to add more training to a completed run. Without a checkpoint,
 `resume.code` is `null` and no resume script is included.
+To recover directly in the notebook, restore the same `RUN_DIR`, set
+`RESUME_FROM_REPORT = True`, and run all cells. The notebook checks the report,
+restores its TrainLM source revision and pretraining settings, and verifies the
+recorded package versions before starting. It then resumes, evaluates, exports,
+and refreshes the report without copying the settings into a separate script.
 Optional distributions and unavailable hardware properties are recorded as
 `null`. Property discovery does not allocate a device; the report labels its
 unverified query separately from the active runtime's status.
