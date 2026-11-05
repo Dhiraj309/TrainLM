@@ -31,10 +31,16 @@
   ordinary trainer lifecycle. GPT-2 remains the default; `model_type` and
   `model_config_overrides` select another registered architecture. TrainLM
   derives the vocabulary and special-token IDs from its trained tokenizer.
-  The Colab/Kaggle notebook uses this public API and its downloadable schema v5
+  The Colab/Kaggle notebook uses this public API and its downloadable schema v6
   report captures requested and effective training settings, optimizer and
   scheduler details, model/tokenizer provenance, runtime versions, selected
   backend, bounded TPU properties, and the newest checkpoint path when present.
+  With a checkpoint, `resume.code` and the bundled `resume.py` preserve the
+  full pretraining configuration and recorded checkpoint. Restore the original
+  run directory and match source/package versions; the model export ZIP does
+  not contain the optimizer checkpoints or packed data. The example keeps the
+  same budget and only retries an already pending extension. Missing run files
+  stop it before trainer construction. No checkpoint means no resume script.
   Property-only discovery does not allocate a device and is labeled unverified.
   Missing optional packages and properties are `null`. Native TorchTPU remains
   experimental; CPU/API work adds no TPU training evidence. Earlier continuation

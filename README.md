@@ -77,7 +77,7 @@ provide the relevant Transformers config fields in `model_config_overrides`.
 Only model types supported by `AutoModelForCausalLM` are suitable; TrainLM does
 not load custom remote model code in this scratch path.
 
-The notebook's downloadable ZIP includes a version 5 evidence report with the
+The notebook's downloadable ZIP includes a version 6 evidence report with the
 requested and effective training settings, optimizer and scheduler details,
 selected backend, runtime TPU discovery and device properties, model config,
 tokenizer vocabulary and special-token IDs, tokenizer artifact hash, parameter
@@ -86,6 +86,15 @@ The top-level `checkpoint.latest_path` field records the newest published
 checkpoint path, including on failed runs when a prior checkpoint remains.
 This path belongs to the notebook runtime; keep `RUN_DIR` on persistent storage
 such as Google Drive if it must remain available after a reset.
+When a checkpoint is available, `resume.code` captures a runnable Python
+example with every pretraining setting and the recorded checkpoint path. The
+download cell displays it and includes the same code as `resume.py` in the ZIP.
+Restore the full original run directory and match the report's source revision
+and package versions before running it. The ZIP contains a model export, not
+the optimizer checkpoints or packed data needed for training recovery. The
+example keeps the saved token budget; use the notebook's explicit extension
+settings to add more training to a completed run. Without a checkpoint,
+`resume.code` is `null` and no resume script is included.
 Optional distributions and unavailable hardware properties are recorded as
 `null`. Property discovery does not allocate a device; the report labels its
 unverified query separately from the active runtime's status.
@@ -100,6 +109,8 @@ does not reinstall the Torch/TorchTPU packages supplied by the TPU runtime.
 - [Inspect the public pretraining config and raw-text preparation](src/trainlm/pretraining.py)
 - [Inspect the public trainer API](src/trainlm/api.py)
 - [Review the public API's CPU lifecycle coverage](tests/test_pretraining_api.py)
+- [Inspect saved resume generation](src/trainlm/_notebook_resume.py)
+- [Review executable resume and ZIP tests](tests/test_notebook_resume.py)
 - [Find files and current evidence for coding agents](docs/AI_AGENT_GUIDE.md)
 
 ## Project status and roadmap

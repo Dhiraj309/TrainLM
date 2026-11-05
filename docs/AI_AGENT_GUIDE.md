@@ -12,6 +12,7 @@ documentation describes the PyTorch/XLA era.
 | Pretrain a causal language model from raw Hugging Face text | [Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) · [notebook source](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) | [`TrainLMPretrainingConfig` and data preparation](../src/trainlm/pretraining.py), [`TrainLMTrainer.from_scratch`](../src/trainlm/api.py), [API tests](../tests/test_pretraining_api.py) |
 | Resume a scratch run with a larger token budget | [Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) · [resume instructions](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) | [`extend_training_budget`](../src/trainlm/api.py), [API tests](../tests/test_pretraining_api.py) |
 | Find, resume, and retain training checkpoints | [public example](../README.md), [notebook](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) | [`latest_checkpoint` and resume lookup](../src/trainlm/api.py), [retention policy](../src/trainlm/checkpoint/retention.py), [trainer lifecycle](../src/trainlm/training/trainer.py), [lifecycle tests](../tests/test_api_lifecycle.py) |
+| Recover a scratch run using its downloaded report | [notebook](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb), [resume instructions](../README.md) | [private report helper](../src/trainlm/_notebook_resume.py), [executable CPU and ZIP tests](../tests/test_notebook_resume.py) |
 | Prepare or inspect packed token data | [packed-data contracts](data/PACKED_BINARY_MANIFEST.md) | [packed data writer](../src/trainlm/data/writer.py), [dataset tests](../tests/test_packed_dataset_resume.py) |
 | Check native TPU availability and package compatibility | [T1 v5e-1 guide](T1_V5E1_PROBE.md) | [hardware discovery](../src/trainlm/runtime/torchtpu_discovery.py), [package preflight](../src/trainlm/runtime/torchtpu_trainer_preflight.py) |
 | Understand supported behavior and validation status | [current handoff](HANDOFF.md) | [dense-AR support scope](SCOPE.md), [T0–T11 roadmap](TORCHTPU_REBASELINE.md) |
@@ -43,13 +44,22 @@ follow the linked implementation and tests before making a change.
   resolved path after training and when its training cell handles an error.
 - The from-scratch notebook is a small-scale implementation example. Its CPU
   lifecycle coverage does not establish TPU training, convergence, or
-  performance. Its version 5 downloadable report captures requested and
+  performance. Its version 6 downloadable report captures requested and
   effective training settings (including optimizer and scheduler), selected
   backend, runtime TPU discovery and device properties, model and tokenizer
   provenance, package versions, source/dataset revisions, and training
   metrics. Its top-level `checkpoint.latest_path` gives the newest published
   checkpoint path when one is available. This is a runtime path, so persistent
-  `RUN_DIR` storage is required to use it after a session reset. A property-only
+  `RUN_DIR` storage is required to use it after a session reset. `resume.code`
+  captures all pretraining settings and an executable example targeting that
+  checkpoint; the ZIP includes it as `resume.py`. The example checks for the
+  original run files before creating a trainer. It keeps the same token budget,
+  retrying only an already requested, still-pending budget extension. Restore
+  the full run directory and match the recorded source and package versions;
+  model exports alone cannot restore training state. With no checkpoint or a
+  failed lookup, no resume code/script is offered. CPU tests exercise ordinary,
+  pending-extension, and committed-extension recovery; TPU recovery remains
+  unverified. A property-only
   device query does not allocate a device and is labeled unverified. Missing
   optional packages and unavailable properties are reported as `null`.
 - `TrainLMTrainer.from_scratch(TrainLMPretrainingConfig(...))` is the public
