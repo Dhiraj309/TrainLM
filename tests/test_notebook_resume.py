@@ -201,8 +201,15 @@ def test_download_cell_bundles_and_displays_resume_only_when_available(
     monkeypatch.setitem(sys.modules, "google", ModuleType("google"))
     monkeypatch.setitem(sys.modules, "google.colab", colab)
 
+    download_cells = [
+        cell
+        for cell in notebook["cells"]
+        if cell["cell_type"] == "code"
+        and "trainlm-scratch-artifact.zip" in "".join(cell["source"])
+    ]
+    assert len(download_cells) == 1
     exec(
-        "".join(notebook["cells"][7]["source"]),
+        "".join(download_cells[0]["source"]),
         {"session_dir": tmp_path, "report_path": report_path},
     )
 
