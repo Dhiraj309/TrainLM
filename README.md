@@ -14,6 +14,10 @@ Transformers causal-LM architecture and pass its config fields directly. The
 native TorchTPU path is experimental; the starter run does not establish
 convergence or TPU performance.
 
+In Colab, the notebook exposes the common settings as form controls for token
+budget, sequence length, dataset, run directory, and resume options. In Kaggle,
+the same settings remain ordinary Python assignments.
+
 ```python
 from trainlm import TrainLMPretrainingConfig, TrainLMTrainer
 

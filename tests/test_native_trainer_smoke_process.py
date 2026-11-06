@@ -360,6 +360,14 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         )
         self.assertIn("TARGET_SUPERVISED_TOKENS = 10_000", source)
         self.assertIn("SEQUENCE_LENGTH = 128", source)
+        self.assertIn('#@param {type:"integer"}', source)
+        self.assertIn(
+            'RESUME_FROM_REPORT = False #@param {type:"boolean"}', source
+        )
+        self.assertIn(
+            'RESUME_FROM_CHECKPOINT = "" #@param {type:"string"}', source
+        )
+        self.assertIn('KEEP_ALL_CHECKPOINTS = False', source)
         self.assertIn("TrainLMPretrainingConfig", source)
         self.assertIn("TrainLMTrainer.from_scratch", source)
         self.assertIn("accelerator=\"native_tpu\"", source)
@@ -368,7 +376,11 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         self.assertNotIn("GRADIENT_ACCUMULATION_STEPS", source)
         self.assertNotIn("torchtpu_native_trainer_smoke.py", source)
         self.assertIn('"baseline-export"', source)
-        self.assertIn('RUN_DIR = Path("/content/trainlm-pretraining")', source)
+        self.assertIn(
+            'RUN_DIR = "/content/trainlm-pretraining" #@param {type:"string"}',
+            source,
+        )
+        self.assertIn('RUN_DIR = Path(RUN_DIR).expanduser()', source)
         self.assertIn('RESUME_FROM_CHECKPOINT = None', source)
         self.assertIn(
             'trainer.train(resume_from_checkpoint=RESUME_FROM_CHECKPOINT)', source
@@ -430,6 +442,7 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         self.assertIn("DATASET_REVISION", source)
         self.assertIn("TEXT_FIELD", source)
         self.assertIn("report.json", source)
+        self.assertIn("In Colab, the settings below appear as form controls", markdown)
 
     def test_scratch_notebook_code_cells_are_valid_python(self):
         notebook = json.loads(

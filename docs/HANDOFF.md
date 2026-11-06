@@ -31,6 +31,8 @@
   ordinary trainer lifecycle. GPT-2 remains the default; `model_type` and
   `model_config_overrides` select another registered architecture. TrainLM
   derives the vocabulary and special-token IDs from its trained tokenizer.
+  The notebook exposes common settings as touch-friendly Colab form controls
+  and keeps ordinary Python assignments for Kaggle.
   The Colab/Kaggle notebook uses this public API and its downloadable schema v6
   report captures requested and effective training settings, optimizer and
   scheduler details, model/tokenizer provenance, runtime versions, selected
