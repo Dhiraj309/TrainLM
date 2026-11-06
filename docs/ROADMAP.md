@@ -18,14 +18,20 @@ TorchTPU support. “Implemented” means present in that historical code path;
 a revision-pinned Hugging Face dataset. The API trains a byte-level tokenizer,
 prepares validated packed shards, initializes GPT-2 by default (or a configured
 registered Transformers causal-LM architecture), and returns the familiar
-trainer lifecycle. Vocabulary and special-token IDs come from the trained
-tokenizer. The notebook's version 6 downloadable report records requested and
-effective training settings, optimizer and scheduler details, selected backend,
-bounded runtime TPU discovery and properties, model/tokenizer provenance,
-runtime versions, training metrics, and `checkpoint.latest_path` when a
+trainer lifecycle. The high-level public `run_pretraining(config)` helper owns
+preparation, training, evaluation, export, and schema-v6 reporting; advanced
+users can keep using `TrainLMTrainer.from_scratch()`. `TrainLMPretrainingError`
+preserves the report path on failure. `restore_pretraining_report()` checks
+package versions and required files before resume, and
+`bundle_pretraining_artifacts()` creates the download ZIP. The notebook now
+shows only common run controls by default; report and bundle construction live
+in the API. Vocabulary and special-token IDs come from the trained tokenizer.
+The report records requested/effective settings, optimizer/scheduler details,
+selected backend, bounded runtime TPU discovery, model/tokenizer provenance,
+package versions, training metrics, and `checkpoint.latest_path` when a
 published checkpoint exists. Property-only discovery is labeled unverified
-and does not allocate a device. The checkpoint path refers to the notebook
-runtime, so `RUN_DIR` must use persistent storage to survive a reset.
+and does not allocate a device. The checkpoint path refers to the run
+directory, so persistent storage is required to survive a reset.
 When a checkpoint exists, `resume.code` captures all pretraining settings and
 an executable example that is also displayed and bundled as `resume.py`.
 The example targets the recorded checkpoint with the same token budget and
@@ -133,8 +139,9 @@ passed. No TPU validation is claimed. PR #96 corrected the post-merge status
 record and rebase-merged at verified `main` SHA
 `2e154afd90df9f65b29c394b045ad06b6a6c6259` from head
 `d87c195af6a23beaece94189aac1b19c1df36491`; both CI profiles passed. The
-current Colab-form follow-up starts on `feat/97-colab-notebook-forms` from that
-base. It adds no training or TPU evidence.
+current end-to-end workflow follow-up starts on
+`feat/97-end-to-end-pretraining` from that base. It adds a one-call run API and
+shortens the notebook, with CPU-only evidence and no TPU claim.
 
 The notebook uses this API; native TPU remains experimental and gains no
 end-to-end evidence from CPU/API tests. PR #81 added tokenizer and runtime

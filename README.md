@@ -7,19 +7,18 @@ kernel backends.
 ## Start here: pretrain a language model from scratch
 
 The [Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb)
-uses TrainLM's public from-scratch API. By default it initializes random GPT-2
-weights, learns a tokenizer from pinned raw text, prepares packed data, trains,
-evaluates, and exports a Hugging Face model. You can also select a registered
-Transformers causal-LM architecture and pass its config fields directly. The
-native TorchTPU path is experimental; the starter run does not establish
+uses the high-level from-scratch API. It initializes random GPT-2 weights,
+learns a tokenizer from pinned raw text, prepares packed data, trains,
+evaluates, exports a Hugging Face model, and writes a versioned report. The
+notebook shows only the common run settings; its advanced cell is optional.
+The native TorchTPU path is experimental; the starter run does not establish
 convergence or TPU performance.
 
-In Colab, the notebook exposes the common settings as form controls for token
-budget, sequence length, dataset, run directory, and resume options. In Kaggle,
-the same settings remain ordinary Python assignments.
+For a simple Python run, `run_pretraining` owns the complete lifecycle and
+returns a result with the report and export paths:
 
 ```python
-from trainlm import TrainLMPretrainingConfig, TrainLMTrainer
+from trainlm import TrainLMPretrainingConfig, run_pretraining
 
 config = TrainLMPretrainingConfig(
     output_dir="runs/tinystories",
@@ -28,11 +27,14 @@ config = TrainLMPretrainingConfig(
     save_total_limit=3,  # Keep up to three automatic training checkpoints.
     accelerator="native_tpu",  # Explicit, experimental single-device path.
 )
-trainer = TrainLMTrainer.from_scratch(config)
-trainer.train()
-metrics = trainer.evaluate()
-trainer.save_model("runs/tinystories/model")
+result = run_pretraining(config)
+print(result.summary())
+print(result.report_path, result.export_path)
 ```
+
+If setup, training, evaluation, or export fails, `TrainLMPretrainingError`
+points to the report saved for that run. For a custom lifecycle, the lower-level
+`TrainLMTrainer.from_scratch(config)` API remains available.
 
 `save_total_limit` also works in `TrainLMTrainingArguments` for single-device
 CPU, CUDA, and explicit native TorchTPU training. The API default, `None`, keeps
@@ -100,16 +102,21 @@ example keeps the saved token budget; use the notebook's explicit extension
 settings to add more training to a completed run. Without a checkpoint,
 `resume.code` is `null` and no resume script is included.
 To recover directly in the notebook, restore the same `RUN_DIR`, set
-`RESUME_FROM_REPORT = True`, and run all cells. The notebook checks the report,
-restores its TrainLM source revision and pretraining settings, and verifies the
-recorded package versions before starting. It then resumes, evaluates, exports,
-and refreshes the report without copying the settings into a separate script.
+`RESUME_FROM_REPORT = True`, and run all cells. The public
+`restore_pretraining_report` helper validates the report, package versions, and
+required run files before returning the matching config and checkpoint. The
+notebook restores the recorded source revision before importing the helper,
+then resumes, evaluates, exports, and refreshes the report without copying
+settings into a separate script.
 If versions differ, it lists the expected and installed versions and stops
 before training; use a fresh runtime with the matching accelerator/package
 profile rather than replacing Torch/TorchTPU packages in a live TPU session.
 Optional distributions and unavailable hardware properties are recorded as
 `null`. Property discovery does not allocate a device; the report labels its
 unverified query separately from the active runtime's status.
+
+`bundle_pretraining_artifacts` creates the notebook ZIP with the report, resume
+example, and model export when the export is complete.
 
 The config defaults to a pinned TinyStories revision. In a standard Python
 environment, install the package with `pip install 'trainlm[pretraining]'`.
@@ -118,9 +125,10 @@ does not reinstall the Torch/TorchTPU packages supplied by the TPU runtime.
 
 - [Open the notebook in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb)
 - [Read the notebook source](notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb)
-- [Inspect the public pretraining config and raw-text preparation](src/trainlm/pretraining.py)
+- [Inspect the public pretraining config and raw-text preparation](src/trainlm/pretraining.py) · [one-call run API](src/trainlm/pretraining_run.py)
 - [Inspect the public trainer API](src/trainlm/api.py)
 - [Review the public API's CPU lifecycle coverage](tests/test_pretraining_api.py)
+- [Review one-call run API coverage](tests/test_pretraining_run.py)
 - [Inspect saved resume generation](src/trainlm/_notebook_resume.py)
 - [Review executable resume and ZIP tests](tests/test_notebook_resume.py)
 - [Find files and current evidence for coding agents](docs/AI_AGENT_GUIDE.md)
