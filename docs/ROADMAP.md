@@ -141,10 +141,12 @@ roadmap suite passed 39 tests and 14 subtests locally, and both CI profiles
 passed. No TPU validation is claimed. PR #96 corrected the post-merge status
 record and rebase-merged at verified `main` SHA
 `2e154afd90df9f65b29c394b045ad06b6a6c6259` from head
-`d87c195af6a23beaece94189aac1b19c1df36491`; both CI profiles passed. The
-current end-to-end workflow follow-up starts on
-`feat/97-end-to-end-pretraining` from that base. It adds a one-call run API and
-shortens the notebook, with CPU-only evidence and no TPU claim.
+`d87c195af6a23beaece94189aac1b19c1df36491`; both CI profiles passed. PR #97
+added the one-call run API and simplified the notebook, then rebase-merged at
+verified `main` SHA `1828e6ad079057fd775e00b3ea11683ba7c237c6` from head
+`553f602d426924a70f9b3876f05d4935040d4a9e`. Both CI dependency profiles passed;
+the focused local CPU suite passed 55 tests and 14 subtests. No TPU training
+or hardware evidence is claimed.
 
 The notebook uses this API; native TPU remains experimental and gains no
 end-to-end evidence from CPU/API tests. PR #81 added tokenizer and runtime
