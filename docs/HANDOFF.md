@@ -49,12 +49,15 @@
   versions and saved run files before training.
   A package mismatch lists expected and installed versions and stops before
   training; use a fresh runtime with the matching accelerator/package profile.
-  The focused run/API/notebook/recovery/roadmap CPU suite passes 52 tests and
+  The focused run/API/notebook/recovery/roadmap CPU suite passes 55 tests and
   14 subtests. It includes an actual tiny CPU from-scratch run and failure
   report generation. No TPU recovery is claimed.
   Property-only discovery does not allocate a device and is labeled unverified.
   Missing optional packages and properties are `null`. Native TorchTPU remains
-  experimental; CPU/API work adds no TPU training evidence. Earlier continuation
+  experimental; CPU/API work adds no TPU training evidence. PR #97 added the
+  one-call workflow and simplified the notebook; it rebase-merged at verified
+  `main` SHA `1828e6ad079057fd775e00b3ea11683ba7c237c6`, and both CI dependency
+  profiles passed. Earlier continuation
   work added a stable notebook
   run directory, a `RESUME_FROM_CHECKPOINT` setting, and public
   `resume_from_checkpoint="latest"` lookup over completed checkpoints. Colab

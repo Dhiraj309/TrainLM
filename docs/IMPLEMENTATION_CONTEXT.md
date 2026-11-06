@@ -148,13 +148,13 @@ roadmap suite passed 39 tests and 14 subtests locally, and both CI profiles
 passed. No TPU validation is claimed. PR #96 corrected this post-merge status
 and rebase-merged at verified `main` SHA
 `2e154afd90df9f65b29c394b045ad06b6a6c6259` from head
-`d87c195af6a23beaece94189aac1b19c1df36491`; both CI profiles passed. The
-current end-to-end workflow follow-up starts on
-`feat/97-end-to-end-pretraining` from that base. It adds the public
-`run_pretraining` lifecycle, report recovery/bundling helpers, and a short
-notebook caller. Focused CPU/API/notebook tests passed locally (52 tests and
-14 subtests); the installed-wheel smoke could not run because this environment's
-`.venv` has no `pip`. No TPU run or hardware evidence is claimed.
+`d87c195af6a23beaece94189aac1b19c1df36491`; both CI profiles passed. PR #97
+added the public `run_pretraining` lifecycle, report recovery/bundling helpers,
+and a short notebook caller. It rebase-merged at verified `main` SHA
+`1828e6ad079057fd775e00b3ea11683ba7c237c6` from head
+`553f602d426924a70f9b3876f05d4935040d4a9e`; both CI profiles passed. The
+focused local CPU/API/notebook suite passed 55 tests and 14 subtests. No TPU run
+or hardware evidence is claimed.
 
 PR #85's verified `main` base is `476bc68ff535cd49f3472316c5bc809bc38e7ae5`.
 PR #86 added whole-run checkpoint compatibility validation and rebase-merged
@@ -1598,11 +1598,9 @@ calling `initialize_cache` a second time, and retains the normal runtime-owned
 cache behavior for other callers. This fixes the v5e startup failure
 `Computation cache has already been initialized` without changing cache policy.
 
-Current PR #97 adds an additive `run_pretraining(config)` package-root entry
-point and reuses the existing configuration API version 1. The compatibility
-evaluator now treats the versioned package symbols as required exports rather
-than an exhaustive `__all__` snapshot, while retaining exact checks for config
-keys and deprecated aliases. The installed-wheel smoke test covers the new
-workflow exports. CI initially exposed these stale exact-symbol assertions;
-the focused regression tests cover both additive compatibility and the wheel
-surface.
+PR #97 added an additive `run_pretraining(config)` package-root entry point
+under configuration API version 1. The compatibility evaluator treats the
+versioned package symbols as required exports rather than an exhaustive
+`__all__` snapshot, while retaining exact checks for config keys and deprecated
+aliases. The installed-wheel smoke test covers the workflow exports; both CI
+dependency profiles pass this test.
