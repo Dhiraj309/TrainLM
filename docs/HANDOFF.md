@@ -45,6 +45,11 @@
   setup cell with the original `RUN_DIR` and run all cells. Setup pins the
   source revision from the report; the recovery cell restores its settings and
   checks installed package versions and saved run files before training.
+  A package mismatch lists expected and installed versions and stops before
+  training; use a fresh runtime with the matching accelerator/package profile.
+  The focused notebook/recovery/roadmap CPU suite passes 39 tests and 14
+  subtests, including the default model config and mismatch diagnostics. No TPU
+  recovery is claimed.
   Property-only discovery does not allocate a device and is labeled unverified.
   Missing optional packages and properties are `null`. Native TorchTPU remains
   experimental; CPU/API work adds no TPU training evidence. Earlier continuation

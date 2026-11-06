@@ -1,6 +1,7 @@
 """Execute the notebook's saved recovery example on CPU and inspect its ZIP."""
 
 from dataclasses import asdict
+import importlib.metadata as importlib_metadata
 import json
 from pathlib import Path
 import sys
@@ -178,6 +179,105 @@ def test_saved_example_resumes_real_cpu_state_and_budget_extension(
             )
     else:
         assert namespace["trainer"].scheduler.last_epoch == 2
+
+
+def _report_recovery_cell_source():
+    root = Path(__file__).resolve().parents[1]
+    notebook = json.loads(
+        (root / "notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb").read_text()
+    )
+    cells = [
+        cell for cell in notebook["cells"]
+        if cell["cell_type"] == "code"
+        and "".join(cell["source"]).startswith(
+            "if RESUME_FROM_REPORT:\n    from importlib.metadata"
+        )
+    ]
+    assert len(cells) == 1
+    return "".join(cells[0]["source"])
+
+
+def _make_report_recovery_fixture(run_dir, packages):
+    config = TrainLMPretrainingConfig(
+        output_dir=run_dir / "artifacts",
+        accelerator="cpu",
+        model_config_overrides=None,
+    )
+    output_dir = Path(config.output_dir)
+    output_dir.mkdir(parents=True)
+    for name in ("run_config.json", "preparation_cache.json"):
+        (output_dir / name).write_text("{}")
+    checkpoint = output_dir / "checkpoints" / "checkpoint-2"
+    checkpoint.mkdir(parents=True)
+    settings = asdict(config)
+    settings["output_dir"] = str(output_dir.resolve())
+    report = {
+        "schema_version": 6,
+        "runtime": {"packages": packages},
+        "resume": {
+            "status": "available",
+            "pretraining_config": settings,
+            "checkpoint_path": str(checkpoint.resolve()),
+            "extend_training_budget": False,
+        },
+    }
+    return config, report, checkpoint
+
+
+def test_notebook_report_recovery_restores_default_model_configuration(
+    tmp_path, monkeypatch,
+):
+    config, report, checkpoint = _make_report_recovery_fixture(
+        tmp_path, {"torch": "2.9.0"},
+    )
+    monkeypatch.setattr(
+        importlib_metadata, "version", lambda distribution: "2.9.0",
+    )
+    namespace = {
+        "RESUME_FROM_REPORT": True,
+        "saved_run_report": report,
+        "RUN_DIR": tmp_path,
+        "Path": Path,
+        "TrainLMPretrainingConfig": TrainLMPretrainingConfig,
+    }
+
+    exec(_report_recovery_cell_source(), namespace)
+
+    assert namespace["pretraining_config"] == config
+    assert namespace["RESUME_FROM_CHECKPOINT"] == checkpoint
+    assert namespace["MODEL_CONFIG_OVERRIDES"] == config.model_config_overrides == {}
+    assert namespace["TARGET_SUPERVISED_TOKENS"] == config.max_tokens
+
+
+@pytest.mark.parametrize(
+    ("installed_version", "display_version"),
+    [("2.14.1+cpu", "2.14.1+cpu"), (None, "not installed")],
+)
+def test_notebook_report_recovery_explains_package_version_mismatch(
+    tmp_path, monkeypatch, installed_version, display_version,
+):
+    _, report, _ = _make_report_recovery_fixture(
+        tmp_path, {"torch": "2.9.0"},
+    )
+
+    def read_installed_version(distribution):
+        if installed_version is None:
+            raise importlib_metadata.PackageNotFoundError(distribution)
+        return installed_version
+
+    monkeypatch.setattr(importlib_metadata, "version", read_installed_version)
+    namespace = {
+        "RESUME_FROM_REPORT": True,
+        "saved_run_report": report,
+        "RUN_DIR": tmp_path,
+        "Path": Path,
+        "TrainLMPretrainingConfig": TrainLMPretrainingConfig,
+    }
+
+    with pytest.raises(RuntimeError, match="package profile") as error:
+        exec(_report_recovery_cell_source(), namespace)
+
+    assert f"torch: expected 2.9.0, found {display_version}" in str(error.value)
 
 
 @pytest.mark.parametrize("resume_code", [None, "print('resume example')\n"])

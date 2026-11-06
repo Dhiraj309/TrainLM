@@ -44,6 +44,10 @@ The notebook's optional `RESUME_FROM_REPORT` path reads the saved config and
 checkpoint directly. It checks schema, source revision, runtime package
 versions, report directory, and required run artifacts before using the normal
 training/evaluation/export flow; it does not execute code stored in the report.
+Package mismatches now show expected and installed versions and direct the user
+to a fresh matching runtime before training; the notebook does not replace
+Torch/TorchTPU packages in an active session. CPU coverage executes the recovery
+cell with the default model configuration and verifies mismatch reporting.
 
 The scratch notebook now uses a stable configurable `RUN_DIR` and exposes
 `RESUME_FROM_CHECKPOINT`. The public trainer accepts the sentinel
@@ -123,9 +127,15 @@ and 41 subtests. Its focused local suite passed 47 tests and 14 subtests across
 resume/ZIP coverage, notebook contracts, the public pretraining API, and
 roadmap consistency. It covered actual checkpoint restore, pending/committed
 budget extensions, safe quoting, and refusal to construct a trainer when run
-files are missing. No TPU runtime was used. The current report-driven notebook
-recovery cell starts on `feat/94-notebook-report-recovery` from that verified
-`main` SHA and adds no TPU validation.
+files are missing. No TPU runtime was used. PR #94 added report-driven notebook
+recovery and rebase-merged at verified `main` SHA
+`4ce8deec5e61075c8c3c294584ae691f3253554b` from head
+`716625c87b77f46566a582cde7fcd636f8e487fb`; both CI profiles passed. The
+current recovery-preflight follow-up starts on
+`fix/95-notebook-recovery-defaults` from that base. Its CPU tests exercise the
+notebook recovery cell and actionable package mismatch output. The focused
+notebook/recovery/roadmap suite passes 39 tests and 14 subtests locally; no TPU
+validation is claimed.
 
 PR #85's verified `main` base is `476bc68ff535cd49f3472316c5bc809bc38e7ae5`.
 PR #86 added whole-run checkpoint compatibility validation and rebase-merged
