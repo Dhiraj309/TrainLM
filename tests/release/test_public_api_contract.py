@@ -37,3 +37,17 @@ def test_public_contract_detects_breaking_changes_without_version_bump():
 
     assert not result.compatible
     assert len(result.reasons) == 3
+
+
+def test_public_contract_allows_additive_package_symbols():
+    contract = load_public_api_contract(CONTRACT)
+
+    result = evaluate_public_api_compatibility(
+        contract,
+        api_version="1",
+        public_symbols=(*contract.public_symbols, "run_pretraining"),
+        config_keys=contract.config_keys,
+        deprecated_config_keys=contract.deprecated_config_keys,
+    )
+
+    assert result.compatible, result.reasons

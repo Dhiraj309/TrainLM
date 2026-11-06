@@ -31,6 +31,10 @@ The path is local to the run directory, so it must be on persistent storage
 to survive resets. Property-only discovery does not allocate a device and is
 labeled unverified. Missing optional packages and unavailable hardware
 properties remain null.
+The package-root run helpers are additive under configuration API version 1.
+The release contract requires the v1 symbols and configuration keys while
+allowing additional package-root helpers, so adding this workflow does not
+force existing YAML configurations to change their `api_version`.
 With a checkpoint, `resume.code` preserves every pretraining setting and an
 executable example also displayed and bundled as `resume.py`. It targets the
 recorded checkpoint with the same token budget, and retries only a previously
@@ -1593,3 +1597,12 @@ collective probe. The worker runtime now receives an explicit
 calling `initialize_cache` a second time, and retains the normal runtime-owned
 cache behavior for other callers. This fixes the v5e startup failure
 `Computation cache has already been initialized` without changing cache policy.
+
+Current PR #97 adds an additive `run_pretraining(config)` package-root entry
+point and reuses the existing configuration API version 1. The compatibility
+evaluator now treats the versioned package symbols as required exports rather
+than an exhaustive `__all__` snapshot, while retaining exact checks for config
+keys and deprecated aliases. The installed-wheel smoke test covers the new
+workflow exports. CI initially exposed these stale exact-symbol assertions;
+the focused regression tests cover both additive compatibility and the wheel
+surface.

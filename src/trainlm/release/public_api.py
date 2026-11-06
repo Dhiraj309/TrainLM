@@ -69,8 +69,8 @@ def evaluate_public_api_compatibility(
     reasons: list[str] = []
     if api_version != contract.api_version:
         reasons.append("public API version changed")
-    if set(public_symbols) != set(contract.public_symbols):
-        reasons.append("public package symbols changed")
+    if not set(contract.public_symbols).issubset(public_symbols):
+        reasons.append("required public package symbols are missing")
     if set(config_keys) != set(contract.config_keys):
         reasons.append("public configuration keys changed")
     if dict(deprecated_config_keys) != dict(contract.deprecated_config_keys):

@@ -52,8 +52,14 @@ assert set(trainlm.__all__) == {{
     'PUBLIC_API_VERSION',
     'PackedBinDataset',
     'TrainLMPretrainingConfig',
+    'TrainLMPretrainingError',
+    'TrainLMPretrainingResult',
+    'TrainLMPretrainingResume',
     'TrainLMTrainer',
     'TrainLMTrainingArguments',
+    'bundle_pretraining_artifacts',
+    'restore_pretraining_report',
+    'run_pretraining',
 }}
 args = trainlm.TrainLMTrainingArguments(max_steps=1, accelerator='cpu')
 assert args.max_steps == 1
