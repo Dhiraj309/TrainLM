@@ -131,11 +131,12 @@ files are missing. No TPU runtime was used. PR #94 added report-driven notebook
 recovery and rebase-merged at verified `main` SHA
 `4ce8deec5e61075c8c3c294584ae691f3253554b` from head
 `716625c87b77f46566a582cde7fcd636f8e487fb`; both CI profiles passed. The
-current recovery-preflight follow-up starts on
-`fix/95-notebook-recovery-defaults` from that base. Its CPU tests exercise the
-notebook recovery cell and actionable package mismatch output. The focused
-notebook/recovery/roadmap suite passes 39 tests and 14 subtests locally; no TPU
-validation is claimed.
+PR #95 follow-up clarifies package-mismatch recovery guidance and adds
+executable CPU coverage. It rebase-merged at verified `main` SHA
+`4b986a7e296cb77a12091bc691fe67c13a322068` from head
+`62261e6f0e8aca40dfa4a9dcceddd7a1d1ee6d8f`; the focused notebook/recovery/
+roadmap suite passed 39 tests and 14 subtests locally, and both CI profiles
+passed. No TPU validation is claimed.
 
 PR #85's verified `main` base is `476bc68ff535cd49f3472316c5bc809bc38e7ae5`.
 PR #86 added whole-run checkpoint compatibility validation and rebase-merged
