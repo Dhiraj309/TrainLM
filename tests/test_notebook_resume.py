@@ -189,9 +189,8 @@ def _report_recovery_cell_source():
     cells = [
         cell for cell in notebook["cells"]
         if cell["cell_type"] == "code"
-        and "".join(cell["source"]).startswith(
-            "if RESUME_FROM_REPORT:\n    from importlib.metadata"
-        )
+        and "if RESUME_FROM_REPORT:\n    from importlib.metadata"
+        in "".join(cell["source"])
     ]
     assert len(cells) == 1
     return "".join(cells[0]["source"])

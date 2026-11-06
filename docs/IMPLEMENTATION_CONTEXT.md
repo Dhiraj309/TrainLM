@@ -47,7 +47,9 @@ training/evaluation/export flow; it does not execute code stored in the report.
 Package mismatches now show expected and installed versions and direct the user
 to a fresh matching runtime before training; the notebook does not replace
 Torch/TorchTPU packages in an active session. CPU coverage executes the recovery
-cell with the default model configuration and verifies mismatch reporting.
+cell with the default model configuration and verifies mismatch reporting. The
+notebook presents common settings as Colab form fields for mobile use while
+keeping the same Python assignments available on Kaggle.
 
 The scratch notebook now uses a stable configurable `RUN_DIR` and exposes
 `RESUME_FROM_CHECKPOINT`. The public trainer accepts the sentinel
@@ -136,7 +138,12 @@ executable CPU coverage. It rebase-merged at verified `main` SHA
 `4b986a7e296cb77a12091bc691fe67c13a322068` from head
 `62261e6f0e8aca40dfa4a9dcceddd7a1d1ee6d8f`; the focused notebook/recovery/
 roadmap suite passed 39 tests and 14 subtests locally, and both CI profiles
-passed. No TPU validation is claimed.
+passed. No TPU validation is claimed. PR #96 corrected this post-merge status
+and rebase-merged at verified `main` SHA
+`2e154afd90df9f65b29c394b045ad06b6a6c6259` from head
+`d87c195af6a23beaece94189aac1b19c1df36491`; both CI profiles passed. The
+current Colab-form follow-up starts on `feat/97-colab-notebook-forms` from that
+base and adds no training or TPU evidence.
 
 PR #85's verified `main` base is `476bc68ff535cd49f3472316c5bc809bc38e7ae5`.
 PR #86 added whole-run checkpoint compatibility validation and rebase-merged

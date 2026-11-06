@@ -13,7 +13,7 @@ that existed at the time, primarily PyTorch/XLA. They do not imply native
 TorchTPU support. “Implemented” means present in that historical code path;
 “partial” means validation remained; “deferred” means it was not delivered.
 
-**Current user-workflow update (2026-11-05):** the package exposes
+**Current user-workflow update (2026-11-06):** the package exposes
 `TrainLMPretrainingConfig` and `TrainLMTrainer.from_scratch()` for raw text from
 a revision-pinned Hugging Face dataset. The API trains a byte-level tokenizer,
 prepares validated packed shards, initializes GPT-2 by default (or a configured
@@ -39,7 +39,9 @@ revision and pretraining config, checks packages and run files, and continues
 through train/evaluate/export before refreshing the report. A package mismatch
 prints expected and installed versions and stops before training; use a fresh
 runtime with the matching accelerator/package profile instead of changing
-Torch/TorchTPU packages in a live TPU session.
+Torch/TorchTPU packages in a live TPU session. Colab shows common token, data,
+run-directory, and resume settings as form controls; Kaggle retains ordinary
+Python assignments.
 
 The from-scratch notebook now keeps its run in an editable stable directory and
 passes an optional `RESUME_FROM_CHECKPOINT` value through the public trainer
@@ -127,7 +129,12 @@ It rebase-merged at verified `main` SHA
 `4b986a7e296cb77a12091bc691fe67c13a322068` from head
 `62261e6f0e8aca40dfa4a9dcceddd7a1d1ee6d8f`; its focused notebook/recovery/
 roadmap suite passed 39 tests and 14 subtests locally, and both CI profiles
-passed. No TPU validation is claimed.
+passed. No TPU validation is claimed. PR #96 corrected the post-merge status
+record and rebase-merged at verified `main` SHA
+`2e154afd90df9f65b29c394b045ad06b6a6c6259` from head
+`d87c195af6a23beaece94189aac1b19c1df36491`; both CI profiles passed. The
+current Colab-form follow-up starts on `feat/97-colab-notebook-forms` from that
+base. It adds no training or TPU evidence.
 
 The notebook uses this API; native TPU remains experimental and gains no
 end-to-end evidence from CPU/API tests. PR #81 added tokenizer and runtime
