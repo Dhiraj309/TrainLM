@@ -121,12 +121,13 @@ PR #93 added the schema-v6 `resume.py` artifact and rebase-merged at verified
 940 tests and 41 subtests. Its focused CPU suite passed 47 tests and 14
 subtests. PR #94 added direct report-driven notebook recovery and rebase-merged
 at verified `main` SHA `4ce8deec5e61075c8c3c294584ae691f3253554b` from head
-`716625c87b77f46566a582cde7fcd636f8e487fb`; both CI profiles passed. The
-current recovery-preflight follow-up starts on
-`fix/95-notebook-recovery-defaults` from that base. It adds executable CPU
-coverage and clearer package-mismatch diagnostics. Its focused notebook,
-recovery, and roadmap suite passes 39 tests and 14 subtests locally; no TPU
-validation is claimed.
+`716625c87b77f46566a582cde7fcd636f8e487fb`; both CI profiles passed. PR #95
+clarified package-mismatch recovery guidance and added executable CPU coverage.
+It rebase-merged at verified `main` SHA
+`4b986a7e296cb77a12091bc691fe67c13a322068` from head
+`62261e6f0e8aca40dfa4a9dcceddd7a1d1ee6d8f`; its focused notebook/recovery/
+roadmap suite passed 39 tests and 14 subtests locally, and both CI profiles
+passed. No TPU validation is claimed.
 
 The notebook uses this API; native TPU remains experimental and gains no
 end-to-end evidence from CPU/API tests. PR #81 added tokenizer and runtime
