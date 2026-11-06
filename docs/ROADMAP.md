@@ -26,6 +26,9 @@ package versions and required files before resume, and
 `bundle_pretraining_artifacts()` creates the download ZIP. The notebook now
 shows only common run controls by default; report and bundle construction live
 in the API. Vocabulary and special-token IDs come from the trained tokenizer.
+The package-root helpers are additive to the existing `api_version: "1"`
+configuration schema; the compatibility contract requires the v1 exports while
+allowing new public helpers without forcing a configuration-version change.
 The report records requested/effective settings, optimizer/scheduler details,
 selected backend, bounded runtime TPU discovery, model/tokenizer provenance,
 package versions, training metrics, and `checkpoint.latest_path` when a
