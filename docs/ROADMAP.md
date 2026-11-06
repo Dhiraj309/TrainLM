@@ -36,7 +36,10 @@ the model export ZIP alone cannot restore optimizer or packed-data state.
 The notebook can load this report directly: keep the original `RUN_DIR`, set
 `RESUME_FROM_REPORT = True`, and run all cells. It restores the recorded source
 revision and pretraining config, checks packages and run files, and continues
-through train/evaluate/export before refreshing the report.
+through train/evaluate/export before refreshing the report. A package mismatch
+prints expected and installed versions and stops before training; use a fresh
+runtime with the matching accelerator/package profile instead of changing
+Torch/TorchTPU packages in a live TPU session.
 
 The from-scratch notebook now keeps its run in an editable stable directory and
 passes an optional `RESUME_FROM_CHECKPOINT` value through the public trainer
@@ -116,8 +119,14 @@ rebase-merged at verified `main` SHA
 PR #93 added the schema-v6 `resume.py` artifact and rebase-merged at verified
 `main` SHA `4de50666874592866fc50debd4261e465ffdaabe`; both profiles passed
 940 tests and 41 subtests. Its focused CPU suite passed 47 tests and 14
-subtests. The current report-driven recovery cell starts on
-`feat/94-notebook-report-recovery` from that base; it adds no TPU validation.
+subtests. PR #94 added direct report-driven notebook recovery and rebase-merged
+at verified `main` SHA `4ce8deec5e61075c8c3c294584ae691f3253554b` from head
+`716625c87b77f46566a582cde7fcd636f8e487fb`; both CI profiles passed. The
+current recovery-preflight follow-up starts on
+`fix/95-notebook-recovery-defaults` from that base. It adds executable CPU
+coverage and clearer package-mismatch diagnostics. Its focused notebook,
+recovery, and roadmap suite passes 39 tests and 14 subtests locally; no TPU
+validation is claimed.
 
 The notebook uses this API; native TPU remains experimental and gains no
 end-to-end evidence from CPU/API tests. PR #81 added tokenizer and runtime

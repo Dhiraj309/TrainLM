@@ -100,6 +100,9 @@ To recover directly in the notebook, restore the same `RUN_DIR`, set
 restores its TrainLM source revision and pretraining settings, and verifies the
 recorded package versions before starting. It then resumes, evaluates, exports,
 and refreshes the report without copying the settings into a separate script.
+If versions differ, it lists the expected and installed versions and stops
+before training; use a fresh runtime with the matching accelerator/package
+profile rather than replacing Torch/TorchTPU packages in a live TPU session.
 Optional distributions and unavailable hardware properties are recorded as
 `null`. Property discovery does not allocate a device; the report labels its
 unverified query separately from the active runtime's status.
