@@ -18,16 +18,19 @@ BPE tokenizer, prepare validated packed shards, and initialize random weights
 through a registered Transformers causal-LM config. GPT-2 remains the default;
 `model_type` and JSON-compatible `model_config_overrides` select other
 `AutoModelForCausalLM` architectures. The trained tokenizer supplies vocabulary
-and special-token IDs. The from-scratch Colab/Kaggle notebook calls this API
-with a concise token-budget and sequence-length setup; its downloadable schema
-v6 report records requested and effective training settings, optimizer and
-scheduler details, resolved backend/runtime, bounded TPU property discovery,
-model config and parameter counts, tokenizer special-token IDs and artifact
-hash, dataset revisions, runtime package versions, and the newest published
-checkpoint path when available. The path is local to the notebook runtime, so
-`RUN_DIR` must be on persistent storage to survive resets. Property-only
-discovery does not allocate a device and is labeled unverified. Missing optional
-runtime packages and unavailable hardware properties are recorded as null.
+and special-token IDs. The high-level public `run_pretraining(config)` helper
+owns preparation, training, evaluation, model export, and schema-v6 report
+writing. Its result exposes status, a concise summary, and artifact paths;
+`TrainLMPretrainingError` preserves the report path and underlying failure.
+The public `restore_pretraining_report` helper validates the recorded package
+profile and run artifacts before resume, and `bundle_pretraining_artifacts`
+creates the notebook download ZIP. The report records requested/effective
+settings, optimizer/scheduler, backend, bounded hardware properties,
+model/tokenizer provenance, package versions, and the latest checkpoint path.
+The path is local to the run directory, so it must be on persistent storage
+to survive resets. Property-only discovery does not allocate a device and is
+labeled unverified. Missing optional packages and unavailable hardware
+properties remain null.
 With a checkpoint, `resume.code` preserves every pretraining setting and an
 executable example also displayed and bundled as `resume.py`. It targets the
 recorded checkpoint with the same token budget, and retries only a previously
@@ -40,16 +43,16 @@ included. The
 private notebook helper does not load checkpoint state while making the
 report. Native TPU remains experimental; CPU/API evidence adds no hardware
 validation.
-The notebook's optional `RESUME_FROM_REPORT` path reads the saved config and
-checkpoint directly. It checks schema, source revision, runtime package
-versions, report directory, and required run artifacts before using the normal
-training/evaluation/export flow; it does not execute code stored in the report.
-Package mismatches now show expected and installed versions and direct the user
-to a fresh matching runtime before training; the notebook does not replace
-Torch/TorchTPU packages in an active session. CPU coverage executes the recovery
-cell with the default model configuration and verifies mismatch reporting. The
-notebook presents common settings as Colab form fields for mobile use while
-keeping the same Python assignments available on Kaggle.
+The notebook's `RESUME_FROM_REPORT` option reads the saved config and checkpoint
+through `restore_pretraining_report`. Before importing TrainLM, it checks the
+recorded source SHA and restores that checkout; the helper then validates the
+schema, package versions, report directory, and required run artifacts. A
+package mismatch identifies expected and installed versions without replacing
+Torch/TorchTPU in an active session. CPU tests exercise report recovery and
+package mismatch behavior through the public helper. The notebook now exposes
+only common run controls in its main cell; data/model overrides are in an
+optional cell, while lifecycle, report construction, and ZIP bundling live in
+the package API.
 
 The scratch notebook now uses a stable configurable `RUN_DIR` and exposes
 `RESUME_FROM_CHECKPOINT`. The public trainer accepts the sentinel
@@ -142,8 +145,12 @@ passed. No TPU validation is claimed. PR #96 corrected this post-merge status
 and rebase-merged at verified `main` SHA
 `2e154afd90df9f65b29c394b045ad06b6a6c6259` from head
 `d87c195af6a23beaece94189aac1b19c1df36491`; both CI profiles passed. The
-current Colab-form follow-up starts on `feat/97-colab-notebook-forms` from that
-base and adds no training or TPU evidence.
+current end-to-end workflow follow-up starts on
+`feat/97-end-to-end-pretraining` from that base. It adds the public
+`run_pretraining` lifecycle, report recovery/bundling helpers, and a short
+notebook caller. Focused CPU/API/notebook tests passed locally (52 tests and
+14 subtests); the installed-wheel smoke could not run because this environment's
+`.venv` has no `pip`. No TPU run or hardware evidence is claimed.
 
 PR #85's verified `main` base is `476bc68ff535cd49f3472316c5bc809bc38e7ae5`.
 PR #86 added whole-run checkpoint compatibility validation and rebase-merged

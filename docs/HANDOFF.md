@@ -25,14 +25,14 @@
   mismatch and unrelated parsed IPython-to-Jedi warning are handled by the
   branch. An owner-runtime report refresh is also pending. This does not
   establish a native TPU install profile or end-to-end training support.
-- **Raw-text API:** `TrainLMPretrainingConfig` plus
-  `TrainLMTrainer.from_scratch()` prepares pinned HF text, tokenizer, packed
-  data, and a randomly initialized Transformers causal LM, then returns the
-  ordinary trainer lifecycle. GPT-2 remains the default; `model_type` and
-  `model_config_overrides` select another registered architecture. TrainLM
-  derives the vocabulary and special-token IDs from its trained tokenizer.
-  The notebook exposes common settings as touch-friendly Colab form controls
-  and keeps ordinary Python assignments for Kaggle.
+- **Raw-text API:** `run_pretraining(config)` wraps
+  `TrainLMTrainer.from_scratch()` in a single preparation/train/evaluate/export
+  call and returns a concise result with report and export paths. The lower-level
+  trainer remains available for custom lifecycles. GPT-2 remains the default;
+  `model_type` and `model_config_overrides` select another registered
+  architecture. TrainLM derives vocabulary and special-token IDs from the
+  trained tokenizer. The notebook exposes common settings as Colab form
+  controls and keeps ordinary Python assignments for Kaggle.
   The Colab/Kaggle notebook uses this public API and its downloadable schema v6
   report captures requested and effective training settings, optimizer and
   scheduler details, model/tokenizer provenance, runtime versions, selected
@@ -43,15 +43,15 @@
   not contain the optimizer checkpoints or packed data. The example keeps the
   same budget and only retries an already pending extension. Missing run files
   stop it before trainer construction. No checkpoint means no resume script.
-  For a one-click notebook recovery, set `RESUME_FROM_REPORT = True` in the
-  setup cell with the original `RUN_DIR` and run all cells. Setup pins the
-  source revision from the report; the recovery cell restores its settings and
-  checks installed package versions and saved run files before training.
+  For report-based recovery, set `RESUME_FROM_REPORT = True` with the original
+  `RUN_DIR` and run all cells. Setup pins the source revision from the report;
+  the public recovery helper restores its settings and checks installed package
+  versions and saved run files before training.
   A package mismatch lists expected and installed versions and stops before
   training; use a fresh runtime with the matching accelerator/package profile.
-  The focused notebook/recovery/roadmap CPU suite passes 39 tests and 14
-  subtests, including the default model config and mismatch diagnostics. No TPU
-  recovery is claimed.
+  The focused run/API/notebook/recovery/roadmap CPU suite passes 52 tests and
+  14 subtests. It includes an actual tiny CPU from-scratch run and failure
+  report generation. No TPU recovery is claimed.
   Property-only discovery does not allocate a device and is labeled unverified.
   Missing optional packages and properties are `null`. Native TorchTPU remains
   experimental; CPU/API work adds no TPU training evidence. Earlier continuation

@@ -348,11 +348,12 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         notebook = json.loads(
             (ROOT / "notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb").read_text()
         )
-        source = "\n".join(
+        code_cells = [
             "".join(cell["source"])
             for cell in notebook["cells"]
             if cell["cell_type"] == "code"
-        )
+        ]
+        source = "\n".join(code_cells)
         markdown = "\n".join(
             "".join(cell["source"])
             for cell in notebook["cells"]
@@ -367,82 +368,28 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         self.assertIn(
             'RESUME_FROM_CHECKPOINT = "" #@param {type:"string"}', source
         )
-        self.assertIn('KEEP_ALL_CHECKPOINTS = False', source)
         self.assertIn("TrainLMPretrainingConfig", source)
-        self.assertIn("TrainLMTrainer.from_scratch", source)
+        self.assertIn("run_pretraining(", source)
+        self.assertIn("restore_pretraining_report(", source)
+        self.assertIn("bundle_pretraining_artifacts(", source)
+        self.assertNotIn("TrainLMTrainer.from_scratch", source)
+        self.assertNotIn("trainlm._notebook_resume", source)
         self.assertIn("accelerator=\"native_tpu\"", source)
-        self.assertNotIn("MODEL_EMBEDDING_SIZE", source)
-        self.assertNotIn("USE_BF16", source)
-        self.assertNotIn("GRADIENT_ACCUMULATION_STEPS", source)
         self.assertNotIn("torchtpu_native_trainer_smoke.py", source)
-        self.assertIn('"baseline-export"', source)
         self.assertIn(
             'RUN_DIR = "/content/trainlm-pretraining" #@param {type:"string"}',
             source,
         )
         self.assertIn('RUN_DIR = Path(RUN_DIR).expanduser()', source)
-        self.assertIn('RESUME_FROM_CHECKPOINT = None', source)
-        self.assertIn(
-            'trainer.train(resume_from_checkpoint=RESUME_FROM_CHECKPOINT)', source
-        )
-        self.assertIn('trainer.latest_checkpoint', source)
-        self.assertIn('latest_checkpoint=', source)
-        self.assertIn('arcname="report.json"', source)
-        self.assertIn('"schema_version": 6', source)
-        self.assertIn('"checkpoint": checkpoint_report', source)
-        self.assertEqual(source.count('"checkpoint": checkpoint_report'), 2)
-        self.assertIn('except Exception as exc', source)
-        self.assertIn(
-            '"latest_path": str(latest_checkpoint) if latest_checkpoint else None',
-            source,
-        )
-        self.assertIn('"requested_model_type": pretraining_config.model_type', source)
-        self.assertIn('"requested_config_overrides"', source)
-        self.assertIn('"effective_config"', source)
-        self.assertIn('"tokenizer_vocab_size"', source)
-        self.assertIn('"total_parameters"', source)
-        self.assertIn('"trainable_parameters"', source)
-        self.assertIn('"special_tokens"', source)
-        self.assertIn('"tokenizer_json_sha256"', source)
-        self.assertIn('"algorithm": "byte_level_bpe"', source)
-        self.assertIn('"base_vocab_size": int(tokenizer.vocab_size)', source)
-        self.assertIn('for name in ("unk", "pad", "bos", "eos")', source)
-        self.assertIn('"runtime": runtime_report', source)
-        self.assertIn('"data": data_report', source)
-        self.assertIn('"training_config": training_config_report', source)
-        self.assertIn('"accelerator": accelerator_report', source)
-        self.assertIn('"accelerator": args.accelerator', source)
-        self.assertIn('"learning_rate": args.learning_rate', source)
-        self.assertIn('"betas": [float(value) for value in args.betas]', source)
-        self.assertIn('"scheduler_class": type(trainer.scheduler).__name__', source)
-        self.assertIn('discover_tpu(', source)
-        self.assertIn(
-            'torch, verify_allocation=False, include_properties=True', source
-        )
-        self.assertIn('"runtime_status": runtime_values.get("native_tpu_status")', source)
-        self.assertIn('"properties_allocation": hardware.get("allocation")', source)
-        self.assertIn('"properties_query_status": hardware.get("status")', source)
-        self.assertIn('print_report_summary(report)', source)
-        self.assertIn('"python_version": platform.python_version()', source)
-        self.assertIn('installed_version("torch-tpu")', source)
-        self.assertIn('installed_version("libtpu")', source)
-        self.assertIn('installed_version("torch")', source)
-        self.assertIn('installed_version("transformers")', source)
-        self.assertIn('"tokenizer_config.json"', source)
-        self.assertIn("zipfile.ZipFile", source)
-        self.assertIn("model_export_ready", source)
-        self.assertIn("model_export=not_included", source)
         self.assertIn("/kaggle/working", source)
         self.assertIn("files.download", source)
-        self.assertIn("does not establish convergence", markdown)
+        self.assertIn("not evidence of convergence", markdown)
         self.assertIn("token budget", markdown)
-        self.assertIn('RESUME_FROM_CHECKPOINT = "latest"', markdown)
-        self.assertIn("mount Google Drive", markdown)
-        self.assertIn("DATASET_ID", source)
-        self.assertIn("DATASET_REVISION", source)
-        self.assertIn("TEXT_FIELD", source)
+        self.assertIn("set `RESUME_FROM_CHECKPOINT` to `latest`", markdown)
+        self.assertIn("Google Drive", markdown)
+        self.assertIn("minibatch loop", markdown)
         self.assertIn("report.json", source)
-        self.assertIn("In Colab, the settings below appear as form controls", markdown)
+        self.assertLess(max(len(cell.splitlines()) for cell in code_cells), 70)
 
     def test_scratch_notebook_code_cells_are_valid_python(self):
         notebook = json.loads(
