@@ -8,11 +8,15 @@ PyTorch/XLA work. Read the status labels before treating an item as current.
 For a task-oriented map of the notebook, implementation, tests, and evidence
 limits, start with the [coding-agent guide](AI_AGENT_GUIDE.md).
 
-The from-scratch notebook calls the public
-`TrainLMTrainer.from_scratch(TrainLMPretrainingConfig(...))` API. It accepts a
+The from-scratch notebook calls the one-call public
+`run_pretraining(TrainLMPretrainingConfig(...))` workflow. It accepts a
 revision-pinned Hugging Face text dataset and owns tokenizer fitting, packed
-data preparation, and random GPT-2 initialization. The native TPU backend
-remains experimental and end-to-end TPU training is not certified.
+data preparation, random GPT-2 initialization, training, evaluation, export,
+and report writing. Notebook users see sparse training progress automatically;
+Python callers can opt in with `show_progress=True`. The lower-level
+`TrainLMTrainer.from_scratch(...)` lifecycle remains available for custom use.
+The native TPU backend remains experimental and end-to-end TPU training is
+not certified.
 
 TrainLM is rebaselining toward native TorchTPU on Kaggle TPU v5e-8. The
 established backend is PyTorch/XLA. An experimental, explicitly selected

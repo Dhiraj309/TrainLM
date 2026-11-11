@@ -1,6 +1,7 @@
 """End-to-end contracts for the simple raw-text pretraining API."""
 
 import json
+from dataclasses import replace
 from pathlib import Path
 import sys
 from types import ModuleType
@@ -82,6 +83,31 @@ def test_run_pretraining_completes_report_export_bundle_and_restore(
     assert "resume.py" in names
     assert "model/config.json" in names
     assert any(name.startswith("model/") and name.endswith(".safetensors") for name in names)
+
+
+def test_run_pretraining_can_show_sparse_training_progress(tmp_path, monkeypatch, capsys):
+    rows = [
+        {"text": f"Progress sample number {index}. " * 5}
+        for index in range(16)
+    ]
+    datasets = ModuleType("datasets")
+    datasets.load_dataset = lambda *args, **kwargs: iter(rows)
+    monkeypatch.setitem(sys.modules, "datasets", datasets)
+
+    config = replace(_config(tmp_path / "progress"), logging_steps=1)
+    result = run_pretraining(config, show_progress=True)
+
+    output = capsys.readouterr().out
+    assert result.status == "passed"
+    assert "train step 1/2" in output
+    assert "tokens 7/8" in output
+    assert "loss " in output
+    assert "lr " in output
+
+
+def test_run_pretraining_requires_boolean_progress_setting(tmp_path):
+    with pytest.raises(TypeError, match="show_progress must be a boolean"):
+        run_pretraining(_config(tmp_path / "progress"), show_progress=1)
 
 
 def test_run_pretraining_writes_a_report_when_construction_fails(tmp_path, monkeypatch):

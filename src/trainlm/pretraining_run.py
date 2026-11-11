@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 import hashlib
 import json
@@ -88,6 +89,7 @@ def run_pretraining(
     *,
     resume_from_checkpoint: str | Path | None = None,
     extend_training_budget: bool = False,
+    show_progress: bool = False,
     source_revision: str | None = None,
     report_path: str | Path | None = None,
     export_path: str | Path | None = None,
@@ -101,11 +103,15 @@ def run_pretraining(
     The report is written even when model preparation, training, evaluation,
     or export fails. In that case :class:`TrainLMPretrainingError` identifies
     the report path and preserves the original exception as its cause.
+    Set ``show_progress=True`` to print sparse step, token, loss, and learning
+    rate snapshots at the configured logging cadence.
     """
     if not isinstance(config, TrainLMPretrainingConfig):
         raise TypeError("config must be a TrainLMPretrainingConfig instance.")
     if not isinstance(extend_training_budget, bool):
         raise TypeError("extend_training_budget must be a boolean.")
+    if not isinstance(show_progress, bool):
+        raise TypeError("show_progress must be a boolean.")
     if source_revision is not None and (
         not isinstance(source_revision, str)
         or _SOURCE_REVISION.fullmatch(source_revision) is None
@@ -125,10 +131,12 @@ def run_pretraining(
         # without importing the training engine.
         from .api import TrainLMTrainer
 
-        trainer = TrainLMTrainer.from_scratch(
-            config,
-            extend_training_budget=extend_training_budget,
-        )
+        trainer_options: dict[str, Any] = {
+            "extend_training_budget": extend_training_budget
+        }
+        if show_progress:
+            trainer_options["callbacks"] = [_make_training_progress_callback(config)]
+        trainer = TrainLMTrainer.from_scratch(config, **trainer_options)
         _capture_effective_configuration(report, trainer)
         _capture_runtime(report, trainer)
 
@@ -184,6 +192,40 @@ def run_pretraining(
         report_path=report_file,
         export_path=completed_export,
     )
+
+
+def _make_training_progress_callback(
+    config: TrainLMPretrainingConfig,
+) -> Any:
+    """Create a sparse console progress callback without extra dependencies."""
+    from .training.callback import TrainerCallback
+
+    tokens_per_step = (
+        (config.sequence_length - 1)
+        * config.per_device_train_batch_size
+        * config.gradient_accumulation_steps
+    )
+    total_steps = math.ceil(config.max_tokens / tokens_per_step)
+
+    class _ProgressCallback(TrainerCallback):
+        def on_metrics(
+            self,
+            state: Any,
+            control: Any,
+            metrics: Mapping[str, float],
+        ) -> None:
+            step = int(metrics.get("step", state.step))
+            tokens_seen = int(metrics.get("tokens_seen", state.tokens_seen))
+            loss = metrics.get("loss")
+            learning_rate = metrics.get("learning_rate", state.learning_rate)
+            loss_text = f"{loss:.4f}" if loss is not None else "unavailable"
+            print(
+                f"train step {step}/{total_steps} | "
+                f"tokens {tokens_seen:,}/{config.max_tokens:,} | "
+                f"loss {loss_text} | lr {learning_rate:.3g}"
+            )
+
+    return _ProgressCallback()
 
 
 def _initial_report(
