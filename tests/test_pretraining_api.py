@@ -47,6 +47,8 @@ def test_pretraining_config_requires_immutable_revision_and_disjoint_splits(tmp_
         _config(tmp_path, tokenizer_vocab_size=65_537)
     with pytest.raises(ValueError, match="requires accelerator='native_tpu'"):
         _config(tmp_path, torch_compile=True)
+    with pytest.raises(ValueError, match="gradient_checkpointing must be booleans"):
+        _config(tmp_path, gradient_checkpointing="yes")
     with pytest.raises(ValueError, match="tokenizer-owned fields"):
         _config(tmp_path, model_config_overrides={"vocab_size": 32000})
     with pytest.raises(ValueError, match="JSON-compatible"):
@@ -111,6 +113,7 @@ def test_from_scratch_builds_and_trains_a_small_cpu_model(tmp_path, monkeypatch)
     assert run_manifest["configuration"]["scheduler"]["schedule"] == "cosine"
     assert "save_total_limit" not in run_manifest["configuration"]["training_args"]
     assert "save_total_limit" not in run_manifest["configuration"]["pretraining"]
+    assert "gradient_checkpointing" not in run_manifest["configuration"]["pretraining"]
 
     checkpoint = trainer._save_training_checkpoint(
         trainer.engine, "checkpoint-0"
@@ -136,6 +139,43 @@ def test_from_scratch_builds_and_trains_a_small_cpu_model(tmp_path, monkeypatch)
         TrainLMTrainer.from_scratch(
             _config(config.output_dir, learning_rate=6e-4)
         )
+    with pytest.raises(RuntimeError, match="already bound to a different"):
+        TrainLMTrainer.from_scratch(
+            _config(config.output_dir, gradient_checkpointing=True)
+        )
+
+
+def test_scratch_gradient_checkpointing_trains_and_exports_with_cache(
+    tmp_path, monkeypatch,
+):
+    rows = [
+        {"text": f"A deterministic checkpointing sample number {index}. " * 5}
+        for index in range(16)
+    ]
+    datasets_module = ModuleType("datasets")
+    datasets_module.load_dataset = lambda *args, **kwargs: iter(rows)
+    monkeypatch.setitem(sys.modules, "datasets", datasets_module)
+
+    config = _config(tmp_path / "checkpointed-run", gradient_checkpointing=True)
+    trainer = TrainLMTrainer.from_scratch(config)
+
+    assert trainer.model.is_gradient_checkpointing
+    assert trainer.model.config.use_cache is False
+    manifest = json.loads(
+        (config.output_dir / "run_config.json").read_text(encoding="utf-8")
+    )
+    assert manifest["configuration"]["pretraining"]["gradient_checkpointing"] is True
+
+    state = trainer.train()
+    assert state.step == 2
+    assert torch.isfinite(torch.tensor(state.loss))
+
+    export = trainer.save_model(config.output_dir / "export")
+    assert trainer.model.config.use_cache is False
+    from transformers import AutoModelForCausalLM
+
+    exported_model = AutoModelForCausalLM.from_pretrained(export)
+    assert exported_model.config.use_cache is True
 
 
 def test_scratch_resume_rejects_changed_run_settings_before_state_restore(

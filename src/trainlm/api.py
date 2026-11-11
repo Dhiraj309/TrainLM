@@ -1072,6 +1072,10 @@ class TrainLMTrainer:
         # Retention controls disk usage, not training semantics. Excluding it
         # also preserves fingerprints of checkpoints saved before this option.
         pretraining.pop("save_total_limit", None)
+        # The new opt-in setting is equivalent to false when absent in an
+        # older manifest, so omit its default to keep existing run fingerprints.
+        if not config.gradient_checkpointing:
+            pretraining.pop("gradient_checkpointing", None)
         training_args.pop("save_total_limit", None)
         model_config = getattr(self.model, "config", None)
         model_config_dict = (
@@ -2022,13 +2026,26 @@ class TrainLMTrainer:
             )
         destination = Path(output_dir or self.args.output_dir)
         destination.mkdir(parents=True, exist_ok=True)
-        if hasattr(self.model, "save_pretrained"):
-            self.model.save_pretrained(destination, safe_serialization=True)
-        else:
-            torch.save(self.model.state_dict(), destination / "pytorch_model.bin")
-        save_processing = getattr(self.processing_class, "save_pretrained", None)
-        if callable(save_processing):
-            save_processing(destination)
+        model_config = getattr(self.model, "config", None)
+        missing = object()
+        training_use_cache = missing
+        original_use_cache = getattr(
+            self.model, "_trainlm_original_use_cache", missing
+        )
+        if original_use_cache is not missing and hasattr(model_config, "use_cache"):
+            training_use_cache = model_config.use_cache
+            model_config.use_cache = original_use_cache
+        try:
+            if hasattr(self.model, "save_pretrained"):
+                self.model.save_pretrained(destination, safe_serialization=True)
+            else:
+                torch.save(self.model.state_dict(), destination / "pytorch_model.bin")
+            save_processing = getattr(self.processing_class, "save_pretrained", None)
+            if callable(save_processing):
+                save_processing(destination)
+        finally:
+            if training_use_cache is not missing:
+                model_config.use_cache = training_use_cache
         return destination
 
     def save_state(self, output_dir: str | Path | None = None) -> Path:

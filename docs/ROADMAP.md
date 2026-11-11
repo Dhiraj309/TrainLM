@@ -504,6 +504,13 @@ context to report schema v4 and rebase-merged at verified `main` SHA
   The notebook setup installs only missing `datasets`/`tokenizers` extras;
   incompatible installed versions stop with a clear error, and PyTorch/TorchTPU
   are not installed or replaced by this setup step.
+  `TrainLMPretrainingConfig.gradient_checkpointing` is an opt-in memory control
+  for Hugging Face models with the standard checkpointing hook. Training turns
+  KV cache off and model export restores the original setting. Its setting is
+  included in run fingerprints when enabled; the false default is omitted to
+  keep older run manifests resumable. A tiny CPU training/export test covers
+  the behavior. The notebook exposes it as an advanced option; TPU memory and
+  performance effects remain unverified.
 
 ## Historical native-backend transition note
 

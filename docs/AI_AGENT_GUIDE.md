@@ -10,6 +10,7 @@ documentation describes the PyTorch/XLA era.
 | Task | Start here | Related evidence |
 | --- | --- | --- |
 | Pretrain a causal language model from raw Hugging Face text | [Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) · [notebook source](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) | [`run_pretraining`](../src/trainlm/pretraining_run.py), [`TrainLMPretrainingConfig` and data preparation](../src/trainlm/pretraining.py), [end-to-end CPU tests](../tests/test_pretraining_run.py) |
+| Reduce activation memory during scratch training | [advanced notebook setting](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) | [`gradient_checkpointing` config and model hook](../src/trainlm/pretraining.py), [export-cache handling](../src/trainlm/api.py), [CPU API test](../tests/test_pretraining_api.py) |
 | Resume a scratch run with a larger token budget | [Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) · [resume instructions](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) | [`extend_training_budget`](../src/trainlm/api.py), [API tests](../tests/test_pretraining_api.py) |
 | Find, resume, and retain training checkpoints | [public example](../README.md), [notebook](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) | [`latest_checkpoint` and resume lookup](../src/trainlm/api.py), [retention policy](../src/trainlm/checkpoint/retention.py), [trainer lifecycle](../src/trainlm/training/trainer.py), [lifecycle tests](../tests/test_api_lifecycle.py) |
 | Run the notebook on mobile Colab or Kaggle | [pretraining notebook](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) | Colab shows common settings as form controls; advanced model/data settings are optional. The notebook calls the public API instead of building reports itself. See [CPU notebook/API tests](../tests/test_native_trainer_smoke_process.py). |
@@ -87,6 +88,11 @@ follow the linked implementation and tests before making a change.
   causal-LM configuration for random initialization. TrainLM fills vocabulary
   and special-token IDs from the newly trained tokenizer. The path does not
   load custom remote model code.
+- `gradient_checkpointing=True` enables the selected Hugging Face model's
+  standard activation-checkpointing hook when available and disables KV cache
+  during training. Export restores the original cache setting. It is off by
+  default; CPU tests confirm training and export behavior, while TPU memory and
+  speed effects remain unverified.
 - Native TorchTPU still requires explicit `accelerator="native_tpu"` and is an
   experimental, single-device path. Package metadata and CPU lifecycle tests do
   not certify TPU training or performance.
