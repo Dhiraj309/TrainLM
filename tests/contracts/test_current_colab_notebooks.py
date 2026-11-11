@@ -75,6 +75,7 @@ def test_from_scratch_notebook_exposes_opt_in_gradient_checkpointing():
 
     assert "GRADIENT_CHECKPOINTING = False" in settings
     assert "gradient_checkpointing=GRADIENT_CHECKPOINTING" in run
+    assert "show_progress=True" in run
     assert "lower activation memory" in _notebook_source(
         Path("notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb")
     )

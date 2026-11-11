@@ -27,10 +27,13 @@ config = TrainLMPretrainingConfig(
     save_total_limit=3,  # Keep up to three automatic training checkpoints.
     accelerator="native_tpu",  # Explicit, experimental single-device path.
 )
-result = run_pretraining(config)
+result = run_pretraining(config, show_progress=True)
 print(result.summary())
 print(result.report_path, result.export_path)
 ```
+
+Progress updates use the configured `logging_steps` cadence. Omit
+`show_progress=True` for a quiet library call.
 
 If setup, training, evaluation, or export fails, `TrainLMPretrainingError`
 points to the report saved for that run. For a custom lifecycle, the lower-level

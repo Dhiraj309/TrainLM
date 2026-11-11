@@ -25,7 +25,9 @@ preserves the report path on failure. `restore_pretraining_report()` checks
 package versions and required files before resume, and
 `bundle_pretraining_artifacts()` creates the download ZIP. The notebook now
 shows only common run controls by default; report and bundle construction live
-in the API. Vocabulary and special-token IDs come from the trained tokenizer.
+in the API. Its one-call run enables sparse step/token/loss/learning-rate
+updates at `logging_steps`, while library callers can keep progress output off.
+Vocabulary and special-token IDs come from the trained tokenizer.
 The package-root helpers are additive to the existing `api_version: "1"`
 configuration schema; the compatibility contract requires the v1 exports while
 allowing new public helpers without forcing a configuration-version change.
