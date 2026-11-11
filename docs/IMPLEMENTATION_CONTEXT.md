@@ -68,6 +68,9 @@ Transformers versions are below the project bounds and `datasets` is absent.
 CPU API tests use an isolated compatible metadata fixture, while dedicated
 tests cover mismatch and missing-package behavior. This is an early package
 gate only; it does not certify the native runtime or TPU training.
+The from-scratch notebook setup installs only missing `datasets` and
+`tokenizers` extras. It stops on incompatible installed versions and never
+installs or replaces Torch/TorchTPU.
 
 The scratch notebook now uses a stable configurable `RUN_DIR` and exposes
 `RESUME_FROM_CHECKPOINT`. The public trainer accepts the sentinel
