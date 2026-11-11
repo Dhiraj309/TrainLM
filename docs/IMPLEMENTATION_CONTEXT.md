@@ -58,6 +58,17 @@ only common run controls in its main cell; data/model overrides are in an
 optional cell, while lifecycle, report construction, and ZIP bundling live in
 the package API.
 
+`TrainLMTrainer.from_scratch()` now checks installed metadata for the base
+project requirements and the `pretraining` extra before it reads or prepares
+the corpus. An explicit `accelerator="native_tpu"` also checks the installed
+TorchTPU distribution and its declared requirements. A blocked high-level run
+keeps this metadata report in `report.json`; the check never installs or changes
+packages. The current local `.venv` is correctly rejected because its Hub and
+Transformers versions are below the project bounds and `datasets` is absent.
+CPU API tests use an isolated compatible metadata fixture, while dedicated
+tests cover mismatch and missing-package behavior. This is an early package
+gate only; it does not certify the native runtime or TPU training.
+
 The scratch notebook now uses a stable configurable `RUN_DIR` and exposes
 `RESUME_FROM_CHECKPOINT`. The public trainer accepts the sentinel
 `resume_from_checkpoint="latest"`, selecting the newest published local

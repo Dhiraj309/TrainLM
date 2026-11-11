@@ -18,6 +18,9 @@ from trainlm import (
 )
 
 
+pytestmark = pytest.mark.usefixtures("compatible_pretraining_profile")
+
+
 def _config(output_dir: Path) -> TrainLMPretrainingConfig:
     return TrainLMPretrainingConfig(
         output_dir=output_dir,
@@ -96,3 +99,33 @@ def test_run_pretraining_writes_a_report_when_construction_fails(tmp_path, monke
     report = json.loads(report_path.read_text())
     assert report["status"] == "failed"
     assert report["error_type"] == "OSError"
+
+
+def test_run_pretraining_report_preserves_package_preflight_failure(
+    tmp_path, monkeypatch,
+):
+    profile = {
+        "schema_version": 1,
+        "scope": "installed_metadata_only",
+        "status": "incompatible",
+        "accelerator": "cpu",
+        "requirements": [{
+            "package": "datasets", "required": "<5,>=3",
+            "installed": None, "status": "missing",
+        }],
+        "limitations": ["metadata_only", "does_not_certify_accelerator_execution"],
+    }
+    monkeypatch.setattr(
+        "trainlm.runtime.pretraining_profile.inspect_pretraining_profile",
+        lambda **kwargs: profile,
+    )
+    report_path = tmp_path / "artifacts" / "report.json"
+
+    with pytest.raises(TrainLMPretrainingError) as raised:
+        run_pretraining(_config(tmp_path / "artifacts"), report_path=report_path)
+
+    assert raised.value.__cause__.profile is profile
+    assert raised.value.report["preflight"]["package_profile"] is profile
+    assert (
+        json.loads(report_path.read_text())["preflight"]["package_profile"] == profile
+    )

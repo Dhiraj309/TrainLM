@@ -14,6 +14,9 @@ from trainlm import (
 )
 
 
+pytestmark = pytest.mark.usefixtures("compatible_pretraining_profile")
+
+
 def _config(output_dir: Path, **overrides) -> TrainLMPretrainingConfig:
     values = {
         "output_dir": output_dir,
@@ -471,3 +474,34 @@ def test_native_tpu_allocation_failure_precedes_dataset_download(tmp_path, monke
 
     with pytest.raises(RuntimeError, match="allocation preflight failed"):
         TrainLMTrainer.from_scratch(config)
+
+
+def test_incompatible_package_profile_precedes_dataset_preparation(
+    tmp_path, monkeypatch,
+):
+    profile = {
+        "schema_version": 1,
+        "scope": "installed_metadata_only",
+        "status": "incompatible",
+        "accelerator": "cpu",
+        "requirements": [{
+            "package": "torch", "required": ">=2.9,<2.15",
+            "installed": "2.15.0", "status": "mismatch",
+        }],
+        "limitations": ["metadata_only", "does_not_certify_accelerator_execution"],
+    }
+    monkeypatch.setattr(
+        "trainlm.runtime.pretraining_profile.inspect_pretraining_profile",
+        lambda **kwargs: profile,
+    )
+    prepared = []
+    monkeypatch.setattr(
+        "trainlm.api._prepare_scratch_training",
+        lambda config: prepared.append(config),
+    )
+
+    with pytest.raises(RuntimeError, match="package preflight failed") as raised:
+        TrainLMTrainer.from_scratch(_config(tmp_path))
+
+    assert raised.value.profile is profile
+    assert prepared == []
