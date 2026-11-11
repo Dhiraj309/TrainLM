@@ -64,6 +64,24 @@ def test_from_scratch_notebook_installs_only_missing_pretraining_extras():
     assert "trainlm[dev]" not in setup
 
 
+def test_from_scratch_notebook_exposes_opt_in_gradient_checkpointing():
+    notebook = json.loads(
+        Path("notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb").read_text(
+            encoding="utf-8"
+        )
+    )
+    settings = "".join(notebook["cells"][5]["source"])
+    run = "".join(notebook["cells"][7]["source"])
+
+    assert "GRADIENT_CHECKPOINTING = False" in settings
+    assert "gradient_checkpointing=GRADIENT_CHECKPOINTING" in run
+    assert "lower activation memory" in _notebook_source(
+        Path("notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb")
+    )
+    compile(settings, "from-scratch:advanced-settings", "exec")
+    compile(run, "from-scratch:run", "exec")
+
+
 def test_xla_validation_notebook_is_labeled_historical():
     source = _notebook_source(Path("notebooks/TrainLM_TPU_Validation.ipynb"))
     assert "Historical PyTorch/XLA validation notebook" in source

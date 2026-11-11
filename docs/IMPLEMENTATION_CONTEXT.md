@@ -71,6 +71,12 @@ gate only; it does not certify the native runtime or TPU training.
 The from-scratch notebook setup installs only missing `datasets` and
 `tokenizers` extras. It stops on incompatible installed versions and never
 installs or replaces Torch/TorchTPU.
+The scratch API exposes opt-in `gradient_checkpointing` for Hugging Face
+models that implement `gradient_checkpointing_enable()`. TrainLM disables KV
+cache during checkpointed training and temporarily restores its original value
+while exporting the model. The option is recorded for resume compatibility,
+remains off by default, and has CPU training/export coverage; TPU memory and
+performance effects have not been measured.
 
 The scratch notebook now uses a stable configurable `RUN_DIR` and exposes
 `RESUME_FROM_CHECKPOINT`. The public trainer accepts the sentinel

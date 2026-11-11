@@ -62,6 +62,7 @@ class TrainLMPretrainingConfig:
     accelerator: Literal["auto", "cpu", "cuda", "native_tpu"] = "auto"
     bf16: bool = False
     torch_compile: bool = False
+    gradient_checkpointing: bool = False
     logging_steps: int = 10
     max_eval_batches: int = 20
     seed: int = 42
@@ -177,8 +178,12 @@ class TrainLMPretrainingConfig:
                 "from_scratch supports auto, cpu, cuda, and native_tpu; "
                 "the XLA coordinator cannot reconstruct this random model yet."
             )
-        if not isinstance(self.bf16, bool) or not isinstance(self.torch_compile, bool):
-            raise ValueError("bf16 and torch_compile must be booleans.")
+        if not all(isinstance(value, bool) for value in (
+            self.bf16, self.torch_compile, self.gradient_checkpointing
+        )):
+            raise ValueError(
+                "bf16, torch_compile, and gradient_checkpointing must be booleans."
+            )
         if self.torch_compile and self.accelerator != "native_tpu":
             raise ValueError(
                 "torch_compile currently requires accelerator='native_tpu'."
@@ -685,6 +690,28 @@ def _write_scratch_preparation_cache(
         temporary_path.unlink(missing_ok=True)
 
 
+def _enable_scratch_gradient_checkpointing(model: Any) -> None:
+    """Enable the Hugging Face checkpointing hook and disable KV caching."""
+    enable = getattr(model, "gradient_checkpointing_enable", None)
+    if not callable(enable):
+        raise ValueError(
+            "The selected Hugging Face model does not support gradient checkpointing."
+        )
+    model_config = getattr(model, "config", None)
+    has_use_cache = model_config is not None and hasattr(model_config, "use_cache")
+    original_use_cache = getattr(model_config, "use_cache", None)
+    if has_use_cache:
+        model_config.use_cache = False
+    try:
+        enable()
+    except Exception:
+        if has_use_cache:
+            model_config.use_cache = original_use_cache
+        raise
+    if has_use_cache:
+        model._trainlm_original_use_cache = original_use_cache
+
+
 def _prepare_scratch_training(config: TrainLMPretrainingConfig):
     """Build the model and reuse integrity-checked prepared data when possible."""
     import torch
@@ -789,6 +816,8 @@ def _prepare_scratch_training(config: TrainLMPretrainingConfig):
     )
     torch.manual_seed(config.seed)
     model = AutoModelForCausalLM.from_config(model_config)
+    if config.gradient_checkpointing:
+        _enable_scratch_gradient_checkpointing(model)
     return model, tokenizer, train_dataset, eval_dataset
 
 
