@@ -425,7 +425,10 @@ def _resolve_training_steps(
 
 
 def _preflight_scratch_backend(config: TrainLMPretrainingConfig) -> None:
-    """Register/detect TPU before a raw-text stream is downloaded or packed."""
+    """Check package metadata and backend before data is downloaded or packed."""
+    from trainlm.runtime.pretraining_profile import require_pretraining_profile
+
+    require_pretraining_profile(accelerator=config.accelerator)
     if config.accelerator not in {"auto", "native_tpu"}:
         return
     import torch

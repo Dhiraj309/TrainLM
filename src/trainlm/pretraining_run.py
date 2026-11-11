@@ -166,6 +166,10 @@ def run_pretraining(
     except Exception as exc:
         report["status"] = "failed"
         report["error_type"] = type(exc).__name__
+        package_profile = getattr(exc, "profile", None)
+        if (isinstance(package_profile, dict)
+                and package_profile.get("scope") == "installed_metadata_only"):
+            report["preflight"] = {"package_profile": package_profile}
         report["checkpoint"] = _checkpoint_report(trainer)
         _capture_resume(report, config, trainer)
         _write_report(report_file, report)

@@ -486,6 +486,20 @@ context to report schema v4 and rebase-merged at verified `main` SHA
   provenance. Owner-run TPU validation and training convergence remain pending.
   Continue only behind explicit experimental selection until CPU and owner-run
   TPU checks pass.
+  The public from-scratch API now checks installed metadata for core and
+  pretraining dependencies before reading or preparing the corpus. Explicit
+  `native_tpu` runs additionally check TorchTPU's installed distribution and
+  declared requirements. A blocked `run_pretraining()` call preserves the
+  metadata report for users; no packages are installed or changed. The local
+  `.venv` reports incompatible Hub/Transformers versions and missing `datasets`,
+  so real local scratch training remains unavailable. The focused CPU/API
+  suite passes with the package profile mocked for training-path tests and
+  isolated tests verifying mismatch handling. This metadata gate does not
+  certify TPU execution; the owner-run v5e-1 full-training result remains
+  pending. See the [profile implementation](../src/trainlm/runtime/pretraining_profile.py),
+  [profile tests](../tests/test_pretraining_profile.py), [API tests](../tests/test_pretraining_api.py),
+  and the
+  [scratch notebook](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb).
 
 ## Historical native-backend transition note
 

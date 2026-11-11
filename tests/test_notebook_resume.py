@@ -20,6 +20,9 @@ from trainlm._notebook_resume import build_resume_report
 from trainlm import pretraining_run
 
 
+pytestmark = pytest.mark.usefixtures("compatible_pretraining_profile")
+
+
 def test_resume_example_round_trips_all_settings_and_quoted_paths(
     tmp_path, monkeypatch,
 ):
