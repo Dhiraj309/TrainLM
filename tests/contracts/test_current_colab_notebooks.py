@@ -45,6 +45,25 @@ def test_probe_notebook_badges_open_main_versions():
         assert "colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/" in source
 
 
+def test_from_scratch_notebook_installs_only_missing_pretraining_extras():
+    notebook = json.loads(
+        Path("notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb").read_text(
+            encoding="utf-8"
+        )
+    )
+    setup = "".join(notebook["cells"][1]["source"])
+
+    compile(setup, "TrainLM_Native_TorchTPU_From_Scratch.ipynb:setup", "exec")
+    assert 'Requirement("datasets>=3,<5")' in setup
+    assert 'Requirement("tokenizers>=0.21,<1")' in setup
+    assert "missing_pretraining_requirements" in setup
+    assert "incompatible_pretraining_requirements" in setup
+    assert '"pip", "install"' in setup
+    assert '"--quiet", "--disable-pip-version-check"' in setup
+    assert "the setup cell leaves installed versions unchanged" in setup
+    assert "trainlm[dev]" not in setup
+
+
 def test_xla_validation_notebook_is_labeled_historical():
     source = _notebook_source(Path("notebooks/TrainLM_TPU_Validation.ipynb"))
     assert "Historical PyTorch/XLA validation notebook" in source

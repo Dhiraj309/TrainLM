@@ -490,7 +490,8 @@ context to report schema v4 and rebase-merged at verified `main` SHA
   pretraining dependencies before reading or preparing the corpus. Explicit
   `native_tpu` runs additionally check TorchTPU's installed distribution and
   declared requirements. A blocked `run_pretraining()` call preserves the
-  metadata report for users; no packages are installed or changed. The local
+  metadata report for users; the API gate itself never installs or changes
+  packages. The local
   `.venv` reports incompatible Hub/Transformers versions and missing `datasets`,
   so real local scratch training remains unavailable. The focused CPU/API
   suite passes with the package profile mocked for training-path tests and
@@ -500,6 +501,9 @@ context to report schema v4 and rebase-merged at verified `main` SHA
   [profile tests](../tests/test_pretraining_profile.py), [API tests](../tests/test_pretraining_api.py),
   and the
   [scratch notebook](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb).
+  The notebook setup installs only missing `datasets`/`tokenizers` extras;
+  incompatible installed versions stop with a clear error, and PyTorch/TorchTPU
+  are not installed or replaced by this setup step.
 
 ## Historical native-backend transition note
 
