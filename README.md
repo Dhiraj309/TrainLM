@@ -14,6 +14,11 @@ notebook shows only the common run settings; its advanced cell is optional.
 The native TorchTPU path is experimental; the starter run does not establish
 convergence or TPU performance.
 
+The notebook offers a 10,000-token workflow smoke test, a 1,000,000-token
+starter budget, and a custom token budget. The smoke test checks that setup,
+training, evaluation, and export work; it is not useful-model training.
+A million tokens is a longer starting run, not a convergence guarantee.
+
 For a simple Python run, `run_pretraining` owns the complete lifecycle and
 returns a result with the report and export paths:
 

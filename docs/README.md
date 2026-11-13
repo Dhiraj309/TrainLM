@@ -15,6 +15,9 @@ data preparation, random GPT-2 initialization, training, evaluation, export,
 and report writing. Notebook users see sparse training progress automatically;
 Python callers can opt in with `show_progress=True`. The lower-level
 `TrainLMTrainer.from_scratch(...)` lifecycle remains available for custom use.
+The notebook distinguishes a 10,000-token workflow smoke test from a
+1,000,000-token starter budget and allows a custom target; neither budget
+certifies model convergence.
 The native TPU backend remains experimental and end-to-end TPU training is
 not certified.
 

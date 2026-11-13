@@ -83,6 +83,24 @@ def test_from_scratch_notebook_exposes_opt_in_gradient_checkpointing():
     compile(run, "from-scratch:run", "exec")
 
 
+def test_from_scratch_notebook_labels_smoke_and_starter_budgets():
+    notebook = json.loads(
+        Path("notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb").read_text(
+            encoding="utf-8"
+        )
+    )
+    instructions = "".join(notebook["cells"][2]["source"])
+    settings = "".join(notebook["cells"][3]["source"])
+
+    assert 'TRAINING_PRESET = "quick_smoke (10k tokens)"' in settings
+    assert '"quick_smoke (10k tokens)": 10_000' in settings
+    assert '"starter_pretraining (1M tokens)": 1_000_000' in settings
+    assert "CUSTOM_TARGET_SUPERVISED_TOKENS" in settings
+    assert "resuming_saved_target_tokens" in settings
+    assert "not useful-model training" in instructions
+    compile(settings, "from-scratch:run-settings", "exec")
+
+
 def test_xla_validation_notebook_is_labeled_historical():
     source = _notebook_source(Path("notebooks/TrainLM_TPU_Validation.ipynb"))
     assert "Historical PyTorch/XLA validation notebook" in source

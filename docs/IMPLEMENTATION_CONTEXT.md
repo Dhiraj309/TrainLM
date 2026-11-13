@@ -25,7 +25,10 @@ writing. Its result exposes status, a concise summary, and artifact paths;
 `run_pretraining(..., show_progress=True)` emits step, token, loss, and learning
 rate updates at the configured `logging_steps` cadence; the scratch notebook
 enables this by default so a long run reports progress without notebook-side
-training loops. The option is off by default for quiet library use.
+training loops. The notebook offers explicit `quick_smoke` (10,000 tokens),
+`starter_pretraining` (1,000,000 tokens), and custom token-budget choices; the
+smoke checks workflow behavior and does not represent model convergence. The
+progress option is off by default for quiet library use.
 The public `restore_pretraining_report` helper validates the recorded package
 profile and run artifacts before resume, and `bundle_pretraining_artifacts`
 creates the notebook download ZIP. The report records requested/effective
