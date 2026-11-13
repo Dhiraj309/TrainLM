@@ -359,7 +359,10 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
             for cell in notebook["cells"]
             if cell["cell_type"] == "markdown"
         )
-        self.assertIn("TARGET_SUPERVISED_TOKENS = 10_000", source)
+        self.assertIn('TRAINING_PRESET = "quick_smoke (10k tokens)"', source)
+        self.assertIn('"quick_smoke (10k tokens)": 10_000', source)
+        self.assertIn('"starter_pretraining (1M tokens)": 1_000_000', source)
+        self.assertIn("CUSTOM_TARGET_SUPERVISED_TOKENS", source)
         self.assertIn("SEQUENCE_LENGTH = 128", source)
         self.assertIn('#@param {type:"integer"}', source)
         self.assertIn(
@@ -383,13 +386,14 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         self.assertIn('RUN_DIR = Path(RUN_DIR).expanduser()', source)
         self.assertIn("/kaggle/working", source)
         self.assertIn("files.download", source)
-        self.assertIn("not evidence of convergence", markdown)
+        self.assertIn("does not measure model quality", markdown)
+        self.assertIn("not a convergence guarantee", markdown)
         self.assertIn("token budget", markdown)
         self.assertIn("set `RESUME_FROM_CHECKPOINT` to `latest`", markdown)
         self.assertIn("Google Drive", markdown)
         self.assertIn("minibatch loop", markdown)
         self.assertIn("report.json", source)
-        self.assertLess(max(len(cell.splitlines()) for cell in code_cells), 70)
+        self.assertLess(max(len(cell.splitlines()) for cell in code_cells), 75)
 
     def test_scratch_notebook_code_cells_are_valid_python(self):
         notebook = json.loads(
