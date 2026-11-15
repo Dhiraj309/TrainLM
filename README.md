@@ -50,9 +50,10 @@ starts the run. Omit
 If setup, training, evaluation, or export fails, `TrainLMPretrainingError`
 points to the report saved for that run. The notebook prints a concise failure
 category and report path instead of dumping the full JSON into the cell output;
-the report retains package details and any resume example. For a custom
-lifecycle, the lower-level `TrainLMTrainer.from_scratch(config)` API remains
-available.
+the report retains package details and any resume example. If the run wrote a
+report before stopping, run the notebook's final artifact cell to download that
+report and any available resume example. For a custom lifecycle, the lower-level
+`TrainLMTrainer.from_scratch(config)` API remains available.
 
 `save_total_limit` also works in `TrainLMTrainingArguments` for single-device
 CPU, CUDA, and explicit native TorchTPU training. The API default, `None`, keeps
