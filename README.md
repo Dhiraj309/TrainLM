@@ -18,6 +18,9 @@ The notebook offers a 10,000-token workflow smoke test, a 1,000,000-token
 starter budget, and a custom token budget. The smoke test checks that setup,
 training, evaluation, and export work; it is not useful-model training.
 A million tokens is a longer starting run, not a convergence guarantee.
+For GPT-2, the advanced notebook also offers compact (256 hidden, 4 layers,
+4 heads), default (768 hidden, 6 layers, 12 heads), and custom dimensions.
+These choices select model shape only; TPU fit and performance remain unverified.
 
 For a simple Python run, `run_pretraining` owns the complete lifecycle and
 returns a result with the report and export paths:

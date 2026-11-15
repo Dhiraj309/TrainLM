@@ -13,7 +13,7 @@ that existed at the time, primarily PyTorch/XLA. They do not imply native
 TorchTPU support. “Implemented” means present in that historical code path;
 “partial” means validation remained; “deferred” means it was not delivered.
 
-**Current user-workflow update (2026-11-13):** the package exposes
+**Current user-workflow update (2026-11-15):** the package exposes
 `TrainLMPretrainingConfig` and `TrainLMTrainer.from_scratch()` for raw text from
 a revision-pinned Hugging Face dataset. The API trains a byte-level tokenizer,
 prepares validated packed shards, initializes GPT-2 by default (or a configured
@@ -29,7 +29,11 @@ in the API. Its one-call run enables sparse step/token/loss/learning-rate
 updates at `logging_steps`, while library callers can keep progress output off.
 The notebook clearly separates a 10,000-token workflow smoke test from its
 1,000,000-token starter budget and a custom target; none is a convergence
-claim. Vocabulary and special-token IDs come from the trained tokenizer.
+claim. In advanced settings, GPT-2 offers compact (256 hidden, 4 layers,
+4 heads), default (768 hidden, 6 layers, 12 heads), or custom dimensions.
+These options choose randomly initialized model dimensions; TPU fit and
+performance are unverified. Vocabulary and special-token IDs come from the
+trained tokenizer.
 The package-root helpers are additive to the existing `api_version: "1"`
 configuration schema; the compatibility contract requires the v1 exports while
 allowing new public helpers without forcing a configuration-version change.
