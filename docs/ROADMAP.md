@@ -33,7 +33,8 @@ claim. In advanced settings, GPT-2 offers compact (256 hidden, 4 layers,
 4 heads), default (768 hidden, 6 layers, 12 heads), or custom dimensions.
 These options choose randomly initialized model dimensions; TPU fit and
 performance are unverified. Vocabulary and special-token IDs come from the
-trained tokenizer.
+trained tokenizer. The successful result exposes the exact instantiated model
+parameter count as `result.parameter_count` and in its concise summary.
 The package-root helpers are additive to the existing `api_version: "1"`
 configuration schema; the compatibility contract requires the v1 exports while
 allowing new public helpers without forcing a configuration-version change.

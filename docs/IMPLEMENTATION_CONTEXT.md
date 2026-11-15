@@ -22,6 +22,8 @@ and special-token IDs. The high-level public `run_pretraining(config)` helper
 owns preparation, training, evaluation, model export, and schema-v6 report
 writing. Its result exposes status, a concise summary, and artifact paths;
 `TrainLMPretrainingError` preserves the report path and underlying failure.
+Successful `TrainLMPretrainingResult` values expose `parameter_count`, measured
+from the instantiated model, and include it in the concise run summary.
 `run_pretraining(..., show_progress=True)` emits step, token, loss, and learning
 rate updates at the configured `logging_steps` cadence; the scratch notebook
 enables this by default so a long run reports progress without notebook-side

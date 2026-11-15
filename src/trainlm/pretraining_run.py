@@ -61,6 +61,15 @@ class TrainLMPretrainingResult:
         return Path(value) if isinstance(value, str) and value else None
 
     @property
+    def parameter_count(self) -> int | None:
+        """Return the instantiated model's total parameter count, if recorded."""
+        model = self.report.get("model", {})
+        value = model.get("total_parameters") if isinstance(model, dict) else None
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            return None
+        return value
+
+    @property
     def metrics(self) -> dict[str, float]:
         training = self.training
         return {
@@ -73,9 +82,15 @@ class TrainLMPretrainingResult:
         training = self.training
         model = self.report.get("model", {})
         accelerator = self.report.get("accelerator", {})
+        parameters = (
+            f"{self.parameter_count:,}"
+            if self.parameter_count is not None
+            else "unknown"
+        )
         return (
             f"status={self.status} "
             f"model={model.get('model_class') or model.get('requested_model_type', 'unknown')} "
+            f"parameters={parameters} "
             f"steps={training.get('step', 'not_run')} "
             f"tokens={training.get('supervised_tokens', 'not_run')}/"
             f"{training.get('target_supervised_tokens', 'unknown')} "

@@ -40,7 +40,9 @@ print(result.summary())
 print(result.report_path, result.export_path)
 ```
 
-Progress updates use the configured `logging_steps` cadence. Omit
+`result.parameter_count` reports the exact total parameter count measured from
+the instantiated model; `result.summary()` includes the same count. Progress
+updates use the configured `logging_steps` cadence. Omit
 `show_progress=True` for a quiet library call.
 
 If setup, training, evaluation, or export fails, `TrainLMPretrainingError`
