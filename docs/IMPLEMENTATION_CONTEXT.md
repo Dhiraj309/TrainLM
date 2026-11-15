@@ -27,6 +27,9 @@ from the instantiated model, and include it in the concise run summary.
 When `run_pretraining` fails, the notebook prints the error category, a
 relevant next step when known, and the report path; detailed diagnostics and
 available resume code stay in the report instead of flooding cell output.
+Immediately before the high-level call, the notebook prints the effective
+model dimensions, token target, and requested accelerator from the config it
+will actually use, including restored settings during resume.
 `run_pretraining(..., show_progress=True)` emits step, token, loss, and learning
 rate updates at the configured `logging_steps` cadence; the scratch notebook
 enables this by default so a long run reports progress without notebook-side
