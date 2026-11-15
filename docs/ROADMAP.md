@@ -37,6 +37,9 @@ trained tokenizer. The successful result exposes the exact instantiated model
 parameter count as `result.parameter_count` and in its concise summary. On a
 failed run, the notebook displays the error category, a next step when known,
 and the report path; full details and recovery code remain in the report.
+If TrainLM wrote a report before stopping, users can run the final notebook
+cell to download the report and any available resume example; the cell labels
+which artifacts are included in the bundle.
 Before the run call, it prints the effective model dimensions, token target,
 and requested backend from the active config, including restored config when
 resuming.

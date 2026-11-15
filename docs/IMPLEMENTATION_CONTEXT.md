@@ -27,6 +27,9 @@ from the instantiated model, and include it in the concise run summary.
 When `run_pretraining` fails, the notebook prints the error category, a
 relevant next step when known, and the report path; detailed diagnostics and
 available resume code stay in the report instead of flooding cell output.
+The final notebook cell can also run after a reported training failure: it
+bundles `report.json` and any available resume example, includes a valid model
+export when present, and prints which artifacts were included.
 Immediately before the high-level call, the notebook prints the effective
 model dimensions, token target, and requested accelerator from the config it
 will actually use, including restored settings during resume.
