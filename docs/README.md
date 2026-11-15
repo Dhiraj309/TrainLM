@@ -17,7 +17,10 @@ Python callers can opt in with `show_progress=True`. The lower-level
 `TrainLMTrainer.from_scratch(...)` lifecycle remains available for custom use.
 The notebook distinguishes a 10,000-token workflow smoke test from a
 1,000,000-token starter budget and allows a custom target; neither budget
-certifies model convergence.
+certifies model convergence. Its advanced GPT-2 settings offer compact
+(256 hidden, 4 layers, 4 heads), default (768 hidden, 6 layers, 12 heads), and
+custom dimensions. They select randomly initialized model size; TPU fit and
+performance remain unverified.
 The native TPU backend remains experimental and end-to-end TPU training is
 not certified.
 
