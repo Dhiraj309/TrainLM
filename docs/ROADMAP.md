@@ -34,7 +34,9 @@ claim. In advanced settings, GPT-2 offers compact (256 hidden, 4 layers,
 These options choose randomly initialized model dimensions; TPU fit and
 performance are unverified. Vocabulary and special-token IDs come from the
 trained tokenizer. The successful result exposes the exact instantiated model
-parameter count as `result.parameter_count` and in its concise summary.
+parameter count as `result.parameter_count` and in its concise summary. On a
+failed run, the notebook displays the error category, a next step when known,
+and the report path; full details and recovery code remain in the report.
 The package-root helpers are additive to the existing `api_version: "1"`
 configuration schema; the compatibility contract requires the v1 exports while
 allowing new public helpers without forcing a configuration-version change.
