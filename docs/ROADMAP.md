@@ -49,9 +49,11 @@ loads the model/tokenizer, preserves separate train and validation splits,
 tokenizes one text field, trains, evaluates, and exports locally. It does not
 upload artifacts, create a validation split, or apply chat templates and
 instruction-specific label masks. Its summary preserves the requested model
-revision and records the resolved model commit when Transformers reports it;
-local sources may not expose a commit. The API implementation is present on
-its feature branch. The focused CPU/API suite passes 73 tests in the local Python
+revision and records resolved model and tokenizer commits plus their match
+status when available. Model loading is pinned to the tokenizer's resolved
+commit; a detected mismatch stops before training. Local sources may not expose
+commit metadata. The API implementation is present on its feature branch. The
+focused CPU/API suite passes 73 tests in the local Python
 3.12.14, torch 2.9.0+cpu, pytest 9.1.1 environment, whose Transformers 5.0.0
 is below the declared minimum; those tests mock Hub/model loading. A separate
 one-step CPU fine-tuning run passed with a locally created GPT-2 model and
@@ -61,8 +63,8 @@ remain unverified. `notebooks/TrainLM_Text_Fine_Tuning.ipynb` provides the API i
 short, copyable Colab/Kaggle cells. It uses a tiny three-step smoke default,
 creates a local model bundle, and installs TrainLM without replacing Torch.
 Its source ref must be changed to `main` after merge before deleting the
-feature branch. The resolved-revision follow-up passes 17 focused fine-tuning,
-model-provider, notebook, and roadmap tests.
+feature branch. The model/tokenizer provenance follow-up passes 17 focused
+fine-tuning, model-provider, notebook, and roadmap tests.
 The package-root helpers are additive to the existing `api_version: "1"`
 configuration schema; the compatibility contract requires the v1 exports while
 allowing new public helpers without forcing a configuration-version change.

@@ -77,6 +77,13 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
     class FakeTokenizer:
         eos_token = "<eos>"
         pad_token_id = None
+        init_kwargs = {
+            "tokenizer_file": (
+                "/cache/models--org--model/snapshots/"
+                + "c" * 40
+                + "/tokenizer.json"
+            )
+        }
 
         @property
         def pad_token(self):
@@ -126,8 +133,10 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
             self.loaded = SimpleNamespace(
                 metadata=SimpleNamespace(resolved_revision="c" * 40)
             )
+            calls["trainer"]["train_calls"] = 0
 
         def train(self, *, resume_from_checkpoint):
+            calls["trainer"]["train_calls"] += 1
             calls["trainer"]["resume_from_checkpoint"] = resume_from_checkpoint
             return SimpleNamespace(step=4, loss=1.25)
 
@@ -148,7 +157,7 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
         TrainLMTrainer, "from_pretrained", classmethod(from_pretrained)
     )
 
-    config = _config(tmp_path / "run", model_revision="b" * 40)
+    config = _config(tmp_path / "run", model_revision="main")
     result = run_finetuning(config, resume_from_checkpoint="latest")
 
     assert isinstance(result, TrainLMFineTuningResult)
@@ -158,11 +167,11 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
     ]
     assert calls["trainer"]["tokenizer_load"] == (
         "org/model",
-        {"revision": "b" * 40},
+        {"revision": "main"},
     )
     model_name, trainer_kwargs = calls["trainer"]["model_load"]
     assert model_name == "org/model"
-    assert trainer_kwargs["revision"] == "b" * 40
+    assert trainer_kwargs["revision"] == "c" * 40
     assert trainer_kwargs["args"] == config.args
     assert trainer_kwargs["processing_class"] is tokenizer
     assert fake_trainer.model.config.pad_token_id == tokenizer.pad_token_id
@@ -172,9 +181,13 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
     assert result.train_loss == 1.25
     assert result.evaluation["eval_loss"] == 1.5
     assert result.summary()["dataset_revision"] == "a" * 40
-    assert result.model_revision == "b" * 40
+    assert result.model_revision == "main"
     assert result.resolved_model_revision == "c" * 40
+    assert result.resolved_tokenizer_revision == "c" * 40
+    assert result.model_tokenizer_revision_match is True
     assert result.summary()["resolved_model_revision"] == "c" * 40
+    assert result.summary()["resolved_tokenizer_revision"] == "c" * 40
+    assert result.summary()["model_tokenizer_revision_match"] is True
 
     collator = trainer_kwargs["data_collator"]
     batch = collator(
@@ -184,6 +197,11 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
         ]
     )
     assert batch["labels"].tolist() == [[7, 2], [8, -100]]
+
+    fake_trainer.loaded.metadata.resolved_revision = "d" * 40
+    with pytest.raises(RuntimeError, match="resolved to different Hub commits"):
+        run_finetuning(config)
+    assert calls["trainer"]["train_calls"] == 1
 
 
 def test_run_finetuning_rejects_legacy_xla_export_path(tmp_path):
