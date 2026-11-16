@@ -1623,6 +1623,11 @@ class TrainLMTrainer:
 
         pretraining = asdict(config)
         pretraining.pop("output_dir", None)
+        if config.train_file is None:
+            # Keep legacy Hub-backed run fingerprints stable when the new
+            # local-file source fields are unused.
+            pretraining.pop("train_file", None)
+            pretraining.pop("validation_file", None)
         training_args = asdict(self.args)
         training_args.pop("output_dir", None)
         # Retention controls disk usage, not training semantics. Excluding it

@@ -30,8 +30,13 @@
   call and returns a concise result with report and export paths. The lower-level
   trainer remains available for custom lifecycles. GPT-2 remains the default;
   `model_type` and `model_config_overrides` select another registered
-  architecture. TrainLM derives vocabulary and special-token IDs from the
-  trained tokenizer. The notebook exposes common settings as Colab form
+  architecture. The current working branch adds paired local UTF-8
+  train/validation text files alongside the pinned Hub source; their hashes
+  join the prepared-data cache identity. Its focused API/report/resume,
+  notebook and roadmap CPU suite passes 31 tests under Python 3.12.14 and torch
+  2.9.0+cpu; data loading was mocked, with no live Hub or TPU run. TrainLM
+  derives vocabulary and special-token IDs from the trained tokenizer. The
+  notebook exposes common settings as Colab form
   controls and keeps ordinary Python assignments for Kaggle.
   The Colab/Kaggle notebook uses this public API and its downloadable schema v6
   report captures requested and effective training settings, optimizer and

@@ -7,6 +7,7 @@ config = TrainLMPretrainingConfig(
     output_dir="runs/tinystories",
     max_tokens=10_000,  # Workflow smoke only; increase for real training.
     sequence_length=128,
+    model_type="gpt2",  # Randomly initialized Hugging Face GPT-2.
     model_embedding_size=256,
     model_layers=4,
     model_attention_heads=4,
@@ -14,5 +15,9 @@ config = TrainLMPretrainingConfig(
 )
 result = run_pretraining(config, show_progress=True)
 print(result.summary())
+print(
+    f"architecture: {result.report['model']['model_class']} "
+    f"({result.report['model']['model_type']})"
+)
 print(f"report: {result.report_path}")
 print(f"model:  {result.export_path}")

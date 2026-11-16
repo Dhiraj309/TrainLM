@@ -28,6 +28,9 @@ def build_resume_report(
     """
     settings = asdict(config)
     settings["output_dir"] = str(Path(config.output_dir).resolve())
+    for name in ("train_file", "validation_file"):
+        if settings[name] is not None:
+            settings[name] = str(Path(settings[name]).resolve())
     result = {
         "status": "unavailable",
         "reason": (

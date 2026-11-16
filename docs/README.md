@@ -14,11 +14,14 @@ checkpoint recovery, longer schedules, best-model selection, and other
 advanced options.
 
 The from-scratch notebook calls the one-call public
-`run_pretraining(TrainLMPretrainingConfig(...))` workflow. It accepts a
-revision-pinned Hugging Face text dataset and owns tokenizer fitting, packed
-data preparation, random GPT-2 initialization, training, evaluation, export,
-and report writing. Notebook users see sparse training progress automatically;
-Python callers can opt in with `show_progress=True`. The lower-level
+`run_pretraining(TrainLMPretrainingConfig(...))` workflow. It explicitly uses
+`model_type="gpt2"`: TrainLM creates a Hugging Face `GPT2Config` and randomly
+initializes `GPT2LMHeadModel`; it does not load pretrained weights. The API
+accepts either a revision-pinned Hugging Face text dataset or separate local
+UTF-8 training and validation text files. It owns tokenizer fitting, packed
+data preparation, training, evaluation, export, and report writing. Notebook
+users see sparse training progress automatically; Python callers can opt in
+with `show_progress=True`. The lower-level
 `TrainLMTrainer.from_scratch(...)` lifecycle remains available for custom use.
 The public API also adds `run_finetuning(TrainLMFineTuningConfig(...))` for a
 pretrained causal LM. It can load a pinned Hub text dataset or accept paired

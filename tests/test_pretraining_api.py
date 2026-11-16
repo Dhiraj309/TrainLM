@@ -61,6 +61,44 @@ def test_pretraining_config_requires_immutable_revision_and_disjoint_splits(tmp_
         )
 
 
+def test_pretraining_config_accepts_paired_local_text_files(tmp_path):
+    train_file = tmp_path / "train.txt"
+    validation_file = tmp_path / "validation.txt"
+    train_file.write_text("training corpus\n", encoding="utf-8")
+    validation_file.write_text("validation corpus\n", encoding="utf-8")
+    local_source = {
+        "dataset_id": None,
+        "dataset_revision": None,
+        "train_file": train_file,
+        "validation_file": validation_file,
+    }
+
+    config = _config(tmp_path / "run", **local_source)
+    assert config.dataset_id is None
+    assert config.dataset_revision is None
+    assert config.train_file == train_file.resolve()
+    assert config.validation_file == validation_file.resolve()
+
+    with pytest.raises(ValueError, match="configured together"):
+        _config(
+            tmp_path / "partial",
+            dataset_id=None,
+            dataset_revision=None,
+            train_file=train_file,
+        )
+    with pytest.raises(ValueError, match="not both"):
+        _config(tmp_path / "mixed", train_file=train_file,
+                validation_file=validation_file)
+    with pytest.raises(ValueError, match="must be distinct"):
+        _config(
+            tmp_path / "same",
+            dataset_id=None,
+            dataset_revision=None,
+            train_file=train_file,
+            validation_file=train_file,
+        )
+
+
 def test_from_scratch_builds_and_trains_a_small_cpu_model(tmp_path, monkeypatch):
     rows = [
         {"text": f"A tiny story about stars, trees, and friendly dogs number {i}. " * 4}
@@ -143,6 +181,83 @@ def test_from_scratch_builds_and_trains_a_small_cpu_model(tmp_path, monkeypatch)
         TrainLMTrainer.from_scratch(
             _config(config.output_dir, gradient_checkpointing=True)
         )
+
+
+def test_from_scratch_streams_local_text_files_and_checks_content_hashes(
+    tmp_path, monkeypatch
+):
+    train_file = tmp_path / "train.txt"
+    validation_file = tmp_path / "validation.txt"
+    train_file.write_text(
+        "".join(
+            f"A local training sample about stories and trees {index}.\n"
+            for index in range(16)
+        ),
+        encoding="utf-8",
+    )
+    validation_file.write_text(
+        "".join(
+            f"A held-out validation story about stars {index}.\n"
+            for index in range(8)
+        ),
+        encoding="utf-8",
+    )
+    calls = []
+
+    class StreamingRows:
+        def __init__(self, path):
+            self.path = Path(path)
+
+        def __iter__(self):
+            return iter(
+                {"text": line}
+                for line in self.path.read_text(encoding="utf-8").splitlines()
+            )
+
+    def load_dataset(builder, *, data_files, split, streaming):
+        calls.append((builder, data_files[split], split, streaming))
+        return StreamingRows(data_files[split])
+
+    datasets_module = ModuleType("datasets")
+    datasets_module.load_dataset = load_dataset
+    monkeypatch.setitem(sys.modules, "datasets", datasets_module)
+    config = _config(
+        tmp_path / "local-run",
+        dataset_id=None,
+        dataset_revision=None,
+        train_file=train_file,
+        validation_file=validation_file,
+    )
+
+    trainer = TrainLMTrainer.from_scratch(config)
+    assert trainer.model.config.model_type == "gpt2"
+    assert calls == [
+        ("text", str(train_file.resolve()), "train", True),
+        ("text", str(train_file.resolve()), "train", True),
+        ("text", str(validation_file.resolve()), "validation", True),
+    ]
+    run_config = json.loads(
+        (config.output_dir / "run_config.json").read_text(encoding="utf-8")
+    )
+    assert run_config["configuration"]["pretraining"]["train_file"] == str(
+        train_file.resolve()
+    )
+    cache = json.loads(
+        (config.output_dir / "preparation_cache.json").read_text(encoding="utf-8")
+    )
+    assert cache["inputs"]["local_text_files"]["train"]["path"] == str(
+        train_file.resolve()
+    )
+    assert len(cache["inputs"]["local_text_files"]["train"]["sha256"]) == 64
+
+    monkeypatch.delitem(sys.modules, "datasets", raising=False)
+    cached = TrainLMTrainer.from_scratch(config)
+    assert cached.model.config.model_type == "gpt2"
+    assert len(calls) == 3
+
+    train_file.write_text("changed corpus\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="different dataset/tokenizer settings"):
+        TrainLMTrainer.from_scratch(config)
 
 
 def test_scratch_gradient_checkpointing_trains_and_exports_with_cache(
