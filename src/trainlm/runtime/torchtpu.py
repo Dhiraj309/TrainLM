@@ -6,7 +6,7 @@ not launch ranks, shard models, or claim multi-device support.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any
 
 import torch
@@ -15,6 +15,50 @@ from torch import nn
 from .base import BackendDiagnostics, Precision
 from .runtime import TorchRuntime
 from .torchtpu_discovery import discover_tpu
+
+
+def _device_rng_getter() -> Callable[[], Any] | None:
+    """Resolve TorchTPU RNG capture through the public API for this PyTorch."""
+    accelerator = getattr(torch, "accelerator", None)
+    random_api = getattr(accelerator, "random", None)
+    getter = getattr(random_api, "get_rng_state", None)
+    if callable(getter):
+        return getter
+
+    # Retain compatibility with early adapter builds that exposed a generic
+    # getter directly on torch.accelerator.
+    getter = getattr(accelerator, "get_rng_state", None)
+    if callable(getter):
+        return getter
+
+    # TorchTPU exposes this backend-specific fallback only for PyTorch versions
+    # predating torch.accelerator.random. In newer PyTorch it is internal.
+    if random_api is None:
+        getter = getattr(getattr(torch, "tpu", None), "get_rng_state", None)
+        if callable(getter):
+            return getter
+    return None
+
+
+def _device_rng_setter() -> Callable[[Any], None] | None:
+    """Resolve TorchTPU RNG restore through a supported public API."""
+    accelerator = getattr(torch, "accelerator", None)
+    random_api = getattr(accelerator, "random", None)
+    setter = getattr(random_api, "set_rng_state", None)
+    if callable(setter):
+        return setter
+
+    # TorchTPU currently publishes set_rng_state under torch.tpu.
+    setter = getattr(getattr(torch, "tpu", None), "set_rng_state", None)
+    if callable(setter):
+        return setter
+
+    # Retain compatibility with early adapter builds exposing the setter on
+    # torch.accelerator directly.
+    setter = getattr(accelerator, "set_rng_state", None)
+    if callable(setter):
+        return setter
+    return None
 
 
 class TorchTPURuntime(TorchRuntime):
@@ -85,11 +129,11 @@ class TorchTPURuntime(TorchRuntime):
 
     def state_dict(self) -> Mapping[str, Any]:
         """Capture the device RNG required by a resumable native checkpoint."""
-        accelerator = getattr(torch, "accelerator", None)
-        get_rng_state = getattr(accelerator, "get_rng_state", None)
+        get_rng_state = _device_rng_getter()
         if not callable(get_rng_state):
             raise RuntimeError(
-                "This PyTorch version does not expose accelerator RNG capture; "
+                "This PyTorch version does not expose supported accelerator "
+                "RNG capture; "
                 "a resumable native TPU checkpoint cannot be written."
             )
         return {
@@ -118,18 +162,17 @@ class TorchTPURuntime(TorchRuntime):
             raise ValueError("Native TPU resume compile mode does not match the checkpoint.")
         if "device_rng_state" not in state_dict:
             raise ValueError("Native TPU checkpoint is missing device RNG state.")
-        accelerator = getattr(torch, "accelerator", None)
-        set_rng_state = getattr(accelerator, "set_rng_state", None)
+        set_rng_state = _device_rng_setter()
         if not callable(set_rng_state):
             raise RuntimeError(
-                "This PyTorch version does not expose accelerator RNG restore; "
+                "This PyTorch/TorchTPU profile does not expose supported TPU "
+                "RNG restore; "
                 "native TPU device RNG restoration is unavailable."
             )
 
     def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
         self.validate_state_dict(state_dict)
-        accelerator = getattr(torch, "accelerator", None)
-        set_rng_state = getattr(accelerator, "set_rng_state", None)
+        set_rng_state = _device_rng_setter()
         # validate_state_dict has already established that this API is callable.
         set_rng_state(state_dict["device_rng_state"])
 
