@@ -46,7 +46,9 @@ saving and resume; this fix does not imply TPU certification.
 **Current public API update:** scratch pretraining accepts Transformers-style
 `warmup_ratio` in the inclusive range 0–1 and rounds it up to a whole optimizer
 step. It cannot be combined with `warmup_steps`. Leaving both unset preserves
-the existing automatic warmup.
+the existing automatic warmup. Optional `save_steps` and `eval_steps` expose
+independent optimizer-step cadence controls; unset values preserve the current
+automatic cadence.
 
 ### API and notebook implementation history
 

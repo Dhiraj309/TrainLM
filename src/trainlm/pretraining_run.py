@@ -313,6 +313,8 @@ def _initial_report(
                 "bf16": config.bf16,
                 "torch_compile": config.torch_compile,
                 "logging_steps": config.logging_steps,
+                "save_steps": config.save_steps,
+                "eval_steps": config.eval_steps,
                 "max_eval_batches": config.max_eval_batches,
                 "seed": config.seed,
                 "save_total_limit": config.save_total_limit,

@@ -929,9 +929,13 @@ class TrainLMTrainer:
             accelerator=config.accelerator,
             torch_compile=config.torch_compile,
             logging_steps=config.logging_steps,
-            save_steps=cadence,
+            save_steps=(
+                config.save_steps if config.save_steps is not None else cadence
+            ),
             save_total_limit=config.save_total_limit,
-            eval_steps=cadence,
+            eval_steps=(
+                config.eval_steps if config.eval_steps is not None else cadence
+            ),
             max_eval_batches=config.max_eval_batches,
             seed=config.seed,
             weight_decay=config.weight_decay,
@@ -1649,6 +1653,9 @@ class TrainLMTrainer:
         # existing runs where the ratio is unset and effective steps are saved.
         if config.warmup_ratio is None:
             pretraining.pop("warmup_ratio", None)
+        for name in ("save_steps", "eval_steps"):
+            if getattr(config, name) is None:
+                pretraining.pop(name, None)
         # The new opt-in setting is equivalent to false when absent in an
         # older manifest, so omit its default to keep existing run fingerprints.
         if not config.gradient_checkpointing:

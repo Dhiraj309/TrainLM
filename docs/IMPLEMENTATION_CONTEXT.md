@@ -46,7 +46,9 @@ coverage is in `tests/runtime/test_torchtpu_runtime.py`.
 Transformers-style `warmup_ratio` from 0 to 1, rounded up to a whole optimizer
 step. It is mutually exclusive with `warmup_steps`; leaving both unset
 preserves the existing automatic default. The run report records requested
-and effective warmup settings.
+and effective warmup settings. Optional `save_steps` and `eval_steps` provide
+independent checkpoint and evaluation cadence controls while preserving the
+automatic cadence when unset.
 
 ### Implementation history
 

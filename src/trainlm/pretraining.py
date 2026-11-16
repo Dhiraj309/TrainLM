@@ -43,7 +43,9 @@ class TrainLMPretrainingConfig:
     ``warmup_ratio`` follows Transformers semantics and rounds the requested
     fraction up to a whole optimizer step. Set at most one of
     ``warmup_steps`` and ``warmup_ratio``. Supported schedules are
-    ``constant``, ``linear``, ``cosine``, and ``wsd``.
+    ``constant``, ``linear``, ``cosine``, and ``wsd``. `save_steps` and
+    `eval_steps` independently override the default cadence derived from the
+    training budget.
     """
 
     output_dir: str | Path = Path("runs/pretraining")
@@ -80,6 +82,8 @@ class TrainLMPretrainingConfig:
     lr_scheduler_type: Literal["constant", "linear", "cosine", "wsd"] = "cosine"
     warmup_steps: int | None = None
     warmup_ratio: float | None = None
+    save_steps: int | None = None
+    eval_steps: int | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "output_dir", Path(self.output_dir).expanduser())
@@ -229,6 +233,14 @@ class TrainLMPretrainingConfig:
             raise ValueError("warmup_ratio must be finite and between 0 and 1.")
         if self.warmup_steps is not None and self.warmup_ratio is not None:
             raise ValueError("Set only one of warmup_steps and warmup_ratio.")
+        for name in ("save_steps", "eval_steps"):
+            value = getattr(self, name)
+            if value is not None and (
+                isinstance(value, bool)
+                or not isinstance(value, int)
+                or value < 1
+            ):
+                raise ValueError(f"{name} must be a positive integer when configured.")
         if (isinstance(self.weight_decay, bool)
                 or not isinstance(self.weight_decay, Real)
                 or not math.isfinite(self.weight_decay)
