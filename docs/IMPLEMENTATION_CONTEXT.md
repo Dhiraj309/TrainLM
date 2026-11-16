@@ -58,7 +58,9 @@ plus `max_grad_norm` for gradient clipping (`0` disables clipping). Requested
 and effective values are included in the run report and checkpoint identity;
 default scratch fingerprints remain compatible. The internal legacy TPU
 coordinator also forwards the clipping value. This API change has no owner-run
-TPU training evidence.
+TPU training evidence. After beta-list normalization for JSON report recovery,
+both hosted CPU suites passed with 988 tests and 41 subtests each under the
+core-current and core-minimum dependency constraints. No TPU training was run.
 
 ### Implementation history
 
