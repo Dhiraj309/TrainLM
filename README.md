@@ -184,6 +184,20 @@ standard `TrainLMTrainer` remains available when you already have a model and
 tokenized datasets or need a custom lifecycle. Native TorchTPU fine-tuning is
 experimental and has not been certified by this API example.
 
+To resume from the latest checkpoint, restore the saved run configuration and
+set a larger step budget. The helper reloads model, dataset, and training
+settings from the summary while anchoring the output directory to its location:
+
+```python
+from trainlm import restore_finetuning_config, run_finetuning
+
+config = restore_finetuning_config(
+    "runs/qwen-tinystories/finetuning-summary.json",
+    max_steps=2000,
+)
+result = run_finetuning(config, resume_from_checkpoint="latest")
+```
+
 See the [fine-tuning guide](docs/tutorials/TEXT_FINETUNING.md) for setup
 requirements and limitations. The [Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/feat%2F01-pretrained-finetuning-api/notebooks/TrainLM_Text_Fine_Tuning.ipynb)
 offers the same flow as short, copyable cells for Colab and Kaggle.

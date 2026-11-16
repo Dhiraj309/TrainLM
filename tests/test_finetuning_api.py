@@ -1,5 +1,6 @@
 import json
 import sys
+from dataclasses import replace
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
@@ -11,6 +12,7 @@ from trainlm import (
     TrainLMFineTuningResult,
     TrainLMTrainer,
     TrainLMTrainingArguments,
+    restore_finetuning_config,
     run_finetuning,
 )
 
@@ -40,6 +42,17 @@ def test_finetuning_config_requires_pinned_dataset_and_distinct_splits(tmp_path)
 
     with pytest.raises(TypeError, match="TrainLMTrainingArguments"):
         _config(tmp_path, args={"max_steps": 1})
+
+
+def test_restore_finetuning_config_rejects_unrelated_summary(tmp_path):
+    summary_path = tmp_path / "report.json"
+    summary_path.write_text(
+        json.dumps({"schema_version": 1, "scope": "pretraining"}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="not a supported"):
+        restore_finetuning_config(summary_path, max_steps=10)
 
 
 def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch):
@@ -212,6 +225,21 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
     assert report["evaluation"]["eval_loss"] == 1.5
     assert report["last_known_state"]["step"] == 4
     assert report["last_known_state"]["latest_checkpoint"] is None
+    restored = restore_finetuning_config(result.summary_path, max_steps=8)
+    assert restored.model_name_or_path == config.model_name_or_path
+    assert restored.model_revision == config.model_revision
+    assert restored.dataset_id == config.dataset_id
+    assert restored.dataset_revision == config.dataset_revision
+    assert restored.text_field == config.text_field
+    assert restored.train_split == config.train_split
+    assert restored.validation_split == config.validation_split
+    assert restored.args == replace(
+        config.args,
+        output_dir=result.summary_path.parent,
+        max_steps=8,
+    )
+    with pytest.raises(ValueError, match="greater than the last recorded"):
+        restore_finetuning_config(result.summary_path, max_steps=4)
 
     collator = trainer_kwargs["data_collator"]
     batch = collator(

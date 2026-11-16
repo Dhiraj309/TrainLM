@@ -363,6 +363,83 @@ def _last_known_state(run_state: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def restore_finetuning_config(
+    summary_path: str | Path,
+    *,
+    max_steps: int,
+) -> TrainLMFineTuningConfig:
+    """Restore a fine-tuning config from its saved summary for checkpoint resume.
+
+    All recorded model, data, and training settings are restored. `max_steps`
+    is supplied by the caller so a resumed run can extend its previous budget.
+    The output directory is anchored to the summary file's current location.
+    """
+    if (
+        isinstance(max_steps, bool)
+        or not isinstance(max_steps, int)
+        or max_steps < 1
+    ):
+        raise ValueError("max_steps must be a positive integer.")
+
+    path = Path(summary_path)
+    try:
+        report = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ValueError(
+            f"Cannot read a fine-tuning summary from {path}."
+        ) from exc
+    if (
+        not isinstance(report, Mapping)
+        or type(report.get("schema_version")) is not int
+        or report.get("schema_version") != 1
+        or report.get("scope") != "pretrained_causal_lm_finetuning"
+    ):
+        raise ValueError("The file is not a supported TrainLM fine-tuning summary.")
+
+    training_args = report.get("training_arguments")
+    data = report.get("data")
+    if not isinstance(training_args, Mapping) or not isinstance(data, Mapping):
+        raise ValueError("The fine-tuning summary is missing its saved settings.")
+
+    expected_argument_names = {item.name for item in fields(TrainLMTrainingArguments)}
+    if set(training_args) != expected_argument_names:
+        raise ValueError(
+            "The saved training arguments do not match this TrainLM version."
+        )
+    restored_args = dict(training_args)
+    restored_args["output_dir"] = path.parent
+    restored_args["max_steps"] = max_steps
+    for name in ("betas", "report_to"):
+        if isinstance(restored_args.get(name), list):
+            restored_args[name] = tuple(restored_args[name])
+    saved_step = report.get("step")
+    if saved_step is not None:
+        if type(saved_step) is not int or saved_step < 0:
+            raise ValueError("The fine-tuning summary has an invalid saved step.")
+        if max_steps <= saved_step:
+            raise ValueError(
+                "max_steps must be greater than the last recorded training step "
+                f"({saved_step})."
+            )
+
+    try:
+        args = TrainLMTrainingArguments(**restored_args)
+        return TrainLMFineTuningConfig(
+            model_name_or_path=report["model_name_or_path"],
+            model_revision=report.get("model_revision"),
+            dataset_id=report["dataset_id"],
+            dataset_revision=report["dataset_revision"],
+            text_field=data["text_field"],
+            train_split=data["train_split"],
+            validation_split=data["validation_split"],
+            args=args,
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError(
+            "The fine-tuning summary contains invalid saved settings."
+        ) from exc
+
+
 def _run_finetuning_impl(
     config: TrainLMFineTuningConfig,
     *,

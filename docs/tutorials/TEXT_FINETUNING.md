@@ -55,33 +55,22 @@ not copied into the report. Install the optional dataset dependency with
 ## Resume an interrupted run
 
 Set `save_steps` to the checkpoint interval you can afford, and keep the full
-`output_dir` between sessions. To continue from its newest checkpoint, pass
-`resume_from_checkpoint="latest"` and raise `max_steps` above the checkpoint's
-saved step. Keep the model and dataset revisions and the other training
-settings the same. The saved checkpoint contains optimizer and trainer state;
-the exported `model` directory alone is not enough to resume. On Colab or
-Kaggle, point `output_dir` at persistent storage if a runtime reset should not
-discard the checkpoint.
+`output_dir` between sessions. To continue from its newest checkpoint, load
+the saved configuration with `restore_finetuning_config` and set `max_steps`
+above the saved step. The helper restores the model, dataset, and other
+training settings, and uses the summary file's directory as `output_dir`. The
+saved checkpoint contains optimizer and trainer state; the exported `model`
+directory alone is not enough to resume. On Colab or Kaggle, keep the summary
+and checkpoints on persistent storage if a runtime reset should not discard
+the run.
 
 ```python
-config = TrainLMFineTuningConfig(
-    # Keep the same model, dataset, revisions, and training settings.
-    model_name_or_path="Qwen/Qwen3-0.6B",
-    dataset_id="roneneldan/TinyStories",
-    dataset_revision="f54c09fd23315a6f9c86f9dc80f725de7d8f9c64",
-    text_field="text",
-    args=TrainLMTrainingArguments(
-        output_dir="runs/qwen-tinystories",
-        max_steps=2000,  # Must be greater than the saved step.
-        sequence_length=512,
-        per_device_train_batch_size=2,
-        learning_rate=2e-5,
-        eval_steps=100,
-        save_steps=100,
-        save_total_limit=3,
-    ),
-)
+from trainlm import restore_finetuning_config, run_finetuning
 
+config = restore_finetuning_config(
+    "runs/qwen-tinystories/finetuning-summary.json",
+    max_steps=2000,  # Must be greater than the saved step.
+)
 result = run_finetuning(config, resume_from_checkpoint="latest")
 ```
 

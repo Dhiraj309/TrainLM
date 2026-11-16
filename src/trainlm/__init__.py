@@ -23,6 +23,7 @@ from .pretraining_run import (
 from .finetuning import (
     TrainLMFineTuningConfig,
     TrainLMFineTuningResult,
+    restore_finetuning_config,
     run_finetuning,
 )
 
@@ -42,6 +43,7 @@ __all__ = [
     "TrainLMTrainingArguments",
     "bundle_pretraining_artifacts",
     "restore_pretraining_report",
+    "restore_finetuning_config",
     "run_pretraining",
     "run_finetuning",
 ]
