@@ -258,7 +258,7 @@ def test_notebook_report_recovery_explains_package_version_mismatch(
 
 
 @pytest.mark.parametrize("resume_code", [None, "print('resume example')\n"])
-def test_download_cell_bundles_and_displays_resume_only_when_available(
+def test_download_cell_bundles_resume_helper_when_available(
     tmp_path, monkeypatch, resume_code,
 ):
     root = Path(__file__).resolve().parents[1]
@@ -267,14 +267,9 @@ def test_download_cell_bundles_and_displays_resume_only_when_available(
     )
     report_path = tmp_path / "report.json"
     report_path.write_text(json.dumps({"resume": {"code": resume_code}}))
-    displayed = []
-    display_module = ModuleType("IPython.display")
-    display_module.Code = lambda code, language: (code, language)
-    display_module.display = displayed.append
-    monkeypatch.setitem(sys.modules, "IPython", ModuleType("IPython"))
-    monkeypatch.setitem(sys.modules, "IPython.display", display_module)
+    downloaded = []
     colab = ModuleType("google.colab")
-    colab.files = SimpleNamespace(download=lambda path: None)
+    colab.files = SimpleNamespace(download=downloaded.append)
     monkeypatch.setitem(sys.modules, "google", ModuleType("google"))
     monkeypatch.setitem(sys.modules, "google.colab", colab)
 
@@ -282,17 +277,18 @@ def test_download_cell_bundles_and_displays_resume_only_when_available(
         cell
         for cell in notebook["cells"]
         if cell["cell_type"] == "code"
-        and "bundle_pretraining_artifacts(report_path)" in "".join(cell["source"])
+        and "bundle_pretraining_artifacts(result.report_path)" in "".join(cell["source"])
     ]
     assert len(download_cells) == 1
     exec(
         "".join(download_cells[0]["source"]),
-        {"report_path": report_path},
+        {"result": SimpleNamespace(report_path=report_path)},
     )
 
-    with zipfile.ZipFile(tmp_path / "trainlm-scratch-artifact.zip") as bundle:
+    bundle_path = tmp_path / "trainlm-scratch-artifact.zip"
+    with zipfile.ZipFile(bundle_path) as bundle:
         assert "report.json" in bundle.namelist()
         assert ("resume.py" in bundle.namelist()) is (resume_code is not None)
         if resume_code:
             assert bundle.read("resume.py").decode() == resume_code
-    assert displayed == ([(resume_code, "python")] if resume_code else [])
+    assert downloaded == [str(bundle_path)]
