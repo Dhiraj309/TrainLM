@@ -33,16 +33,18 @@ _PREPARATION_ALGORITHM = "byte-level-bpe-v1"
 class TrainLMPretrainingConfig:
     """Settings for starting a GPT-2 causal LM from random weights on HF text.
 
-    The starter path uses a revision-pinned streaming dataset, learns a
-    byte-level BPE tokenizer from the training split, and writes validated
-    packed shards under ``output_dir`` before constructing a trainer. Matching
-    pinned preparation inputs reuse integrity-checked tokenizer and shard
-    artifacts from that directory.
+    The starter path uses either a revision-pinned streaming dataset or a pair
+    of local UTF-8 text files. It learns a byte-level BPE tokenizer from the
+    training split and writes validated packed shards under ``output_dir``
+    before constructing a trainer. Matching preparation inputs reuse
+    integrity-checked tokenizer and shard artifacts from that directory.
     """
 
     output_dir: str | Path = Path("runs/pretraining")
-    dataset_id: str = DEFAULT_DATASET_ID
-    dataset_revision: str = DEFAULT_DATASET_REVISION
+    dataset_id: str | None = None
+    dataset_revision: str | None = None
+    train_file: str | Path | None = None
+    validation_file: str | Path | None = None
     train_split: str = "train"
     validation_split: str = "validation"
     text_field: str = "text"
@@ -72,15 +74,45 @@ class TrainLMPretrainingConfig:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "output_dir", Path(self.output_dir).expanduser())
-        if not isinstance(self.dataset_id, str) or not _DATASET_ID.fullmatch(
-            self.dataset_id
-        ):
-            raise ValueError("dataset_id must be a Hugging Face owner/name ID.")
-        if (not isinstance(self.dataset_revision, str)
-                or not _COMMIT_SHA.fullmatch(self.dataset_revision)):
-            raise ValueError(
-                "dataset_revision must be an immutable 40-character commit SHA."
-            )
+        local_files = self.train_file is not None or self.validation_file is not None
+        if local_files:
+            if self.train_file is None or self.validation_file is None:
+                raise ValueError(
+                    "train_file and validation_file must be configured together."
+                )
+            if self.dataset_id is not None or self.dataset_revision is not None:
+                raise ValueError(
+                    "Choose either local text files or a Hugging Face dataset, not both."
+                )
+            if self.text_field != "text":
+                raise ValueError(
+                    "Local text files use the 'text' field; set text_field='text'."
+                )
+            paths = []
+            for name in ("train_file", "validation_file"):
+                raw_path = getattr(self, name)
+                if not isinstance(raw_path, (str, Path)) or not str(raw_path).strip():
+                    raise ValueError(f"{name} must be a non-empty file path.")
+                path = Path(raw_path).expanduser().resolve()
+                if not path.is_file():
+                    raise ValueError(f"{name} must point to a regular text file.")
+                object.__setattr__(self, name, path)
+                paths.append(path)
+            if paths[0] == paths[1]:
+                raise ValueError("Training and validation files must be distinct.")
+        else:
+            if self.dataset_id is None and self.dataset_revision is None:
+                object.__setattr__(self, "dataset_id", DEFAULT_DATASET_ID)
+                object.__setattr__(self, "dataset_revision", DEFAULT_DATASET_REVISION)
+            if not isinstance(self.dataset_id, str) or not _DATASET_ID.fullmatch(
+                self.dataset_id
+            ):
+                raise ValueError("dataset_id must be a Hugging Face owner/name ID.")
+            if (not isinstance(self.dataset_revision, str)
+                    or not _COMMIT_SHA.fullmatch(self.dataset_revision)):
+                raise ValueError(
+                    "dataset_revision must be an immutable 40-character commit SHA."
+                )
         if not all(
             isinstance(value, str) and _FIELD_NAME.fullmatch(value)
             for value in (self.train_split, self.validation_split, self.text_field)
@@ -482,7 +514,7 @@ def _preflight_scratch_backend(config: TrainLMPretrainingConfig) -> None:
 
 def _preparation_cache_inputs(config: TrainLMPretrainingConfig) -> dict[str, Any]:
     """Return the settings that define tokenizer and packed-shard contents."""
-    return {
+    inputs = {
         "algorithm": _PREPARATION_ALGORITHM,
         "dataset_id": config.dataset_id,
         "dataset_revision": config.dataset_revision,
@@ -493,11 +525,47 @@ def _preparation_cache_inputs(config: TrainLMPretrainingConfig) -> dict[str, Any
         "max_eval_examples": config.max_eval_examples,
         "tokenizer_vocab_size": config.tokenizer_vocab_size,
     }
+    if config.train_file is not None and config.validation_file is not None:
+        inputs["local_text_files"] = {
+            "train": {
+                "path": str(config.train_file),
+                "sha256": _sha256_file(config.train_file),
+            },
+            "validation": {
+                "path": str(config.validation_file),
+                "sha256": _sha256_file(config.validation_file),
+            },
+        }
+    return inputs
 
 
 def _preparation_cache_fingerprint(inputs: Mapping[str, Any]) -> str:
     canonical = json.dumps(inputs, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _load_scratch_text_source(
+    load_dataset: Any,
+    config: TrainLMPretrainingConfig,
+    *,
+    split: Literal["train", "validation"],
+):
+    """Open one pinned Hub split or one local UTF-8 text file as a stream."""
+    split_name = config.train_split if split == "train" else config.validation_split
+    local_file = config.train_file if split == "train" else config.validation_file
+    if local_file is not None:
+        return load_dataset(
+            "text",
+            data_files={split_name: str(local_file)},
+            split=split_name,
+            streaming=True,
+        )
+    return load_dataset(
+        config.dataset_id,
+        revision=config.dataset_revision,
+        split=split_name,
+        streaming=True,
+    )
 
 
 def _sha256_file(path: Path) -> str:
@@ -560,6 +628,7 @@ def _load_scratch_preparation_cache(
     *,
     root: Path,
     packed_dataset_type: Any,
+    inputs: Mapping[str, Any] | None = None,
 ) -> tuple[Any, Any, Any] | None:
     """Load only a matching cache whose tokenizer and packed shards validate."""
     cache_path = root / "preparation_cache.json"
@@ -583,7 +652,7 @@ def _load_scratch_preparation_cache(
             f"Prepared-data cache {cache_path} has an unsupported format; "
             "use a fresh output_dir."
         )
-    inputs = _preparation_cache_inputs(config)
+    inputs = _preparation_cache_inputs(config) if inputs is None else dict(inputs)
     if (
         payload.get("inputs") != inputs
         or payload.get("fingerprint") != _preparation_cache_fingerprint(inputs)
@@ -660,13 +729,13 @@ def _write_scratch_preparation_cache(
     *,
     root: Path,
     tokenizer: Any,
+    inputs: Mapping[str, Any] | None = None,
 ) -> None:
+    inputs = _preparation_cache_inputs(config) if inputs is None else dict(inputs)
     payload = {
         "schema_version": _PREPARATION_CACHE_SCHEMA,
-        "inputs": _preparation_cache_inputs(config),
-        "fingerprint": _preparation_cache_fingerprint(
-            _preparation_cache_inputs(config)
-        ),
+        "inputs": inputs,
+        "fingerprint": _preparation_cache_fingerprint(inputs),
         "tokenizer": _scratch_tokenizer_identity(tokenizer),
         "tokenizer_files": _tokenizer_cache_hashes(root / "tokenizer"),
         "shard_manifests": {
@@ -723,8 +792,12 @@ def _prepare_scratch_training(config: TrainLMPretrainingConfig):
     root = Path(config.output_dir)
     data_root = root / "data"
     root.mkdir(parents=True, exist_ok=True)
+    preparation_inputs = _preparation_cache_inputs(config)
     cached = _load_scratch_preparation_cache(
-        config, root=root, packed_dataset_type=PackedBinDataset
+        config,
+        root=root,
+        packed_dataset_type=PackedBinDataset,
+        inputs=preparation_inputs,
     )
     if cached is not None:
         tokenizer, train_dataset, eval_dataset = cached
@@ -733,15 +806,12 @@ def _prepare_scratch_training(config: TrainLMPretrainingConfig):
             from datasets import load_dataset
         except ImportError as exc:
             raise ImportError(
-                "Raw-text Hub pretraining needs the optional 'datasets' package. "
+                "Raw-text pretraining needs the optional 'datasets' package. "
                 "Install datasets, then restart the Python runtime."
             ) from exc
 
-        train_source = load_dataset(
-            config.dataset_id,
-            revision=config.dataset_revision,
-            split=config.train_split,
-            streaming=True,
+        train_source = _load_scratch_text_source(
+            load_dataset, config, split="train"
         )
         tokenizer, _ = _train_byte_level_tokenizer(
             train_source,
@@ -752,17 +822,11 @@ def _prepare_scratch_training(config: TrainLMPretrainingConfig):
         tokenizer.save_pretrained(root / "tokenizer")
 
         # Reopen the immutable stream after fitting the tokenizer on training text.
-        train_source = load_dataset(
-            config.dataset_id,
-            revision=config.dataset_revision,
-            split=config.train_split,
-            streaming=True,
+        train_source = _load_scratch_text_source(
+            load_dataset, config, split="train"
         )
-        validation_source = load_dataset(
-            config.dataset_id,
-            revision=config.dataset_revision,
-            split=config.validation_split,
-            streaming=True,
+        validation_source = _load_scratch_text_source(
+            load_dataset, config, split="validation"
         )
         write_packed_binary_shard(
             _token_documents(
@@ -802,9 +866,19 @@ def _prepare_scratch_training(config: TrainLMPretrainingConfig):
         except Exception:
             train_dataset.close()
             raise
+        if _preparation_cache_inputs(config) != preparation_inputs:
+            train_dataset.close()
+            eval_dataset.close()
+            raise RuntimeError(
+                "The source text files changed while TrainLM was preparing data. "
+                "Restore the original files or choose a fresh output_dir."
+            )
         _check_scratch_dataset_sizes(config, train_dataset, eval_dataset)
         _write_scratch_preparation_cache(
-            config, root=root, tokenizer=tokenizer
+            config,
+            root=root,
+            tokenizer=tokenizer,
+            inputs=preparation_inputs,
         )
 
     model_config = _scratch_huggingface_config(

@@ -19,6 +19,9 @@ in the config for a longer run; token count alone does not guarantee
 convergence. Advanced model dimensions and budgets belong in the guide so the
 first notebook path stays short.
 
+See the [notebook catalog](notebooks/README.md) for the roles of the training
+quickstarts, TPU diagnostics, and historical XLA notebook.
+
 For a simple Python run, `run_pretraining` owns the complete lifecycle and
 returns a result with the report and export paths:
 
@@ -43,6 +46,33 @@ print(result.report_path, result.export_path)
 the instantiated model; `result.summary()` includes the same count. Progress
 updates use the configured `logging_steps` cadence. Omit `show_progress=True`
 for a quiet library call.
+
+The default architecture is Hugging Face GPT-2 (`model_type="gpt2"`). TrainLM
+builds its config from the model dimensions and tokenizer vocabulary, then
+initializes new weights with `AutoModelForCausalLM.from_config`; it does not
+load a pretrained checkpoint. Set `model_type` and architecture-specific
+`model_config_overrides` to build another registered Transformers causal LM.
+
+To use your own corpus instead of the default pinned Hub dataset, provide
+separate UTF-8 text files for training and validation. Each non-empty line is
+one text example:
+
+```python
+config = TrainLMPretrainingConfig(
+    output_dir="runs/my-corpus",
+    train_file="data/train.txt",
+    validation_file="data/validation.txt",
+    max_tokens=1_000_000,
+    sequence_length=512,
+    model_type="gpt2",
+    accelerator="native_tpu",
+)
+result = run_pretraining(config, show_progress=True)
+```
+
+TrainLM records both file hashes and refuses to reuse prepared data if either
+file changes under the same `output_dir`; choose a fresh run directory after
+changing the corpus.
 
 For a short copyable script, see [`examples/pretrain_from_scratch.py`](examples/pretrain_from_scratch.py).
 The [examples index](examples/README.md) also separates user quickstarts from

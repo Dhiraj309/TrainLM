@@ -152,6 +152,7 @@ def run_pretraining(
         if show_progress:
             trainer_options["callbacks"] = [_make_training_progress_callback(config)]
         trainer = TrainLMTrainer.from_scratch(config, **trainer_options)
+        _capture_local_text_sources(report, config)
         _capture_effective_configuration(report, trainer)
         _capture_runtime(report, trainer)
 
@@ -267,6 +268,11 @@ def _initial_report(
             "packages": packages,
         },
         "data": {
+            "source_type": (
+                "local_text_files"
+                if config.train_file is not None
+                else "huggingface_hub"
+            ),
             "dataset_id": config.dataset_id,
             "dataset_revision": config.dataset_revision,
             "train_split": config.train_split,
@@ -274,6 +280,14 @@ def _initial_report(
             "text_field": config.text_field,
             "max_train_examples": config.max_train_examples,
             "max_eval_examples": config.max_eval_examples,
+            "local_files": (
+                {
+                    "train": str(config.train_file),
+                    "validation": str(config.validation_file),
+                }
+                if config.train_file is not None
+                else None
+            ),
         },
         "model": {
             "requested_model_type": config.model_type,
@@ -305,6 +319,22 @@ def _initial_report(
         "checkpoint": {"latest_path": None},
         "limitations": ["does_not_certify_performance"],
     }
+
+
+def _capture_local_text_sources(
+    report: dict[str, Any], config: TrainLMPretrainingConfig
+) -> None:
+    """Record the source hashes already checked during packed-data prep."""
+    if config.train_file is None or config.validation_file is None:
+        return
+    cache_path = Path(config.output_dir) / "preparation_cache.json"
+    cache = json.loads(cache_path.read_text(encoding="utf-8"))
+    files = cache.get("inputs", {}).get("local_text_files")
+    if not isinstance(files, Mapping) or set(files) != {"train", "validation"}:
+        raise RuntimeError(
+            "The prepared-data cache does not record both local text files."
+        )
+    report["data"]["local_files"] = files
 
 
 def _capture_effective_configuration(report: dict[str, Any], trainer: Any) -> None:

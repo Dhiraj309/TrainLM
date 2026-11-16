@@ -83,6 +83,10 @@ def test_training_notebooks_keep_the_common_path_short_and_copyable():
     )
     assert 'accelerator="native_tpu"' in scratch
     assert "10,000-token" in scratch
+    assert 'model_type="gpt2"' in scratch
+    assert "Hugging Face GPT-2" in scratch
+    assert "GPT2LMHeadModel" in scratch
+    assert "does not load a pretrained GPT-2 checkpoint" in scratch
     finetuning = _notebook_source(Path("notebooks/TrainLM_Text_Fine_Tuning.ipynb"))
     assert 'accelerator="auto"' in finetuning
     assert "Native TorchTPU fine-tuning is not validated yet" in finetuning
@@ -99,9 +103,26 @@ def test_python_quickstart_examples_are_small_public_api_examples():
         assert len(source.splitlines()) <= 30
         assert api_name in source
         assert "10_000" in source or "max_steps=3" in source
+    scratch = Path("examples/pretrain_from_scratch.py").read_text(encoding="utf-8")
+    assert 'model_type="gpt2"' in scratch
+    assert "randomly initialized hugging face gpt-2" in scratch.lower()
+
+
+def test_legacy_smollm2_yaml_is_identified_as_xla():
+    source = Path("examples/smollm2_135m_tpu_pretraining.yaml").read_text(
+        encoding="utf-8"
+    )
+    assert "Historical PyTorch/XLA" in source
+    assert "not native TorchTPU" in source
 
 
 def test_xla_validation_notebook_is_labeled_historical():
     source = _notebook_source(Path("notebooks/TrainLM_TPU_Validation.ipynb"))
     assert "Historical PyTorch/XLA validation notebook" in source
     assert "does not validate the current native TorchTPU path" in source
+
+
+def test_notebook_catalog_classifies_every_notebook():
+    catalog = Path("notebooks/README.md").read_text(encoding="utf-8")
+    for path in Path("notebooks").glob("*.ipynb"):
+        assert path.name in catalog, f"Unclassified notebook: {path.name}"

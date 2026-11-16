@@ -27,6 +27,17 @@ notebook establishes model quality, convergence, or TPU performance. See the
 [coding-agent guide](AI_AGENT_GUIDE.md) for the example, implementation, test,
 and evidence map.
 
+**Unmerged working-branch update:** the from-scratch API now has a
+local text-file source alongside the pinned Hub source. Its quick notebook and
+Python example explicitly select randomly initialized Hugging Face GPT-2 and
+show the returned model class. `notebooks/README.md` classifies the current
+quickstarts, runtime probes, and the retained historical XLA notebook; the
+audit found no dead notebook or example files to remove. The focused API,
+report/resume, notebook and roadmap CPU suite passed 31 tests under Python
+3.12.14 and torch 2.9.0+cpu. Data loading was mocked; no live Hub or TPU
+training was run. This does not change the T1 hardware gate or establish native
+TPU training support.
+
 ### API and notebook implementation history
 
 The API implementation history follows. Its branch names, notebook controls,

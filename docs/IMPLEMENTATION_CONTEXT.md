@@ -24,6 +24,18 @@ the experimental native TorchTPU path; its 10,000-token default is a workflow
 smoke test. Fine-tuning examples target CPU or CUDA. Neither notebook is a
 TPU certification, quality benchmark, or convergence claim.
 
+**Unmerged working-branch update:** from-scratch configuration now
+supports separate local UTF-8 training and validation text files as well as the
+pinned Hub source. The scratch notebook and Python example name
+`model_type="gpt2"` explicitly and explain that TrainLM builds a `GPT2Config`
+and randomly initializes `GPT2LMHeadModel`; it does not load a pretrained model
+ID. A notebook catalog classifies user quickstarts, TPU diagnostics, and the
+retained historical XLA validation notebook. No notebook or example was removed
+because each is still referenced or records a distinct validation scope. The
+focused API, report/resume, notebook and roadmap CPU suite passed 31 tests under
+Python 3.12.14 and torch 2.9.0+cpu. Data loading was mocked; no live Hub or TPU
+training was run.
+
 ### Implementation history
 
 The entries below preserve the API and validation history. Branch names,

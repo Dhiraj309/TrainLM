@@ -11,7 +11,7 @@ documentation describes the PyTorch/XLA era.
 | --- | --- | --- |
 | Fine-tune a pretrained causal LM | [short Colab notebook](../notebooks/TrainLM_Text_Fine_Tuning.ipynb) · [short Python example](../examples/finetune_text.py) · [full guide](tutorials/TEXT_FINETUNING.md) | [`run_finetuning`](../src/trainlm/finetuning.py), [API tests](../tests/test_finetuning_api.py), [notebook contract](../tests/contracts/test_current_colab_notebooks.py); use CPU or CUDA, native TPU fine-tuning is not validated |
 | Configure fine-tuning evaluation, best-checkpoint selection, early stopping, or resume | [fine-tuning guide](tutorials/TEXT_FINETUNING.md) | [`TrainLMTrainingArguments`](../src/trainlm/api.py), [`restore_finetuning_config`](../src/trainlm/finetuning.py), [lifecycle tests](../tests/test_api_lifecycle.py) |
-| Pretrain a causal LM from raw Hugging Face text | [short Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) · [short Python example](../examples/pretrain_from_scratch.py) | [`run_pretraining`](../src/trainlm/pretraining_run.py), [`TrainLMPretrainingConfig`](../src/trainlm/pretraining.py), [CPU workflow tests](../tests/test_pretraining_run.py); native TPU remains experimental |
+| Pretrain a causal LM from Hub text or local text files | [short Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) · [short Python example](../examples/pretrain_from_scratch.py) | [`run_pretraining`](../src/trainlm/pretraining_run.py), [`TrainLMPretrainingConfig`](../src/trainlm/pretraining.py), [CPU workflow tests](../tests/test_pretraining_run.py); defaults to random Hugging Face GPT-2; native TPU remains experimental |
 | Change model dimensions, token budget, or resume a scratch run | [pretraining guide](tutorials/TPU_PACKED_BIN_PRETRAINING.md) · [README API reference](../README.md#start-here-pretrain-a-language-model-from-scratch) | [`restore_pretraining_report` and `bundle_pretraining_artifacts`](../src/trainlm/pretraining_run.py), [recovery tests](../tests/test_notebook_resume.py) |
 | Use the lower-level trainer lifecycle or inspect checkpoints | [README API reference](../README.md) | [`TrainLMTrainer`](../src/trainlm/api.py), [checkpoint retention](../src/trainlm/checkpoint/retention.py), [lifecycle tests](../tests/test_api_lifecycle.py) |
 | Check native TPU availability and package compatibility | [T1 v5e-1 guide](T1_V5E1_PROBE.md) | [hardware discovery](../src/trainlm/runtime/torchtpu_discovery.py), [package preflight](../src/trainlm/runtime/torchtpu_trainer_preflight.py) |
@@ -48,9 +48,9 @@ follow the linked implementation and tests before making a change.
   directory for checkpoint recovery. CPU tests do not establish TPU training,
   checkpoint recovery, convergence, or performance.
 - `TrainLMTrainer.from_scratch(TrainLMPretrainingConfig(...))` is the public
-  raw-text entry point. It requires an immutable Hugging Face dataset revision
-  and disjoint train/validation splits, then returns the familiar trainer for
-  `train()`, `evaluate()`, and `save_model()` calls. Use
+  raw-text entry point. It accepts either an immutable Hugging Face dataset
+  revision or paired local UTF-8 train/validation text files, then returns the
+  familiar trainer for `train()`, `evaluate()`, and `save_model()` calls. Use
   `trainer.train(resume_from_checkpoint="latest")` to resume from the newest
   completed checkpoint under the trainer output directory. Matching pinned
   preparation settings reuse validated tokenizer and packed-data artifacts in

@@ -85,6 +85,41 @@ def test_run_pretraining_completes_report_export_bundle_and_restore(
     assert any(name.startswith("model/") and name.endswith(".safetensors") for name in names)
 
 
+def test_run_pretraining_reports_and_restores_local_text_files(tmp_path, monkeypatch):
+    rows = [
+        {"text": f"Local corpus document about lakes and mountains {index}. " * 4}
+        for index in range(16)
+    ]
+    datasets = ModuleType("datasets")
+    datasets.load_dataset = lambda *args, **kwargs: iter(rows)
+    monkeypatch.setitem(sys.modules, "datasets", datasets)
+
+    train_file = tmp_path / "train.txt"
+    validation_file = tmp_path / "validation.txt"
+    train_file.write_text("training data\n", encoding="utf-8")
+    validation_file.write_text("validation data\n", encoding="utf-8")
+    config = replace(
+        _config(tmp_path / "local-artifacts"),
+        dataset_id=None,
+        dataset_revision=None,
+        train_file=train_file,
+        validation_file=validation_file,
+    )
+
+    result = run_pretraining(config)
+
+    assert result.status == "passed"
+    assert result.report["data"]["source_type"] == "local_text_files"
+    assert result.report["data"]["local_files"]["train"]["path"] == str(
+        train_file.resolve()
+    )
+    assert len(result.report["data"]["local_files"]["train"]["sha256"]) == 64
+    restored = restore_pretraining_report(result.report_path)
+    assert restored.config.train_file == train_file.resolve()
+    assert restored.config.validation_file == validation_file.resolve()
+    assert "train_file" in result.report["resume"]["code"]
+
+
 def test_run_pretraining_can_show_sparse_training_progress(tmp_path, monkeypatch, capsys):
     rows = [
         {"text": f"Progress sample number {index}. " * 5}
