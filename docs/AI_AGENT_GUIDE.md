@@ -9,24 +9,13 @@ documentation describes the PyTorch/XLA era.
 
 | Task | Start here | Related evidence |
 | --- | --- | --- |
-| Fine-tune or resume a pretrained causal LM on a Hub text dataset | [Colab notebook](../notebooks/TrainLM_Text_Fine_Tuning.ipynb) · [fine-tuning guide](tutorials/TEXT_FINETUNING.md) | [`run_finetuning` and `restore_finetuning_config`](../src/trainlm/finetuning.py), [API tests](../tests/test_finetuning_api.py), [notebook contract](../tests/contracts/test_current_colab_notebooks.py); tests mock Hub/model loading, and native TPU remains experimental |
-| Restore the best validation checkpoint or stop on a plateau | [best-checkpoint and early-stopping guide](tutorials/TEXT_FINETUNING.md#restore-the-best-evaluation-checkpoint) · [notebook settings](../notebooks/TrainLM_Text_Fine_Tuning.ipynb) | [`load_best_model_at_end` and early stopping](../src/trainlm/api.py), [run summary](../src/trainlm/finetuning.py), [same-step, retention, threshold, and resume tests](../tests/test_api_lifecycle.py); single-device CPU coverage only, legacy XLA and distributed runtimes are unsupported |
-| Pretrain a causal language model from raw Hugging Face text | [Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) · [notebook source](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) | [`run_pretraining`](../src/trainlm/pretraining_run.py), [`TrainLMPretrainingConfig` and data preparation](../src/trainlm/pretraining.py), [end-to-end CPU tests](../tests/test_pretraining_run.py) |
-| Show progress during a one-call scratch run | [notebook run cell](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) | [`run_pretraining(show_progress=True)`](../src/trainlm/pretraining_run.py), [progress tests](../tests/test_pretraining_run.py); updates follow `logging_steps` |
-| Choose GPT-2 model dimensions in the notebook | [advanced notebook settings](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) | compact (256 hidden, 4 layers, 4 heads), default (768 hidden, 6 layers, 12 heads), or custom; random initialization only, TPU fit and performance unverified |
-| Choose a scratch-training token budget | [notebook run settings](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) | `quick_smoke` = 10,000 targets, `starter_pretraining` = 1,000,000, or a custom target; these budgets do not certify convergence |
-| Reduce activation memory during scratch training | [advanced notebook setting](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) | [`gradient_checkpointing` config and model hook](../src/trainlm/pretraining.py), [export-cache handling](../src/trainlm/api.py), [CPU API test](../tests/test_pretraining_api.py) |
-| Resume a scratch run with a larger token budget | [Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) · [resume instructions](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) | [`extend_training_budget`](../src/trainlm/api.py), [API tests](../tests/test_pretraining_api.py) |
-| Find, resume, and retain training checkpoints | [public example](../README.md), [notebook](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) | [`latest_checkpoint` and resume lookup](../src/trainlm/api.py), [retention policy](../src/trainlm/checkpoint/retention.py), [trainer lifecycle](../src/trainlm/training/trainer.py), [lifecycle tests](../tests/test_api_lifecycle.py) |
-| Run the notebook on mobile Colab or Kaggle | [pretraining notebook](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) | Colab shows common settings as form controls; advanced model/data settings are optional. The notebook calls the public API instead of building reports itself. See [CPU notebook/API tests](../tests/test_native_trainer_smoke_process.py). |
-| Recover a scratch run using its downloaded report | [notebook](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb), [resume instructions](../README.md) | [`restore_pretraining_report` and `bundle_pretraining_artifacts`](../src/trainlm/pretraining_run.py), [recovery and ZIP tests](../tests/test_notebook_resume.py) |
-| Run, evaluate, export, and write a report | [public quickstart](../README.md), [notebook](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) | [`run_pretraining`](../src/trainlm/pretraining_run.py), [CPU run tests](../tests/test_pretraining_run.py) |
-| Inspect the model size after a run | [public quickstart](../README.md) | `TrainLMPretrainingResult.parameter_count` reports the exact total from the instantiated model and is included in `summary()` and the run report |
-| Diagnose a failed notebook run | [pretraining notebook](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) | The cell reports the error category and report path; full diagnostics and any resume example remain in `report.json` |
-| Download artifacts after a failed run | [pretraining notebook](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) | After `report.json` has been written, run the final cell to bundle the report and any available resume example; a valid model export is included when present |
-| Review the run settings before training | [pretraining notebook](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) | The `run_plan` line shows effective model dimensions, token target, and requested accelerator from the config that will run |
-| Prepare or inspect packed token data | [packed-data contracts](data/PACKED_BINARY_MANIFEST.md) | [packed data writer](../src/trainlm/data/writer.py), [dataset tests](../tests/test_packed_dataset_resume.py) |
+| Fine-tune a pretrained causal LM | [short Colab notebook](../notebooks/TrainLM_Text_Fine_Tuning.ipynb) · [short Python example](../examples/finetune_text.py) · [full guide](tutorials/TEXT_FINETUNING.md) | [`run_finetuning`](../src/trainlm/finetuning.py), [API tests](../tests/test_finetuning_api.py), [notebook contract](../tests/contracts/test_current_colab_notebooks.py); use CPU or CUDA, native TPU fine-tuning is not validated |
+| Configure fine-tuning evaluation, best-checkpoint selection, early stopping, or resume | [fine-tuning guide](tutorials/TEXT_FINETUNING.md) | [`TrainLMTrainingArguments`](../src/trainlm/api.py), [`restore_finetuning_config`](../src/trainlm/finetuning.py), [lifecycle tests](../tests/test_api_lifecycle.py) |
+| Pretrain a causal LM from raw Hugging Face text | [short Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) · [short Python example](../examples/pretrain_from_scratch.py) | [`run_pretraining`](../src/trainlm/pretraining_run.py), [`TrainLMPretrainingConfig`](../src/trainlm/pretraining.py), [CPU workflow tests](../tests/test_pretraining_run.py); native TPU remains experimental |
+| Change model dimensions, token budget, or resume a scratch run | [pretraining guide](tutorials/TPU_PACKED_BIN_PRETRAINING.md) · [README API reference](../README.md#start-here-pretrain-a-language-model-from-scratch) | [`restore_pretraining_report` and `bundle_pretraining_artifacts`](../src/trainlm/pretraining_run.py), [recovery tests](../tests/test_notebook_resume.py) |
+| Use the lower-level trainer lifecycle or inspect checkpoints | [README API reference](../README.md) | [`TrainLMTrainer`](../src/trainlm/api.py), [checkpoint retention](../src/trainlm/checkpoint/retention.py), [lifecycle tests](../tests/test_api_lifecycle.py) |
 | Check native TPU availability and package compatibility | [T1 v5e-1 guide](T1_V5E1_PROBE.md) | [hardware discovery](../src/trainlm/runtime/torchtpu_discovery.py), [package preflight](../src/trainlm/runtime/torchtpu_trainer_preflight.py) |
+| Prepare or inspect packed token data | [packed-data contracts](data/PACKED_BINARY_MANIFEST.md) | [packed data writer](../src/trainlm/data/writer.py), [dataset tests](../tests/test_packed_dataset_resume.py) |
 | Understand supported behavior and validation status | [current handoff](HANDOFF.md) | [dense-AR support scope](SCOPE.md), [T0–T11 roadmap](TORCHTPU_REBASELINE.md) |
 
 Useful questions include “How does TrainLM train a randomly initialized GPT-2
@@ -37,7 +26,7 @@ follow the linked implementation and tests before making a change.
 ## Evidence and limits
 
 - `save_total_limit` accepts a positive integer or `None` (API default: keep
-  all). The notebook uses three. After state and run metadata are published,
+  all). The quickstart notebooks leave retention at its API default. After state and run metadata are published,
   the single-device public trainer retains the new save and the newest other
   owned `checkpoint-N` directories within that limit. Each new automatic save
   receives a small ownership marker; unmarked legacy saves, incomplete saves,
@@ -52,28 +41,12 @@ follow the linked implementation and tests before making a change.
   keeps automatic saving disabled.
 - `trainer.latest_checkpoint` returns the newest published checkpoint as a
   `Path`, or `None`; it uses the same lookup as
-  `trainer.train(resume_from_checkpoint="latest")`. The notebook prints the
-  resolved path after training and when its training cell handles an error.
-- The from-scratch notebook is a small-scale implementation example. Its CPU
-  lifecycle coverage does not establish TPU training, convergence, or
-  performance. Its version 6 downloadable report captures requested and
-  effective training settings (including optimizer and scheduler), selected
-  backend, runtime TPU discovery and device properties, model and tokenizer
-  provenance, package versions, source/dataset revisions, and training
-  metrics. Its top-level `checkpoint.latest_path` gives the newest published
-  checkpoint path when one is available. This is a runtime path, so persistent
-  `RUN_DIR` storage is required to use it after a session reset. `resume.code`
-  captures all pretraining settings and an executable example targeting that
-  checkpoint; the ZIP includes it as `resume.py`. The example checks for the
-  original run files before creating a trainer. It keeps the same token budget,
-  retrying only an already requested, still-pending budget extension. Restore
-  the full run directory and match the recorded source and package versions;
-  model exports alone cannot restore training state. With no checkpoint or a
-  failed lookup, no resume code/script is offered. CPU tests exercise ordinary,
-  pending-extension, and committed-extension recovery; TPU recovery remains
-  unverified. A property-only
-  device query does not allocate a device and is labeled unverified. Missing
-  optional packages and unavailable properties are reported as `null`.
+  `trainer.train(resume_from_checkpoint="latest")`.
+- The from-scratch notebook and script are small workflow examples, not quality
+  benchmarks. `run_pretraining` writes a detailed report; the artifact helper
+  can bundle that report, a completed export, and a resume helper. Keep the run
+  directory for checkpoint recovery. CPU tests do not establish TPU training,
+  checkpoint recovery, convergence, or performance.
 - `TrainLMTrainer.from_scratch(TrainLMPretrainingConfig(...))` is the public
   raw-text entry point. It requires an immutable Hugging Face dataset revision
   and disjoint train/validation splits, then returns the familiar trainer for

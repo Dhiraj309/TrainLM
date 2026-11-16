@@ -8,6 +8,11 @@ PyTorch/XLA work. Read the status labels before treating an item as current.
 For a task-oriented map of the notebook, implementation, tests, and evidence
 limits, start with the [coding-agent guide](AI_AGENT_GUIDE.md).
 
+The quick-start notebooks and Python examples intentionally show only setup,
+the public API call, and the saved result. Use the task guides for custom data,
+checkpoint recovery, longer schedules, best-model selection, and other
+advanced options.
+
 The from-scratch notebook calls the one-call public
 `run_pretraining(TrainLMPretrainingConfig(...))` workflow. It accepts a
 revision-pinned Hugging Face text dataset and owns tokenizer fitting, packed
@@ -52,23 +57,16 @@ partial-accumulation flushing; distributed and legacy XLA epoch schedules are
 not supported. Its focused API, lifecycle, config, engine, notebook, TPU
 coordinator, and packed-scratch suite passed 151 tests under Python 3.12.14
 with torch 2.9.0+cpu. No TPU or Hub run was performed.
-The additive `restore_finetuning_config` helper reloads those settings from a
-run summary, anchors `output_dir` to its location, verifies a published
-checkpoint archive or native TPU manifest is readable, and accepts a new
-training-step target for resume. This early check does not unpickle local
-checkpoint data; trainer restore still checks model/state compatibility. The
-fine-tuning notebook uses it when `RESUME_FROM_CHECKPOINT` is `"latest"`.
-Its focused API, checkpoint lifecycle, notebook, roadmap, and installed-wheel
-suite passes 66 tests under Python 3.12.14, torch 2.9.0+cpu, and Transformers
-5.20.2; 20 CPU/Gloo checkpoint-worker tests also pass when local sockets are
-permitted for that command. Real Hub and accelerator training remain
-unverified.
-The notebook distinguishes a 10,000-token workflow smoke test from a
-1,000,000-token starter budget and allows a custom target; neither budget
-certifies model convergence. Its advanced GPT-2 settings offer compact
-(256 hidden, 4 layers, 4 heads), default (768 hidden, 6 layers, 12 heads), and
-custom dimensions. They select randomly initialized model size; TPU fit and
-performance remain unverified.
+The additive `restore_finetuning_config` helper reloads settings from a run
+summary, anchors `output_dir` to its location, verifies that a published
+checkpoint is readable, and accepts a new training-step target for resume.
+This early check does not unpickle local checkpoint data; trainer restore
+still checks model/state compatibility. Resume is covered by CPU lifecycle
+tests; the quick-start notebook leaves these controls to the guide. The
+from-scratch notebook uses a 10,000-token workflow smoke test with compact
+randomly initialized GPT-2 weights. It does not certify convergence, TPU fit,
+or performance. Longer budgets and model dimensions are documented
+separately.
 The native TPU backend remains experimental and end-to-end TPU training is
 not certified.
 

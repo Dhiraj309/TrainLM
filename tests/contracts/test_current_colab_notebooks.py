@@ -35,7 +35,9 @@ def test_active_colab_notebooks_clone_merged_main():
         if path.name.startswith("TorchTPU_T1_"):
             assert 'PROBE_BRANCH = "main"' in source, path
         elif path.name == "TrainLM_Text_Fine_Tuning.ipynb":
-            assert 'TRAINLM_REF = "feat/01-pretrained-finetuning-api"' in source, path
+            assert "git+https://github.com/Dhiraj309/TrainLM.git@main" in source, path
+        elif path.name == "TrainLM_Native_TorchTPU_From_Scratch.ipynb":
+            assert "git+https://github.com/Dhiraj309/TrainLM.git@main" in source, path
         else:
             assert re.search(r'"--branch",\s*"main"', source), path
         for stale_branch in STALE_BRANCHES:
@@ -48,114 +50,55 @@ def test_probe_notebook_badges_open_main_versions():
         assert "colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/" in source
 
 
-def test_from_scratch_notebook_installs_only_missing_pretraining_extras():
-    notebook = json.loads(
-        Path("notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb").read_text(
-            encoding="utf-8"
-        )
-    )
-    setup = "".join(notebook["cells"][1]["source"])
-
-    compile(setup, "TrainLM_Native_TorchTPU_From_Scratch.ipynb:setup", "exec")
-    assert 'Requirement("datasets>=3,<5")' in setup
-    assert 'Requirement("tokenizers>=0.21,<1")' in setup
-    assert "missing_pretraining_requirements" in setup
-    assert "incompatible_pretraining_requirements" in setup
-    assert '"pip", "install"' in setup
-    assert '"--quiet", "--disable-pip-version-check"' in setup
-    assert "the setup cell leaves installed versions unchanged" in setup
-    assert "trainlm[dev]" not in setup
-
-
-def test_text_finetuning_notebook_is_copyable_and_uses_the_public_api():
-    path = Path("notebooks/TrainLM_Text_Fine_Tuning.ipynb")
+def _code_cells(path: Path):
     notebook = json.loads(path.read_text(encoding="utf-8"))
     assert notebook["nbformat"] == 4
-    code_cells = [cell for cell in notebook["cells"] if cell["cell_type"] == "code"]
-    assert all(
-        cell["execution_count"] is None and not cell["outputs"]
-        for cell in code_cells
-    )
-    for index, cell in enumerate(code_cells):
-        compile("".join(cell["source"]), f"{path.name}:cell-{index}", "exec")
-
-    source = "\n".join("".join(cell["source"]) for cell in notebook["cells"])
-    assert 'TRAINLM_REF = "feat/01-pretrained-finetuning-api"' in source
-    assert "--no-deps" in source
-    assert "run_finetuning(" in source
-    assert "restore_finetuning_config(" in source
-    assert 'if RESUME_FROM_CHECKPOINT == "latest":' in source
-    assert "max_steps=MAX_STEPS" in source
-    assert "config.args.max_steps" in source
-    assert "resume_status=blocked" in source
-    assert "resume_recovery=" in source
-    assert "checkpoint is missing, malformed, or incompatible" in source
-    assert "run_status=skipped" in source
-    assert "bundle_status=skipped" in source
-    assert 'RESUME_FROM_CHECKPOINT = ""' in source
-    assert "resume_from_checkpoint=RESUME_FROM_CHECKPOINT or None" in source
-    assert "SAVE_STEPS = 100" in source
-    assert 'save_strategy=SAVE_STRATEGY' in source
-    assert 'eval_strategy=EVAL_STRATEGY' in source
-    assert "SAVE_STRATEGY = \"steps\"" in source
-    assert "EVAL_STRATEGY = \"no\"" in source
-    assert "LOAD_BEST_MODEL_AT_END" in source
-    assert "METRIC_FOR_BEST_MODEL" in source
-    assert "GREATER_IS_BETTER" in source
-    assert "load_best_model_at_end=(" in source
-    assert "early_stopping_patience=" in source
-    assert "early_stopping_threshold=" in source
-    assert "EARLY_STOPPING_PATIENCE" in source
-    assert "EARLY_STOPPING_THRESHOLD" in source
-    assert "increase the selected budget" in source
-    assert 'TRAINING_BUDGET = "steps"' in source
-    assert "NUM_TRAIN_EPOCHS" in source
-    assert "persistent storage" in source
-    assert 'ACCELERATOR = "cpu"' in source
-    assert '"native_tpu"' in source
-    assert "files.download" in source
-    assert "finetuning-summary.json" in source
-    assert "json.loads(summary_path.read_text" in source
-    assert 'report["status"] == "completed"' in source
-    assert "run_status=failed" in source
-    assert '"torch"' not in source
+    cells = [cell for cell in notebook["cells"] if cell["cell_type"] == "code"]
+    assert all(cell["execution_count"] is None and not cell["outputs"] for cell in cells)
+    for index, cell in enumerate(cells):
+        source = "".join(cell["source"])
+        compile(source, f"{path.name}:cell-{index}", "exec")
+        assert len(source.splitlines()) <= 30, f"{path.name}:cell-{index} is too long"
+    return notebook, cells
 
 
-def test_from_scratch_notebook_exposes_opt_in_gradient_checkpointing():
-    notebook = json.loads(
-        Path("notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb").read_text(
-            encoding="utf-8"
-        )
-    )
-    settings = "".join(notebook["cells"][5]["source"])
-    run = "".join(notebook["cells"][7]["source"])
+def test_training_notebooks_keep_the_common_path_short_and_copyable():
+    for name, api_name in (
+        ("TrainLM_Native_TorchTPU_From_Scratch.ipynb", "run_pretraining"),
+        ("TrainLM_Text_Fine_Tuning.ipynb", "run_finetuning"),
+    ):
+        path = Path("notebooks") / name
+        notebook, cells = _code_cells(path)
+        source = _notebook_source(path)
+        assert len(notebook["cells"]) <= 5
+        assert api_name in source
+        assert "--no-deps" in source
+        assert "git+https://github.com/Dhiraj309/TrainLM.git@main" in source
+        assert "files.download" in source
+        assert "restore_finetuning_config" not in source
+        assert "RESUME_FROM_CHECKPOINT" not in source
 
-    assert "GRADIENT_CHECKPOINTING = False" in settings
-    assert "gradient_checkpointing=GRADIENT_CHECKPOINTING" in run
-    assert "show_progress=True" in run
-    assert "lower activation memory" in _notebook_source(
+    scratch = _notebook_source(
         Path("notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb")
     )
-    compile(settings, "from-scratch:advanced-settings", "exec")
-    compile(run, "from-scratch:run", "exec")
+    assert 'accelerator="native_tpu"' in scratch
+    assert "10,000-token" in scratch
+    finetuning = _notebook_source(Path("notebooks/TrainLM_Text_Fine_Tuning.ipynb"))
+    assert 'accelerator="auto"' in finetuning
+    assert "Native TorchTPU fine-tuning is not validated yet" in finetuning
 
 
-def test_from_scratch_notebook_labels_smoke_and_starter_budgets():
-    notebook = json.loads(
-        Path("notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb").read_text(
-            encoding="utf-8"
-        )
-    )
-    instructions = "".join(notebook["cells"][2]["source"])
-    settings = "".join(notebook["cells"][3]["source"])
-
-    assert 'TRAINING_PRESET = "quick_smoke (10k tokens)"' in settings
-    assert '"quick_smoke (10k tokens)": 10_000' in settings
-    assert '"starter_pretraining (1M tokens)": 1_000_000' in settings
-    assert "CUSTOM_TARGET_SUPERVISED_TOKENS" in settings
-    assert "resuming_saved_target_tokens" in settings
-    assert "not useful-model training" in instructions
-    compile(settings, "from-scratch:run-settings", "exec")
+def test_python_quickstart_examples_are_small_public_api_examples():
+    for name, api_name in (
+        ("pretrain_from_scratch.py", "run_pretraining"),
+        ("finetune_text.py", "run_finetuning"),
+    ):
+        path = Path("examples") / name
+        source = path.read_text(encoding="utf-8")
+        compile(source, str(path), "exec")
+        assert len(source.splitlines()) <= 30
+        assert api_name in source
+        assert "10_000" in source or "max_steps=3" in source
 
 
 def test_xla_validation_notebook_is_labeled_historical():
