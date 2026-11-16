@@ -44,14 +44,20 @@ Before the run call, it prints the effective model dimensions, token target,
 and requested backend from the active config, including restored config when
 resuming.
 The current feature branch adds a task-focused `run_finetuning` API for a
-pretrained causal LM and an immutable Hugging Face text-dataset revision. It
-loads the model/tokenizer, preserves separate train and validation splits,
-tokenizes one text field by default, trains, evaluates, and exports locally. It
+pretrained causal LM and separate train and validation splits. It loads the
+model/tokenizer and either reads a pinned Hugging Face text-dataset revision
+or accepts caller-provided Hugging Face `Dataset` objects. Dataset identity is
+optional for caller-provided data; the Hub-loading path requires a pinned ID
+and immutable revision. The API tokenizes one text field by default, trains,
+evaluates, and exports locally. It
 does not upload artifacts or create a validation split. Callers can provide
 preloaded Hugging Face `Dataset` splits, a row formatter, tokenizer, and custom
-collator for prompt formatting and label construction. Its summary preserves
-the requested model revision and records resolved model and tokenizer commits
-and whether they match when available. Model loading is pinned to the
+collator for prompt formatting and label construction. Caller-provided data can
+omit Hub identity. Its summary preserves the requested model revision and
+records resolved model and tokenizer commits and whether they match when
+available. The focused fine-tuning API, roadmap, and notebook-contract suite
+passes 15 tests under Python 3.12.14, torch 2.9.0+cpu, and pytest 9.1.1. No
+live Hub or TPU run was performed. Model loading is pinned to the
 tokenizer's resolved commit; a detected mismatch stops before training. Each
 successful run writes
 a JSON summary beside the export with the arguments, data splits, revisions,

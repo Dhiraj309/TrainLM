@@ -10,10 +10,12 @@
 
 The `feat/01-pretrained-finetuning-api` branch introduces an additive
 `run_finetuning(TrainLMFineTuningConfig(...))` workflow. It loads a pretrained
-causal LM and tokenizer, reads immutable Hub train and validation splits,
-tokenizes a plain-text field, then trains, evaluates, and saves a local model
-export. Its summary records the requested model revision, resolved model and
-tokenizer commits, and whether they match when available. It pins model loading
+causal LM and tokenizer, defaults to immutable Hub train and validation splits,
+or accepts caller-provided Hugging Face `Dataset` splits, tokenizes a plain-text
+field, then trains, evaluates, and saves a local model export. Hub-loaded data
+requires a pinned ID and revision; preloaded local or transformed splits can
+omit those fields. Its summary records the requested model revision, resolved
+model and tokenizer commits, and whether they match when available. It pins model loading
 to the tokenizer's resolved commit; a detected mismatch stops before training.
 Each successful run writes a JSON summary beside the export with all training
 arguments, data splits, revisions, and metrics. Failed runs update that file
@@ -85,6 +87,13 @@ available for label construction. The report records whether splits came from
 the Hub loader or the caller and the formatter's name; callers must resupply
 runtime objects and callback code when resuming. The API suite covers both
 input paths; no live Hub or TPU run was performed.
+Caller-supplied splits can now omit `dataset_id` and `dataset_revision`, which
+removes the need for placeholder Hub provenance for local or transformed data.
+The Hub-loading path still requires an immutable source revision. CPU/API
+coverage verifies both direct-data metadata omission and pinned Hub validation:
+15 fine-tuning API, roadmap, and notebook-contract tests passed under Python
+3.12.14, torch 2.9.0+cpu, and pytest 9.1.1. No live Hub or TPU run was
+performed.
 
 The [coding-agent guide](AI_AGENT_GUIDE.md) maps common training tasks to
 the current notebook, implementation, tests, and validation limits. Prefer it

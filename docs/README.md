@@ -21,8 +21,10 @@ preloaded Hugging Face `Dataset` splits. A row formatter and custom collator
 support user-owned prompt formatting and label construction. The default path
 trains, evaluates, and exports locally; it requires a separate validation
 split. For caller-supplied splits, TrainLM records the declared dataset
-identity and requires the same data and callbacks to be supplied again during
-resume. The [fine-tuning notebook](../notebooks/TrainLM_Text_Fine_Tuning.ipynb)
+identity when supplied; local or transformed datasets do not need a placeholder
+Hub ID or revision. Hub-loaded splits still require an immutable commit SHA.
+The same data and callbacks must be supplied again during resume. The
+[fine-tuning notebook](../notebooks/TrainLM_Text_Fine_Tuning.ipynb)
 calls this API in short Colab/Kaggle cells and installs the package without
 reinstalling Torch. Each successful run writes `finetuning-summary.json` beside
 the model export, recording training arguments, data splits, resolved model and
@@ -31,6 +33,9 @@ known checkpoint before re-raising the original exception. Seventy-three
 focused CPU API/lifecycle tests and 10 notebook/roadmap contract tests pass. A
 local one-step training run also passed with a tiny GPT-2 model under supported
 Transformers 5.20.2; real Hub and accelerator execution remain unverified.
+The latest optional-provenance update passes 15 focused fine-tuning API,
+roadmap, and notebook-contract tests under Python 3.12.14, torch 2.9.0+cpu, and
+pytest 9.1.1; it did not run against the live Hub or an accelerator.
 The additive `restore_finetuning_config` helper reloads those settings from a
 run summary, anchors `output_dir` to its location, verifies a published
 checkpoint archive or native TPU manifest is readable, and accepts a new

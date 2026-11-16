@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
 import json
 import math
 import os
@@ -39,9 +39,11 @@ class TrainLMFineTuningConfig:
     """
 
     model_name_or_path: str
-    dataset_id: str
-    dataset_revision: str
-    args: TrainLMTrainingArguments
+    dataset_id: str | None = None
+    dataset_revision: str | None = None
+    args: TrainLMTrainingArguments = field(
+        default_factory=TrainLMTrainingArguments
+    )
     text_field: str = "text"
     train_split: str = "train"
     validation_split: str = "validation"
@@ -53,14 +55,17 @@ class TrainLMFineTuningConfig:
             or not self.model_name_or_path.strip()
         ):
             raise ValueError("model_name_or_path must be a non-empty model ID or path.")
-        if not isinstance(self.dataset_id, str) or not self.dataset_id.strip():
-            raise ValueError("dataset_id must identify a non-empty data source.")
-        if (
+        if self.dataset_id is not None and (
+            not isinstance(self.dataset_id, str) or not self.dataset_id.strip()
+        ):
+            raise ValueError("dataset_id must be a non-empty string when provided.")
+        if self.dataset_revision is not None and (
             not isinstance(self.dataset_revision, str)
             or not _COMMIT_SHA.fullmatch(self.dataset_revision)
         ):
             raise ValueError(
-                "dataset_revision must be an immutable 40-character commit SHA."
+                "dataset_revision must be an immutable 40-character commit SHA "
+                "when provided."
             )
         if self.model_revision is not None and (
             not isinstance(self.model_revision, str) or not self.model_revision.strip()
@@ -85,8 +90,8 @@ class TrainLMFineTuningResult:
 
     model_name_or_path: str
     model_revision: str | None
-    dataset_id: str
-    dataset_revision: str
+    dataset_id: str | None
+    dataset_revision: str | None
     model_path: Path
     step: int
     train_loss: float | None
@@ -242,6 +247,13 @@ def run_finetuning(
         raise TypeError("config must be a TrainLMFineTuningConfig instance.")
     if (train_dataset is None) != (eval_dataset is None):
         raise ValueError("Set both train_dataset and eval_dataset, or neither.")
+    if train_dataset is None and (
+        config.dataset_id is None or config.dataset_revision is None
+    ):
+        raise ValueError(
+            "dataset_id and immutable dataset_revision are required when "
+            "run_finetuning loads splits from the Hugging Face Hub."
+        )
     if tokenizer is not None and not callable(tokenizer):
         raise TypeError("tokenizer must be callable when provided.")
     if formatting_func is not None and not callable(formatting_func):
@@ -541,8 +553,8 @@ def restore_finetuning_config(
         config = TrainLMFineTuningConfig(
             model_name_or_path=report["model_name_or_path"],
             model_revision=report.get("model_revision"),
-            dataset_id=report["dataset_id"],
-            dataset_revision=report["dataset_revision"],
+            dataset_id=report.get("dataset_id"),
+            dataset_revision=report.get("dataset_revision"),
             text_field=data["text_field"],
             train_split=data["train_split"],
             validation_split=data["validation_split"],
