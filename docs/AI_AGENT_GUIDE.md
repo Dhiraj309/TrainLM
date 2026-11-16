@@ -9,6 +9,7 @@ documentation describes the PyTorch/XLA era.
 
 | Task | Start here | Related evidence |
 | --- | --- | --- |
+| Fine-tune a pretrained causal LM on a Hub text dataset | [Fine-tuning guide](tutorials/TEXT_FINETUNING.md) | [`run_finetuning`](../src/trainlm/finetuning.py), [focused API tests](../tests/test_finetuning_api.py); tests mock Hub/model loading, and native TPU remains experimental |
 | Pretrain a causal language model from raw Hugging Face text | [Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) · [notebook source](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) | [`run_pretraining`](../src/trainlm/pretraining_run.py), [`TrainLMPretrainingConfig` and data preparation](../src/trainlm/pretraining.py), [end-to-end CPU tests](../tests/test_pretraining_run.py) |
 | Show progress during a one-call scratch run | [notebook run cell](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) | [`run_pretraining(show_progress=True)`](../src/trainlm/pretraining_run.py), [progress tests](../tests/test_pretraining_run.py); updates follow `logging_steps` |
 | Choose GPT-2 model dimensions in the notebook | [advanced notebook settings](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) | compact (256 hidden, 4 layers, 4 heads), default (768 hidden, 6 layers, 12 heads), or custom; random initialization only, TPU fit and performance unverified |

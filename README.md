@@ -137,6 +137,53 @@ unverified query separately from the active runtime's status.
 `bundle_pretraining_artifacts` creates the notebook ZIP with the report, resume
 example, and model export when the export is complete.
 
+## Fine-tune a pretrained model
+
+For a text dataset on the Hub, `run_finetuning` loads the pretrained model and
+tokenizer, tokenizes the selected text column, trains against a separate
+validation split, evaluates, and exports the model and tokenizer locally.
+Pin the dataset revision to an immutable commit; pin the model revision when
+reproducibility requires it.
+
+```python
+from trainlm import (
+    TrainLMFineTuningConfig,
+    TrainLMTrainingArguments,
+    run_finetuning,
+)
+
+config = TrainLMFineTuningConfig(
+    model_name_or_path="Qwen/Qwen3-0.6B",
+    dataset_id="roneneldan/TinyStories",
+    dataset_revision="f54c09fd23315a6f9c86f9dc80f725de7d8f9c64",
+    text_field="text",
+    args=TrainLMTrainingArguments(
+        output_dir="runs/qwen-tinystories",
+        max_steps=1000,
+        sequence_length=512,
+        per_device_train_batch_size=2,
+        learning_rate=2e-5,
+        eval_steps=100,
+        save_steps=100,
+        save_total_limit=3,
+    ),
+)
+result = run_finetuning(config)
+print(result.summary())
+```
+
+This path keeps validation data separate and writes the export to
+`runs/qwen-tinystories/model`. It does not upload to the Hub. Install the
+optional dataset dependency with `pip install 'trainlm[finetuning]'`. The
+standard `TrainLMTrainer` remains available when you already have a model and
+tokenized datasets or need a custom lifecycle. Native TorchTPU fine-tuning is
+experimental and has not been certified by this API example. This first
+version returns a summary rather than writing the detailed report used by the
+from-scratch workflow.
+
+See the [fine-tuning guide](docs/tutorials/TEXT_FINETUNING.md) for setup
+requirements and limitations.
+
 The config defaults to a pinned TinyStories revision. In a standard Python
 environment, install the package with `pip install 'trainlm[pretraining]'`.
 The notebook installs only missing `datasets` and `tokenizers` helpers; it
