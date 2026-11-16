@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, fields
 import json
 import math
@@ -30,12 +30,12 @@ _SNAPSHOT_COMMIT = re.compile(
 
 @dataclass(frozen=True, slots=True)
 class TrainLMFineTuningConfig:
-    """Inputs for fine-tuning a pretrained causal LM on a Hub text dataset.
+    """Inputs and data provenance for pretrained causal-LM fine-tuning.
 
-    The train and validation splits stay separate. TrainLM loads the pretrained
-    model and tokenizer, tokenizes the selected text column, then runs the
-    familiar trainer lifecycle. Training and evaluation details live in the
-    supplied :class:`TrainLMTrainingArguments`.
+    The train and validation splits stay separate. The default path loads the
+    pinned Hub dataset and tokenizes ``text_field``. ``run_finetuning`` can
+    instead receive dataset objects and a row formatter. Training and
+    evaluation settings live in :class:`TrainLMTrainingArguments`.
     """
 
     model_name_or_path: str
@@ -54,7 +54,7 @@ class TrainLMFineTuningConfig:
         ):
             raise ValueError("model_name_or_path must be a non-empty model ID or path.")
         if not isinstance(self.dataset_id, str) or not self.dataset_id.strip():
-            raise ValueError("dataset_id must be a non-empty Hugging Face dataset ID.")
+            raise ValueError("dataset_id must identify a non-empty data source.")
         if (
             not isinstance(self.dataset_revision, str)
             or not _COMMIT_SHA.fullmatch(self.dataset_revision)
@@ -217,10 +217,22 @@ def _write_summary(path: Path, report: Mapping[str, Any]) -> None:
 def run_finetuning(
     config: TrainLMFineTuningConfig,
     *,
+    train_dataset: Any | None = None,
+    eval_dataset: Any | None = None,
+    tokenizer: Any | None = None,
+    formatting_func: Callable[[Mapping[str, Any]], str] | None = None,
+    data_collator: Callable[[Sequence[Any]], Mapping[str, Any]] | None = None,
     callbacks: Sequence[TrainerCallback] | None = None,
     resume_from_checkpoint: str | Path | None = None,
 ) -> TrainLMFineTuningResult:
     """Run pretrained text fine-tuning and persist a success or failure summary.
+
+    By default, load the configured pinned Hub dataset. To use preloaded
+    Hugging Face ``Dataset`` splits, pass both ``train_dataset`` and
+    ``eval_dataset``. ``formatting_func`` receives one row and returns its
+    training text; a custom ``data_collator`` receives the mapped token fields
+    and original columns so it can build task-specific labels. Supply the same
+    objects and callbacks again when resuming such a run.
 
     The JSON summary is written under ``args.output_dir`` before work begins,
     then finalized on success or updated with the failed phase and last known
@@ -228,10 +240,25 @@ def run_finetuning(
     """
     if not isinstance(config, TrainLMFineTuningConfig):
         raise TypeError("config must be a TrainLMFineTuningConfig instance.")
+    if (train_dataset is None) != (eval_dataset is None):
+        raise ValueError("Set both train_dataset and eval_dataset, or neither.")
+    if tokenizer is not None and not callable(tokenizer):
+        raise TypeError("tokenizer must be callable when provided.")
+    if formatting_func is not None and not callable(formatting_func):
+        raise TypeError("formatting_func must be callable when provided.")
+    if data_collator is not None and not callable(data_collator):
+        raise TypeError("data_collator must be callable when provided.")
 
     summary_path = Path(config.args.output_dir) / "finetuning-summary.json"
+    dataset_source = (
+        "provided_dataset" if train_dataset is not None else "huggingface_hub"
+    )
     report = _initial_finetuning_summary(
-        config, summary_path, resume_from_checkpoint=resume_from_checkpoint
+        config,
+        summary_path,
+        resume_from_checkpoint=resume_from_checkpoint,
+        dataset_source=dataset_source,
+        formatting_func=formatting_func,
     )
     _write_summary(summary_path, report)
     run_state: dict[str, Any] = {
@@ -243,6 +270,11 @@ def run_finetuning(
     try:
         result = _run_finetuning_impl(
             config,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            tokenizer=tokenizer,
+            formatting_func=formatting_func,
+            data_collator=data_collator,
             callbacks=callbacks,
             resume_from_checkpoint=resume_from_checkpoint,
             run_state=run_state,
@@ -293,6 +325,8 @@ def _initial_finetuning_summary(
     summary_path: Path,
     *,
     resume_from_checkpoint: str | Path | None,
+    dataset_source: str,
+    formatting_func: Callable[[Mapping[str, Any]], str] | None,
 ) -> dict[str, Any]:
     return {
         "schema_version": 1,
@@ -315,9 +349,11 @@ def _initial_finetuning_summary(
         "train_loss": None,
         "evaluation": {},
         "data": {
+            "source": dataset_source,
             "text_field": config.text_field,
             "train_split": config.train_split,
             "validation_split": config.validation_split,
+            "formatting_function": _callable_label(formatting_func),
         },
         "training_arguments": _json_compatible({
             item.name: getattr(config.args, item.name)
@@ -330,6 +366,14 @@ def _initial_finetuning_summary(
             "latest_checkpoint": None,
         },
     }
+
+
+def _callable_label(value: Callable[..., Any] | None) -> str | None:
+    if value is None:
+        return None
+    module = getattr(value, "__module__", type(value).__module__)
+    name = getattr(value, "__qualname__", type(value).__qualname__)
+    return f"{module}.{name}"
 
 
 def _last_known_state(run_state: Mapping[str, Any]) -> dict[str, Any]:
@@ -521,15 +565,20 @@ def restore_finetuning_config(
 def _run_finetuning_impl(
     config: TrainLMFineTuningConfig,
     *,
+    train_dataset: Any | None = None,
+    eval_dataset: Any | None = None,
+    tokenizer: Any | None = None,
+    formatting_func: Callable[[Mapping[str, Any]], str] | None = None,
+    data_collator: Callable[[Sequence[Any]], Mapping[str, Any]] | None = None,
     callbacks: Sequence[TrainerCallback] | None = None,
     resume_from_checkpoint: str | Path | None = None,
     run_state: dict[str, Any],
 ) -> TrainLMFineTuningResult:
-    """Load, tokenize, fine-tune, evaluate, and export one pretrained causal LM.
+    """Load data, fine-tune, evaluate, and export one pretrained causal LM.
 
-    This convenience path reads immutable Hugging Face dataset revisions and
-    requires a separate validation split. It saves a local model and tokenizer
-    under ``args.output_dir / "model"``; it never uploads artifacts.
+    Hub sources are pinned to an immutable dataset revision. Caller-provided
+    data must expose the Hugging Face Dataset ``column_names`` and ``map``
+    interface. The result is saved locally and never uploaded.
     """
     if not isinstance(config, TrainLMFineTuningConfig):
         raise TypeError("config must be a TrainLMFineTuningConfig instance.")
@@ -548,30 +597,37 @@ def _run_finetuning_impl(
     ):
         raise TypeError("resume_from_checkpoint must be a path or None.")
 
-    run_state["phase"] = "dependency_loading"
-    try:
-        from datasets import load_dataset
-    except ModuleNotFoundError as exc:
-        if exc.name != "datasets":
-            raise
-        raise RuntimeError(
-            "Hub text fine-tuning requires the optional datasets package; "
-            "install TrainLM with `pip install 'trainlm[finetuning]'`."
-        ) from exc
-    from transformers import AutoTokenizer
+    if train_dataset is None:
+        if eval_dataset is not None:
+            raise ValueError("Set both train_dataset and eval_dataset, or neither.")
+        run_state["phase"] = "dependency_loading"
+        try:
+            from datasets import load_dataset
+        except ModuleNotFoundError as exc:
+            if exc.name != "datasets":
+                raise
+            raise RuntimeError(
+                "Hub text fine-tuning requires the optional datasets package; "
+                "install TrainLM with `pip install 'trainlm[finetuning]'`."
+            ) from exc
+    elif eval_dataset is None:
+        raise ValueError("Set both train_dataset and eval_dataset, or neither.")
 
     model_revision = config.model_revision
     run_state["phase"] = "tokenizer_loading"
-    try:
-        tokenizer = AutoTokenizer.from_pretrained(
-            config.model_name_or_path,
-            **({"revision": model_revision} if model_revision is not None else {}),
-        )
-    except Exception as exc:
-        raise RuntimeError(
-            f"Could not load tokenizer for {config.model_name_or_path!r}. "
-            "Check the model ID, revision, and Hub access."
-        ) from exc
+    if tokenizer is None:
+        from transformers import AutoTokenizer
+
+        try:
+            tokenizer = AutoTokenizer.from_pretrained(
+                config.model_name_or_path,
+                **({"revision": model_revision} if model_revision is not None else {}),
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                f"Could not load tokenizer for {config.model_name_or_path!r}. "
+                "Check the model ID, revision, and Hub access."
+            ) from exc
     resolved_tokenizer_revision = (
         _tokenizer_commit(tokenizer) or _resolved_commit(model_revision)
     )
@@ -586,34 +642,66 @@ def _run_finetuning_impl(
         tokenizer.pad_token = tokenizer.eos_token
 
     run_state["phase"] = "dataset_loading"
-    train_source = load_dataset(
-        config.dataset_id,
-        revision=config.dataset_revision,
-        split=config.train_split,
-    )
-    validation_source = load_dataset(
-        config.dataset_id,
-        revision=config.dataset_revision,
-        split=config.validation_split,
-    )
+    if train_dataset is None:
+        train_source = load_dataset(
+            config.dataset_id,
+            revision=config.dataset_revision,
+            split=config.train_split,
+        )
+        validation_source = load_dataset(
+            config.dataset_id,
+            revision=config.dataset_revision,
+            split=config.validation_split,
+        )
+    else:
+        train_source = train_dataset
+        validation_source = eval_dataset
     for split_name, dataset in (
         (config.train_split, train_source),
         (config.validation_split, validation_source),
     ):
-        if config.text_field not in dataset.column_names:
+        columns = getattr(dataset, "column_names", None)
+        mapper = getattr(dataset, "map", None)
+        if not isinstance(columns, Sequence) or isinstance(columns, (str, bytes)):
+            raise TypeError(
+                f"{split_name} dataset must expose the Hugging Face Dataset "
+                "`column_names` interface."
+            )
+        if not callable(mapper):
+            raise TypeError(
+                f"{split_name} dataset must expose the Hugging Face Dataset "
+                "`map` method."
+            )
+        if formatting_func is None and config.text_field not in columns:
             raise ValueError(
                 f"Dataset split {split_name!r} has no {config.text_field!r} column."
             )
-        if len(dataset) == 0:
-            raise ValueError(f"Dataset split {split_name!r} is empty.")
+        try:
+            if len(dataset) == 0:
+                raise ValueError(f"Dataset split {split_name!r} is empty.")
+        except (TypeError, NotImplementedError):
+            pass
 
     def tokenize(batch: Mapping[str, Any]) -> Mapping[str, Any]:
-        texts = batch[config.text_field]
+        if formatting_func is None:
+            texts = batch[config.text_field]
+        else:
+            values = tuple(batch.values())
+            if not values:
+                raise ValueError("Cannot format a dataset batch with no columns.")
+            size = len(values[0])
+            if any(len(column) != size for column in values):
+                raise ValueError("Dataset batch columns have inconsistent lengths.")
+            texts = [
+                formatting_func({name: batch[name][index] for name in batch})
+                for index in range(size)
+            ]
         if not isinstance(texts, list) or any(
             not isinstance(text, str) for text in texts
         ):
             raise ValueError(
-                f"Dataset field {config.text_field!r} must contain text strings."
+                "The selected dataset text or formatting_func must produce "
+                "one string per example."
             )
         return tokenizer(
             texts,
@@ -625,12 +713,14 @@ def _run_finetuning_impl(
     train_dataset = train_source.map(
         tokenize,
         batched=True,
-        remove_columns=train_source.column_names,
+        remove_columns=[] if data_collator is not None else train_source.column_names,
     )
     validation_dataset = validation_source.map(
         tokenize,
         batched=True,
-        remove_columns=validation_source.column_names,
+        remove_columns=(
+            [] if data_collator is not None else validation_source.column_names
+        ),
     )
 
     model_load_revision = resolved_tokenizer_revision or model_revision
@@ -644,7 +734,11 @@ def _run_finetuning_impl(
         train_dataset=train_dataset,
         eval_dataset=validation_dataset,
         processing_class=tokenizer,
-        data_collator=_CausalLMCollator(tokenizer),
+        data_collator=(
+            data_collator
+            if data_collator is not None
+            else _CausalLMCollator(tokenizer)
+        ),
         callbacks=callbacks,
     )
     run_state["trainer"] = trainer

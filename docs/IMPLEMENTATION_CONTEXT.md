@@ -19,9 +19,10 @@ Each successful run writes a JSON summary beside the export with all training
 arguments, data splits, revisions, and metrics. Failed runs update that file
 with the phase, error type, and last known step/checkpoint, then re-raise the
 original exception without copying its message into the report. Local sources
-may have no commit metadata. It does not upload artifacts, create a validation
-split, or format chat/instruction examples. Native TPU remains experimental
-and receives no certification from this API. The focused
+may have no commit metadata. It does not upload artifacts or create a
+validation split. Its optional row formatter and custom collator allow
+caller-defined chat/instruction formatting and label construction. Native TPU
+remains experimental and receives no certification from this API. The focused
 CPU/API suites pass 73 tests under
 Python 3.12.14, torch 2.9.0+cpu,
 pytest 9.1.1, and Transformers 5.0.0. That Transformers version is below the
@@ -77,6 +78,13 @@ compatibility remain part of trainer restore after model construction. The
 focused API, notebook, roadmap, and installed-wheel suite passes 66 tests, and
 the CPU/Gloo checkpoint-worker suite passes 20 tests with command-scoped local
 socket permission. Accelerator and real Hub execution remain unverified.
+The high-level fine-tuning helper also accepts paired, preloaded Hugging Face
+`Dataset` splits, an optional caller tokenizer, a row-to-text `formatting_func`,
+and a custom collator. With a custom collator, original columns remain
+available for label construction. The report records whether splits came from
+the Hub loader or the caller and the formatter's name; callers must resupply
+runtime objects and callback code when resuming. The API suite covers both
+input paths; no live Hub or TPU run was performed.
 
 The [coding-agent guide](AI_AGENT_GUIDE.md) maps common training tasks to
 the current notebook, implementation, tests, and validation limits. Prefer it

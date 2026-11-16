@@ -16,15 +16,17 @@ and report writing. Notebook users see sparse training progress automatically;
 Python callers can opt in with `show_progress=True`. The lower-level
 `TrainLMTrainer.from_scratch(...)` lifecycle remains available for custom use.
 The public API also adds `run_finetuning(TrainLMFineTuningConfig(...))` for a
-pretrained causal LM and pinned Hub text dataset. It loads the model and
-tokenizer, tokenizes one text field, trains, evaluates, and exports locally.
-This path requires a separate validation split and does not handle
-chat-template formatting or task-specific label masking. The
-[fine-tuning notebook](../notebooks/TrainLM_Text_Fine_Tuning.ipynb) calls this
-API in short Colab/Kaggle cells and installs the package without reinstalling
-Torch. Each successful run writes `finetuning-summary.json` beside the model
-export, recording training arguments, data splits, resolved model/tokenizer
-revisions, and metrics. Failed runs also record the phase, error type, and last
+pretrained causal LM. It can load a pinned Hub text dataset or accept paired
+preloaded Hugging Face `Dataset` splits. A row formatter and custom collator
+support user-owned prompt formatting and label construction. The default path
+trains, evaluates, and exports locally; it requires a separate validation
+split. For caller-supplied splits, TrainLM records the declared dataset
+identity and requires the same data and callbacks to be supplied again during
+resume. The [fine-tuning notebook](../notebooks/TrainLM_Text_Fine_Tuning.ipynb)
+calls this API in short Colab/Kaggle cells and installs the package without
+reinstalling Torch. Each successful run writes `finetuning-summary.json` beside
+the model export, recording training arguments, data splits, resolved model and
+tokenizer revisions, and metrics. Failed runs also record the phase, error type, and last
 known checkpoint before re-raising the original exception. Seventy-three
 focused CPU API/lifecycle tests and 10 notebook/roadmap contract tests pass. A
 local one-step training run also passed with a tiny GPT-2 model under supported
