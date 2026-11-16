@@ -7,9 +7,10 @@ from dataclasses import dataclass, fields
 import json
 import math
 import os
-from pathlib import Path
 import re
 import tempfile
+import zipfile
+from pathlib import Path
 from typing import Any
 
 from .api import (
@@ -367,6 +368,70 @@ def _last_known_state(run_state: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _validate_resume_checkpoint(checkpoint: Path) -> None:
+    """Check checkpoint publication metadata without loading saved Python data."""
+    state_path = checkpoint / "trainer_state.pt"
+    if state_path.is_file() and not state_path.is_symlink():
+        try:
+            with zipfile.ZipFile(state_path) as archive:
+                infos = archive.infolist()
+                data_infos = [
+                    info
+                    for info in infos
+                    if info.filename.rsplit("/", 1)[-1] == "data.pkl"
+                ]
+                version_infos = [
+                    info
+                    for info in infos
+                    if info.filename.rsplit("/", 1)[-1] == "version"
+                ]
+                if len(data_infos) != 1 or len(version_infos) != 1:
+                    raise ValueError("missing Torch checkpoint metadata")
+                data_info = data_infos[0]
+                version_info = version_infos[0]
+                if (
+                    data_info.filename.rsplit("/", 1)[0]
+                    != version_info.filename.rsplit("/", 1)[0]
+                    or data_info.file_size == 0
+                ):
+                    raise ValueError("inconsistent Torch checkpoint metadata")
+                archive.read(data_info)
+                version = archive.read(version_info).decode("ascii").strip()
+                if not version.isdecimal():
+                    raise ValueError("invalid Torch checkpoint version")
+        except (
+            OSError,
+            RuntimeError,
+            UnicodeError,
+            ValueError,
+            zipfile.BadZipFile,
+        ) as exc:
+            raise ValueError(
+                "The published local checkpoint is not a readable Torch "
+                "archive. Restore the complete run directory or "
+                "start a new run."
+            ) from exc
+        return
+
+    manifest_path = checkpoint / "manifest.json"
+    if manifest_path.is_file() and not manifest_path.is_symlink():
+        from ._tpu_checkpoint import find_latest_committed_tpu_checkpoint
+
+        committed = find_latest_committed_tpu_checkpoint(checkpoint.parent)
+        if committed == checkpoint:
+            return
+        raise ValueError(
+            "The published native TPU checkpoint manifest or shard set is "
+            "incomplete or invalid. Restore the complete run directory or "
+            "start a new run."
+        )
+
+    raise ValueError(
+        "The published training checkpoint has no supported state file or "
+        "native TPU manifest. Restore the complete run directory or start a new run."
+    )
+
+
 def restore_finetuning_config(
     summary_path: str | Path,
     *,
@@ -443,11 +508,13 @@ def restore_finetuning_config(
         raise ValueError(
             "The fine-tuning summary contains invalid saved settings."
         ) from exc
-    if _latest_training_checkpoint(path.parent) is None:
+    checkpoint = _latest_training_checkpoint(path.parent)
+    if checkpoint is None:
         raise ValueError(
             "No published training checkpoint was found under "
             f"{path.parent}; restore the full run directory or start a new run."
         )
+    _validate_resume_checkpoint(checkpoint)
     return config
 
 

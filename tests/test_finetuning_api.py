@@ -183,7 +183,7 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
     checkpoint_path = config.args.output_dir / "checkpoint-4"
     checkpoint_path.mkdir(parents=True)
     checkpoint_state = checkpoint_path / "trainer_state.pt"
-    checkpoint_state.write_bytes(b"saved state placeholder")
+    torch.save({"schema_version": 1}, checkpoint_state)
     calls["trainer"]["latest_checkpoint"] = str(checkpoint_path)
     result = run_finetuning(config, resume_from_checkpoint="latest")
 
@@ -245,8 +245,32 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
     )
     with pytest.raises(ValueError, match="greater than the last recorded"):
         restore_finetuning_config(result.summary_path, max_steps=4)
+    checkpoint_state.write_bytes(b"truncated checkpoint")
+    with pytest.raises(ValueError, match="not a readable Torch archive"):
+        restore_finetuning_config(result.summary_path, max_steps=8)
     checkpoint_state.unlink()
     with pytest.raises(ValueError, match="No published training checkpoint"):
+        restore_finetuning_config(result.summary_path, max_steps=8)
+    shard_name = "checkpoint-4-rank-00000.pt"
+    (checkpoint_path / shard_name).write_bytes(b"committed shard")
+    manifest = {
+        "schema_version": 1,
+        "status": "committed",
+        "step": 4,
+        "micro_step": 4,
+        "world_size": 1,
+        "shards": [shard_name],
+    }
+    manifest_path = checkpoint_path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    restored_manifest_config = restore_finetuning_config(
+        result.summary_path,
+        max_steps=8,
+    )
+    assert restored_manifest_config.args.max_steps == 8
+    manifest["status"] = "pending"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(ValueError, match="manifest or shard set"):
         restore_finetuning_config(result.summary_path, max_steps=8)
 
     collator = trainer_kwargs["data_collator"]

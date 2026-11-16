@@ -31,11 +31,15 @@ local one-step training run also passed with a tiny GPT-2 model under supported
 Transformers 5.20.2; real Hub and accelerator execution remain unverified.
 The additive `restore_finetuning_config` helper reloads those settings from a
 run summary, anchors `output_dir` to its location, verifies a published
-checkpoint exists, and accepts a new training-step target for resume. The
+checkpoint archive or native TPU manifest is readable, and accepts a new
+training-step target for resume. This early check does not unpickle local
+checkpoint data; trainer restore still checks model/state compatibility. The
 fine-tuning notebook uses it when `RESUME_FROM_CHECKPOINT` is `"latest"`.
 Its focused API, checkpoint lifecycle, notebook, roadmap, and installed-wheel
 suite passes 66 tests under Python 3.12.14, torch 2.9.0+cpu, and Transformers
-5.20.2. Real Hub and accelerator training remain unverified.
+5.20.2; 20 CPU/Gloo checkpoint-worker tests also pass when local sockets are
+permitted for that command. Real Hub and accelerator training remain
+unverified.
 The notebook distinguishes a 10,000-token workflow smoke test from a
 1,000,000-token starter budget and allows a custom target; neither budget
 certifies model convergence. Its advanced GPT-2 settings offer compact

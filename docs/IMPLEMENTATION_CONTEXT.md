@@ -69,6 +69,14 @@ The updated API, checkpoint lifecycle, notebook, roadmap, and installed-wheel
 suite passes 66 tests under Python 3.12.14, torch 2.9.0+cpu, and Transformers
 5.20.2, including coverage for a missing checkpoint. No Hub or TPU run was
 performed.
+Resume setup now checks the local Torch checkpoint archive metadata without
+unpickling saved data; native TPU resumes require a committed manifest and
+present shard set. A missing or malformed checkpoint is reported before the
+fine-tuning notebook loads the dataset or model. Tensor-shape and training-state
+compatibility remain part of trainer restore after model construction. The
+focused API, notebook, roadmap, and installed-wheel suite passes 66 tests, and
+the CPU/Gloo checkpoint-worker suite passes 20 tests with command-scoped local
+socket permission. Accelerator and real Hub execution remain unverified.
 
 The [coding-agent guide](AI_AGENT_GUIDE.md) maps common training tasks to
 the current notebook, implementation, tests, and validation limits. Prefer it
