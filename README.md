@@ -77,8 +77,10 @@ changing the corpus.
 
 The scratch API defaults to cosine decay with automatic warmup (floor of 10%
 of the step budget, capped at 100 steps). Choose `lr_scheduler_type` from
-`"constant"`, `"linear"`, `"cosine"`, or `"wsd"`; set `warmup_steps` to a
-non-negative integer to override automatic warmup:
+`"constant"`, `"linear"`, `"cosine"`, or `"wsd"`. Set either `warmup_ratio`
+from 0 to 1 or a non-negative integer `warmup_steps` to override automatic
+warmup; the options are mutually exclusive. A ratio rounds up to a whole
+optimizer step, matching Transformers:
 
 ```python
 config = TrainLMPretrainingConfig(
@@ -87,14 +89,16 @@ config = TrainLMPretrainingConfig(
     validation_file="data/validation.txt",
     max_tokens=1_000_000,
     lr_scheduler_type="cosine",
-    warmup_steps=500,
+    warmup_ratio=0.1,
     accelerator="native_tpu",
 )
 ```
 
+Use `warmup_steps=500` instead when you want an exact number of warmup steps.
+
 The report records the requested and effective values. Extending an existing
-run's token budget currently remains limited to the default cosine schedule
-and its automatic warmup; other schedule settings need a fresh run directory.
+run's token budget remains limited to cosine runs whose effective warmup
+matches the automatic rule; other schedule settings need a fresh run directory.
 
 For a short copyable script, see [`examples/pretrain_from_scratch.py`](examples/pretrain_from_scratch.py).
 The [examples index](examples/README.md) also separates user quickstarts from

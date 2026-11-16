@@ -38,9 +38,12 @@ class TrainLMPretrainingConfig:
     training split and writes validated packed shards under ``output_dir``
     before constructing a trainer. Matching preparation inputs reuse
     integrity-checked tokenizer and shard artifacts from that directory.
-    The learning-rate schedule defaults to cosine; ``warmup_steps=None`` keeps
-    the derived floor-of-10%-of-steps warmup (capped at 100). Supported
-    schedules are ``constant``, ``linear``, ``cosine``, and ``wsd``.
+    The learning-rate schedule defaults to cosine. If neither warmup option is
+    set, the run uses the derived floor-of-10%-of-steps warmup (capped at 100).
+    ``warmup_ratio`` follows Transformers semantics and rounds the requested
+    fraction up to a whole optimizer step. Set at most one of
+    ``warmup_steps`` and ``warmup_ratio``. Supported schedules are
+    ``constant``, ``linear``, ``cosine``, and ``wsd``.
     """
 
     output_dir: str | Path = Path("runs/pretraining")
@@ -76,6 +79,7 @@ class TrainLMPretrainingConfig:
     save_total_limit: int | None = None
     lr_scheduler_type: Literal["constant", "linear", "cosine", "wsd"] = "cosine"
     warmup_steps: int | None = None
+    warmup_ratio: float | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "output_dir", Path(self.output_dir).expanduser())
@@ -216,6 +220,15 @@ class TrainLMPretrainingConfig:
                 "warmup_steps must be a non-negative integer or None for "
                 "automatic warmup."
             )
+        if self.warmup_ratio is not None and (
+            isinstance(self.warmup_ratio, bool)
+            or not isinstance(self.warmup_ratio, Real)
+            or not math.isfinite(self.warmup_ratio)
+            or not 0 <= self.warmup_ratio <= 1
+        ):
+            raise ValueError("warmup_ratio must be finite and between 0 and 1.")
+        if self.warmup_steps is not None and self.warmup_ratio is not None:
+            raise ValueError("Set only one of warmup_steps and warmup_ratio.")
         if (isinstance(self.weight_decay, bool)
                 or not isinstance(self.weight_decay, Real)
                 or not math.isfinite(self.weight_decay)
