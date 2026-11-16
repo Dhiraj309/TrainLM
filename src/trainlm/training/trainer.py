@@ -59,13 +59,31 @@ class Trainer:
         self.train_dataloader = runtime.prepare_dataloader(train_dataloader)
         try:
             self._train_batches_per_epoch = len(self.train_dataloader)
-        except (TypeError, NotImplementedError):
+        except (TypeError, NotImplementedError, ValueError):
             self._train_batches_per_epoch = None
+        checkpoint_config = getattr(config, "checkpoint", None)
+        evaluation_config = getattr(config, "evaluation", None)
+        if (
+            getattr(config.trainer, "stop_at_epoch_end", False)
+            or getattr(checkpoint_config, "save_training_at_epoch_end", False)
+            or getattr(evaluation_config, "eval_at_epoch_end", False)
+        ) and self._train_batches_per_epoch is None:
+            raise ValueError(
+                "Epoch-based trainer actions require a finite training loader."
+            )
         self.eval_dataloader = (
             runtime.prepare_dataloader(eval_dataloader)
             if eval_dataloader is not None
             else None
         )
+        evaluation_config = getattr(config, "evaluation", None)
+        if (
+            getattr(evaluation_config, "eval_at_epoch_end", False)
+            or getattr(evaluation_config, "eval_every_steps", None) is not None
+        ) and self.eval_dataloader is None:
+            raise ValueError(
+                "Scheduled evaluation requires an evaluation dataloader."
+            )
 
         self.state = TrainerState()
         self.control = TrainerControl()
@@ -78,6 +96,7 @@ class Trainer:
 
         self._train_iterator: Iterator | None = None
         self._global_tokens_seen: int | None = None
+        self._epoch_end_pending = False
 
     def prepare(self) -> TrainerState:
         """Initialize backend resources and enter the prepared phase."""
@@ -137,7 +156,9 @@ class Trainer:
                     self.control,
                 )
 
+                previous_epoch = self.state.epoch
                 self._train_step()
+                self._epoch_end_pending = self.state.epoch > previous_epoch
 
                 self.callback_handler.on_step_end(
                     self.state,
@@ -161,16 +182,23 @@ class Trainer:
         eval_interval = getattr(evaluation, "eval_every_steps", None)
         should_evaluate = self.control.should_evaluate or (
             eval_interval is not None and self.state.step % eval_interval == 0
+        ) or (
+            getattr(evaluation, "eval_at_epoch_end", False)
+            and self._epoch_end_pending
         )
         checkpoint = getattr(self.config, "checkpoint", None)
         save_interval = getattr(checkpoint, "save_training_every_steps", None)
         should_save = self.control.should_save_checkpoint or (
             save_interval is not None and self.state.step % save_interval == 0
+        ) or (
+            getattr(checkpoint, "save_training_at_epoch_end", False)
+            and self._epoch_end_pending
         )
         if should_evaluate:
             self.evaluate()
         if should_save:
             self.save_checkpoint(f"checkpoint-{self.state.step}")
+        self._epoch_end_pending = False
 
     def _finish_training(self) -> None:
         """Run end hooks and finalize resources exactly once."""
@@ -209,9 +237,10 @@ class Trainer:
         """Save a successful terminal step when periodic saves are enabled."""
         checkpoint = getattr(self.config, "checkpoint", None)
         save_interval = getattr(checkpoint, "save_training_every_steps", None)
+        save_at_epoch_end = getattr(checkpoint, "save_training_at_epoch_end", False)
         if (
             self.state.phase == TrainerPhase.FAILED
-            or save_interval is None
+            or (save_interval is None and not save_at_epoch_end)
             or self._checkpoint_saver is None
             or self.state.step < 1
             or self._last_checkpoint_step == self.state.step
@@ -449,16 +478,25 @@ class Trainer:
 
         microbatch_limit = accumulation_steps
         max_train_batches = getattr(self.config.trainer, "max_train_batches", None)
-        if max_train_batches is not None:
-            remaining_batches = max_train_batches - self.state.micro_step
-            if remaining_batches < 1:
-                raise RuntimeError("The configured training-batch budget is exhausted.")
-            microbatch_limit = min(microbatch_limit, remaining_batches)
-            if self._train_batches_per_epoch:
-                batches_to_epoch_end = self._train_batches_per_epoch - (
-                    self.state.micro_step % self._train_batches_per_epoch
+        stop_at_epoch_end = getattr(
+            self.config.trainer, "stop_at_epoch_end", False
+        )
+        if max_train_batches is not None or stop_at_epoch_end:
+            if not self._train_batches_per_epoch:
+                raise ValueError(
+                    "Epoch-bounded accumulation requires a finite training loader."
                 )
-                microbatch_limit = min(microbatch_limit, batches_to_epoch_end)
+            if max_train_batches is not None:
+                remaining_batches = max_train_batches - self.state.micro_step
+                if remaining_batches < 1:
+                    raise RuntimeError(
+                        "The configured training-batch budget is exhausted."
+                    )
+                microbatch_limit = min(microbatch_limit, remaining_batches)
+            batches_to_epoch_end = self._train_batches_per_epoch - (
+                self.state.micro_step % self._train_batches_per_epoch
+            )
+            microbatch_limit = min(microbatch_limit, batches_to_epoch_end)
 
         total_tokens = 0
         total_sequences = 0

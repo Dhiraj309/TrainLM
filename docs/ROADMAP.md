@@ -62,11 +62,16 @@ available. The focused fine-tuning API, roadmap, and notebook-contract suite
 passes 15 tests under Python 3.12.14, torch 2.9.0+cpu, and pytest 9.1.1. No
 live Hub or TPU run was performed. The epoch-budget follow-up passes 116
 focused API, lifecycle, config, trainer, and notebook-contract tests under the
-same CPU environment; native TPU epoch training remains unverified. Model
-loading is pinned to the
-tokenizer's resolved commit; a detected mismatch stops before training. Each
-successful run writes
-a JSON summary beside the export with the arguments, data splits, revisions,
+same CPU environment; native TPU epoch training remains unverified.
+The current API follow-up adds `eval_strategy` and `save_strategy` values
+`"no"`, `"steps"`, and `"epoch"`. Epoch actions flush partial accumulation at
+finite map-style dataset boundaries. Epoch scheduling requires a single device
+and is not implemented in the legacy XLA coordinator. The focused CPU suite for
+this change passed 151 API, lifecycle, config, engine, notebook, TPU coordinator,
+and packed-scratch tests. No accelerator run was performed. Model loading is
+pinned to the tokenizer's resolved commit; a detected mismatch stops before
+training. Each successful run writes a JSON summary beside the export with
+the arguments, data splits, revisions,
 and metrics. Failed runs record the phase, error type, and last known
 step/checkpoint before re-raising the original exception; the exception text is
 not saved. Local sources may not expose commit metadata. The API implementation

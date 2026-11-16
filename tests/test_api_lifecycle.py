@@ -151,6 +151,108 @@ def test_epoch_budget_rejects_conflicting_steps_and_streaming_data(tmp_path):
         )
 
 
+def test_epoch_schedules_flush_updates_then_evaluate_and_save(tmp_path):
+    recorder = MetricsRecorder()
+    trainer = TrainLMTrainer(
+        model=TinyModel(),
+        train_dataset=_dataset(),
+        eval_dataset=_dataset(),
+        callbacks=[recorder],
+        args=TrainLMTrainingArguments(
+            output_dir=tmp_path,
+            max_steps=4,
+            sequence_length=4,
+            gradient_accumulation_steps=3,
+            accelerator="cpu",
+            lr_scheduler_type="constant",
+            eval_strategy="epoch",
+            save_strategy="epoch",
+        ),
+    )
+
+    state = trainer.train()
+
+    assert state.step == 4
+    assert state.micro_step == 8
+    assert state.epoch == 2
+    assert sum("eval_loss" in metrics for metrics in recorder.metrics) == 2
+    assert (tmp_path / "checkpoint-2" / "trainer_state.pt").is_file()
+    assert (tmp_path / "checkpoint-4" / "trainer_state.pt").is_file()
+
+
+def test_epoch_schedules_require_a_finite_map_dataset_and_matching_settings(
+    tmp_path,
+):
+    with pytest.raises(ValueError, match="save_steps is required"):
+        TrainLMTrainingArguments(save_strategy="steps")
+    with pytest.raises(ValueError, match="eval_steps must be omitted"):
+        TrainLMTrainingArguments(eval_strategy="epoch", eval_steps=2)
+    with pytest.raises(ValueError, match="requires eval_dataset"):
+        TrainLMTrainer(
+            model=TinyModel(),
+            train_dataset=_dataset(),
+            args=TrainLMTrainingArguments(
+                output_dir=tmp_path,
+                max_steps=1,
+                accelerator="cpu",
+                eval_strategy="epoch",
+            ),
+        )
+    with pytest.raises(ValueError, match="finite map-style"):
+        TrainLMTrainer(
+            model=TinyModel(),
+            train_dataset=(example for example in _dataset()),
+            args=TrainLMTrainingArguments(
+                output_dir=tmp_path,
+                max_steps=1,
+                accelerator="cpu",
+                save_strategy="epoch",
+            ),
+        )
+
+
+def test_epoch_schedule_resume_derives_epoch_from_batch_cursor(tmp_path):
+    def make_trainer(output_dir, *, max_steps, callbacks=None, eval_strategy=None):
+        return TrainLMTrainer(
+            model=TinyModel(),
+            train_dataset=_dataset(),
+            eval_dataset=_dataset() if eval_strategy == "epoch" else None,
+            callbacks=callbacks,
+            args=TrainLMTrainingArguments(
+                output_dir=output_dir,
+                max_steps=max_steps,
+                sequence_length=4,
+                accelerator="cpu",
+                lr_scheduler_type="constant",
+                save_steps=1 if eval_strategy is None else None,
+                save_strategy=("no" if eval_strategy == "epoch" else None),
+                eval_strategy=eval_strategy,
+            ),
+        )
+
+    checkpoint_source = make_trainer(tmp_path / "source", max_steps=4)
+    checkpoint_source.train()
+    checkpoint = checkpoint_source.latest_checkpoint
+    assert checkpoint is not None
+    checkpoint_state = checkpoint / "trainer_state.pt"
+    payload = torch.load(checkpoint_state, map_location="cpu", weights_only=False)
+    payload["trainer"]["epoch"] = 0  # Simulate a pre-epoch-counter checkpoint.
+    torch.save(payload, checkpoint_state)
+
+    recorder = MetricsRecorder()
+    resumed = make_trainer(
+        tmp_path / "resumed",
+        max_steps=5,
+        callbacks=[recorder],
+        eval_strategy="epoch",
+    )
+    state = resumed.train(resume_from_checkpoint=checkpoint)
+
+    assert state.micro_step == 5
+    assert state.epoch == 1
+    assert not any("eval_loss" in metrics for metrics in recorder.metrics)
+
+
 def test_epoch_budget_resume_replays_map_dataset_cursor(tmp_path):
     class StopAfterFirstUpdate(TrainerCallback):
         def on_step_end(self, state, control):

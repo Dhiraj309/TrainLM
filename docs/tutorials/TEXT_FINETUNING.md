@@ -28,7 +28,9 @@ config = TrainLMFineTuningConfig(
         sequence_length=512,
         per_device_train_batch_size=2,
         learning_rate=2e-5,
+        eval_strategy="steps",
         eval_steps=100,
+        save_strategy="steps",
         save_steps=100,
         save_total_limit=3,
     ),
@@ -42,7 +44,7 @@ print(result.summary())
 
 Use `num_train_epochs` when you want the training budget tied to a finite
 dataset instead of a fixed number of optimizer updates. Set `max_steps=None`
-so only one budget is active:
+so the step budget does not conflict:
 
 ```python
 epoch_args = TrainLMTrainingArguments(
@@ -53,6 +55,8 @@ epoch_args = TrainLMTrainingArguments(
     per_device_train_batch_size=2,
     gradient_accumulation_steps=8,
     learning_rate=2e-5,
+    eval_strategy="epoch",
+    save_strategy="epoch",
 )
 epoch_config = TrainLMFineTuningConfig(
     model_name_or_path=config.model_name_or_path,
@@ -75,6 +79,19 @@ TorchTPU runtime. Streaming datasets, distributed loaders, and the legacy XLA
 coordinator should use `max_steps` instead.
 `result.summary()` and the run report include the resolved batches-per-epoch,
 batch target, and optimizer-step horizon.
+
+## Schedule evaluation and checkpoints
+
+Set `eval_strategy` and `save_strategy` to `"steps"` or `"epoch"`. Step
+strategies use `eval_steps` or `save_steps`; epoch strategies run after the
+last batch in each finite map-style dataset pass. At an epoch boundary, TrainLM
+flushes any partial gradient-accumulation group before evaluating or saving.
+Epoch schedules require a single-device runtime and are not available through
+the legacy PyTorch/XLA coordinator. Omit the strategy to preserve the existing
+behavior: a configured step interval schedules that action, while no interval
+disables scheduled actions. `run_finetuning` still evaluates once at the end
+when a validation split is configured. When saving is enabled, the last
+successful training state is also checkpointed on normal completion.
 
 ## Use preloaded datasets and your own formatting
 
@@ -156,13 +173,15 @@ not copied into the report. Install the optional dataset dependency with
 
 ## Resume an interrupted run
 
-Set `save_steps` to the checkpoint interval you can afford, and keep the full
+Set `save_strategy="steps"` with `save_steps` for step-based checkpoints, or
+`save_strategy="epoch"` to save at epoch boundaries. Keep the full
 `output_dir` between sessions. To continue from its newest checkpoint, load
 the saved configuration with `restore_finetuning_config` and increase the same
-training budget (`max_steps` or `num_train_epochs`). The helper restores the model, dataset, and other
-training settings, uses the summary file's directory as `output_dir`, and
-checks local archive or native TPU manifest metadata before returning the
-config. This catches missing or malformed publication without unpickling local
+training budget (`max_steps` or `num_train_epochs`). The helper restores the
+model, dataset, and other training and scheduling settings, uses the summary
+file's directory as `output_dir`, and checks local archive or native TPU
+manifest metadata before returning the config. This catches missing or
+malformed publication without unpickling local
 checkpoint data; the trainer checks model/state compatibility during restore.
 The saved checkpoint contains optimizer and trainer state; the exported
 `model` directory alone is not enough to resume. On Colab or Kaggle, keep the

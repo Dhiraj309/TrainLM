@@ -559,9 +559,22 @@ def restore_finetuning_config(
         raise ValueError("The fine-tuning summary is missing its saved settings.")
 
     expected_argument_names = {item.name for item in fields(TrainLMTrainingArguments)}
-    if set(training_args) == expected_argument_names - {"num_train_epochs"}:
-        # Additive argument for summaries written before epoch budgets existed.
-        training_args = {**training_args, "num_train_epochs": None}
+    additive_arguments = {
+        "num_train_epochs": None,
+        "save_strategy": None,
+        "eval_strategy": None,
+    }
+    missing_additive = expected_argument_names - set(training_args)
+    if (
+        missing_additive
+        and missing_additive <= additive_arguments.keys()
+        and set(training_args) == expected_argument_names - missing_additive
+    ):
+        # Additive argument fields default to the behavior of older summaries.
+        training_args = {
+            **training_args,
+            **{name: additive_arguments[name] for name in missing_additive},
+        }
     if set(training_args) != expected_argument_names:
         raise ValueError(
             "The saved training arguments do not match this TrainLM version."

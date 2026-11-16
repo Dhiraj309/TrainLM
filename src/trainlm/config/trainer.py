@@ -39,7 +39,13 @@ class TrainerConfig:
 
     seed: int = 42
 
+    # Flush accumulated gradients at a finite dataset boundary so epoch-based
+    # evaluation and checkpoint actions run at an exact epoch end.
+    stop_at_epoch_end: bool = False
+
     def __post_init__(self) -> None:
+        if not isinstance(self.stop_at_epoch_end, bool):
+            raise ValueError("stop_at_epoch_end must be a boolean.")
         if (
             isinstance(self.gradient_accumulation_steps, bool)
             or not isinstance(self.gradient_accumulation_steps, int)
