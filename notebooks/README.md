@@ -2,7 +2,7 @@
 
 ## User training quickstarts
 
-- [Pretrain from scratch](TrainLM_Native_TorchTPU_From_Scratch.ipynb) uses
+- [Pretrain from scratch](TrainLM_Native_TorchTPU_From_Scratch.ipynb) ([open in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) · [open in Kaggle](https://kaggle.com/kernels/welcome?src=https://raw.githubusercontent.com/Dhiraj309/TrainLM/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb)) uses
   Hugging Face GPT-2 with randomly initialized weights. The training cell sets
   `model_type="gpt2"`, dimensions, context length, and the experimental
   `native_tpu` backend. It does not load a pretrained model checkpoint.

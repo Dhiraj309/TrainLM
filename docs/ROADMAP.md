@@ -27,16 +27,20 @@ notebook establishes model quality, convergence, or TPU performance. See the
 [coding-agent guide](AI_AGENT_GUIDE.md) for the example, implementation, test,
 and evidence map.
 
-**Unmerged working-branch update:** the from-scratch API now has a
-local text-file source alongside the pinned Hub source. Its quick notebook and
-Python example explicitly select randomly initialized Hugging Face GPT-2 and
-show the returned model class. `notebooks/README.md` classifies the current
-quickstarts, runtime probes, and the retained historical XLA notebook; the
-audit found no dead notebook or example files to remove. The focused API,
-report/resume, notebook and roadmap CPU suite passed 31 tests under Python
-3.12.14 and torch 2.9.0+cpu. Data loading was mocked; no live Hub or TPU
-training was run. This does not change the T1 hardware gate or establish native
-TPU training support.
+**Merged scratch-workflow update (PR #111, 2026-11-16):** the from-scratch API
+accepts local text files or the pinned Hub source. Its quick notebook and
+Python example explicitly select randomly initialized Hugging Face GPT-2.
+`notebooks/README.md` classifies the user quickstarts, runtime probes, and
+retained historical XLA notebook; the audit found no dead notebook or example
+files to remove. The focused API, report/resume, notebook, and roadmap CPU suite
+passed 31 tests under Python 3.12.14 and torch 2.9.0+cpu. Data loading was
+mocked; no live Hub or TPU training was run.
+
+**Current branch update:** the from-scratch quickstart now has direct Colab and
+Kaggle launch links in the notebook and catalog. Kaggle imports the public
+GitHub notebook; neither link provisions accelerator hardware. This is a
+notebook access improvement and does not change the T1 hardware gate or native
+TPU support status.
 
 ### API and notebook implementation history
 
