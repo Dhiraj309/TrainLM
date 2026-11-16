@@ -35,12 +35,18 @@ Colab or Kaggle. Reports record requested and effective schedule settings.
 Budget extension remains limited to cosine with automatic warmup. Both hosted
 CPU suites passed; PR #112 did not include TPU training.
 
-**Current branch update:** the owner’s Colab TPU run failed at its first
-scheduled checkpoint because the native runtime queried the wrong RNG API.
-TorchTPU exposes capture through `torch.accelerator.random.get_rng_state()`
-and restore through `torch.tpu.set_rng_state()`. The adapter now uses those
-paths with compatibility fallbacks. A rerun on the owner’s TPU is still needed
-to validate saving and resume; this fix does not imply TPU certification.
+**Merged runtime update (PR #113, 2026-11-16):** the owner’s Colab TPU run
+failed at its first scheduled checkpoint because the native runtime queried
+the wrong RNG API. TorchTPU exposes capture through
+`torch.accelerator.random.get_rng_state()` and restore through
+`torch.tpu.set_rng_state()`. The adapter now uses those paths with
+compatibility fallbacks. A rerun on the owner’s TPU is still needed to validate
+saving and resume; this fix does not imply TPU certification.
+
+**Current public API update:** scratch pretraining accepts Transformers-style
+`warmup_ratio` in the inclusive range 0–1 and rounds it up to a whole optimizer
+step. It cannot be combined with `warmup_steps`. Leaving both unset preserves
+the existing automatic warmup.
 
 ### API and notebook implementation history
 

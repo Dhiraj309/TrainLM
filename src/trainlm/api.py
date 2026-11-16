@@ -917,9 +917,13 @@ class TrainLMTrainer:
             learning_rate=config.learning_rate,
             lr_scheduler_type=config.lr_scheduler_type,
             warmup_steps=(
-                min(max_steps // 10, 100)
-                if config.warmup_steps is None
-                else config.warmup_steps
+                config.warmup_steps
+                if config.warmup_steps is not None
+                else (
+                    math.ceil(max_steps * config.warmup_ratio)
+                    if config.warmup_ratio is not None
+                    else min(max_steps // 10, 100)
+                )
             ),
             bf16=config.bf16,
             accelerator=config.accelerator,
@@ -1641,6 +1645,10 @@ class TrainLMTrainer:
         # omitting their config aliases keeps old default-run fingerprints stable.
         pretraining.pop("lr_scheduler_type", None)
         pretraining.pop("warmup_steps", None)
+        # Keep explicit ratio provenance while preserving fingerprints for
+        # existing runs where the ratio is unset and effective steps are saved.
+        if config.warmup_ratio is None:
+            pretraining.pop("warmup_ratio", None)
         # The new opt-in setting is equivalent to false when absent in an
         # older manifest, so omit its default to keep existing run fingerprints.
         if not config.gradient_checkpointing:

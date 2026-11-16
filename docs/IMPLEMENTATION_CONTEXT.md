@@ -32,15 +32,21 @@ schedules plus configurable warmup; reports include requested and effective
 values. Budget extension remains limited to cosine with automatic warmup.
 Both hosted CPU suites passed for PR #112; it did not include TPU training.
 
-**Current branch update:** the owner’s Colab TPU run reached the first
-scheduled checkpoint, then failed because the native runtime looked for
-`torch.accelerator.get_rng_state()`. TorchTPU’s current API exposes capture at
-`torch.accelerator.random.get_rng_state()` and restoration at
+**Merged runtime update (PR #113, 2026-11-16):** the owner’s Colab TPU run
+reached the first scheduled checkpoint, then failed because the native runtime
+looked for `torch.accelerator.get_rng_state()`. TorchTPU’s current API exposes
+capture at `torch.accelerator.random.get_rng_state()` and restoration at
 `torch.tpu.set_rng_state()`. The runtime adapter now resolves those APIs while
 retaining compatibility fallbacks. Owner-run checkpoint and resume validation
 is still required; this code change alone does not certify TPU checkpointing.
 The adapter is in `src/trainlm/runtime/torchtpu.py`; existing runtime contract
 coverage is in `tests/runtime/test_torchtpu_runtime.py`.
+
+**Current public API update:** the from-scratch config accepts a
+Transformers-style `warmup_ratio` from 0 to 1, rounded up to a whole optimizer
+step. It is mutually exclusive with `warmup_steps`; leaving both unset
+preserves the existing automatic default. The run report records requested
+and effective warmup settings.
 
 ### Implementation history
 

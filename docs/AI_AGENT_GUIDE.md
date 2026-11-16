@@ -61,9 +61,10 @@ follow the linked implementation and tests before making a change.
   match and fails before restoring any state when settings differ.
   `lr_scheduler_type` supports `constant`, `linear`, `cosine`, or `wsd`;
   `warmup_steps=None` keeps the default automatic warmup (floor of 10% of the
-  step budget, capped at 100), while an integer sets it directly. The run report
-  records requested and effective values. `extend_training_budget=True`
-  permits only a strictly larger `max_tokens`
+  step budget, capped at 100). Set `warmup_ratio` (0–1, rounded up to a whole
+  step) or an integer `warmup_steps` for an override; they cannot be combined.
+  The run report records requested and effective values.
+  `extend_training_budget=True` permits only a strictly larger `max_tokens`
   and its derived horizon/cadence. After a compatible checkpoint is restored,
   it starts a new cosine schedule at the configured learning rate while keeping
   model and optimizer state; this can raise the learning rate, so use it

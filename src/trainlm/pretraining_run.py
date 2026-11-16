@@ -308,6 +308,7 @@ def _initial_report(
                 "learning_rate": config.learning_rate,
                 "lr_scheduler_type": config.lr_scheduler_type,
                 "warmup_steps": config.warmup_steps,
+                "warmup_ratio": config.warmup_ratio,
                 "weight_decay": config.weight_decay,
                 "bf16": config.bf16,
                 "torch_compile": config.torch_compile,
