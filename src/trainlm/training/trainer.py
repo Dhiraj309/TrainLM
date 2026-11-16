@@ -57,6 +57,10 @@ class Trainer:
         self.task = task
 
         self.train_dataloader = runtime.prepare_dataloader(train_dataloader)
+        try:
+            self._train_batches_per_epoch = len(self.train_dataloader)
+        except (TypeError, NotImplementedError):
+            self._train_batches_per_epoch = None
         self.eval_dataloader = (
             runtime.prepare_dataloader(eval_dataloader)
             if eval_dataloader is not None
@@ -221,6 +225,12 @@ class Trainer:
 
         trainer = self.config.trainer
         if trainer.max_steps is not None and self.state.step >= trainer.max_steps:
+            return True
+        max_train_batches = getattr(trainer, "max_train_batches", None)
+        if (
+            max_train_batches is not None
+            and self.state.micro_step >= max_train_batches
+        ):
             return True
         if (
             trainer.max_tokens is not None
@@ -437,19 +447,36 @@ class Trainer:
         ):
             raise ValueError("gradient_accumulation_steps must be positive.")
 
+        microbatch_limit = accumulation_steps
+        max_train_batches = getattr(self.config.trainer, "max_train_batches", None)
+        if max_train_batches is not None:
+            remaining_batches = max_train_batches - self.state.micro_step
+            if remaining_batches < 1:
+                raise RuntimeError("The configured training-batch budget is exhausted.")
+            microbatch_limit = min(microbatch_limit, remaining_batches)
+            if self._train_batches_per_epoch:
+                batches_to_epoch_end = self._train_batches_per_epoch - (
+                    self.state.micro_step % self._train_batches_per_epoch
+                )
+                microbatch_limit = min(microbatch_limit, batches_to_epoch_end)
+
         total_tokens = 0
         total_sequences = 0
         loss_numerator: torch.Tensor | None = None
         exact_tokens = True
         micro_steps = 0
 
-        for _ in range(accumulation_steps):
+        for _ in range(microbatch_limit):
             result = self.task.training_step(
                 self.model,
                 self._next_batch(),
                 self.runtime,
             )
             self.state.micro_step += 1
+            if self._train_batches_per_epoch:
+                self.state.epoch = (
+                    self.state.micro_step // self._train_batches_per_epoch
+                )
             micro_steps += 1
             token_count = result.tokens.supervised_tokens
             stop_after_microbatch = False

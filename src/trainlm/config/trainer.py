@@ -24,6 +24,10 @@ class TrainerConfig:
 
     max_tokens: int | None = None
 
+    # Maximum number of training batches to consume. Public epoch budgets are
+    # resolved to this finite cursor before the engine starts.
+    max_train_batches: int | None = None
+
     gradient_accumulation_steps: int = 1
 
     # Host materialization is intentionally configurable because ``.item()``
@@ -42,6 +46,12 @@ class TrainerConfig:
             or self.gradient_accumulation_steps < 1
         ):
             raise ValueError("gradient_accumulation_steps must be positive.")
+        if self.max_train_batches is not None and (
+            isinstance(self.max_train_batches, bool)
+            or not isinstance(self.max_train_batches, int)
+            or self.max_train_batches < 1
+        ):
+            raise ValueError("max_train_batches must be positive when configured.")
         if (
             isinstance(self.materialize_loss_every_steps, bool)
             or not isinstance(self.materialize_loss_every_steps, int)

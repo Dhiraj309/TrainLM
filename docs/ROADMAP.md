@@ -53,11 +53,17 @@ evaluates, and exports locally. It
 does not upload artifacts or create a validation split. Callers can provide
 preloaded Hugging Face `Dataset` splits, a row formatter, tokenizer, and custom
 collator for prompt formatting and label construction. Caller-provided data can
-omit Hub identity. Its summary preserves the requested model revision and
+omit Hub identity. `TrainLMTrainingArguments.num_train_epochs` now provides a
+finite map-style single-device epoch budget; it respects per-device batch size
+and flushes partial gradient accumulation at epoch boundaries. Its summary
+preserves the requested model revision and
 records resolved model and tokenizer commits and whether they match when
 available. The focused fine-tuning API, roadmap, and notebook-contract suite
 passes 15 tests under Python 3.12.14, torch 2.9.0+cpu, and pytest 9.1.1. No
-live Hub or TPU run was performed. Model loading is pinned to the
+live Hub or TPU run was performed. The epoch-budget follow-up passes 116
+focused API, lifecycle, config, trainer, and notebook-contract tests under the
+same CPU environment; native TPU epoch training remains unverified. Model
+loading is pinned to the
 tokenizer's resolved commit; a detected mismatch stops before training. Each
 successful run writes
 a JSON summary beside the export with the arguments, data splits, revisions,

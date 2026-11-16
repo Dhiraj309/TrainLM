@@ -76,6 +76,59 @@ def test_restore_finetuning_config_rejects_unrelated_summary(tmp_path):
         restore_finetuning_config(summary_path, max_steps=10)
 
 
+def test_restore_finetuning_config_extends_epoch_budget(tmp_path):
+    config = _config(
+        tmp_path,
+        args=TrainLMTrainingArguments(
+            output_dir=tmp_path,
+            max_steps=None,
+            num_train_epochs=1,
+            accelerator="cpu",
+        ),
+    )
+    training_arguments = {
+        name: getattr(config.args, name)
+        for name in config.args.__dataclass_fields__
+    }
+    training_arguments["output_dir"] = str(tmp_path)
+    summary_path = tmp_path / "finetuning-summary.json"
+    summary_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "scope": "pretrained_causal_lm_finetuning",
+                "model_name_or_path": config.model_name_or_path,
+                "model_revision": None,
+                "dataset_id": config.dataset_id,
+                "dataset_revision": config.dataset_revision,
+                "training_arguments": training_arguments,
+                "data": {
+                    "text_field": config.text_field,
+                    "train_split": config.train_split,
+                    "validation_split": config.validation_split,
+                },
+                "step": 1,
+                "last_known_state": {"epoch": 1},
+            }
+        ),
+        encoding="utf-8",
+    )
+    checkpoint = tmp_path / "checkpoint-1"
+    checkpoint.mkdir()
+    torch.save({"schema_version": 1}, checkpoint / "trainer_state.pt")
+
+    restored = restore_finetuning_config(
+        summary_path,
+        num_train_epochs=2,
+    )
+
+    assert restored.args.max_steps is None
+    assert restored.args.num_train_epochs == 2
+    assert restored.args.output_dir == tmp_path
+    with pytest.raises(ValueError, match="greater than the saved epoch budget"):
+        restore_finetuning_config(summary_path, num_train_epochs=1)
+
+
 def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch):
     calls = {"datasets": [], "trainer": {}}
 
@@ -245,6 +298,12 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
     assert result.summary()["resolved_tokenizer_revision"] == "c" * 40
     assert result.summary()["model_tokenizer_revision_match"] is True
     assert result.summary_path == tmp_path / "run" / "finetuning-summary.json"
+    assert result.summary()["training_budget"] == {
+        "num_train_epochs": None,
+        "train_batches_per_epoch": None,
+        "max_train_batches": None,
+        "effective_max_steps": 4,
+    }
     report = json.loads(result.summary_path.read_text(encoding="utf-8"))
     assert report["schema_version"] == 1
     assert report["status"] == "completed"
@@ -274,6 +333,15 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
         output_dir=result.summary_path.parent,
         max_steps=8,
     )
+    legacy_report = json.loads(json.dumps(report))
+    legacy_report["training_arguments"].pop("num_train_epochs")
+    legacy_summary_path = result.summary_path.parent / "legacy-summary.json"
+    legacy_summary_path.write_text(json.dumps(legacy_report), encoding="utf-8")
+    restored_legacy = restore_finetuning_config(
+        legacy_summary_path,
+        max_steps=8,
+    )
+    assert restored_legacy.args.num_train_epochs is None
     with pytest.raises(ValueError, match="greater than the last recorded"):
         restore_finetuning_config(result.summary_path, max_steps=4)
     checkpoint_state.write_bytes(b"truncated checkpoint")
@@ -338,6 +406,7 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
     assert failed_report["error_type"] == "RuntimeError"
     assert failed_report["last_known_state"] == {
         "step": 2,
+        "epoch": None,
         "train_loss": 0.75,
         "evaluation": {},
         "latest_checkpoint": str(

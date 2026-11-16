@@ -38,6 +38,44 @@ result = run_finetuning(config)
 print(result.summary())
 ```
 
+## Train for a number of dataset epochs
+
+Use `num_train_epochs` when you want the training budget tied to a finite
+dataset instead of a fixed number of optimizer updates. Set `max_steps=None`
+so only one budget is active:
+
+```python
+epoch_args = TrainLMTrainingArguments(
+    output_dir="runs/qwen-tinystories-epochs",
+    max_steps=None,
+    num_train_epochs=3,
+    sequence_length=512,
+    per_device_train_batch_size=2,
+    gradient_accumulation_steps=8,
+    learning_rate=2e-5,
+)
+epoch_config = TrainLMFineTuningConfig(
+    model_name_or_path=config.model_name_or_path,
+    dataset_id=config.dataset_id,
+    dataset_revision=config.dataset_revision,
+    text_field=config.text_field,
+    train_split=config.train_split,
+    validation_split=config.validation_split,
+    args=epoch_args,
+)
+result = run_finetuning(epoch_config)
+```
+
+TrainLM counts the batches after applying the per-device batch size, and ends
+each epoch before starting the next. If an epoch ends partway through gradient
+accumulation, TrainLM applies the accumulated update there. Fractional epoch
+budgets round up to the next data batch. Epoch budgets currently require a
+finite, map-style dataset and a single-device CPU, CUDA, or experimental native
+TorchTPU runtime. Streaming datasets, distributed loaders, and the legacy XLA
+coordinator should use `max_steps` instead.
+`result.summary()` and the run report include the resolved batches-per-epoch,
+batch target, and optimizer-step horizon.
+
 ## Use preloaded datasets and your own formatting
 
 The same config can use dataset splits you loaded or filtered yourself. When
@@ -120,8 +158,8 @@ not copied into the report. Install the optional dataset dependency with
 
 Set `save_steps` to the checkpoint interval you can afford, and keep the full
 `output_dir` between sessions. To continue from its newest checkpoint, load
-the saved configuration with `restore_finetuning_config` and set `max_steps`
-above the saved step. The helper restores the model, dataset, and other
+the saved configuration with `restore_finetuning_config` and increase the same
+training budget (`max_steps` or `num_train_epochs`). The helper restores the model, dataset, and other
 training settings, uses the summary file's directory as `output_dir`, and
 checks local archive or native TPU manifest metadata before returning the
 config. This catches missing or malformed publication without unpickling local
@@ -139,6 +177,16 @@ from trainlm import restore_finetuning_config, run_finetuning
 config = restore_finetuning_config(
     "runs/qwen-tinystories/finetuning-summary.json",
     max_steps=2000,  # Must be greater than the saved step.
+)
+result = run_finetuning(config, resume_from_checkpoint="latest")
+```
+
+For an epoch-based run, supply `num_train_epochs` instead:
+
+```python
+config = restore_finetuning_config(
+    "runs/qwen-tinystories-epochs/finetuning-summary.json",
+    num_train_epochs=4,
 )
 result = run_finetuning(config, resume_from_checkpoint="latest")
 ```

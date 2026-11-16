@@ -23,7 +23,9 @@ trains, evaluates, and exports locally; it requires a separate validation
 split. For caller-supplied splits, TrainLM records the declared dataset
 identity when supplied; local or transformed datasets do not need a placeholder
 Hub ID or revision. Hub-loaded splits still require an immutable commit SHA.
-The same data and callbacks must be supplied again during resume. The
+`TrainLMTrainingArguments` accepts steps or `num_train_epochs` for finite
+map-style single-device training. The same data and callbacks must be supplied
+again during resume. The
 [fine-tuning notebook](../notebooks/TrainLM_Text_Fine_Tuning.ipynb)
 calls this API in short Colab/Kaggle cells and installs the package without
 reinstalling Torch. Each successful run writes `finetuning-summary.json` beside
@@ -36,6 +38,9 @@ Transformers 5.20.2; real Hub and accelerator execution remain unverified.
 The latest optional-provenance update passes 15 focused fine-tuning API,
 roadmap, and notebook-contract tests under Python 3.12.14, torch 2.9.0+cpu, and
 pytest 9.1.1; it did not run against the live Hub or an accelerator.
+The epoch-budget update passes 116 focused API, lifecycle, config, trainer, and
+notebook-contract tests in the same Python/Torch environment. This is CPU
+evidence only; native TPU epoch training remains unverified.
 The additive `restore_finetuning_config` helper reloads those settings from a
 run summary, anchors `output_dir` to its location, verifies a published
 checkpoint archive or native TPU manifest is readable, and accepts a new

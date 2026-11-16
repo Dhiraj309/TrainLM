@@ -29,10 +29,11 @@ def _validate_training_stop(config: TrainConfig) -> None:
     if (
         trainer.max_steps is None
         and trainer.max_tokens is None
+        and trainer.max_train_batches is None
     ):
         raise ValueError(
-            "Either 'trainer.max_steps' or "
-            "'trainer.max_tokens' must be specified."
+            "Set at least one of 'trainer.max_steps', 'trainer.max_tokens', or "
+            "'trainer.max_train_batches'."
         )
 
 

@@ -104,6 +104,106 @@ def test_facade_runs_eval_save_and_forwards_metrics(tmp_path):
     assert trainer.latest_checkpoint == tmp_path / "checkpoint-1"
 
 
+def test_epoch_budget_counts_batches_and_flushes_partial_accumulation(tmp_path):
+    trainer = TrainLMTrainer(
+        model=TinyModel(),
+        train_dataset=_dataset(),
+        args=TrainLMTrainingArguments(
+            output_dir=tmp_path,
+            max_steps=None,
+            num_train_epochs=2,
+            sequence_length=4,
+            per_device_train_batch_size=1,
+            gradient_accumulation_steps=3,
+            accelerator="cpu",
+            lr_scheduler_type="constant",
+        ),
+    )
+
+    assert trainer.training_budget == {
+        "num_train_epochs": 2,
+        "train_batches_per_epoch": 4,
+        "max_train_batches": 8,
+        "effective_max_steps": 4,
+    }
+
+    state = trainer.train()
+
+    assert state.micro_step == 8
+    assert state.epoch == 2
+    assert state.step == 4
+
+
+def test_epoch_budget_rejects_conflicting_steps_and_streaming_data(tmp_path):
+    with pytest.raises(ValueError, match="Set max_steps=None"):
+        TrainLMTrainingArguments(num_train_epochs=2)
+
+    with pytest.raises(ValueError, match="finite map-style dataset"):
+        TrainLMTrainer(
+            model=TinyModel(),
+            train_dataset=(example for example in _dataset()),
+            args=TrainLMTrainingArguments(
+                output_dir=tmp_path,
+                max_steps=None,
+                num_train_epochs=1,
+                accelerator="cpu",
+            ),
+        )
+
+
+def test_epoch_budget_resume_replays_map_dataset_cursor(tmp_path):
+    class StopAfterFirstUpdate(TrainerCallback):
+        def on_step_end(self, state, control):
+            if state.step == 1:
+                control.request_stop()
+
+    def make_trainer(output_dir, *, callbacks=None):
+        return TrainLMTrainer(
+            model=TinyModel(),
+            train_dataset=_dataset(),
+            callbacks=callbacks,
+            args=TrainLMTrainingArguments(
+                output_dir=output_dir,
+                max_steps=None,
+                num_train_epochs=2,
+                sequence_length=4,
+                per_device_train_batch_size=1,
+                gradient_accumulation_steps=3,
+                accelerator="cpu",
+                lr_scheduler_type="constant",
+                save_steps=1,
+                seed=29,
+            ),
+        )
+
+    torch.manual_seed(31)
+    reference = make_trainer(tmp_path / "reference")
+    reference_state = reference.train()
+    expected = deepcopy(reference.model.state_dict())
+
+    torch.manual_seed(31)
+    interrupted = make_trainer(
+        tmp_path / "interrupted",
+        callbacks=[StopAfterFirstUpdate()],
+    )
+    interrupted_state = interrupted.train()
+    assert interrupted_state.step == 1
+    assert interrupted_state.micro_step == 3
+    checkpoint = interrupted.latest_checkpoint
+    assert checkpoint is not None
+
+    resumed = make_trainer(tmp_path / "resumed")
+    resumed_state = resumed.train(resume_from_checkpoint=checkpoint)
+
+    assert resumed_state.step == reference_state.step == 4
+    assert resumed_state.micro_step == reference_state.micro_step == 8
+    assert resumed_state.epoch == reference_state.epoch == 2
+    for name, tensor in expected.items():
+        torch.testing.assert_close(
+            resumed.model.state_dict()[name], tensor, rtol=0, atol=0
+        )
+
+
 def test_facade_resumes_local_training_state(tmp_path):
     first = TrainLMTrainer(
         model=TinyModel(),
