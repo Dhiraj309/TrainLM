@@ -46,8 +46,10 @@ The JSON report at `result.summary_path` also records the text field, split
 names, and all `TrainLMTrainingArguments`. TrainLM pins model loading to the
 tokenizer's resolved Hub commit when available. If both revisions are available
 and differ, the run stops before training. Revision fields are `null` for local
-sources or loaders that do not expose commit metadata. Install the optional
-dataset dependency with
+sources or loaders that do not expose commit metadata. If a run fails, the same
+file records the failed phase, error type, last known step, metrics, and
+checkpoint path before the original exception is raised. The error message is
+not copied into the report. Install the optional dataset dependency with
 `pip install 'trainlm[finetuning]'`.
 
 ## Choose settings for your task

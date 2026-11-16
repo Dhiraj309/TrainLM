@@ -215,6 +215,161 @@ def run_finetuning(
     callbacks: Sequence[TrainerCallback] | None = None,
     resume_from_checkpoint: str | Path | None = None,
 ) -> TrainLMFineTuningResult:
+    """Run pretrained text fine-tuning and persist a success or failure summary.
+
+    The JSON summary is written under ``args.output_dir`` before work begins,
+    then finalized on success or updated with the failed phase and last known
+    checkpoint before the original exception is re-raised.
+    """
+    if not isinstance(config, TrainLMFineTuningConfig):
+        raise TypeError("config must be a TrainLMFineTuningConfig instance.")
+
+    summary_path = Path(config.args.output_dir) / "finetuning-summary.json"
+    report = _initial_finetuning_summary(
+        config, summary_path, resume_from_checkpoint=resume_from_checkpoint
+    )
+    _write_summary(summary_path, report)
+    run_state: dict[str, Any] = {
+        "phase": "validation",
+        "trainer": None,
+        "state": None,
+        "evaluation": {},
+    }
+    try:
+        result = _run_finetuning_impl(
+            config,
+            callbacks=callbacks,
+            resume_from_checkpoint=resume_from_checkpoint,
+            run_state=run_state,
+        )
+        report.update(result.summary())
+        report.update(
+            status="completed",
+            phase="completed",
+            error_type=None,
+            last_known_state=_last_known_state(run_state),
+        )
+        _write_summary(summary_path, report)
+        return result
+    except Exception as exc:
+        report.update(
+            status="failed",
+            phase=run_state["phase"],
+            error_type=type(exc).__name__,
+            cause_error_type=(
+                type(exc.__cause__).__name__ if exc.__cause__ is not None else None
+            ),
+            resolved_model_revision=run_state.get("resolved_model_revision"),
+            resolved_tokenizer_revision=run_state.get("resolved_tokenizer_revision"),
+            model_tokenizer_revision_match=run_state.get(
+                "model_tokenizer_revision_match"
+            ),
+            last_known_state=_last_known_state(run_state),
+        )
+        known_state = report["last_known_state"]
+        report.update(
+            step=known_state["step"],
+            train_loss=known_state["train_loss"],
+            evaluation=known_state["evaluation"],
+        )
+        if run_state.get("model_path") is not None:
+            report["model_path"] = run_state["model_path"]
+        try:
+            _write_summary(summary_path, report)
+        except Exception:
+            # Preserve the original run failure if the report location also
+            # becomes unavailable.
+            pass
+        raise
+
+
+def _initial_finetuning_summary(
+    config: TrainLMFineTuningConfig,
+    summary_path: Path,
+    *,
+    resume_from_checkpoint: str | Path | None,
+) -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "scope": "pretrained_causal_lm_finetuning",
+        "status": "not_started",
+        "phase": "initialization",
+        "error_type": None,
+        "cause_error_type": None,
+        "summary_path": str(summary_path),
+        "model_name_or_path": config.model_name_or_path,
+        "model_revision": config.model_revision,
+        "resolved_model_revision": None,
+        "resolved_tokenizer_revision": None,
+        "model_tokenizer_revision_match": None,
+        "dataset_id": config.dataset_id,
+        "dataset_revision": config.dataset_revision,
+        "model_path": str(Path(config.args.output_dir) / "model"),
+        "resume_from_checkpoint": _json_compatible(resume_from_checkpoint),
+        "step": None,
+        "train_loss": None,
+        "evaluation": {},
+        "data": {
+            "text_field": config.text_field,
+            "train_split": config.train_split,
+            "validation_split": config.validation_split,
+        },
+        "training_arguments": _json_compatible({
+            item.name: getattr(config.args, item.name)
+            for item in fields(config.args)
+        }),
+        "last_known_state": {
+            "step": None,
+            "train_loss": None,
+            "evaluation": {},
+            "latest_checkpoint": None,
+        },
+    }
+
+
+def _last_known_state(run_state: Mapping[str, Any]) -> dict[str, Any]:
+    trainer = run_state.get("trainer")
+    state = run_state.get("state")
+    if state is None:
+        state = getattr(getattr(trainer, "engine", None), "state", None)
+
+    step = getattr(state, "step", None)
+    try:
+        step = int(step) if step is not None else None
+    except (TypeError, ValueError, OverflowError):
+        step = None
+
+    train_loss = getattr(state, "loss", None)
+    try:
+        train_loss = float(train_loss) if train_loss is not None else None
+    except (TypeError, ValueError, OverflowError):
+        train_loss = None
+    if train_loss is not None and not math.isfinite(train_loss):
+        train_loss = None
+
+    latest_checkpoint = None
+    if trainer is not None:
+        try:
+            checkpoint = trainer.latest_checkpoint
+            latest_checkpoint = str(checkpoint) if checkpoint is not None else None
+        except Exception:
+            pass
+
+    return {
+        "step": step,
+        "train_loss": train_loss,
+        "evaluation": _json_compatible(run_state.get("evaluation", {})),
+        "latest_checkpoint": latest_checkpoint,
+    }
+
+
+def _run_finetuning_impl(
+    config: TrainLMFineTuningConfig,
+    *,
+    callbacks: Sequence[TrainerCallback] | None = None,
+    resume_from_checkpoint: str | Path | None = None,
+    run_state: dict[str, Any],
+) -> TrainLMFineTuningResult:
     """Load, tokenize, fine-tune, evaluate, and export one pretrained causal LM.
 
     This convenience path reads immutable Hugging Face dataset revisions and
@@ -238,6 +393,7 @@ def run_finetuning(
     ):
         raise TypeError("resume_from_checkpoint must be a path or None.")
 
+    run_state["phase"] = "dependency_loading"
     try:
         from datasets import load_dataset
     except ModuleNotFoundError as exc:
@@ -250,6 +406,7 @@ def run_finetuning(
     from transformers import AutoTokenizer
 
     model_revision = config.model_revision
+    run_state["phase"] = "tokenizer_loading"
     try:
         tokenizer = AutoTokenizer.from_pretrained(
             config.model_name_or_path,
@@ -263,6 +420,7 @@ def run_finetuning(
     resolved_tokenizer_revision = (
         _tokenizer_commit(tokenizer) or _resolved_commit(model_revision)
     )
+    run_state["resolved_tokenizer_revision"] = resolved_tokenizer_revision
 
     if tokenizer.pad_token_id is None:
         if tokenizer.eos_token is None:
@@ -272,6 +430,7 @@ def run_finetuning(
             )
         tokenizer.pad_token = tokenizer.eos_token
 
+    run_state["phase"] = "dataset_loading"
     train_source = load_dataset(
         config.dataset_id,
         revision=config.dataset_revision,
@@ -307,6 +466,7 @@ def run_finetuning(
             max_length=config.args.sequence_length,
         )
 
+    run_state["phase"] = "tokenizing"
     train_dataset = train_source.map(
         tokenize,
         batched=True,
@@ -319,6 +479,7 @@ def run_finetuning(
     )
 
     model_load_revision = resolved_tokenizer_revision or model_revision
+    run_state["phase"] = "model_loading"
     trainer = TrainLMTrainer.from_pretrained(
         config.model_name_or_path,
         # Pin model loading to the tokenizer's resolved commit when available,
@@ -331,6 +492,7 @@ def run_finetuning(
         data_collator=_CausalLMCollator(tokenizer),
         callbacks=callbacks,
     )
+    run_state["trainer"] = trainer
     loaded_metadata = getattr(getattr(trainer, "loaded", None), "metadata", None)
     resolved_model_revision = _resolved_commit(
         getattr(loaded_metadata, "resolved_revision", None)
@@ -344,6 +506,7 @@ def run_finetuning(
         # The model was loaded successfully at this immutable commit even if
         # the installed Transformers version does not return config metadata.
         resolved_model_revision = _resolved_commit(model_load_revision)
+    run_state["resolved_model_revision"] = resolved_model_revision
     model_tokenizer_revision_match = None
     if resolved_model_revision and resolved_tokenizer_revision:
         model_tokenizer_revision_match = (
@@ -356,18 +519,26 @@ def run_finetuning(
                 f"{resolved_tokenizer_revision}); training stopped before the "
                 "first step."
             )
+    run_state["model_tokenizer_revision_match"] = model_tokenizer_revision_match
     if getattr(trainer.model, "config", None) is not None:
         model_config = trainer.model.config
         if getattr(model_config, "pad_token_id", None) is None:
             model_config.pad_token_id = tokenizer.pad_token_id
+    run_state["phase"] = "training"
     state = trainer.train(resume_from_checkpoint=resume_from_checkpoint)
+    run_state["state"] = state
+    run_state["phase"] = "evaluation"
     evaluation = trainer.evaluate()
+    run_state["evaluation"] = evaluation
+    run_state["phase"] = "export"
     model_path = trainer.save_model(Path(config.args.output_dir) / "model")
+    run_state["model_path"] = str(model_path)
     raw_loss = getattr(state, "loss", None)
     train_loss = float(raw_loss) if raw_loss is not None else None
     if train_loss is not None and not math.isfinite(train_loss):
         train_loss = None
     summary_path = Path(config.args.output_dir) / "finetuning-summary.json"
+    run_state["phase"] = "summary"
     result = TrainLMFineTuningResult(
         model_name_or_path=config.model_name_or_path,
         model_revision=config.model_revision,
@@ -382,20 +553,4 @@ def run_finetuning(
         model_tokenizer_revision_match=model_tokenizer_revision_match,
         summary_path=summary_path,
     )
-    report = {
-        "schema_version": 1,
-        "scope": "pretrained_causal_lm_finetuning",
-        "status": "completed",
-        **result.summary(),
-        "data": {
-            "text_field": config.text_field,
-            "train_split": config.train_split,
-            "validation_split": config.validation_split,
-        },
-        "training_arguments": _json_compatible({
-            item.name: getattr(config.args, item.name)
-            for item in fields(config.args)
-        }),
-    }
-    _write_summary(summary_path, report)
     return result

@@ -176,7 +176,9 @@ This path keeps validation data separate and writes the export to
 `runs/qwen-tinystories/model` plus a machine-readable run summary to
 `runs/qwen-tinystories/finetuning-summary.json` (`result.summary_path`). The
 summary records training arguments, data splits, resolved model/tokenizer
-revisions, and evaluation metrics. It does not upload to the Hub. Install the
+revisions, and evaluation metrics. If a run fails, the same file records the
+failed phase, error type, and last known step/checkpoint; the original
+exception is still raised. It does not upload to the Hub. Install the
 optional dataset dependency with `pip install 'trainlm[finetuning]'`. The
 standard `TrainLMTrainer` remains available when you already have a model and
 tokenized datasets or need a custom lifecycle. Native TorchTPU fine-tuning is
