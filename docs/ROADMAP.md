@@ -27,23 +27,20 @@ notebook establishes model quality, convergence, or TPU performance. See the
 [coding-agent guide](AI_AGENT_GUIDE.md) for the example, implementation, test,
 and evidence map.
 
-**Merged scratch-workflow update (PR #111, 2026-11-16):** the from-scratch API
-accepts local text files or the pinned Hub source. Its quick notebook and
-Python example explicitly select randomly initialized Hugging Face GPT-2.
-`notebooks/README.md` classifies the user quickstarts, runtime probes, and
-retained historical XLA notebook; the audit found no dead notebook or example
-files to remove. The focused API, report/resume, notebook, and roadmap CPU suite
-passed 31 tests under Python 3.12.14 and torch 2.9.0+cpu. Data loading was
-mocked; no live Hub or TPU training was run.
+**Merged scratch-workflow update (PR #112, 2026-11-16):** the from-scratch API
+accepts local text files or the pinned Hub source, and exposes the existing
+`constant`, `linear`, `cosine`, and `wsd` schedules plus configurable warmup.
+The notebook identifies its randomly initialized GPT-2 model and opens in
+Colab or Kaggle. Reports record requested and effective schedule settings.
+Budget extension remains limited to cosine with automatic warmup. Both hosted
+CPU suites passed; PR #112 did not include TPU training.
 
-**Current branch update:** the from-scratch quickstart now has direct Colab and
-Kaggle launch links in the notebook and catalog. Kaggle imports the public
-GitHub notebook; neither link provisions accelerator hardware. The scratch API
-also exposes the existing `constant`, `linear`, `cosine`, and `wsd` schedules
-plus configurable warmup steps. Defaults preserve cosine decay and its prior
-automatic warmup; reports record requested and effective settings. Budget
-extension still supports only the default cosine/automatic-warmup path. These
-changes do not alter the T1 hardware gate or native TPU support status.
+**Current branch update:** the owner’s Colab TPU run failed at its first
+scheduled checkpoint because the native runtime queried the wrong RNG API.
+TorchTPU exposes capture through `torch.accelerator.random.get_rng_state()`
+and restore through `torch.tpu.set_rng_state()`. The adapter now uses those
+paths with compatibility fallbacks. A rerun on the owner’s TPU is still needed
+to validate saving and resume; this fix does not imply TPU certification.
 
 ### API and notebook implementation history
 

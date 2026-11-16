@@ -24,28 +24,23 @@ the experimental native TorchTPU path; its 10,000-token default is a workflow
 smoke test. Fine-tuning examples target CPU or CUDA. Neither notebook is a
 TPU certification, quality benchmark, or convergence claim.
 
-**Merged scratch-workflow update (PR #111, 2026-11-16):** from-scratch
-configuration supports separate local UTF-8 training and validation files as
-well as the pinned Hub source. The scratch notebook and Python example name
-`model_type="gpt2"` explicitly and explain that TrainLM builds a `GPT2Config`
-and randomly initializes `GPT2LMHeadModel`; it does not load a pretrained
-model ID. A notebook catalog classifies user quickstarts, TPU diagnostics, and
-the retained historical XLA validation notebook. No notebook or example was
-removed because each is still referenced or records a distinct validation
-scope. The focused API, report/resume, notebook, and roadmap CPU suite passed
-31 tests under Python 3.12.14 and torch 2.9.0+cpu. Data loading was mocked; no
-live Hub or TPU training was run.
+**Merged scratch-workflow update (PR #112, 2026-11-16):** from-scratch
+configuration supports local UTF-8 train/validation files or the pinned Hub
+source. The notebook names its random GPT-2 architecture and opens in Colab or
+Kaggle. The scratch API supports `constant`, `linear`, `cosine`, and `wsd`
+schedules plus configurable warmup; reports include requested and effective
+values. Budget extension remains limited to cosine with automatic warmup.
+Both hosted CPU suites passed for PR #112; it did not include TPU training.
 
-**Current branch update:** the from-scratch quickstart now exposes Colab and
-Kaggle launch buttons in its opening cell, with matching links from the
-notebook catalog. Kaggle imports the public notebook URL. These links do not
-select or provision runtime hardware. `TrainLMPretrainingConfig` also exposes
-the existing `constant`, `linear`, `cosine`, and `wsd` schedules, with
-`warmup_steps=None` retaining the prior capped automatic warmup. Requested and
-effective values appear in the run report; schedule settings participate in
-checkpoint compatibility. Token-budget extension remains limited to cosine
-with automatic warmup. CPU and TPU validation for these current-branch changes
-has not yet been run.
+**Current branch update:** the owner’s Colab TPU run reached the first
+scheduled checkpoint, then failed because the native runtime looked for
+`torch.accelerator.get_rng_state()`. TorchTPU’s current API exposes capture at
+`torch.accelerator.random.get_rng_state()` and restoration at
+`torch.tpu.set_rng_state()`. The runtime adapter now resolves those APIs while
+retaining compatibility fallbacks. Owner-run checkpoint and resume validation
+is still required; this code change alone does not certify TPU checkpointing.
+The adapter is in `src/trainlm/runtime/torchtpu.py`; existing runtime contract
+coverage is in `tests/runtime/test_torchtpu_runtime.py`.
 
 ### Implementation history
 
@@ -661,10 +656,12 @@ rebase-merged at verified `main` SHA
   causal LM for three steps and exports its model and tokenizer. This is
   experimental code only: no native trainer run has been observed, and
   compile, multi-device, package compatibility, CPU conformance, and target
-  performance remain unverified. The runtime now captures/restores accelerator
-  RNG state through guarded generic APIs; an absent API rejects checkpointing
-  or resume. Native resume is currently guarded to deterministic map-style
-  data, zero loader workers, and a TrainLM-owned random sampler or sequential
+  performance remain unverified. The runtime captures/restores accelerator RNG
+  state through guarded backend APIs; an absent API rejects checkpointing or
+  resume. The owner-run Colab error showed that current PyTorch capture uses
+  `torch.accelerator.random.get_rng_state()` and TorchTPU restore uses
+  `torch.tpu.set_rng_state()`. Native resume is currently guarded to
+  deterministic map-style data, zero loader workers, and a TrainLM-owned random sampler or sequential
   order. PR #32 adds a fingerprinted cursor for packed iterable data and wires
   it into trainer checkpoints; exact CPU resume parity passed CI. Native TPU
   validation remains pending.
