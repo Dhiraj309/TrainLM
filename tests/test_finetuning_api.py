@@ -1,5 +1,6 @@
-from pathlib import Path
+import json
 import sys
+from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
 import pytest
@@ -188,6 +189,19 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
     assert result.summary()["resolved_model_revision"] == "c" * 40
     assert result.summary()["resolved_tokenizer_revision"] == "c" * 40
     assert result.summary()["model_tokenizer_revision_match"] is True
+    assert result.summary_path == tmp_path / "run" / "finetuning-summary.json"
+    report = json.loads(result.summary_path.read_text(encoding="utf-8"))
+    assert report["schema_version"] == 1
+    assert report["status"] == "completed"
+    assert report["data"] == {
+        "text_field": "text",
+        "train_split": "train",
+        "validation_split": "validation",
+    }
+    assert report["training_arguments"]["output_dir"] == str(tmp_path / "run")
+    assert report["training_arguments"]["max_steps"] == 4
+    assert report["model_tokenizer_revision_match"] is True
+    assert report["evaluation"]["eval_loss"] == 1.5
 
     collator = trainer_kwargs["data_collator"]
     batch = collator(

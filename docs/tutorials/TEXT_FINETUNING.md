@@ -39,14 +39,15 @@ print(result.summary())
 ```
 
 The model and tokenizer are saved under `runs/qwen-tinystories/model`. The
-helper does not upload artifacts or write a run report; `result.summary()`
-returns the requested and resolved model revisions, pinned dataset revision,
-resolved tokenizer revision, final step, loss, evaluation metrics, and export
-path. TrainLM pins model loading to the tokenizer's resolved Hub commit when
-available. `model_tokenizer_revision_match` reports whether both loaded from
-the same commit; if both revisions are available and differ, the run stops
-before training. Revision fields are `null` for local sources or loaders that
-do not expose commit metadata. Install the optional dataset dependency with
+helper does not upload artifacts. `result.summary()` returns the requested and
+resolved model revisions, pinned dataset revision, resolved tokenizer
+revision, final step, loss, evaluation metrics, export path, and summary path.
+The JSON report at `result.summary_path` also records the text field, split
+names, and all `TrainLMTrainingArguments`. TrainLM pins model loading to the
+tokenizer's resolved Hub commit when available. If both revisions are available
+and differ, the run stops before training. Revision fields are `null` for local
+sources or loaders that do not expose commit metadata. Install the optional
+dataset dependency with
 `pip install 'trainlm[finetuning]'`.
 
 ## Choose settings for your task

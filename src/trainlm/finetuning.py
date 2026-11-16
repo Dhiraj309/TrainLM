@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
+import json
 import math
+import os
 from pathlib import Path
 import re
+import tempfile
 from typing import Any
 
 from .api import TrainLMTrainer, TrainLMTrainingArguments
@@ -86,6 +89,7 @@ class TrainLMFineTuningResult:
     resolved_model_revision: str | None = None
     resolved_tokenizer_revision: str | None = None
     model_tokenizer_revision_match: bool | None = None
+    summary_path: Path | None = None
 
     def summary(self) -> dict[str, Any]:
         """Return a compact, JSON-compatible run summary."""
@@ -101,6 +105,7 @@ class TrainLMFineTuningResult:
             "resolved_model_revision": self.resolved_model_revision,
             "resolved_tokenizer_revision": self.resolved_tokenizer_revision,
             "model_tokenizer_revision_match": self.model_tokenizer_revision_match,
+            "summary_path": str(self.summary_path) if self.summary_path else None,
             "dataset_id": self.dataset_id,
             "dataset_revision": self.dataset_revision,
             "model_path": str(self.model_path),
@@ -165,6 +170,43 @@ def _tokenizer_commit(tokenizer: Any) -> str | None:
             "train with an inconsistent tokenizer."
         )
     return None
+
+
+def _json_compatible(value: Any) -> Any:
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, Mapping):
+        return {str(key): _json_compatible(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [_json_compatible(item) for item in value]
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    raise TypeError(f"Unsupported run-summary value: {type(value).__name__}.")
+
+
+def _write_summary(path: Path, report: Mapping[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = json.dumps(report, indent=2, sort_keys=True, allow_nan=False) + "\n"
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temporary = Path(handle.name)
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        temporary.replace(path)
+    finally:
+        if temporary is not None and temporary.exists():
+            temporary.unlink()
 
 
 def run_finetuning(
@@ -325,7 +367,8 @@ def run_finetuning(
     train_loss = float(raw_loss) if raw_loss is not None else None
     if train_loss is not None and not math.isfinite(train_loss):
         train_loss = None
-    return TrainLMFineTuningResult(
+    summary_path = Path(config.args.output_dir) / "finetuning-summary.json"
+    result = TrainLMFineTuningResult(
         model_name_or_path=config.model_name_or_path,
         model_revision=config.model_revision,
         dataset_id=config.dataset_id,
@@ -337,4 +380,22 @@ def run_finetuning(
         resolved_model_revision=resolved_model_revision,
         resolved_tokenizer_revision=resolved_tokenizer_revision,
         model_tokenizer_revision_match=model_tokenizer_revision_match,
+        summary_path=summary_path,
     )
+    report = {
+        "schema_version": 1,
+        "scope": "pretrained_causal_lm_finetuning",
+        "status": "completed",
+        **result.summary(),
+        "data": {
+            "text_field": config.text_field,
+            "train_split": config.train_split,
+            "validation_split": config.validation_split,
+        },
+        "training_arguments": _json_compatible({
+            item.name: getattr(config.args, item.name)
+            for item in fields(config.args)
+        }),
+    }
+    _write_summary(summary_path, report)
+    return result

@@ -22,10 +22,12 @@ This path requires a separate validation split and does not handle
 chat-template formatting or task-specific label masking. The
 [fine-tuning notebook](../notebooks/TrainLM_Text_Fine_Tuning.ipynb) calls this
 API in short Colab/Kaggle cells and installs the package without reinstalling
-Torch. Seventy-three focused CPU API/lifecycle tests and 10 notebook/roadmap
-contract tests pass. A local one-step training run also passed with a tiny
-GPT-2 model under supported Transformers 5.20.2; real Hub and accelerator
-execution remain unverified.
+Torch. Each successful run writes `finetuning-summary.json` beside the model
+export, recording training arguments, data splits, resolved model/tokenizer
+revisions, and metrics. Seventy-three focused CPU API/lifecycle tests and 10
+notebook/roadmap contract tests pass. A local one-step training run also
+passed with a tiny GPT-2 model under supported Transformers 5.20.2; real Hub
+and accelerator execution remain unverified.
 The notebook distinguishes a 10,000-token workflow smoke test from a
 1,000,000-token starter budget and allows a custom target; neither budget
 certifies model convergence. Its advanced GPT-2 settings offer compact
