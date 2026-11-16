@@ -1,6 +1,6 @@
 # Fine-tune a pretrained causal language model
 
-[Open the copyable notebook in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/feat%2F01-pretrained-finetuning-api/notebooks/TrainLM_Text_Fine_Tuning.ipynb) · [View notebook source](../../notebooks/TrainLM_Text_Fine_Tuning.ipynb)
+[Open the copyable notebook in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Text_Fine_Tuning.ipynb) · [View notebook source](../../notebooks/TrainLM_Text_Fine_Tuning.ipynb) · [Short Python example](../../examples/finetune_text.py)
 
 Use this workflow when you already have pretrained weights and want to adapt
 them to a text domain. It is separate from [pretraining from scratch](../../README.md#start-here-pretrain-a-language-model-from-scratch),
@@ -9,6 +9,10 @@ which initializes random weights and learns a tokenizer.
 `run_finetuning` owns dataset loading, tokenization, training, evaluation, and
 local model export. When it loads a dataset from the Hub, give it an immutable
 dataset revision and a distinct validation split:
+
+The notebook is the quick path: it uses a tiny model and three training steps
+to verify the workflow. Use CPU or GPU; native TorchTPU fine-tuning is not yet
+validated. The code below is a fuller example for a larger model and budget.
 
 ```python
 from trainlm import (

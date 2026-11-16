@@ -7,20 +7,17 @@ kernel backends.
 ## Start here: pretrain a language model from scratch
 
 The [Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb)
-uses the high-level from-scratch API. It initializes random GPT-2 weights,
-learns a tokenizer from pinned raw text, prepares packed data, trains,
-evaluates, exports a Hugging Face model, and writes a versioned report. The
-notebook shows only the common run settings; its advanced cell is optional.
-The native TorchTPU path is experimental; the starter run does not establish
-convergence or TPU performance.
+uses one high-level call to initialize random GPT-2 weights, prepare pinned
+raw text, train, evaluate, and export a Hugging Face model. The notebook keeps
+the first run to a few cells; advanced controls are in the [pretraining
+guide](docs/tutorials/TPU_PACKED_BIN_PRETRAINING.md). Native TorchTPU remains
+experimental, and the smoke run does not establish convergence or performance.
 
-The notebook offers a 10,000-token workflow smoke test, a 1,000,000-token
-starter budget, and a custom token budget. The smoke test checks that setup,
-training, evaluation, and export work; it is not useful-model training.
-A million tokens is a longer starting run, not a convergence guarantee.
-For GPT-2, the advanced notebook also offers compact (256 hidden, 4 layers,
-4 heads), default (768 hidden, 6 layers, 12 heads), and custom dimensions.
-These choices select model shape only; TPU fit and performance remain unverified.
+The notebook runs a 10,000-token workflow smoke test to check setup, training,
+evaluation, and export; it is not useful-model training. Increase `max_tokens`
+in the config for a longer run; token count alone does not guarantee
+convergence. Advanced model dimensions and budgets belong in the guide so the
+first notebook path stays short.
 
 For a simple Python run, `run_pretraining` owns the complete lifecycle and
 returns a result with the report and export paths:
@@ -32,7 +29,9 @@ config = TrainLMPretrainingConfig(
     output_dir="runs/tinystories",
     max_tokens=10_000,
     sequence_length=128,
-    save_total_limit=3,  # Keep up to three automatic training checkpoints.
+    model_embedding_size=256,
+    model_layers=4,
+    model_attention_heads=4,
     accelerator="native_tpu",  # Explicit, experimental single-device path.
 )
 result = run_pretraining(config, show_progress=True)
@@ -42,22 +41,20 @@ print(result.report_path, result.export_path)
 
 `result.parameter_count` reports the exact total parameter count measured from
 the instantiated model; `result.summary()` includes the same count. Progress
-updates use the configured `logging_steps` cadence. The notebook prints the
-effective model dimensions, token target, and requested accelerator before it
-starts the run. Omit
-`show_progress=True` for a quiet library call.
+updates use the configured `logging_steps` cadence. Omit `show_progress=True`
+for a quiet library call.
+
+For a short copyable script, see [`examples/pretrain_from_scratch.py`](examples/pretrain_from_scratch.py).
+The [examples index](examples/README.md) also separates user quickstarts from
+runtime diagnostics.
 
 If setup, training, evaluation, or export fails, `TrainLMPretrainingError`
-points to the report saved for that run. The notebook prints a concise failure
-category and report path instead of dumping the full JSON into the cell output;
-the report retains package details and any resume example. If the run wrote a
-report before stopping, run the notebook's final artifact cell to download that
-report and any available resume example. For a custom lifecycle, the lower-level
+points to the saved report. For a custom lifecycle, the lower-level
 `TrainLMTrainer.from_scratch(config)` API remains available.
 
 `save_total_limit` also works in `TrainLMTrainingArguments` for single-device
 CPU, CUDA, and explicit native TorchTPU training. The API default, `None`, keeps
-all saves; the notebook selects `3`. Cleanup runs after a successful save and
+all saves. Cleanup runs after a successful save and
 preserves the new checkpoint. When `save_steps` is configured, TrainLM also
 saves a final checkpoint after a successful run if its last step falls between
 periodic save steps. Unmarked legacy checkpoints, incomplete saves,
@@ -70,8 +67,7 @@ native TPU behavior still requires hardware validation.
 After training, `trainer.latest_checkpoint` returns the newest published
 checkpoint as a `Path`, or `None` if no checkpoint exists. To resume in a new
 session, create a trainer with the same `output_dir` and call
-`trainer.train(resume_from_checkpoint="latest")`; the notebook prints the
-resolved path for easy copying.
+`trainer.train(resume_from_checkpoint="latest")`.
 
 For a different built-in Transformers causal-LM architecture, set `model_type`
 and pass its architecture-specific fields. TrainLM derives `vocab_size` and
@@ -102,40 +98,13 @@ provide the relevant Transformers config fields in `model_config_overrides`.
 Only model types supported by `AutoModelForCausalLM` are suitable; TrainLM does
 not load custom remote model code in this scratch path.
 
-The notebook's downloadable ZIP includes a version 6 evidence report with the
-requested and effective training settings, optimizer and scheduler details,
-selected backend, runtime TPU discovery and device properties, model config,
-tokenizer vocabulary and special-token IDs, tokenizer artifact hash, parameter
-counts, source and dataset revisions, package versions, and training metrics.
-The top-level `checkpoint.latest_path` field records the newest published
-checkpoint path, including on failed runs when a prior checkpoint remains.
-This path belongs to the notebook runtime; keep `RUN_DIR` on persistent storage
-such as Google Drive if it must remain available after a reset.
-When a checkpoint is available, `resume.code` captures a runnable Python
-example with every pretraining setting and the recorded checkpoint path. The
-download cell displays it and includes the same code as `resume.py` in the ZIP.
-Restore the full original run directory and match the report's source revision
-and package versions before running it. The ZIP contains a model export, not
-the optimizer checkpoints or packed data needed for training recovery. The
-example keeps the saved token budget; use the notebook's explicit extension
-settings to add more training to a completed run. Without a checkpoint,
-`resume.code` is `null` and no resume script is included.
-To recover directly in the notebook, restore the same `RUN_DIR`, set
-`RESUME_FROM_REPORT = True`, and run all cells. The public
-`restore_pretraining_report` helper validates the report, package versions, and
-required run files before returning the matching config and checkpoint. The
-notebook restores the recorded source revision before importing the helper,
-then resumes, evaluates, exports, and refreshes the report without copying
-settings into a separate script.
-If versions differ, it lists the expected and installed versions and stops
-before training; use a fresh runtime with the matching accelerator/package
-profile rather than replacing Torch/TorchTPU packages in a live TPU session.
-Optional distributions and unavailable hardware properties are recorded as
-`null`. Property discovery does not allocate a device; the report labels its
-unverified query separately from the active runtime's status.
-
-`bundle_pretraining_artifacts` creates the notebook ZIP with the report, resume
-example, and model export when the export is complete.
+`run_pretraining` writes a versioned report containing the effective settings,
+model and tokenizer details, selected backend, package versions, and training
+metrics. `bundle_pretraining_artifacts(result.report_path)` packages the
+report, a resume helper when a checkpoint is available, and the model export
+when complete. Keep the full run directory to resume; the model ZIP does not
+contain optimizer state or packed data. The [pretraining guide](docs/tutorials/TPU_PACKED_BIN_PRETRAINING.md)
+covers report recovery and longer runs.
 
 ## Fine-tune a pretrained model
 
@@ -146,37 +115,24 @@ Pin the dataset revision to an immutable commit; pin the model revision when
 reproducibility requires it.
 
 ```python
-from trainlm import (
-    TrainLMFineTuningConfig,
-    TrainLMTrainingArguments,
-    run_finetuning,
-)
+from trainlm import TrainLMFineTuningConfig, TrainLMTrainingArguments, run_finetuning
 
-config = TrainLMFineTuningConfig(
-    model_name_or_path="Qwen/Qwen3-0.6B",
+result = run_finetuning(TrainLMFineTuningConfig(
+    model_name_or_path="sshleifer/tiny-gpt2",
     dataset_id="roneneldan/TinyStories",
     dataset_revision="f54c09fd23315a6f9c86f9dc80f725de7d8f9c64",
-    text_field="text",
     args=TrainLMTrainingArguments(
-        output_dir="runs/qwen-tinystories",
-        max_steps=1000,
-        sequence_length=512,
-        per_device_train_batch_size=2,
-        learning_rate=2e-5,
-        eval_strategy="steps",
-        eval_steps=100,
-        save_strategy="steps",
-        save_steps=100,
-        save_total_limit=3,
+        output_dir="runs/tinystories-finetune",
+        max_steps=3,  # Workflow smoke only; increase for real training.
+        sequence_length=128,
     ),
-)
-result = run_finetuning(config)
+))
 print(result.summary())
 ```
 
 This path keeps validation data separate and writes the export to
-`runs/qwen-tinystories/model` plus a machine-readable run summary to
-`runs/qwen-tinystories/finetuning-summary.json` (`result.summary_path`). The
+`runs/tinystories-finetune/model` plus a machine-readable run summary to
+`runs/tinystories-finetune/finetuning-summary.json` (`result.summary_path`). The
 summary records training arguments, data splits, resolved model/tokenizer
 revisions, and evaluation metrics. If a run fails, the same file records the
 failed phase, error type, and last known step/checkpoint; the original
@@ -227,13 +183,17 @@ result = run_finetuning(config, resume_from_checkpoint="latest")
 ```
 
 See the [fine-tuning guide](docs/tutorials/TEXT_FINETUNING.md) for setup
-requirements and limitations. The [Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/feat%2F01-pretrained-finetuning-api/notebooks/TrainLM_Text_Fine_Tuning.ipynb)
-offers the same flow as short, copyable cells for Colab and Kaggle.
+requirements and limitations. The [Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Text_Fine_Tuning.ipynb)
+and [`examples/finetune_text.py`](examples/finetune_text.py) show the short
+first-run path. The notebook targets CPU or GPU; native TPU fine-tuning has not
+been validated.
 
-The config defaults to a pinned TinyStories revision. In a standard Python
-environment, install the package with `pip install 'trainlm[pretraining]'`.
-The notebook installs only missing `datasets` and `tokenizers` helpers; it
-does not reinstall the Torch/TorchTPU packages supplied by the TPU runtime.
+The quick-start configs use a pinned TinyStories revision. In a standard Python
+environment, install the package with `pip install 'trainlm[pretraining]'` for
+from-scratch runs or `pip install 'trainlm[finetuning]'` for fine-tuning.
+The notebook setup cells install TrainLM without dependency resolution, then
+install its Transformers/data-library requirements separately. They do not
+request PyTorch or TorchTPU, so those runtime packages stay in place.
 
 - [Open the notebook in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb)
 - [Read the notebook source](notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb)

@@ -8,39 +8,33 @@
 
 ## Current project snapshot
 
-The `feat/01-pretrained-finetuning-api` branch introduces an additive
-`run_finetuning(TrainLMFineTuningConfig(...))` workflow. It loads a pretrained
-causal LM and tokenizer, defaults to immutable Hub train and validation splits,
-or accepts caller-provided Hugging Face `Dataset` splits, tokenizes a plain-text
-field, then trains, evaluates, and saves a local model export. Hub-loaded data
-requires a pinned ID and revision; preloaded local or transformed splits can
-omit those fields. Its summary records the requested model revision, resolved
-model and tokenizer commits, and whether they match when available. It pins model loading
-to the tokenizer's resolved commit; a detected mismatch stops before training.
-Each successful run writes a JSON summary beside the export with all training
-arguments, data splits, revisions, and metrics. Failed runs update that file
-with the phase, error type, and last known step/checkpoint, then re-raise the
-original exception without copying its message into the report. Local sources
-may have no commit metadata. It does not upload artifacts or create a
-validation split. Its optional row formatter and custom collator allow
-caller-defined chat/instruction formatting and label construction. Native TPU
-remains experimental and receives no certification from this API. The focused
-CPU/API suites pass 73 tests under
-Python 3.12.14, torch 2.9.0+cpu,
-pytest 9.1.1, and Transformers 5.0.0. That Transformers version is below the
-declared project minimum; the fine-tuning tests mock Hub dataset, tokenizer,
-and model loading. A separate CPU integration run passed one training step
-with a locally created GPT-2 model/tokenizer under Transformers 5.20.2 and
-torch 2.9.0+cpu; the dataset loader was an in-memory fixture. Ten notebook and
-roadmap contract tests pass. Real Hub fine-tuning and TPU execution remain
-unverified.
+The merged `main` branch exposes two task-focused, Hugging Face-style entry
+points: `run_pretraining(TrainLMPretrainingConfig(...))` for random-weight
+pretraining from pinned text, and
+`run_finetuning(TrainLMFineTuningConfig(...))` for a pretrained causal LM.
+They own data preparation, the training lifecycle, evaluation, export, and run
+summaries. The lower-level `TrainLMTrainer` API remains available for custom
+workflows.
+
+The quick-start notebooks and runnable Python examples stay intentionally
+small: setup, a few values to edit, one public API call, and the saved result.
+Advanced schedules, checkpoint recovery, custom formatting, and larger run
+settings live in the task guides. The from-scratch notebook explicitly selects
+the experimental native TorchTPU path; its 10,000-token default is a workflow
+smoke test. Fine-tuning examples target CPU or CUDA. Neither notebook is a
+TPU certification, quality benchmark, or convergence claim.
+
+### Implementation history
+
+The entries below preserve the API and validation history. Branch names,
+intermediate notebook controls, and test counts in those entries describe past
+iterations, not the current notebook interface or live branch state.
 The fine-tuning summary and failure-report follow-up passes 17 focused API,
 model-provider, notebook, and roadmap tests.
 `notebooks/TrainLM_Text_Fine_Tuning.ipynb` presents the API in short, copyable
 cells with a three-step smoke default and a local model bundle. It installs
-TrainLM without reinstalling Torch. During this branch review it installs from
-the feature branch; update its source ref to `main` after merge before deleting
-the feature branch.
+TrainLM without reinstalling Torch. The current notebook source is merged
+`main`; the earlier feature-branch bootstrap note is obsolete.
 The notebook also exposes `SAVE_STEPS` and `RESUME_FROM_CHECKPOINT`;
 `"latest"` resumes the newest saved checkpoint under the same output directory.
 Its instructions require retaining that directory, keeping run settings, and
@@ -142,25 +136,12 @@ writing. Its result exposes status, a concise summary, and artifact paths;
 `TrainLMPretrainingError` preserves the report path and underlying failure.
 Successful `TrainLMPretrainingResult` values expose `parameter_count`, measured
 from the instantiated model, and include it in the concise run summary.
-When `run_pretraining` fails, the notebook prints the error category, a
-relevant next step when known, and the report path; detailed diagnostics and
-available resume code stay in the report instead of flooding cell output.
-The final notebook cell can also run after a reported training failure: it
-bundles `report.json` and any available resume example, includes a valid model
-export when present, and prints which artifacts were included.
-Immediately before the high-level call, the notebook prints the effective
-model dimensions, token target, and requested accelerator from the config it
-will actually use, including restored settings during resume.
-`run_pretraining(..., show_progress=True)` emits step, token, loss, and learning
-rate updates at the configured `logging_steps` cadence; the scratch notebook
-enables this by default so a long run reports progress without notebook-side
-training loops. The notebook offers explicit `quick_smoke` (10,000 tokens),
-`starter_pretraining` (1,000,000 tokens), and custom token-budget choices; the
-smoke checks workflow behavior and does not represent model convergence. The
-progress option is off by default for quiet library use. The advanced notebook
-settings offer compact GPT-2 (256 hidden, 4 layers, 4 heads), default GPT-2
-(768 hidden, 6 layers, 12 heads), and custom dimensions. These select a random
-model shape; CPU contract coverage does not establish TPU fit or performance.
+When `run_pretraining` fails, the API writes detailed diagnostics to the
+report and raises `TrainLMPretrainingError` with the report path. A successful
+`run_pretraining(..., show_progress=True)` call emits step, token, loss, and
+learning-rate updates at the configured `logging_steps` cadence. The current
+quick-start notebook uses a compact GPT-2 configuration and a 10,000-token
+workflow smoke test; CPU coverage does not establish TPU fit or performance.
 The public `restore_pretraining_report` helper validates the recorded package
 profile and run artifacts before resume, and `bundle_pretraining_artifacts`
 creates the notebook download ZIP. The report records requested/effective
@@ -186,16 +167,12 @@ included. The
 private notebook helper does not load checkpoint state while making the
 report. Native TPU remains experimental; CPU/API evidence adds no hardware
 validation.
-The notebook's `RESUME_FROM_REPORT` option reads the saved config and checkpoint
-through `restore_pretraining_report`. Before importing TrainLM, it checks the
-recorded source SHA and restores that checkout; the helper then validates the
-schema, package versions, report directory, and required run artifacts. A
-package mismatch identifies expected and installed versions without replacing
-Torch/TorchTPU in an active session. CPU tests exercise report recovery and
-package mismatch behavior through the public helper. The notebook now exposes
-only common run controls in its main cell; data/model overrides are in an
-optional cell, while lifecycle, report construction, and ZIP bundling live in
-the package API.
+The public `restore_pretraining_report` helper reads a saved config and
+checkpoint, then validates the schema, package versions, report directory, and
+required run artifacts. CPU tests exercise report recovery and package mismatch
+behavior through the public helper. The quick-start notebook leaves this
+advanced recovery flow to the guide; lifecycle, report construction, and ZIP
+bundling remain in the package API.
 
 `TrainLMTrainer.from_scratch()` now checks installed metadata for the base
 project requirements and the `pretraining` extra before it reads or prepares

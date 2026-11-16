@@ -13,37 +13,27 @@ that existed at the time, primarily PyTorch/XLA. They do not imply native
 TorchTPU support. “Implemented” means present in that historical code path;
 “partial” means validation remained; “deferred” means it was not delivered.
 
-**Current user-workflow update (2026-11-16):** the package exposes
-`TrainLMPretrainingConfig` and `TrainLMTrainer.from_scratch()` for raw text from
-a revision-pinned Hugging Face dataset. The API trains a byte-level tokenizer,
-prepares validated packed shards, initializes GPT-2 by default (or a configured
-registered Transformers causal-LM architecture), and returns the familiar
-trainer lifecycle. The high-level public `run_pretraining(config)` helper owns
-preparation, training, evaluation, export, and schema-v6 reporting; advanced
-users can keep using `TrainLMTrainer.from_scratch()`. `TrainLMPretrainingError`
-preserves the report path on failure. `restore_pretraining_report()` checks
-package versions and required files before resume, and
-`bundle_pretraining_artifacts()` creates the download ZIP. The notebook now
-shows only common run controls by default; report and bundle construction live
-in the API. Its one-call run enables sparse step/token/loss/learning-rate
-updates at `logging_steps`, while library callers can keep progress output off.
-The notebook clearly separates a 10,000-token workflow smoke test from its
-1,000,000-token starter budget and a custom target; none is a convergence
-claim. In advanced settings, GPT-2 offers compact (256 hidden, 4 layers,
-4 heads), default (768 hidden, 6 layers, 12 heads), or custom dimensions.
-These options choose randomly initialized model dimensions; TPU fit and
-performance are unverified. Vocabulary and special-token IDs come from the
-trained tokenizer. The successful result exposes the exact instantiated model
-parameter count as `result.parameter_count` and in its concise summary. On a
-failed run, the notebook displays the error category, a next step when known,
-and the report path; full details and recovery code remain in the report.
-If TrainLM wrote a report before stopping, users can run the final notebook
-cell to download the report and any available resume example; the cell labels
-which artifacts are included in the bundle.
-Before the run call, it prints the effective model dimensions, token target,
-and requested backend from the active config, including restored config when
-resuming.
-The current feature branch adds a task-focused `run_finetuning` API for a
+**Current user-workflow update (2026-11-16):** merged `main` exposes
+`run_pretraining(TrainLMPretrainingConfig(...))` for from-scratch training and
+`run_finetuning(TrainLMFineTuningConfig(...))` for pretrained causal LMs. These
+public APIs own preparation, training, evaluation, export, and run summaries.
+The quick-start notebooks and Python examples are intentionally short: setup,
+a few editable values, one API call, and the saved result. Longer schedules,
+custom data, model options, and checkpoint recovery are documented in the
+guides. The scratch notebook's 10,000-token default is a workflow smoke test
+and explicitly selects the experimental native TorchTPU path. Fine-tuning's
+quick example targets CPU/CUDA; native TPU fine-tuning is unvalidated. Neither
+notebook establishes model quality, convergence, or TPU performance. See the
+[coding-agent guide](AI_AGENT_GUIDE.md) for the example, implementation, test,
+and evidence map.
+
+### API and notebook implementation history
+
+The API implementation history follows. Its branch names, notebook controls,
+and intermediate test counts are historical records rather than the current
+user interface.
+
+The fine-tuning API introduced a task-focused `run_finetuning` workflow for a
 pretrained causal LM and separate train and validation splits. It loads the
 model/tokenizer and either reads a pinned Hugging Face text-dataset revision
 or accepts caller-provided Hugging Face `Dataset` objects. Dataset identity is
@@ -63,7 +53,7 @@ passes 15 tests under Python 3.12.14, torch 2.9.0+cpu, and pytest 9.1.1. No
 live Hub or TPU run was performed. The epoch-budget follow-up passes 116
 focused API, lifecycle, config, trainer, and notebook-contract tests under the
 same CPU environment; native TPU epoch training remains unverified.
-The current API follow-up adds `eval_strategy` and `save_strategy` values
+The API follow-up added `eval_strategy` and `save_strategy` values
 `"no"`, `"steps"`, and `"epoch"`. Epoch actions flush partial accumulation at
 finite map-style dataset boundaries. Epoch scheduling requires a single device
 and is not implemented in the legacy XLA coordinator. The focused CPU suite for
@@ -74,10 +64,10 @@ training. Each successful run writes a JSON summary beside the export with
 the arguments, data splits, revisions,
 and metrics. Failed runs record the phase, error type, and last known
 step/checkpoint before re-raising the original exception; the exception text is
-not saved. Local sources may not expose commit metadata. The API implementation
-is present on its feature branch. The current follow-up adds
-`load_best_model_at_end`, metric direction, and `early_stopping_patience` with
-an improvement threshold. Evaluation improvements force a same-step
+not saved. Local sources may not expose commit metadata. PR #109 later merged
+the API to `main`. Its follow-up added `load_best_model_at_end`, metric
+direction, and `early_stopping_patience` with an improvement threshold.
+Evaluation improvements force a same-step
 checkpoint; local retention protects the selected checkpoint and newest save.
 The patience counter is checkpointed and restored on resume. These features
 currently require a single-device runtime and are not implemented by the legacy
