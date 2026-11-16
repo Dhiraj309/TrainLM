@@ -184,6 +184,12 @@ standard `TrainLMTrainer` remains available when you already have a model and
 tokenized datasets or need a custom lifecycle. Native TorchTPU fine-tuning is
 experimental and has not been certified by this API example.
 
+For custom formatting, pass preloaded Hugging Face `Dataset` train and
+validation splits, a `formatting_func` that returns one text string per row,
+and optionally a tokenizer and custom `data_collator`. See the
+[fine-tuning guide](docs/tutorials/TEXT_FINETUNING.md) for this pattern and
+resume requirements.
+
 To resume from the latest checkpoint, restore the saved run configuration and
 set a larger step budget. The helper reloads model, dataset, and training
 settings from the summary while anchoring the output directory to its location:

@@ -68,15 +68,22 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
 
         def map(self, function, *, batched, remove_columns):
             assert batched is True
-            assert remove_columns == self.column_names
+            assert set(remove_columns).issubset(self.column_names)
             batch = {
                 name: [row[name] for row in self.rows]
                 for name in self.column_names
             }
             mapped = function(batch)
             rows = [
-                {name: values[index] for name, values in mapped.items()}
-                for index in range(len(self.rows))
+                {
+                    **{
+                        name: row[name]
+                        for name in self.column_names
+                        if name not in remove_columns
+                    },
+                    **{name: values[index] for name, values in mapped.items()},
+                }
+                for index, row in enumerate(self.rows)
             ]
             return FakeDataset(rows)
 
@@ -111,6 +118,7 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
         def __call__(self, texts, *, truncation, max_length):
             assert truncation is True
             assert max_length == 8
+            calls["trainer"].setdefault("tokenized_texts", []).append(list(texts))
             return {
                 "input_ids": [[index + 10, 2] for index, _ in enumerate(texts)],
                 "attention_mask": [[1, 1] for _ in texts],
@@ -220,9 +228,11 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
     assert report["schema_version"] == 1
     assert report["status"] == "completed"
     assert report["data"] == {
+        "source": "huggingface_hub",
         "text_field": "text",
         "train_split": "train",
         "validation_split": "validation",
+        "formatting_function": None,
     }
     assert report["training_arguments"]["output_dir"] == str(tmp_path / "run")
     assert report["training_arguments"]["max_steps"] == 4
@@ -315,6 +325,56 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
     }
     assert "must-not-be-saved" not in failed_report_text
     assert calls["trainer"]["train_calls"] == 2
+
+    provided_config = _config(
+        tmp_path / "provided",
+        dataset_id="org/custom-instructions",
+        dataset_revision="b" * 40,
+    )
+    calls["trainer"]["fail_train"] = False
+    calls["trainer"]["latest_checkpoint"] = None
+    provided_calls_before = list(calls["datasets"])
+
+    def format_example(example):
+        return f"Question: {example['prompt']}\nAnswer: {example['completion']}"
+
+    def custom_collator(features):
+        return features
+
+    provided_result = run_finetuning(
+        provided_config,
+        train_dataset=FakeDataset(
+            [{"prompt": "Write a greeting", "completion": "Hello."}]
+        ),
+        eval_dataset=FakeDataset(
+            [{"prompt": "Write a farewell", "completion": "Goodbye."}]
+        ),
+        tokenizer=tokenizer,
+        formatting_func=format_example,
+        data_collator=custom_collator,
+    )
+    assert calls["datasets"] == provided_calls_before
+    assert calls["trainer"]["tokenized_texts"][-2:] == [
+        ["Question: Write a greeting\nAnswer: Hello."],
+        ["Question: Write a farewell\nAnswer: Goodbye."],
+    ]
+    _, provided_trainer_kwargs = calls["trainer"]["model_load"]
+    assert provided_trainer_kwargs["data_collator"] is custom_collator
+    assert provided_trainer_kwargs["train_dataset"].column_names == [
+        "prompt",
+        "completion",
+        "input_ids",
+        "attention_mask",
+    ]
+    provided_report = json.loads(
+        provided_result.summary_path.read_text(encoding="utf-8")
+    )
+    assert provided_report["data"]["source"] == "provided_dataset"
+    assert provided_report["data"]["formatting_function"].endswith(
+        ".format_example"
+    )
+    assert provided_report["dataset_id"] == "org/custom-instructions"
+    assert provided_report["dataset_revision"] == "b" * 40
 
 
 def test_run_finetuning_rejects_legacy_xla_export_path(tmp_path):

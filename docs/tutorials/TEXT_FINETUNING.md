@@ -38,13 +38,55 @@ result = run_finetuning(config)
 print(result.summary())
 ```
 
-The model and tokenizer are saved under `runs/qwen-tinystories/model`. The
+## Use preloaded datasets and your own formatting
+
+The same config can use dataset splits you loaded or filtered yourself. Keep
+the dataset ID and immutable revision in the config as the run's source
+identity. This example assumes a dataset whose rows contain `prompt` and
+`response` fields; update the config and field names for your data. The
+formatter receives one row and returns the text to tokenize:
+
+```python
+from datasets import load_dataset
+
+train_dataset = load_dataset(
+    config.dataset_id,
+    revision=config.dataset_revision,
+    split=config.train_split,
+)
+eval_dataset = load_dataset(
+    config.dataset_id,
+    revision=config.dataset_revision,
+    split=config.validation_split,
+)
+
+def format_example(example):
+    return f"### Prompt\n{example['prompt']}\n### Response\n{example['response']}"
+
+result = run_finetuning(
+    config,
+    train_dataset=train_dataset,
+    eval_dataset=eval_dataset,
+    formatting_func=format_example,
+)
+```
+
+Pass `tokenizer=` to reuse a tokenizer you loaded, or `data_collator=` to
+control padding and labels. When a custom collator is set, the mapped batch
+retains original dataset columns so the collator can build task-specific
+labels. Caller-provided splits must expose Hugging Face Dataset's
+`column_names` and `map` interface. On resume, pass the same splits, tokenizer,
+formatter, and collator again; the summary records their source identity and
+formatter name but cannot recreate Python objects or callback code.
+
+The model and tokenizer are saved under `config.args.output_dir/model`. The
 helper does not upload artifacts. `result.summary()` returns the requested and
 resolved model revisions, pinned dataset revision, resolved tokenizer
 revision, final step, loss, evaluation metrics, export path, and summary path.
-The JSON report at `result.summary_path` also records the text field, split
-names, and all `TrainLMTrainingArguments`. TrainLM pins model loading to the
-tokenizer's resolved Hub commit when available. If both revisions are available
+The JSON report at `result.summary_path` also records the data source, text
+field, split names, formatter name, and all `TrainLMTrainingArguments`. TrainLM
+pins model loading to the tokenizer's resolved Hub commit when available. If
+both revisions are available
 and differ, the run stops before training. Revision fields are `null` for local
 sources or loaders that do not expose commit metadata. If a run fails, the same
 file records the failed phase, error type, last known step, metrics, and
@@ -82,20 +124,21 @@ result = run_finetuning(config, resume_from_checkpoint="latest")
 ## Choose settings for your task
 
 - Confirm the model is a causal language model and the selected dataset field
-  contains plain text.
+  contains plain text, or provide `formatting_func` to build it from row fields.
 - Keep evaluation examples in a separate validation split. This helper does
   not create a split or infer one from training data.
 - Set `sequence_length`, batch size, training budget, and evaluation/save
   cadence to fit the runtime and memory available to you. The example values
   are a starting point, not a convergence or performance guarantee.
-- For chat or instruction fine-tuning, apply the model's chat template and
-  task-specific label masking before using the generic trainer API. This
-  convenience helper currently tokenizes a plain text column only.
+- For chat or instruction fine-tuning, use `formatting_func` to apply the
+  model's chat template and a custom `data_collator` for task-specific label
+  masking.
 - Native TorchTPU is experimental and has not been certified by this workflow.
   Set `accelerator="native_tpu"` explicitly to try that path; automatic TPU
   selection is not enabled. The legacy PyTorch/XLA coordinator is not supported
   by this one-call export path.
 
-For custom preprocessing, already-tokenized datasets, or direct control of the
-training lifecycle, use [`TrainLMTrainer.from_pretrained`](../../src/trainlm/api.py)
-with `train()`, `evaluate()`, and `save_model()`.
+For already-tokenized datasets, datasets without Hugging Face Dataset's
+`map`/`column_names` interface, or direct control of the training lifecycle,
+use [`TrainLMTrainer.from_pretrained`](../../src/trainlm/api.py) with `train()`,
+`evaluate()`, and `save_model()`.

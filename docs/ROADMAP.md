@@ -46,12 +46,14 @@ resuming.
 The current feature branch adds a task-focused `run_finetuning` API for a
 pretrained causal LM and an immutable Hugging Face text-dataset revision. It
 loads the model/tokenizer, preserves separate train and validation splits,
-tokenizes one text field, trains, evaluates, and exports locally. It does not
-upload artifacts, create a validation split, or apply chat templates and
-instruction-specific label masks. Its summary preserves the requested model
-revision and records resolved model and tokenizer commits plus their match
-status when available. Model loading is pinned to the tokenizer's resolved
-commit; a detected mismatch stops before training. Each successful run writes
+tokenizes one text field by default, trains, evaluates, and exports locally. It
+does not upload artifacts or create a validation split. Callers can provide
+preloaded Hugging Face `Dataset` splits, a row formatter, tokenizer, and custom
+collator for prompt formatting and label construction. Its summary preserves
+the requested model revision and records resolved model and tokenizer commits
+and whether they match when available. Model loading is pinned to the
+tokenizer's resolved commit; a detected mismatch stops before training. Each
+successful run writes
 a JSON summary beside the export with the arguments, data splits, revisions,
 and metrics. Failed runs record the phase, error type, and last known
 step/checkpoint before re-raising the original exception; the exception text is
@@ -103,6 +105,12 @@ is still checked by the trainer during restore. No Hub or TPU validation was
 performed for this guard. The focused API, notebook, roadmap, and installed-wheel
 suite passes 66 tests; the CPU/Gloo checkpoint-worker suite passes 20 tests with
 command-scoped local socket permission.
+The convenience helper now also accepts paired preloaded Hugging Face
+`Dataset` splits with a row formatter, optional tokenizer, and custom collator.
+Original columns are retained for custom label construction. The run report
+records its input mode and formatter name; resume callers must provide those
+runtime objects again. The focused suite covers both Hub-loaded and caller-owned
+dataset paths; live Hub and TPU validation remain pending.
 The package-root helpers are additive to the existing `api_version: "1"`
 configuration schema; the compatibility contract requires the v1 exports while
 allowing new public helpers without forcing a configuration-version change.
