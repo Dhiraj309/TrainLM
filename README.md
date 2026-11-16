@@ -6,8 +6,9 @@ kernel backends.
 
 ## Start here: pretrain a language model from scratch
 
-The [Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb)
-uses one high-level call to initialize random GPT-2 weights, prepare pinned
+Open the [from-scratch notebook in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb)
+or [import it into Kaggle](https://kaggle.com/kernels/welcome?src=https://raw.githubusercontent.com/Dhiraj309/TrainLM/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb).
+It uses one high-level call to initialize random GPT-2 weights, prepare pinned
 raw text, train, evaluate, and export a Hugging Face model. The notebook keeps
 the first run to a few cells; advanced controls are in the [pretraining
 guide](docs/tutorials/TPU_PACKED_BIN_PRETRAINING.md). Native TorchTPU remains
