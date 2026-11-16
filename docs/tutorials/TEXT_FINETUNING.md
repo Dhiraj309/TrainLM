@@ -59,13 +59,15 @@ Set `save_steps` to the checkpoint interval you can afford, and keep the full
 the saved configuration with `restore_finetuning_config` and set `max_steps`
 above the saved step. The helper restores the model, dataset, and other
 training settings, uses the summary file's directory as `output_dir`, and
-checks that a published checkpoint exists before returning the config. The
-saved checkpoint contains optimizer and trainer state; the exported `model`
-directory alone is not enough to resume. On Colab or Kaggle, keep the summary
-and checkpoints on persistent storage if a runtime reset should not discard
-the run. In the notebook, a missing or incompatible summary or checkpoint
-produces recovery instructions and skips training and bundling, so a previous
-model is not presented as the resumed run.
+checks local archive or native TPU manifest metadata before returning the
+config. This catches missing or malformed publication without unpickling local
+checkpoint data; the trainer checks model/state compatibility during restore.
+The saved checkpoint contains optimizer and trainer state; the exported
+`model` directory alone is not enough to resume. On Colab or Kaggle, keep the
+summary and checkpoints on persistent storage if a runtime reset should not
+discard the run. In the notebook, a missing or incompatible summary or
+checkpoint produces recovery instructions and skips training and bundling, so
+a previous model is not presented as the resumed run.
 
 ```python
 from trainlm import restore_finetuning_config, run_finetuning

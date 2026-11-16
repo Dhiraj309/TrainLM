@@ -96,6 +96,13 @@ The 66-test API, checkpoint lifecycle, notebook, roadmap, and installed-wheel
 suite now includes the missing-checkpoint guard. It passes under Python
 3.12.14, torch 2.9.0+cpu, and Transformers 5.20.2; no Hub or TPU run was
 performed.
+Resume setup now rejects an unreadable local checkpoint archive and checks
+native TPU manifest/shard publication before model or dataset loading. It does
+not unpickle the checkpoint during this early check; model/state compatibility
+is still checked by the trainer during restore. No Hub or TPU validation was
+performed for this guard. The focused API, notebook, roadmap, and installed-wheel
+suite passes 66 tests; the CPU/Gloo checkpoint-worker suite passes 20 tests with
+command-scoped local socket permission.
 The package-root helpers are additive to the existing `api_version: "1"`
 configuration schema; the compatibility contract requires the v1 exports while
 allowing new public helpers without forcing a configuration-version change.

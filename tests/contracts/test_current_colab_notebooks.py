@@ -89,7 +89,7 @@ def test_text_finetuning_notebook_is_copyable_and_uses_the_public_api():
     assert "config.args.max_steps" in source
     assert "resume_status=blocked" in source
     assert "resume_recovery=" in source
-    assert "published checkpoint is missing" in source
+    assert "checkpoint is missing, malformed, or incompatible" in source
     assert "run_status=skipped" in source
     assert "bundle_status=skipped" in source
     assert 'RESUME_FROM_CHECKPOINT = ""' in source
