@@ -306,6 +306,8 @@ def _initial_report(
                 "per_device_eval_batch_size": config.per_device_eval_batch_size,
                 "gradient_accumulation_steps": config.gradient_accumulation_steps,
                 "learning_rate": config.learning_rate,
+                "lr_scheduler_type": config.lr_scheduler_type,
+                "warmup_steps": config.warmup_steps,
                 "weight_decay": config.weight_decay,
                 "bf16": config.bf16,
                 "torch_compile": config.torch_compile,

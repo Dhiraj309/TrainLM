@@ -75,6 +75,27 @@ TrainLM records both file hashes and refuses to reuse prepared data if either
 file changes under the same `output_dir`; choose a fresh run directory after
 changing the corpus.
 
+The scratch API defaults to cosine decay with automatic warmup (floor of 10%
+of the step budget, capped at 100 steps). Choose `lr_scheduler_type` from
+`"constant"`, `"linear"`, `"cosine"`, or `"wsd"`; set `warmup_steps` to a
+non-negative integer to override automatic warmup:
+
+```python
+config = TrainLMPretrainingConfig(
+    output_dir="runs/my-corpus",
+    train_file="data/train.txt",
+    validation_file="data/validation.txt",
+    max_tokens=1_000_000,
+    lr_scheduler_type="cosine",
+    warmup_steps=500,
+    accelerator="native_tpu",
+)
+```
+
+The report records the requested and effective values. Extending an existing
+run's token budget currently remains limited to the default cosine schedule
+and its automatic warmup; other schedule settings need a fresh run directory.
+
 For a short copyable script, see [`examples/pretrain_from_scratch.py`](examples/pretrain_from_scratch.py).
 The [examples index](examples/README.md) also separates user quickstarts from
 runtime diagnostics.

@@ -278,7 +278,7 @@ def _validate_scratch_budget_extension(
         raise ValueError(
             "Budget extension can change only max_tokens and its derived step, "
             "warmup, save, and evaluation cadence. Model, data, optimizer, "
-            "precision, and runtime settings must remain identical."
+            "schedule, precision, and runtime settings must remain identical."
         )
 
     def budget_values(configuration: Mapping[str, Any]) -> tuple[int, int, int]:
@@ -915,8 +915,12 @@ class TrainLMTrainer:
             sequence_length=config.sequence_length,
             gradient_accumulation_steps=config.gradient_accumulation_steps,
             learning_rate=config.learning_rate,
-            lr_scheduler_type="cosine",
-            warmup_steps=min(max_steps // 10, 100),
+            lr_scheduler_type=config.lr_scheduler_type,
+            warmup_steps=(
+                min(max_steps // 10, 100)
+                if config.warmup_steps is None
+                else config.warmup_steps
+            ),
             bf16=config.bf16,
             accelerator=config.accelerator,
             torch_compile=config.torch_compile,
@@ -1633,6 +1637,10 @@ class TrainLMTrainer:
         # Retention controls disk usage, not training semantics. Excluding it
         # also preserves fingerprints of checkpoints saved before this option.
         pretraining.pop("save_total_limit", None)
+        # The effective schedule and warmup are captured in training_args;
+        # omitting their config aliases keeps old default-run fingerprints stable.
+        pretraining.pop("lr_scheduler_type", None)
+        pretraining.pop("warmup_steps", None)
         # The new opt-in setting is equivalent to false when absent in an
         # older manifest, so omit its default to keep existing run fingerprints.
         if not config.gradient_checkpointing:
@@ -1780,8 +1788,9 @@ class TrainLMTrainer:
                 except (KeyError, TypeError, ValueError) as exc:
                     raise RuntimeError(
                         "extend_training_budget=True only permits a strictly larger "
-                        "max_tokens budget with the same model, data, optimizer, "
-                        "precision, and runtime settings."
+                        "max_tokens budget with the default cosine schedule and "
+                        "automatic warmup, keeping the model, data, optimizer, "
+                        "precision, and runtime settings unchanged."
                     ) from exc
                 if _latest_training_checkpoint(Path(self.args.output_dir)) is None:
                     raise RuntimeError(

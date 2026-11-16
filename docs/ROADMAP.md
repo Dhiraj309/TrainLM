@@ -38,9 +38,12 @@ mocked; no live Hub or TPU training was run.
 
 **Current branch update:** the from-scratch quickstart now has direct Colab and
 Kaggle launch links in the notebook and catalog. Kaggle imports the public
-GitHub notebook; neither link provisions accelerator hardware. This is a
-notebook access improvement and does not change the T1 hardware gate or native
-TPU support status.
+GitHub notebook; neither link provisions accelerator hardware. The scratch API
+also exposes the existing `constant`, `linear`, `cosine`, and `wsd` schedules
+plus configurable warmup steps. Defaults preserve cosine decay and its prior
+automatic warmup; reports record requested and effective settings. Budget
+extension still supports only the default cosine/automatic-warmup path. These
+changes do not alter the T1 hardware gate or native TPU support status.
 
 ### API and notebook implementation history
 
