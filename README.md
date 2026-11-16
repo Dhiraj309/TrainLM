@@ -90,15 +90,22 @@ config = TrainLMPretrainingConfig(
     max_tokens=1_000_000,
     lr_scheduler_type="cosine",
     warmup_ratio=0.1,
+    save_steps=1_000,
+    eval_steps=500,
     accelerator="native_tpu",
 )
 ```
 
 Use `warmup_steps=500` instead when you want an exact number of warmup steps.
+By default, TrainLM saves and evaluates roughly every 10% of the planned update
+budget. `save_steps` and `eval_steps` override those intervals independently;
+each is a positive number of optimizer steps. The report records both
+requested and effective intervals.
 
 The report records the requested and effective values. Extending an existing
-run's token budget remains limited to cosine runs whose effective warmup
-matches the automatic rule; other schedule settings need a fresh run directory.
+run's token budget remains limited to runs whose effective schedule, warmup,
+save interval, and evaluation interval match the automatic cosine defaults;
+custom settings need a fresh run directory.
 
 For a short copyable script, see [`examples/pretrain_from_scratch.py`](examples/pretrain_from_scratch.py).
 The [examples index](examples/README.md) also separates user quickstarts from

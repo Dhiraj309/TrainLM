@@ -63,9 +63,13 @@ follow the linked implementation and tests before making a change.
   `warmup_steps=None` keeps the default automatic warmup (floor of 10% of the
   step budget, capped at 100). Set `warmup_ratio` (0–1, rounded up to a whole
   step) or an integer `warmup_steps` for an override; they cannot be combined.
-  The run report records requested and effective values.
+  Set positive `save_steps` and `eval_steps` to control checkpoint and
+  evaluation cadence independently; if omitted, both use the automatic interval
+  of roughly 10% of the planned update budget. The run report records
+  requested and effective values.
   `extend_training_budget=True` permits only a strictly larger `max_tokens`
-  and its derived horizon/cadence. After a compatible checkpoint is restored,
+  when effective schedule, warmup, and cadence still match the automatic
+  cosine defaults. After a compatible checkpoint is restored,
   it starts a new cosine schedule at the configured learning rate while keeping
   model and optimizer state; this can raise the learning rate, so use it
   deliberately. Other changed settings require a fresh `output_dir`. CPU/API
