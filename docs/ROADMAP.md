@@ -56,7 +56,8 @@ outstanding.
 The same config now exposes AdamW `betas` and `eps`, plus `max_grad_norm`
 (`0` disables clipping). Requested and effective optimizer settings are stored
 in the run report. Native TPU behavior remains experimental and awaits owner
-validation.
+validation. The core-current and core-minimum hosted CPU suites each passed
+988 tests and 41 subtests; no TPU training was run.
 
 ### API and notebook implementation history
 
