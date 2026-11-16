@@ -173,13 +173,14 @@ print(result.summary())
 ```
 
 This path keeps validation data separate and writes the export to
-`runs/qwen-tinystories/model`. It does not upload to the Hub. Install the
+`runs/qwen-tinystories/model` plus a machine-readable run summary to
+`runs/qwen-tinystories/finetuning-summary.json` (`result.summary_path`). The
+summary records training arguments, data splits, resolved model/tokenizer
+revisions, and evaluation metrics. It does not upload to the Hub. Install the
 optional dataset dependency with `pip install 'trainlm[finetuning]'`. The
 standard `TrainLMTrainer` remains available when you already have a model and
 tokenized datasets or need a custom lifecycle. Native TorchTPU fine-tuning is
-experimental and has not been certified by this API example. This first
-version returns a summary rather than writing the detailed report used by the
-from-scratch workflow.
+experimental and has not been certified by this API example.
 
 See the [fine-tuning guide](docs/tutorials/TEXT_FINETUNING.md) for setup
 requirements and limitations. The [Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/feat%2F01-pretrained-finetuning-api/notebooks/TrainLM_Text_Fine_Tuning.ipynb)
