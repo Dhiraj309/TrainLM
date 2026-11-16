@@ -202,7 +202,12 @@ data, respect batch size and gradient accumulation, and currently require a
 single-device runtime. `eval_strategy` and `save_strategy` schedule evaluation
 and training checkpoints by steps or at epoch boundaries; epoch schedules
 also require finite map-style data and flush partial accumulation at each
-boundary.
+boundary. Set `load_best_model_at_end=True` to export the weights from the
+best validation metric; evaluation and saving must use matching strategies,
+and step-based save intervals must be multiples of the evaluation interval.
+The default selection metric is the lowest `eval_loss`. See the
+[fine-tuning guide](docs/tutorials/TEXT_FINETUNING.md#restore-the-best-evaluation-checkpoint)
+for metric selection, retention, resume behavior, and current limitations.
 
 To resume from the latest checkpoint, restore the saved run configuration and
 set a larger step budget. The helper reloads model, dataset, and training

@@ -436,7 +436,8 @@ class TrainLMTrainingArguments:
     Set ``max_steps=None`` with ``num_train_epochs`` to train on a finite
     map-style dataset for a dataset-relative budget. ``eval_strategy`` and
     ``save_strategy`` accept ``"no"``, ``"steps"``, or ``"epoch"``; omitted
-    strategies preserve interval-based behavior.
+    strategies preserve interval-based behavior. ``load_best_model_at_end``
+    selects and restores the best evaluation checkpoint.
     """
 
     output_dir: str | Path = Path("runs")
@@ -473,6 +474,9 @@ class TrainLMTrainingArguments:
     save_total_limit: int | None = None
     save_strategy: Literal["no", "steps", "epoch"] | None = None
     eval_strategy: Literal["no", "steps", "epoch"] | None = None
+    load_best_model_at_end: bool = False
+    metric_for_best_model: str | None = None
+    greater_is_better: bool | None = None
 
     def __post_init__(self) -> None:
         for name in ("save_strategy", "eval_strategy"):
@@ -529,6 +533,45 @@ class TrainLMTrainingArguments:
                     f"{interval_name} must be omitted when {strategy_name}="
                     f"{strategy!r}."
                 )
+        if not isinstance(self.load_best_model_at_end, bool):
+            raise ValueError("load_best_model_at_end must be boolean.")
+        if self.metric_for_best_model is not None and (
+            not isinstance(self.metric_for_best_model, str)
+            or not self.metric_for_best_model.strip()
+        ):
+            raise ValueError("metric_for_best_model must be a non-empty string.")
+        if self.greater_is_better is not None and not isinstance(
+            self.greater_is_better, bool
+        ):
+            raise ValueError("greater_is_better must be boolean when configured.")
+        if self.load_best_model_at_end:
+            eval_strategy = self.resolved_eval_strategy
+            save_strategy = self.resolved_save_strategy
+            if eval_strategy == "no":
+                raise ValueError(
+                    "load_best_model_at_end requires an active eval_strategy."
+                )
+            if save_strategy == "no" or save_strategy != eval_strategy:
+                raise ValueError(
+                    "load_best_model_at_end requires matching, active eval_strategy "
+                    "and save_strategy values."
+                )
+            if (
+                eval_strategy == "steps"
+                and self.save_steps % self.eval_steps != 0
+            ):
+                raise ValueError(
+                    "save_steps must be a multiple of eval_steps when "
+                    "load_best_model_at_end is enabled."
+                )
+        elif (
+            self.metric_for_best_model is not None
+            or self.greater_is_better is not None
+        ):
+            raise ValueError(
+                "metric_for_best_model and greater_is_better require "
+                "load_best_model_at_end=True."
+            )
         for name in (
             "per_device_train_batch_size",
             "per_device_eval_batch_size",
@@ -596,6 +639,98 @@ class TrainLMTrainingArguments:
     def resolved_eval_strategy(self) -> Literal["no", "steps", "epoch"]:
         """Return evaluation policy, inferring the legacy step policy when omitted."""
         return self.eval_strategy or ("steps" if self.eval_steps is not None else "no")
+
+
+class _BestModelSelectionCallback(TrainerCallback):
+    """Track the best evaluation metric and force its checkpoint to be saved."""
+
+    def __init__(
+        self,
+        *,
+        metric_name: str,
+        greater_is_better: bool,
+    ) -> None:
+        self.metric_name = metric_name
+        self.greater_is_better = greater_is_better
+        self.best_metric: float | None = None
+        self.best_step: int | None = None
+
+    def on_metrics(self, state, control, metrics: Mapping[str, float]) -> None:
+        if state.phase != TrainerPhase.EVALUATING:
+            return
+        if self.metric_name not in metrics:
+            raise ValueError(
+                f"Evaluation did not return metric {self.metric_name!r}; "
+                f"available metrics: {', '.join(metrics)}."
+            )
+        try:
+            value = float(metrics[self.metric_name])
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise ValueError(
+                f"Best-model metric {self.metric_name!r} must be a finite number."
+            ) from exc
+        if not math.isfinite(value):
+            raise ValueError(
+                f"Best-model metric {self.metric_name!r} must be a finite number."
+            )
+        improved = self.best_metric is None or (
+            value > self.best_metric
+            if self.greater_is_better
+            else value < self.best_metric
+        )
+        if improved:
+            self.best_metric = value
+            self.best_step = state.step
+            control.should_save_checkpoint = True
+
+    def state_dict(self) -> dict[str, Any]:
+        return {
+            "schema_version": 1,
+            "metric_name": self.metric_name,
+            "greater_is_better": self.greater_is_better,
+            "best_metric": self.best_metric,
+            "best_step": self.best_step,
+        }
+
+    def validate_state_dict(
+        self,
+        state: object,
+        *,
+        checkpoint_step: int,
+    ) -> tuple[float | None, int | None]:
+        if not isinstance(state, Mapping):
+            raise ValueError("Best-model checkpoint metadata must be a mapping.")
+        if (
+            state.get("schema_version") != 1
+            or isinstance(state.get("schema_version"), bool)
+            or state.get("metric_name") != self.metric_name
+            or state.get("greater_is_better") is not self.greater_is_better
+        ):
+            raise ValueError(
+                "Best-model selection settings do not match the checkpoint."
+            )
+        metric = state.get("best_metric")
+        step = state.get("best_step")
+        if metric is None or step is None:
+            if metric is not None or step is not None:
+                raise ValueError("Best-model checkpoint metadata is incomplete.")
+            return None, None
+        if (
+            isinstance(metric, bool)
+            or not isinstance(metric, Real)
+            or not _is_finite_real(metric)
+            or type(step) is not int
+            or step < 1
+            or step > checkpoint_step
+        ):
+            raise ValueError("Best-model checkpoint metadata is invalid.")
+        return float(metric), step
+
+    def load_state_dict(self, state: object, *, checkpoint_step: int) -> None:
+        self.best_metric, self.best_step = self.validate_state_dict(
+            state,
+            checkpoint_step=checkpoint_step,
+        )
 
 
 def _default_collator(features: Sequence[Any]) -> dict[str, torch.Tensor]:
@@ -779,6 +914,18 @@ class TrainLMTrainer:
             self.args.resolved_save_strategy == "epoch"
             or self.args.resolved_eval_strategy == "epoch"
         )
+        self._best_model_callback: _BestModelSelectionCallback | None = None
+        if self.args.load_best_model_at_end:
+            metric_name = self.args.metric_for_best_model or "eval_loss"
+            if not metric_name.startswith("eval_"):
+                metric_name = f"eval_{metric_name}"
+            greater_is_better = self.args.greater_is_better
+            if greater_is_better is None:
+                greater_is_better = not metric_name.endswith("loss")
+            self._best_model_callback = _BestModelSelectionCallback(
+                metric_name=metric_name,
+                greater_is_better=greater_is_better,
+            )
         self._train_batches_per_epoch: int | None = None
         self._max_train_batches: int | None = None
         self._effective_max_steps = self.args.max_steps
@@ -822,6 +969,11 @@ class TrainLMTrainer:
         self._train_loader_generator_initial_state: torch.Tensor | None = None
         self._tpu_coordinator = None
         if self.args.accelerator == "tpu":
+            if self.args.load_best_model_at_end:
+                raise NotImplementedError(
+                    "load_best_model_at_end is not supported by the legacy "
+                    "PyTorch/XLA coordinator."
+                )
             if self._uses_epoch_schedules:
                 raise NotImplementedError(
                     "Epoch-based evaluation and saving are not supported by the "
@@ -880,6 +1032,10 @@ class TrainLMTrainer:
                 "Epoch-based evaluation and saving currently require a "
                 "single-device runtime."
             )
+        if self.args.load_best_model_at_end and self.runtime.is_distributed:
+            raise NotImplementedError(
+                "load_best_model_at_end currently requires a single-device runtime."
+            )
         if self.args.save_total_limit is not None and self.runtime.is_distributed:
             raise ValueError("save_total_limit requires a single-device trainer.")
         self.optimizer = optimizer or self._make_optimizer()
@@ -923,7 +1079,11 @@ class TrainLMTrainer:
             task=CausalLMTask(loss_implementation="causal_lm"),
             train_dataloader=train_loader,
             eval_dataloader=eval_loader,
-            callbacks=self.callbacks,
+            callbacks=(
+                self.callbacks + (self._best_model_callback,)
+                if self._best_model_callback is not None
+                else self.callbacks
+            ),
             checkpoint_saver=self._save_training_checkpoint,
             checkpoint_loader=self._load_training_checkpoint,
         )
@@ -1203,7 +1363,68 @@ class TrainLMTrainer:
                     self._scratch_budget_extension_checkpoint = False
                 else:
                     self._activate_scratch_budget_extension()
-        return self.engine.train()
+        state = self.engine.train()
+        if self._best_model_callback is not None:
+            self._load_best_model_at_end()
+        return state
+
+    @property
+    def best_model_selection(self) -> dict[str, Any] | None:
+        """Return the selected evaluation metric and retained checkpoint."""
+        callback = self._best_model_callback
+        if callback is None:
+            return None
+        checkpoint = (
+            Path(self.args.output_dir) / f"checkpoint-{callback.best_step}"
+            if callback.best_step is not None
+            else None
+        )
+        return {
+            "metric_name": callback.metric_name,
+            "greater_is_better": callback.greater_is_better,
+            "value": callback.best_metric,
+            "step": callback.best_step,
+            "checkpoint": str(checkpoint) if checkpoint is not None else None,
+        }
+
+    def _load_best_model_at_end(self) -> None:
+        callback = self._best_model_callback
+        if callback is None:
+            return
+        if callback.best_step is None:
+            raise RuntimeError(
+                "No best-model evaluation was recorded. Check that training "
+                "reached an evaluation step or epoch."
+            )
+        checkpoint_dir = Path(self.args.output_dir) / f"checkpoint-{callback.best_step}"
+        state_path = checkpoint_dir / "trainer_state.pt"
+        if checkpoint_dir.is_symlink() or state_path.is_symlink():
+            raise ValueError("The selected best-model checkpoint cannot be a symlink.")
+        if not state_path.is_file():
+            raise FileNotFoundError(
+                "The selected best-model checkpoint is missing: "
+                f"{state_path}"
+            )
+        payload = torch.load(state_path, map_location="cpu", weights_only=False)
+        if not isinstance(payload, Mapping) or not isinstance(
+            payload.get("model"), Mapping
+        ):
+            raise ValueError("The selected best-model checkpoint is malformed.")
+        selection_state = payload.get("best_model_selection")
+        if selection_state is None:
+            raise ValueError(
+                "The selected checkpoint is missing best-model selection metadata."
+            )
+        saved_metric, saved_step = callback.validate_state_dict(
+            selection_state,
+            checkpoint_step=callback.best_step,
+        )
+        if saved_metric != callback.best_metric or saved_step != callback.best_step:
+            raise ValueError(
+                "The selected checkpoint's best-model metadata does not match "
+                "the active run."
+            )
+        self.model.load_state_dict(payload["model"])
 
     def _consume_tpu_result(self, result: dict[str, Any]) -> dict[str, Any]:
         """Deliver worker artifacts through public state and callback contracts."""
@@ -1257,6 +1478,10 @@ class TrainLMTrainer:
             payload["run_configuration"] = deepcopy(
                 self._run_configuration_manifest
             )
+        if self._best_model_callback is not None:
+            payload["best_model_selection"] = (
+                self._best_model_callback.state_dict()
+            )
         loader = engine.train_dataloader
         dataset = getattr(loader, "dataset", None)
         dataset_state_dict = getattr(dataset, "state_dict", None)
@@ -1301,6 +1526,12 @@ class TrainLMTrainer:
             training_args.pop("save_strategy", None)
         if self.args.eval_strategy is None:
             training_args.pop("eval_strategy", None)
+        if not self.args.load_best_model_at_end:
+            training_args.pop("load_best_model_at_end", None)
+        if self.args.metric_for_best_model is None:
+            training_args.pop("metric_for_best_model", None)
+        if self.args.greater_is_better is None:
+            training_args.pop("greater_is_better", None)
         model_config = getattr(self.model, "config", None)
         model_config_dict = (
             model_config.to_dict()
@@ -1684,6 +1915,12 @@ class TrainLMTrainer:
                 just_saved=path,
                 step=engine.state.step,
                 limit=self.args.save_total_limit,
+                protected_steps=(
+                    (self._best_model_callback.best_step,)
+                    if self._best_model_callback is not None
+                    and self._best_model_callback.best_step is not None
+                    else ()
+                ),
             )
         return path
 
@@ -1776,6 +2013,18 @@ class TrainLMTrainer:
                     f"Training checkpoint trainer field {key!r} is not persisted."
                 )
         self._preflight_trainer_state(trainer_payload)
+        if self._best_model_callback is not None:
+            best_selection = payload.get("best_model_selection")
+            if best_selection is not None:
+                checkpoint_step = trainer_payload.get("step")
+                if type(checkpoint_step) is not int:
+                    raise ValueError(
+                        "Best-model checkpoint has an invalid trainer step."
+                    )
+                self._best_model_callback.validate_state_dict(
+                    best_selection,
+                    checkpoint_step=checkpoint_step,
+                )
 
         cpu_rng_state = payload["cpu_rng_state"]
         if (
@@ -2118,6 +2367,14 @@ class TrainLMTrainer:
         engine.scheduler.load_state_dict(payload["scheduler"])
         for key, value in payload["trainer"].items():
             setattr(engine.state, key, value)
+        if (
+            self._best_model_callback is not None
+            and payload.get("best_model_selection") is not None
+        ):
+            self._best_model_callback.load_state_dict(
+                payload["best_model_selection"],
+                checkpoint_step=engine.state.step,
+            )
         if engine._train_batches_per_epoch:
             # Older checkpoints persisted the epoch field without maintaining
             # it during training. Derive it from the exact batch cursor so a

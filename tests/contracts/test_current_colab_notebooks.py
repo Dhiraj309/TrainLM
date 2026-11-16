@@ -99,6 +99,10 @@ def test_text_finetuning_notebook_is_copyable_and_uses_the_public_api():
     assert 'eval_strategy=EVAL_STRATEGY' in source
     assert "SAVE_STRATEGY = \"steps\"" in source
     assert "EVAL_STRATEGY = \"no\"" in source
+    assert "LOAD_BEST_MODEL_AT_END" in source
+    assert "METRIC_FOR_BEST_MODEL" in source
+    assert "GREATER_IS_BETTER" in source
+    assert "load_best_model_at_end=LOAD_BEST_MODEL_AT_END" in source
     assert "increase the selected budget" in source
     assert 'TRAINING_BUDGET = "steps"' in source
     assert "NUM_TRAIN_EPOCHS" in source

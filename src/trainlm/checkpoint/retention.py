@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 import json
 from pathlib import Path
 import re
@@ -52,7 +53,12 @@ def _owned_checkpoint_step(path: Path) -> int | None:
 
 
 def maintain_local_checkpoints(
-    *, output_dir: Path, just_saved: Path, step: int, limit: int | None
+    *,
+    output_dir: Path,
+    just_saved: Path,
+    step: int,
+    limit: int | None,
+    protected_steps: Iterable[int] = (),
 ) -> None:
     """Mark a published save and prune older owned directories within its root.
 
@@ -82,8 +88,21 @@ def maintain_local_checkpoints(
             if checkpoint_step is not None and path.name != just_saved.name:
                 candidates.append((checkpoint_step, path))
         candidates.sort(key=lambda item: item[0], reverse=True)
-        # The current save takes one slot; preserve the newest remaining saves.
-        for _, path in candidates[limit - 1:]:
+        protected_step_set = set(protected_steps)
+        protected = {
+            path for checkpoint_step, path in candidates
+            if checkpoint_step in protected_step_set
+        }
+        # Preserve the current save and the best-model checkpoint. If a limit
+        # of one is requested, these two required checkpoints take precedence.
+        remaining_slots = max(limit - 1, len(protected))
+        kept = set(protected)
+        for _, path in candidates:
+            if path in kept:
+                continue
+            if len(kept) < remaining_slots:
+                kept.add(path)
+                continue
             if _owned_checkpoint_step(path) is not None:
                 shutil.rmtree(path)
     except OSError as exc:

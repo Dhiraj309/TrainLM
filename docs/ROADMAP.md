@@ -75,7 +75,16 @@ the arguments, data splits, revisions,
 and metrics. Failed runs record the phase, error type, and last known
 step/checkpoint before re-raising the original exception; the exception text is
 not saved. Local sources may not expose commit metadata. The API implementation
-is present on its feature branch. The focused CPU/API suite passes 73 tests in
+is present on its feature branch. The current follow-up adds
+`load_best_model_at_end`, metric direction, and a `best_model_selection`
+summary. Evaluation improvements force a same-step checkpoint; local retention
+protects both the selected checkpoint and the newest save. This currently
+requires a single-device runtime and is not implemented by the legacy XLA
+coordinator. The paired API, notebook, retention, and engine regression suite
+passed 171 tests under Python 3.12.14, torch 2.9.0+cpu, and pytest 9.1.1,
+including the same-step save regression and best-checkpoint retention. No TPU
+or live Hub run was performed. The focused CPU/API suite passes
+73 tests in
 the local Python
 3.12.14, torch 2.9.0+cpu, pytest 9.1.1 environment, whose Transformers 5.0.0
 is below the declared minimum; those tests mock Hub/model loading. A separate
