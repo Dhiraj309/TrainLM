@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import faulthandler
 import json
+import math
 import os
 from pathlib import Path
 
@@ -83,6 +84,7 @@ def parse_args():
     parser.add_argument("--beta1", type=float, default=0.9)
     parser.add_argument("--beta2", type=float, default=0.95)
     parser.add_argument("--eps", type=float, default=1e-8)
+    parser.add_argument("--max-grad-norm", type=float, default=1.0)
     parser.add_argument("--weight-decay", type=float, default=0.1)
     parser.add_argument("--z-loss", type=float, default=1e-4)
     parser.add_argument(
@@ -159,6 +161,8 @@ def parse_args():
         )
     if not 0 <= args.beta1 < 1 or not 0 <= args.beta2 < 1:
         parser.error("optimizer betas must be in [0, 1)")
+    if not math.isfinite(args.max_grad_norm) or args.max_grad_norm < 0:
+        parser.error("--max-grad-norm must be finite and non-negative")
     if args.data_mode == "raw" and not (args.probe_only or args.model_preflight):
         if not args.bin_path or args.header_bytes is None or args.header_bytes < 0:
             parser.error("raw mode requires --bin-path and explicit nonnegative --header-bytes")

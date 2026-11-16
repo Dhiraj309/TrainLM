@@ -72,8 +72,10 @@ follow the linked implementation and tests before making a change.
   `early_stopping_patience` and optionally `early_stopping_threshold` to stop
   after validation loss plateaus. The selected step is available on
   `TrainLMPretrainingResult.best_model_selection`; early stopping can finish
-  before the token target and is reported explicitly. TPU behavior remains
-  experimental.
+  before the token target and is reported explicitly. Set AdamW `betas` and
+  `eps` as usual; `max_grad_norm` defaults to `1.0`, and `0` disables gradient
+  clipping. The run report records requested and effective values. TPU behavior
+  remains experimental.
   `extend_training_budget=True` permits only a strictly larger `max_tokens`
   when effective schedule, warmup, and cadence still match the automatic
   cosine defaults. After a compatible checkpoint is restored,

@@ -340,6 +340,9 @@ def _initial_report(
                 "per_device_eval_batch_size": config.per_device_eval_batch_size,
                 "gradient_accumulation_steps": config.gradient_accumulation_steps,
                 "learning_rate": config.learning_rate,
+                "betas": [float(value) for value in config.betas],
+                "eps": config.eps,
+                "max_grad_norm": config.max_grad_norm,
                 "lr_scheduler_type": config.lr_scheduler_type,
                 "warmup_steps": config.warmup_steps,
                 "warmup_ratio": config.warmup_ratio,
@@ -437,8 +440,6 @@ def _capture_effective_configuration(report: dict[str, Any], trainer: Any) -> No
                 for group in optimizer.param_groups
             ],
         }
-    engine_config = getattr(getattr(trainer, "engine", None), "config", None)
-    trainer_config = getattr(engine_config, "trainer", None)
     scheduler = getattr(trainer, "scheduler", None)
     report["training_config"]["effective"] = {
         "accelerator": args.accelerator,
@@ -486,7 +487,7 @@ def _capture_effective_configuration(report: dict[str, Any], trainer: Any) -> No
         "logging_verbosity": args.logging_verbosity,
         "loss_implementation": args.loss_implementation,
         "logits_chunk_size": args.logits_chunk_size,
-        "max_grad_norm": getattr(trainer_config, "max_grad_norm", None),
+        "max_grad_norm": args.max_grad_norm,
         "optimizer": optimizer_report,
         "scheduler_class": type(scheduler).__name__ if scheduler is not None else None,
     }

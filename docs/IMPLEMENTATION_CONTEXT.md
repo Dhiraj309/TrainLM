@@ -53,6 +53,13 @@ automatic cadence when unset. Best-checkpoint selection uses the lowest
 the token budget. The result exposes the selected checkpoint details. Native
 TPU validation remains outstanding.
 
+The scratch and shared training arguments now expose AdamW `betas` and `eps`,
+plus `max_grad_norm` for gradient clipping (`0` disables clipping). Requested
+and effective values are included in the run report and checkpoint identity;
+default scratch fingerprints remain compatible. The internal legacy TPU
+coordinator also forwards the clipping value. This API change has no owner-run
+TPU training evidence.
+
 ### Implementation history
 
 The entries below preserve the API and validation history. Branch names,

@@ -89,6 +89,9 @@ config = TrainLMPretrainingConfig(
     validation_file="data/validation.txt",
     max_tokens=1_000_000,
     lr_scheduler_type="cosine",
+    betas=(0.9, 0.95),
+    eps=1e-8,
+    max_grad_norm=1.0,
     warmup_ratio=0.1,
     save_steps=1_000,
     eval_steps=500,
@@ -103,6 +106,10 @@ By default, TrainLM saves and evaluates roughly every 10% of the planned update
 budget. `save_steps` and `eval_steps` override those intervals independently;
 each is a positive number of optimizer steps. The report records both
 requested and effective intervals.
+
+AdamW uses the familiar `betas` and `eps` settings. `max_grad_norm` controls
+gradient clipping (default `1.0`); set it to `0` to disable clipping. These
+values are recorded in the run report and checked when resuming a run.
 
 To export the weights from the best validation checkpoint, set
 `load_best_model_at_end=True`. Scratch pretraining currently selects the lowest

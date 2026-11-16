@@ -481,6 +481,7 @@ class TrainLMTrainingArguments:
     greater_is_better: bool | None = None
     early_stopping_patience: int | None = None
     early_stopping_threshold: float = 0.0
+    max_grad_norm: float = 1.0
 
     def __post_init__(self) -> None:
         for name in ("save_strategy", "eval_strategy"):
@@ -641,6 +642,19 @@ class TrainLMTrainingArguments:
             raise ValueError("warmup_steps must be non-negative.")
         if not isinstance(self.learning_rate, (int, float)) or self.learning_rate <= 0:
             raise ValueError("learning_rate must be positive.")
+        if (
+            not isinstance(self.betas, tuple)
+            or len(self.betas) != 2
+            or any(
+                not _is_finite_real(beta) or not 0 <= beta < 1
+                for beta in self.betas
+            )
+        ):
+            raise ValueError("betas must contain two finite values in [0, 1).")
+        if not _is_finite_real(self.eps) or self.eps <= 0:
+            raise ValueError("eps must be finite and positive.")
+        if not _is_finite_real(self.max_grad_norm) or self.max_grad_norm < 0:
+            raise ValueError("max_grad_norm must be finite and non-negative.")
         if not isinstance(self.weight_decay, (int, float)) or self.weight_decay < 0:
             raise ValueError("weight_decay must be non-negative.")
         if not isinstance(self.seed, int) or isinstance(self.seed, bool) or self.seed < 0:
@@ -942,6 +956,9 @@ class TrainLMTrainer:
             load_best_model_at_end=config.load_best_model_at_end,
             early_stopping_patience=config.early_stopping_patience,
             early_stopping_threshold=config.early_stopping_threshold,
+            betas=config.betas,
+            eps=config.eps,
+            max_grad_norm=config.max_grad_norm,
         )
         try:
             trainer = cls(
@@ -1380,7 +1397,7 @@ class TrainLMTrainer:
                 stop_at_epoch_end=self._uses_epoch_schedules,
                 gradient_accumulation_steps=self.args.gradient_accumulation_steps,
                 materialize_loss_every_steps=self.args.logging_steps,
-                max_grad_norm=1.0,
+                max_grad_norm=self.args.max_grad_norm,
                 seed=self.args.seed,
             ),
             checkpoint=CheckpointConfig(
@@ -1664,6 +1681,10 @@ class TrainLMTrainer:
         if config.early_stopping_patience is None:
             pretraining.pop("early_stopping_patience", None)
             pretraining.pop("early_stopping_threshold", None)
+        # The resolved optimizer values are stored in training_args; omit the
+        # new aliases so existing default scratch fingerprints stay stable.
+        for name in ("betas", "eps", "max_grad_norm"):
+            pretraining.pop(name, None)
         # The new opt-in setting is equivalent to false when absent in an
         # older manifest, so omit its default to keep existing run fingerprints.
         if not config.gradient_checkpointing:
@@ -1685,6 +1706,8 @@ class TrainLMTrainer:
             # Keep disabled early-stopping defaults out of older run fingerprints.
             training_args.pop("early_stopping_patience", None)
             training_args.pop("early_stopping_threshold", None)
+        if self.args.max_grad_norm == 1.0:
+            training_args.pop("max_grad_norm", None)
         model_config = getattr(self.model, "config", None)
         model_config_dict = (
             model_config.to_dict()
@@ -2651,6 +2674,7 @@ class TrainLMTrainer:
                 else None
             ),
             max_eval_batches=self.args.max_eval_batches,
+            max_grad_norm=self.args.max_grad_norm,
         )
 
     def evaluate(self) -> dict[str, float]:

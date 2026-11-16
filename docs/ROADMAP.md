@@ -53,6 +53,11 @@ and stop after a configured validation plateau. The result exposes the selected
 checkpoint and marks a valid early stop explicitly; TPU validation remains
 outstanding.
 
+The same config now exposes AdamW `betas` and `eps`, plus `max_grad_norm`
+(`0` disables clipping). Requested and effective optimizer settings are stored
+in the run report. Native TPU behavior remains experimental and awaits owner
+validation.
+
 ### API and notebook implementation history
 
 The API implementation history follows. Its branch names, notebook controls,
