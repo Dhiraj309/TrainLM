@@ -80,6 +80,7 @@ class TrainLMFineTuningResult:
     step: int
     train_loss: float | None
     evaluation: Mapping[str, float]
+    resolved_model_revision: str | None = None
 
     def summary(self) -> dict[str, Any]:
         """Return a compact, JSON-compatible run summary."""
@@ -92,6 +93,7 @@ class TrainLMFineTuningResult:
         return {
             "model_name_or_path": self.model_name_or_path,
             "model_revision": self.model_revision,
+            "resolved_model_revision": self.resolved_model_revision,
             "dataset_id": self.dataset_id,
             "dataset_revision": self.dataset_revision,
             "model_path": str(self.model_path),
@@ -245,6 +247,10 @@ def run_finetuning(
     state = trainer.train(resume_from_checkpoint=resume_from_checkpoint)
     evaluation = trainer.evaluate()
     model_path = trainer.save_model(Path(config.args.output_dir) / "model")
+    loaded_metadata = getattr(getattr(trainer, "loaded", None), "metadata", None)
+    resolved_model_revision = getattr(loaded_metadata, "resolved_revision", None)
+    if not isinstance(resolved_model_revision, str) or not resolved_model_revision:
+        resolved_model_revision = None
     raw_loss = getattr(state, "loss", None)
     train_loss = float(raw_loss) if raw_loss is not None else None
     if train_loss is not None and not math.isfinite(train_loss):
@@ -258,4 +264,5 @@ def run_finetuning(
         step=int(getattr(state, "step", 0)),
         train_loss=train_loss,
         evaluation={str(name): float(value) for name, value in evaluation.items()},
+        resolved_model_revision=resolved_model_revision,
     )
