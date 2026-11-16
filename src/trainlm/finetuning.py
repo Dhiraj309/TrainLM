@@ -12,7 +12,11 @@ import re
 import tempfile
 from typing import Any
 
-from .api import TrainLMTrainer, TrainLMTrainingArguments
+from .api import (
+    TrainLMTrainer,
+    TrainLMTrainingArguments,
+    _latest_training_checkpoint,
+)
 from .training import TrainerCallback
 
 
@@ -373,6 +377,7 @@ def restore_finetuning_config(
     All recorded model, data, and training settings are restored. `max_steps`
     is supplied by the caller so a resumed run can extend its previous budget.
     The output directory is anchored to the summary file's current location.
+    A published checkpoint must exist before the config is returned.
     """
     if (
         isinstance(max_steps, bool)
@@ -424,7 +429,7 @@ def restore_finetuning_config(
 
     try:
         args = TrainLMTrainingArguments(**restored_args)
-        return TrainLMFineTuningConfig(
+        config = TrainLMFineTuningConfig(
             model_name_or_path=report["model_name_or_path"],
             model_revision=report.get("model_revision"),
             dataset_id=report["dataset_id"],
@@ -438,6 +443,12 @@ def restore_finetuning_config(
         raise ValueError(
             "The fine-tuning summary contains invalid saved settings."
         ) from exc
+    if _latest_training_checkpoint(path.parent) is None:
+        raise ValueError(
+            "No published training checkpoint was found under "
+            f"{path.parent}; restore the full run directory or start a new run."
+        )
+    return config
 
 
 def _run_finetuning_impl(

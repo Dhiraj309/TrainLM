@@ -89,6 +89,13 @@ The notebook also handles missing or incompatible resume summaries with a
 recovery message and skips training and bundling until the setup is corrected.
 This prevents the previous model export from appearing as a successful resumed
 run. The notebook and roadmap contract tests pass 10 checks.
+The restore helper checks for a published checkpoint before the fine-tuning
+notebook loads the model or dataset. A missing checkpoint prompts the user to
+restore the full run directory or start a new run.
+The 66-test API, checkpoint lifecycle, notebook, roadmap, and installed-wheel
+suite now includes the missing-checkpoint guard. It passes under Python
+3.12.14, torch 2.9.0+cpu, and Transformers 5.20.2; no Hub or TPU run was
+performed.
 The package-root helpers are additive to the existing `api_version: "1"`
 configuration schema; the compatibility contract requires the v1 exports while
 allowing new public helpers without forcing a configuration-version change.
