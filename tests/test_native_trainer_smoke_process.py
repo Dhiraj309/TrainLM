@@ -359,41 +359,31 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
             for cell in notebook["cells"]
             if cell["cell_type"] == "markdown"
         )
-        self.assertIn('TRAINING_PRESET = "quick_smoke (10k tokens)"', source)
-        self.assertIn('"quick_smoke (10k tokens)": 10_000', source)
-        self.assertIn('"starter_pretraining (1M tokens)": 1_000_000', source)
-        self.assertIn("CUSTOM_TARGET_SUPERVISED_TOKENS", source)
-        self.assertIn("SEQUENCE_LENGTH = 128", source)
-        self.assertIn('#@param {type:"integer"}', source)
-        self.assertIn(
-            'RESUME_FROM_REPORT = False #@param {type:"boolean"}', source
-        )
-        self.assertIn(
-            'RESUME_FROM_CHECKPOINT = "" #@param {type:"string"}', source
-        )
+        self.assertLessEqual(len(notebook["cells"]), 5)
+        self.assertTrue(all(
+            len("".join(cell["source"]).splitlines()) <= 30
+            for cell in notebook["cells"]
+            if cell["cell_type"] == "code"
+        ))
+        self.assertIn("git+https://github.com/Dhiraj309/TrainLM.git@main", source)
+        self.assertIn('"--no-deps"', source)
+        self.assertIn('"datasets>=3,<5"', source)
+        self.assertIn('"tokenizers>=0.21,<1"', source)
         self.assertIn("TrainLMPretrainingConfig", source)
         self.assertIn("run_pretraining(", source)
-        self.assertIn("restore_pretraining_report(", source)
         self.assertIn("bundle_pretraining_artifacts(", source)
         self.assertNotIn("TrainLMTrainer.from_scratch", source)
-        self.assertNotIn("trainlm._notebook_resume", source)
         self.assertIn("accelerator=\"native_tpu\"", source)
         self.assertNotIn("torchtpu_native_trainer_smoke.py", source)
-        self.assertIn(
-            'RUN_DIR = "/content/trainlm-pretraining" #@param {type:"string"}',
-            source,
-        )
-        self.assertIn('RUN_DIR = Path(RUN_DIR).expanduser()', source)
-        self.assertIn("/kaggle/working", source)
+        self.assertIn("max_tokens=10_000", source)
         self.assertIn("files.download", source)
-        self.assertIn("does not measure model quality", markdown)
-        self.assertIn("not a convergence guarantee", markdown)
-        self.assertIn("token budget", markdown)
-        self.assertIn("set `RESUME_FROM_CHECKPOINT` to `latest`", markdown)
-        self.assertIn("Google Drive", markdown)
-        self.assertIn("minibatch loop", markdown)
-        self.assertIn("report.json", source)
-        self.assertLess(max(len(cell.splitlines()) for cell in code_cells), 75)
+        self.assertIn("workflow smoke test", markdown)
+        self.assertIn("does not produce a useful model", markdown)
+        self.assertIn("`max_tokens`", markdown)
+        self.assertIn("checkpoint recovery", markdown)
+        self.assertIn("single-device native TorchTPU runtime", markdown)
+        self.assertIn("bundle_pretraining_artifacts(result.report_path)", source)
+        self.assertLessEqual(max(len(cell.splitlines()) for cell in code_cells), 30)
 
     def test_scratch_notebook_code_cells_are_valid_python(self):
         notebook = json.loads(
