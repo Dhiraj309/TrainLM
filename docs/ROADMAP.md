@@ -69,6 +69,14 @@ creates a local model bundle, and installs TrainLM without replacing Torch.
 Its source ref must be changed to `main` after merge before deleting the
 feature branch. The fine-tuning summary and failure-report follow-up passes 17
 focused API, model-provider, notebook, and roadmap tests.
+The notebook now exposes a periodic save cadence and a
+`RESUME_FROM_CHECKPOINT="latest"` control. It explains raising `MAX_STEPS` and
+keeping the output directory on persistent storage for cross-session recovery.
+The API's final-step checkpoint is available when the configured cadence falls
+between the last periodic save and successful completion. The focused CPU/API,
+checkpoint lifecycle, notebook, and roadmap suite for this follow-up passed 64
+tests under Python 3.12.14, torch 2.9.0+cpu, and Transformers 5.20.2. This is
+not Hub or TPU training evidence.
 The package-root helpers are additive to the existing `api_version: "1"`
 configuration schema; the compatibility contract requires the v1 exports while
 allowing new public helpers without forcing a configuration-version change.

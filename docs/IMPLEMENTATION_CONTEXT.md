@@ -38,6 +38,14 @@ cells with a three-step smoke default and a local model bundle. It installs
 TrainLM without reinstalling Torch. During this branch review it installs from
 the feature branch; update its source ref to `main` after merge before deleting
 the feature branch.
+The notebook also exposes `SAVE_STEPS` and `RESUME_FROM_CHECKPOINT`;
+`"latest"` resumes the newest saved checkpoint under the same output directory.
+Its instructions require retaining that directory, keeping run settings, and
+increasing `MAX_STEPS`; persistent storage is needed across runtime resets.
+The API saves the final successful step when a periodic cadence is configured.
+The focused CPU/API, checkpoint lifecycle, notebook, and roadmap suite for
+this follow-up passed 64 tests under Python 3.12.14, torch 2.9.0+cpu, and
+Transformers 5.20.2. No Hub or TPU training was run.
 
 The [coding-agent guide](AI_AGENT_GUIDE.md) maps common training tasks to
 the current notebook, implementation, tests, and validation limits. Prefer it
