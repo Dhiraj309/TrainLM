@@ -77,6 +77,14 @@ between the last periodic save and successful completion. The focused CPU/API,
 checkpoint lifecycle, notebook, and roadmap suite for this follow-up passed 64
 tests under Python 3.12.14, torch 2.9.0+cpu, and Transformers 5.20.2. This is
 not Hub or TPU training evidence.
+The follow-up adds public `restore_finetuning_config(summary_path, max_steps=...)`.
+It restores model, data, and training settings from the fine-tuning summary,
+anchors the run directory to the summary location, and rejects a target step
+that does not exceed the recorded step. The notebook uses the helper for
+`RESUME_FROM_CHECKPOINT="latest"` so users only provide the new step budget.
+The focused API, checkpoint lifecycle, notebook, roadmap, and installed-wheel
+suite passes 66 tests under Python 3.12.14, torch 2.9.0+cpu, and Transformers
+5.20.2. Real Hub and TPU training remain unverified.
 The package-root helpers are additive to the existing `api_version: "1"`
 configuration schema; the compatibility contract requires the v1 exports while
 allowing new public helpers without forcing a configuration-version change.

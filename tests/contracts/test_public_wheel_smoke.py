@@ -55,11 +55,15 @@ assert set(trainlm.__all__) == {{
     'TrainLMPretrainingError',
     'TrainLMPretrainingResult',
     'TrainLMPretrainingResume',
+    'TrainLMFineTuningConfig',
+    'TrainLMFineTuningResult',
     'TrainLMTrainer',
     'TrainLMTrainingArguments',
     'bundle_pretraining_artifacts',
     'restore_pretraining_report',
+    'restore_finetuning_config',
     'run_pretraining',
+    'run_finetuning',
 }}
 args = trainlm.TrainLMTrainingArguments(max_steps=1, accelerator='cpu')
 assert args.max_steps == 1
