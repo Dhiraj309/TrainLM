@@ -87,6 +87,10 @@ def test_text_finetuning_notebook_is_copyable_and_uses_the_public_api():
     assert 'if RESUME_FROM_CHECKPOINT == "latest":' in source
     assert "max_steps=MAX_STEPS" in source
     assert "config.args.max_steps" in source
+    assert "resume_status=blocked" in source
+    assert "resume_recovery=" in source
+    assert "run_status=skipped" in source
+    assert "bundle_status=skipped" in source
     assert 'RESUME_FROM_CHECKPOINT = ""' in source
     assert "resume_from_checkpoint=RESUME_FROM_CHECKPOINT or None" in source
     assert "SAVE_STEPS = 100" in source
