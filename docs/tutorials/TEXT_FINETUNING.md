@@ -40,8 +40,11 @@ print(result.summary())
 
 The model and tokenizer are saved under `runs/qwen-tinystories/model`. The
 helper does not upload artifacts or write a run report; `result.summary()`
-returns the model/dataset revisions, final step, loss, evaluation metrics, and
-export path. Install its optional dataset dependency with
+returns the requested and resolved model revisions, pinned dataset revision,
+final step, loss, evaluation metrics, and export path. `resolved_model_revision`
+is the Hub commit reported by Transformers when available; it is `null` for a
+local model or a loader that does not expose that metadata. Install the optional
+dataset dependency with
 `pip install 'trainlm[finetuning]'`.
 
 ## Choose settings for your task

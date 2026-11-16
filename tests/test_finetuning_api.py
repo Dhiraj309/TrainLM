@@ -123,6 +123,9 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
     class FakeTrainer:
         def __init__(self):
             self.model = SimpleNamespace(config=SimpleNamespace(pad_token_id=None))
+            self.loaded = SimpleNamespace(
+                metadata=SimpleNamespace(resolved_revision="c" * 40)
+            )
 
         def train(self, *, resume_from_checkpoint):
             calls["trainer"]["resume_from_checkpoint"] = resume_from_checkpoint
@@ -169,6 +172,9 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
     assert result.train_loss == 1.25
     assert result.evaluation["eval_loss"] == 1.5
     assert result.summary()["dataset_revision"] == "a" * 40
+    assert result.model_revision == "b" * 40
+    assert result.resolved_model_revision == "c" * 40
+    assert result.summary()["resolved_model_revision"] == "c" * 40
 
     collator = trainer_kwargs["data_collator"]
     batch = collator(
