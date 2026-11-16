@@ -82,7 +82,13 @@ def test_text_finetuning_notebook_is_copyable_and_uses_the_public_api():
     source = "\n".join("".join(cell["source"]) for cell in notebook["cells"])
     assert 'TRAINLM_REF = "feat/01-pretrained-finetuning-api"' in source
     assert "--no-deps" in source
-    assert "run_finetuning(config)" in source
+    assert "run_finetuning(" in source
+    assert 'RESUME_FROM_CHECKPOINT = ""' in source
+    assert "resume_from_checkpoint=RESUME_FROM_CHECKPOINT or None" in source
+    assert "SAVE_STEPS = 100" in source
+    assert "save_steps=SAVE_STEPS" in source
+    assert "higher than the saved step" in source
+    assert "persistent storage" in source
     assert 'ACCELERATOR = "cpu"' in source
     assert '"native_tpu"' in source
     assert "files.download" in source
