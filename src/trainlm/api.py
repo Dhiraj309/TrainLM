@@ -939,6 +939,9 @@ class TrainLMTrainer:
             max_eval_batches=config.max_eval_batches,
             seed=config.seed,
             weight_decay=config.weight_decay,
+            load_best_model_at_end=config.load_best_model_at_end,
+            early_stopping_patience=config.early_stopping_patience,
+            early_stopping_threshold=config.early_stopping_threshold,
         )
         try:
             trainer = cls(
@@ -1656,6 +1659,11 @@ class TrainLMTrainer:
         for name in ("save_steps", "eval_steps"):
             if getattr(config, name) is None:
                 pretraining.pop(name, None)
+        if not config.load_best_model_at_end:
+            pretraining.pop("load_best_model_at_end", None)
+        if config.early_stopping_patience is None:
+            pretraining.pop("early_stopping_patience", None)
+            pretraining.pop("early_stopping_threshold", None)
         # The new opt-in setting is equivalent to false when absent in an
         # older manifest, so omit its default to keep existing run fingerprints.
         if not config.gradient_checkpointing:

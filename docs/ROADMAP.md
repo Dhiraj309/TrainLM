@@ -48,7 +48,10 @@ saving and resume; this fix does not imply TPU certification.
 step. It cannot be combined with `warmup_steps`. Leaving both unset preserves
 the existing automatic warmup. Optional `save_steps` and `eval_steps` expose
 independent optimizer-step cadence controls; unset values preserve the current
-automatic cadence.
+automatic cadence. Scratch runs can select the lowest `eval_loss` checkpoint
+and stop after a configured validation plateau. The result exposes the selected
+checkpoint and marks a valid early stop explicitly; TPU validation remains
+outstanding.
 
 ### API and notebook implementation history
 

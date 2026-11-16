@@ -78,6 +78,12 @@ class TrainLMPretrainingResult:
             if isinstance(training.get(key), (int, float))
         }
 
+    @property
+    def best_model_selection(self) -> dict[str, Any] | None:
+        """Return the selected best checkpoint details when configured."""
+        value = self.report.get("best_model_selection")
+        return value if isinstance(value, dict) else None
+
     def summary(self) -> str:
         training = self.training
         model = self.report.get("model", {})
@@ -86,6 +92,14 @@ class TrainLMPretrainingResult:
             f"{self.parameter_count:,}"
             if self.parameter_count is not None
             else "unknown"
+        )
+        best = self.best_model_selection
+        best_step = best.get("step") if best is not None else None
+        best_summary = f" best_step={best_step}" if best_step is not None else ""
+        stop_summary = (
+            " early_stopping_triggered=True"
+            if training.get("early_stopping_triggered")
+            else ""
         )
         return (
             f"status={self.status} "
@@ -96,6 +110,8 @@ class TrainLMPretrainingResult:
             f"{training.get('target_supervised_tokens', 'unknown')} "
             f"eval_loss={training.get('eval_loss', 'not_run')} "
             f"accelerator={accelerator.get('backend', accelerator.get('requested', 'unknown'))}"
+            f"{best_summary}"
+            f"{stop_summary}"
         )
 
 
@@ -157,14 +173,27 @@ def run_pretraining(
         _capture_runtime(report, trainer)
 
         state = trainer.train(resume_from_checkpoint=resume_from_checkpoint)
+        tokens_seen = int(state.tokens_seen)
         checkpoint = _checkpoint_report(trainer)
+        best_model_selection = trainer.best_model_selection
+        early_stopping = (
+            best_model_selection.get("early_stopping")
+            if isinstance(best_model_selection, Mapping)
+            else None
+        )
+        early_stopping_triggered = (
+            tokens_seen < config.max_tokens
+            and config.early_stopping_patience is not None
+            and isinstance(early_stopping, Mapping)
+            and early_stopping.get("evaluations_without_improvement", 0)
+            >= config.early_stopping_patience
+        )
         evaluation = trainer.evaluate()
         completed_export = Path(trainer.save_model(export_dir))
         _capture_export(report, completed_export)
 
         train_loss = float(state.loss) if state.loss is not None else None
         eval_loss = float(evaluation["eval_loss"])
-        tokens_seen = int(state.tokens_seen)
         report["training"] = {
             "extend_training_budget": extend_training_budget,
             "resume_from_checkpoint": (
@@ -176,12 +205,14 @@ def run_pretraining(
             "target_supervised_tokens": config.max_tokens,
             "train_loss": train_loss,
             "eval_loss": eval_loss,
+            "early_stopping_triggered": early_stopping_triggered,
         }
+        report["best_model_selection"] = best_model_selection
         report["checkpoint"] = checkpoint
         report["model_export"] = str(completed_export)
         report["status"] = (
             "passed"
-            if tokens_seen >= config.max_tokens
+            if (tokens_seen >= config.max_tokens or early_stopping_triggered)
             and train_loss is not None
             and math.isfinite(train_loss)
             and math.isfinite(eval_loss)
@@ -195,6 +226,9 @@ def run_pretraining(
                 and package_profile.get("scope") == "installed_metadata_only"):
             report["preflight"] = {"package_profile": package_profile}
         report["checkpoint"] = _checkpoint_report(trainer)
+        report["best_model_selection"] = (
+            trainer.best_model_selection if trainer is not None else None
+        )
         _capture_resume(report, config, trainer)
         _write_report(report_file, report)
         raise TrainLMPretrainingError(
@@ -316,12 +350,16 @@ def _initial_report(
                 "save_steps": config.save_steps,
                 "eval_steps": config.eval_steps,
                 "max_eval_batches": config.max_eval_batches,
+                "load_best_model_at_end": config.load_best_model_at_end,
+                "early_stopping_patience": config.early_stopping_patience,
+                "early_stopping_threshold": config.early_stopping_threshold,
                 "seed": config.seed,
                 "save_total_limit": config.save_total_limit,
             }
         },
         "accelerator": {"requested": config.accelerator},
         "checkpoint": {"latest_path": None},
+        "best_model_selection": None,
         "limitations": ["does_not_certify_performance"],
     }
 
@@ -423,6 +461,23 @@ def _capture_effective_configuration(report: dict[str, Any], trainer: Any) -> No
         "save_steps": args.save_steps,
         "save_total_limit": args.save_total_limit,
         "eval_steps": args.eval_steps,
+        "load_best_model_at_end": args.load_best_model_at_end,
+        "metric_for_best_model": (
+            (args.metric_for_best_model or "eval_loss")
+            if args.load_best_model_at_end
+            else None
+        ),
+        "greater_is_better": (
+            (
+                args.greater_is_better
+                if args.greater_is_better is not None
+                else False
+            )
+            if args.load_best_model_at_end
+            else None
+        ),
+        "early_stopping_patience": args.early_stopping_patience,
+        "early_stopping_threshold": args.early_stopping_threshold,
         "max_eval_batches": args.max_eval_batches,
         "dataloader_num_workers": args.dataloader_num_workers,
         "dataloader_pin_memory": args.dataloader_pin_memory,

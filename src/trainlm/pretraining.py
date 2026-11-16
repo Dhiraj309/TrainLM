@@ -45,7 +45,8 @@ class TrainLMPretrainingConfig:
     ``warmup_steps`` and ``warmup_ratio``. Supported schedules are
     ``constant``, ``linear``, ``cosine``, and ``wsd``. `save_steps` and
     `eval_steps` independently override the default cadence derived from the
-    training budget.
+    training budget. Best-checkpoint selection uses validation loss; optional
+    early stopping counts consecutive evaluations without sufficient progress.
     """
 
     output_dir: str | Path = Path("runs/pretraining")
@@ -84,6 +85,9 @@ class TrainLMPretrainingConfig:
     warmup_ratio: float | None = None
     save_steps: int | None = None
     eval_steps: int | None = None
+    load_best_model_at_end: bool = False
+    early_stopping_patience: int | None = None
+    early_stopping_threshold: float = 0.0
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "output_dir", Path(self.output_dir).expanduser())
@@ -241,6 +245,57 @@ class TrainLMPretrainingConfig:
                 or value < 1
             ):
                 raise ValueError(f"{name} must be a positive integer when configured.")
+        if not isinstance(self.load_best_model_at_end, bool):
+            raise ValueError("load_best_model_at_end must be boolean.")
+        if self.early_stopping_patience is not None and (
+            isinstance(self.early_stopping_patience, bool)
+            or not isinstance(self.early_stopping_patience, int)
+            or self.early_stopping_patience < 1
+        ):
+            raise ValueError("early_stopping_patience must be a positive integer.")
+        if (
+            isinstance(self.early_stopping_threshold, bool)
+            or not isinstance(self.early_stopping_threshold, Real)
+            or not math.isfinite(self.early_stopping_threshold)
+            or self.early_stopping_threshold < 0
+        ):
+            raise ValueError(
+                "early_stopping_threshold must be finite and non-negative."
+            )
+        if (
+            self.early_stopping_patience is not None
+            and not self.load_best_model_at_end
+        ):
+            raise ValueError(
+                "early_stopping_patience requires load_best_model_at_end=True."
+            )
+        if (
+            self.early_stopping_patience is None
+            and self.early_stopping_threshold != 0
+        ):
+            raise ValueError(
+                "early_stopping_threshold requires early_stopping_patience."
+            )
+        if self.load_best_model_at_end:
+            tokens_per_update = (
+                (self.sequence_length - 1)
+                * self.per_device_train_batch_size
+                * self.gradient_accumulation_steps
+            )
+            max_steps = math.ceil(self.max_tokens / tokens_per_update)
+            cadence = max(1, max_steps // 10)
+            save_steps = self.save_steps if self.save_steps is not None else cadence
+            eval_steps = self.eval_steps if self.eval_steps is not None else cadence
+            if eval_steps > max_steps:
+                raise ValueError(
+                    "load_best_model_at_end requires at least one evaluation; "
+                    "set eval_steps no greater than the planned optimizer steps."
+                )
+            if save_steps % eval_steps:
+                raise ValueError(
+                    "save_steps must be a multiple of eval_steps when "
+                    "load_best_model_at_end is enabled."
+                )
         if (isinstance(self.weight_decay, bool)
                 or not isinstance(self.weight_decay, Real)
                 or not math.isfinite(self.weight_decay)

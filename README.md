@@ -92,6 +92,8 @@ config = TrainLMPretrainingConfig(
     warmup_ratio=0.1,
     save_steps=1_000,
     eval_steps=500,
+    load_best_model_at_end=True,
+    early_stopping_patience=3,
     accelerator="native_tpu",
 )
 ```
@@ -102,10 +104,21 @@ budget. `save_steps` and `eval_steps` override those intervals independently;
 each is a positive number of optimizer steps. The report records both
 requested and effective intervals.
 
-The report records the requested and effective values. Extending an existing
-run's token budget remains limited to runs whose effective schedule, warmup,
-save interval, and evaluation interval match the automatic cosine defaults;
-custom settings need a fresh run directory.
+To export the weights from the best validation checkpoint, set
+`load_best_model_at_end=True`. Scratch pretraining currently selects the lowest
+`eval_loss`. `save_steps` must be a multiple of `eval_steps`, and at least one
+evaluation must fit inside the planned run. Add `early_stopping_patience` to
+stop after that many consecutive evaluations without a significant loss
+improvement; `early_stopping_threshold` sets the minimum loss improvement.
+The selected step and checkpoint are available as
+`result.best_model_selection`. A valid early stop is reported as a successful
+run and marked by `result.training["early_stopping_triggered"]`. The exported
+model uses the best weights while the latest checkpoint remains available for
+resume. This feature has no native TPU hardware validation.
+
+Extending an existing run's token budget remains limited to runs whose
+effective schedule, warmup, save interval, and evaluation interval match the
+automatic cosine defaults; custom settings need a fresh run directory.
 
 For a short copyable script, see [`examples/pretrain_from_scratch.py`](examples/pretrain_from_scratch.py).
 The [examples index](examples/README.md) also separates user quickstarts from

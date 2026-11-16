@@ -48,7 +48,10 @@ step. It is mutually exclusive with `warmup_steps`; leaving both unset
 preserves the existing automatic default. The run report records requested
 and effective warmup settings. Optional `save_steps` and `eval_steps` provide
 independent checkpoint and evaluation cadence controls while preserving the
-automatic cadence when unset.
+automatic cadence when unset. Best-checkpoint selection uses the lowest
+`eval_loss`; optional early stopping records whether it ended the run before
+the token budget. The result exposes the selected checkpoint details. Native
+TPU validation remains outstanding.
 
 ### Implementation history
 

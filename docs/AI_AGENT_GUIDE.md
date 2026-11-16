@@ -66,7 +66,14 @@ follow the linked implementation and tests before making a change.
   Set positive `save_steps` and `eval_steps` to control checkpoint and
   evaluation cadence independently; if omitted, both use the automatic interval
   of roughly 10% of the planned update budget. The run report records
-  requested and effective values.
+  requested and effective values. `load_best_model_at_end=True` selects the
+  lowest scratch `eval_loss`; `save_steps` must be a multiple of `eval_steps`,
+  and `eval_steps` must reach at least one evaluation within the run. Add
+  `early_stopping_patience` and optionally `early_stopping_threshold` to stop
+  after validation loss plateaus. The selected step is available on
+  `TrainLMPretrainingResult.best_model_selection`; early stopping can finish
+  before the token target and is reported explicitly. TPU behavior remains
+  experimental.
   `extend_training_budget=True` permits only a strictly larger `max_tokens`
   when effective schedule, warmup, and cadence still match the automatic
   cosine defaults. After a compatible checkpoint is restored,
