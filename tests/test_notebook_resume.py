@@ -62,7 +62,7 @@ def test_resume_example_round_trips_all_settings_and_quoted_paths(
     namespace = {}
     exec(compile(report["code"], "resume.py", "exec"), namespace)
 
-    expected_settings = asdict(config)
+    expected_settings = json.loads(json.dumps(asdict(config)))
     expected_settings["output_dir"] = str(config.output_dir)
     assert report["pretraining_config"] == expected_settings
     assert report["status"] == "available"

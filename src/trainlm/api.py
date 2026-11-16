@@ -484,6 +484,8 @@ class TrainLMTrainingArguments:
     max_grad_norm: float = 1.0
 
     def __post_init__(self) -> None:
+        if isinstance(self.betas, list):
+            object.__setattr__(self, "betas", tuple(self.betas))
         for name in ("save_strategy", "eval_strategy"):
             strategy = getattr(self, name)
             if strategy is not None and strategy not in {"no", "steps", "epoch"}:
