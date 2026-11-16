@@ -61,6 +61,14 @@ specific recovery action. If restore fails, its training and artifact-download
 cells skip, so a prior successful export cannot be mistaken for the new run.
 The 10 notebook and roadmap contract tests pass under Python 3.12.14; no
 accelerator training was run for this guard.
+The resume config helper checks for a published checkpoint in the summary
+folder before returning. Missing checkpoints now produce a clear error during
+notebook setup, before model or dataset loading; the notebook skips training
+and bundling until the run directory is restored or the user starts a new run.
+The updated API, checkpoint lifecycle, notebook, roadmap, and installed-wheel
+suite passes 66 tests under Python 3.12.14, torch 2.9.0+cpu, and Transformers
+5.20.2, including coverage for a missing checkpoint. No Hub or TPU run was
+performed.
 
 The [coding-agent guide](AI_AGENT_GUIDE.md) maps common training tasks to
 the current notebook, implementation, tests, and validation limits. Prefer it

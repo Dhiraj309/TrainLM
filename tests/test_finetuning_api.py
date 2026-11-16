@@ -180,6 +180,11 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
     )
 
     config = _config(tmp_path / "run", model_revision="main")
+    checkpoint_path = config.args.output_dir / "checkpoint-4"
+    checkpoint_path.mkdir(parents=True)
+    checkpoint_state = checkpoint_path / "trainer_state.pt"
+    checkpoint_state.write_bytes(b"saved state placeholder")
+    calls["trainer"]["latest_checkpoint"] = str(checkpoint_path)
     result = run_finetuning(config, resume_from_checkpoint="latest")
 
     assert isinstance(result, TrainLMFineTuningResult)
@@ -224,7 +229,7 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
     assert report["model_tokenizer_revision_match"] is True
     assert report["evaluation"]["eval_loss"] == 1.5
     assert report["last_known_state"]["step"] == 4
-    assert report["last_known_state"]["latest_checkpoint"] is None
+    assert report["last_known_state"]["latest_checkpoint"] == str(checkpoint_path)
     restored = restore_finetuning_config(result.summary_path, max_steps=8)
     assert restored.model_name_or_path == config.model_name_or_path
     assert restored.model_revision == config.model_revision
@@ -240,6 +245,9 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
     )
     with pytest.raises(ValueError, match="greater than the last recorded"):
         restore_finetuning_config(result.summary_path, max_steps=4)
+    checkpoint_state.unlink()
+    with pytest.raises(ValueError, match="No published training checkpoint"):
+        restore_finetuning_config(result.summary_path, max_steps=8)
 
     collator = trainer_kwargs["data_collator"]
     batch = collator(
