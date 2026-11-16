@@ -12,11 +12,13 @@ The `feat/01-pretrained-finetuning-api` branch introduces an additive
 `run_finetuning(TrainLMFineTuningConfig(...))` workflow. It loads a pretrained
 causal LM and tokenizer, reads immutable Hub train and validation splits,
 tokenizes a plain-text field, then trains, evaluates, and saves a local model
-export. Its summary records both the requested model revision and the resolved
-model commit when Transformers exposes it; local sources may have no resolved
-commit. It does not upload artifacts, create a validation split, or format
-chat/instruction examples. Native TPU remains experimental and receives no
-certification from this API. The focused CPU/API suites pass 73 tests under
+export. Its summary records the requested model revision, resolved model and
+tokenizer commits, and whether they match when available. It pins model loading
+to the tokenizer's resolved commit; a detected mismatch stops before training.
+Local sources may have no commit metadata. It does not upload artifacts,
+create a validation split, or format chat/instruction examples. Native TPU
+remains experimental and receives no certification from this API. The focused
+CPU/API suites pass 73 tests under
 Python 3.12.14, torch 2.9.0+cpu,
 pytest 9.1.1, and Transformers 5.0.0. That Transformers version is below the
 declared project minimum; the fine-tuning tests mock Hub dataset, tokenizer,
@@ -25,8 +27,8 @@ with a locally created GPT-2 model/tokenizer under Transformers 5.20.2 and
 torch 2.9.0+cpu; the dataset loader was an in-memory fixture. Ten notebook and
 roadmap contract tests pass. Real Hub fine-tuning and TPU execution remain
 unverified.
-The resolved-revision follow-up passes 17 focused fine-tuning, model-provider,
-notebook, and roadmap tests.
+The model/tokenizer provenance follow-up passes 17 focused fine-tuning,
+model-provider, notebook, and roadmap tests.
 `notebooks/TrainLM_Text_Fine_Tuning.ipynb` presents the API in short, copyable
 cells with a three-step smoke default and a local model bundle. It installs
 TrainLM without reinstalling Torch. During this branch review it installs from

@@ -15,6 +15,9 @@ from .training import TrainerCallback
 
 _COMMIT_SHA = re.compile(r"[0-9a-f]{40}\Z")
 _FIELD_NAME = re.compile(r"[A-Za-z0-9._+-]{1,96}\Z")
+_SNAPSHOT_COMMIT = re.compile(
+    r"(?:^|[/\\])snapshots[/\\]([0-9a-f]{40})(?:[/\\]|\Z)"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +84,8 @@ class TrainLMFineTuningResult:
     train_loss: float | None
     evaluation: Mapping[str, float]
     resolved_model_revision: str | None = None
+    resolved_tokenizer_revision: str | None = None
+    model_tokenizer_revision_match: bool | None = None
 
     def summary(self) -> dict[str, Any]:
         """Return a compact, JSON-compatible run summary."""
@@ -94,6 +99,8 @@ class TrainLMFineTuningResult:
             "model_name_or_path": self.model_name_or_path,
             "model_revision": self.model_revision,
             "resolved_model_revision": self.resolved_model_revision,
+            "resolved_tokenizer_revision": self.resolved_tokenizer_revision,
+            "model_tokenizer_revision_match": self.model_tokenizer_revision_match,
             "dataset_id": self.dataset_id,
             "dataset_revision": self.dataset_revision,
             "model_path": str(self.model_path),
@@ -122,6 +129,42 @@ class _CausalLMCollator:
         labels[attention_mask == 0] = -100
         batch["labels"] = labels
         return batch
+
+
+def _resolved_commit(value: Any) -> str | None:
+    if isinstance(value, str) and _COMMIT_SHA.fullmatch(value):
+        return value
+    return None
+
+
+def _tokenizer_commit(tokenizer: Any) -> str | None:
+    revision = getattr(tokenizer, "_commit_hash", None)
+    resolved = _resolved_commit(revision)
+    if resolved is not None:
+        return resolved
+
+    init_kwargs = getattr(tokenizer, "init_kwargs", None)
+    if not isinstance(init_kwargs, Mapping):
+        return None
+    resolved = _resolved_commit(init_kwargs.get("_commit_hash"))
+    if resolved is not None:
+        return resolved
+
+    snapshot_commits = set()
+    for name, value in init_kwargs.items():
+        if not name.endswith("_file") or not isinstance(value, (str, Path)):
+            continue
+        match = _SNAPSHOT_COMMIT.search(str(value))
+        if match is not None:
+            snapshot_commits.add(match.group(1))
+    if len(snapshot_commits) == 1:
+        return snapshot_commits.pop()
+    if len(snapshot_commits) > 1:
+        raise RuntimeError(
+            "Tokenizer files resolved from multiple Hub commits; refusing to "
+            "train with an inconsistent tokenizer."
+        )
+    return None
 
 
 def run_finetuning(
@@ -175,6 +218,9 @@ def run_finetuning(
             f"Could not load tokenizer for {config.model_name_or_path!r}. "
             "Check the model ID, revision, and Hub access."
         ) from exc
+    resolved_tokenizer_revision = (
+        _tokenizer_commit(tokenizer) or _resolved_commit(model_revision)
+    )
 
     if tokenizer.pad_token_id is None:
         if tokenizer.eos_token is None:
@@ -230,9 +276,12 @@ def run_finetuning(
         remove_columns=validation_source.column_names,
     )
 
+    model_load_revision = resolved_tokenizer_revision or model_revision
     trainer = TrainLMTrainer.from_pretrained(
         config.model_name_or_path,
-        revision=model_revision,
+        # Pin model loading to the tokenizer's resolved commit when available,
+        # so a moving branch cannot select different model and tokenizer files.
+        revision=model_load_revision,
         args=config.args,
         train_dataset=train_dataset,
         eval_dataset=validation_dataset,
@@ -240,6 +289,31 @@ def run_finetuning(
         data_collator=_CausalLMCollator(tokenizer),
         callbacks=callbacks,
     )
+    loaded_metadata = getattr(getattr(trainer, "loaded", None), "metadata", None)
+    resolved_model_revision = _resolved_commit(
+        getattr(loaded_metadata, "resolved_revision", None)
+    )
+    if resolved_model_revision is None:
+        model_config = getattr(getattr(trainer, "model", None), "config", None)
+        resolved_model_revision = _resolved_commit(
+            getattr(model_config, "_commit_hash", None)
+        )
+    if resolved_model_revision is None:
+        # The model was loaded successfully at this immutable commit even if
+        # the installed Transformers version does not return config metadata.
+        resolved_model_revision = _resolved_commit(model_load_revision)
+    model_tokenizer_revision_match = None
+    if resolved_model_revision and resolved_tokenizer_revision:
+        model_tokenizer_revision_match = (
+            resolved_model_revision == resolved_tokenizer_revision
+        )
+        if not model_tokenizer_revision_match:
+            raise RuntimeError(
+                "The pretrained model and tokenizer resolved to different Hub "
+                f"commits ({resolved_model_revision} and "
+                f"{resolved_tokenizer_revision}); training stopped before the "
+                "first step."
+            )
     if getattr(trainer.model, "config", None) is not None:
         model_config = trainer.model.config
         if getattr(model_config, "pad_token_id", None) is None:
@@ -247,10 +321,6 @@ def run_finetuning(
     state = trainer.train(resume_from_checkpoint=resume_from_checkpoint)
     evaluation = trainer.evaluate()
     model_path = trainer.save_model(Path(config.args.output_dir) / "model")
-    loaded_metadata = getattr(getattr(trainer, "loaded", None), "metadata", None)
-    resolved_model_revision = getattr(loaded_metadata, "resolved_revision", None)
-    if not isinstance(resolved_model_revision, str) or not resolved_model_revision:
-        resolved_model_revision = None
     raw_loss = getattr(state, "loss", None)
     train_loss = float(raw_loss) if raw_loss is not None else None
     if train_loss is not None and not math.isfinite(train_loss):
@@ -265,4 +335,6 @@ def run_finetuning(
         train_loss=train_loss,
         evaluation={str(name): float(value) for name, value in evaluation.items()},
         resolved_model_revision=resolved_model_revision,
+        resolved_tokenizer_revision=resolved_tokenizer_revision,
+        model_tokenizer_revision_match=model_tokenizer_revision_match,
     )
