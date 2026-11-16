@@ -211,6 +211,89 @@ def test_epoch_schedules_require_a_finite_map_dataset_and_matching_settings(
         )
 
 
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"load_best_model_at_end": True}, "requires an active eval_strategy"),
+        (
+            {
+                "load_best_model_at_end": True,
+                "eval_strategy": "steps",
+                "eval_steps": 2,
+                "save_strategy": "steps",
+                "save_steps": 3,
+            },
+            "save_steps must be a multiple of eval_steps",
+        ),
+        (
+            {
+                "metric_for_best_model": "eval_loss",
+            },
+            "require load_best_model_at_end=True",
+        ),
+    ],
+)
+def test_best_model_selection_requires_compatible_arguments(overrides, message):
+    with pytest.raises(ValueError, match=message):
+        TrainLMTrainingArguments(**overrides)
+
+
+def test_load_best_model_saves_and_restores_best_evaluation_checkpoint(tmp_path):
+    torch.manual_seed(211)
+    model = TinyModel()
+
+    class MakeLaterEvaluationsWorse(TrainerCallback):
+        def on_step_end(self, state, control):
+            del control
+            if state.step == 2:
+                with torch.no_grad():
+                    model.projection.bias[7] += 100
+
+    trainer = TrainLMTrainer(
+        model=model,
+        train_dataset=_dataset(),
+        eval_dataset=_dataset(),
+        callbacks=[MakeLaterEvaluationsWorse()],
+        args=TrainLMTrainingArguments(
+            output_dir=tmp_path,
+            max_steps=3,
+            sequence_length=4,
+            accelerator="cpu",
+            lr_scheduler_type="constant",
+            eval_strategy="steps",
+            eval_steps=1,
+            save_strategy="steps",
+            save_steps=2,
+            save_total_limit=1,
+            load_best_model_at_end=True,
+            metric_for_best_model="loss",
+            greater_is_better=False,
+        ),
+    )
+
+    state = trainer.train()
+
+    selection = trainer.best_model_selection
+    assert state.step == 3
+    assert selection is not None
+    assert selection["metric_name"] == "eval_loss"
+    assert selection["step"] == 1
+    assert selection["checkpoint"] == str(tmp_path / "checkpoint-1")
+    assert (tmp_path / "checkpoint-1" / "trainer_state.pt").is_file()
+    assert (tmp_path / "checkpoint-3" / "trainer_state.pt").is_file()
+    assert {
+        path.name for path in tmp_path.iterdir() if path.name.startswith("checkpoint-")
+    } == {"checkpoint-1", "checkpoint-3"}
+
+    best_payload = torch.load(
+        tmp_path / "checkpoint-1" / "trainer_state.pt",
+        map_location="cpu",
+        weights_only=False,
+    )
+    for name, value in trainer.model.state_dict().items():
+        torch.testing.assert_close(value, best_payload["model"][name], rtol=0, atol=0)
+
+
 def test_epoch_schedule_resume_derives_epoch_from_batch_cursor(tmp_path):
     def make_trainer(output_dir, *, max_steps, callbacks=None, eval_strategy=None):
         return TrainLMTrainer(

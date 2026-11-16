@@ -9,12 +9,22 @@ from trainlm import TrainLMPretrainingConfig, TrainLMTrainingArguments
 from trainlm.checkpoint.retention import maintain_local_checkpoints
 
 
-def _publish(root: Path, step: int, limit: int | None = None) -> Path:
+def _publish(
+    root: Path,
+    step: int,
+    limit: int | None = None,
+    *,
+    protected_steps=(),
+) -> Path:
     path = root / f"checkpoint-{step}"
     path.mkdir(parents=True, exist_ok=True)
     (path / "trainer_state.pt").write_bytes(b"published checkpoint state")
     maintain_local_checkpoints(
-        output_dir=root, just_saved=path, step=step, limit=limit
+        output_dir=root,
+        just_saved=path,
+        step=step,
+        limit=limit,
+        protected_steps=protected_steps,
     )
     return path
 
@@ -42,6 +52,17 @@ def test_retention_orders_steps_numerically_and_protects_the_new_save(tmp_path):
     _publish(tmp_path, 3, limit=2)
     assert {path.name for path in tmp_path.iterdir()} == {
         "checkpoint-3", "checkpoint-10"
+    }
+
+
+def test_retention_keeps_the_selected_best_checkpoint(tmp_path):
+    _publish(tmp_path, 1)
+    _publish(tmp_path, 2)
+
+    _publish(tmp_path, 3, limit=1, protected_steps=(1,))
+
+    assert {path.name for path in tmp_path.iterdir()} == {
+        "checkpoint-1", "checkpoint-3"
     }
 
 

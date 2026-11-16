@@ -26,7 +26,10 @@ Hub ID or revision. Hub-loaded splits still require an immutable commit SHA.
 `TrainLMTrainingArguments` accepts steps or `num_train_epochs` for finite
 map-style single-device training. The same data and callbacks must be supplied
 again during resume. `eval_strategy` and `save_strategy` can schedule periodic
-actions by steps or at epoch boundaries. The
+actions by steps or at epoch boundaries. `load_best_model_at_end=True` restores
+the model weights from the selected validation checkpoint; this requires
+matching active evaluation and save strategies, and step save cadence must be
+a multiple of evaluation cadence. The
 [fine-tuning notebook](../notebooks/TrainLM_Text_Fine_Tuning.ipynb)
 calls this API in short Colab/Kaggle cells and installs the package without
 reinstalling Torch. Each successful run writes `finetuning-summary.json` beside

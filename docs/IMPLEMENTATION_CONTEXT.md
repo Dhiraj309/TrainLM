@@ -114,6 +114,17 @@ fingerprints to preserve existing checkpoint identity. The updated focused CPU
 suite passed 151 API, lifecycle, config, engine, notebook-contract, TPU
 coordinator, and packed-scratch tests under Python 3.12.14 and torch 2.9.0+cpu.
 No TPU or Hub run was performed.
+The next API slice adds `load_best_model_at_end`, explicit metric selection,
+and `trainer.best_model_selection`. An improving evaluation requests a
+checkpoint at the same optimizer step, and retention preserves that selected
+checkpoint beside the newest save. The implementation currently requires a
+single-device runtime and is unavailable in the legacy XLA coordinator. CPU
+coverage passed 171 lifecycle, config, fine-tuning, trainer, checkpoint,
+notebook, roadmap, coordinator, and packed-data tests under Python 3.12.14,
+torch 2.9.0+cpu, and pytest 9.1.1. The regression confirms that an improving
+evaluation is saved at its own step even when it falls between regular saves,
+and that the selected checkpoint survives retention. No TPU or live Hub run
+was performed.
 
 The [coding-agent guide](AI_AGENT_GUIDE.md) maps common training tasks to
 the current notebook, implementation, tests, and validation limits. Prefer it

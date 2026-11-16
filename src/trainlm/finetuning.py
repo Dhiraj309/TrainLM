@@ -102,6 +102,7 @@ class TrainLMFineTuningResult:
     model_tokenizer_revision_match: bool | None = None
     summary_path: Path | None = None
     training_budget: Mapping[str, Any] = field(default_factory=dict)
+    best_model_selection: Mapping[str, Any] | None = None
 
     def summary(self) -> dict[str, Any]:
         """Return a compact, JSON-compatible run summary."""
@@ -125,6 +126,9 @@ class TrainLMFineTuningResult:
             "train_loss": self.train_loss,
             "evaluation": evaluation,
             "training_budget": _json_compatible(self.training_budget),
+            "best_model_selection": _json_compatible(
+                self.best_model_selection
+            ),
         }
 
 
@@ -290,6 +294,7 @@ def run_finetuning(
         "trainer": None,
         "state": None,
         "evaluation": {},
+        "best_model_selection": None,
     }
     try:
         result = _run_finetuning_impl(
@@ -326,6 +331,7 @@ def run_finetuning(
                 "model_tokenizer_revision_match"
             ),
             training_budget=run_state.get("training_budget", report["training_budget"]),
+            best_model_selection=run_state.get("best_model_selection"),
             last_known_state=_last_known_state(run_state),
         )
         known_state = report["last_known_state"]
@@ -373,6 +379,7 @@ def _initial_finetuning_summary(
         "step": None,
         "train_loss": None,
         "evaluation": {},
+        "best_model_selection": None,
         "data": {
             "source": dataset_source,
             "text_field": config.text_field,
@@ -563,6 +570,9 @@ def restore_finetuning_config(
         "num_train_epochs": None,
         "save_strategy": None,
         "eval_strategy": None,
+        "load_best_model_at_end": False,
+        "metric_for_best_model": None,
+        "greater_is_better": None,
     }
     missing_additive = expected_argument_names - set(training_args)
     if (
@@ -861,6 +871,9 @@ def _run_finetuning_impl(
     run_state["phase"] = "training"
     state = trainer.train(resume_from_checkpoint=resume_from_checkpoint)
     run_state["state"] = state
+    best_model_selection = getattr(trainer, "best_model_selection", None)
+    if isinstance(best_model_selection, Mapping):
+        run_state["best_model_selection"] = dict(best_model_selection)
     run_state["phase"] = "evaluation"
     evaluation = trainer.evaluate()
     run_state["evaluation"] = evaluation
@@ -895,5 +908,6 @@ def _run_finetuning_impl(
                 "effective_max_steps": config.args.max_steps,
             },
         ),
+        best_model_selection=run_state.get("best_model_selection"),
     )
     return result

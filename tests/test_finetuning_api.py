@@ -251,6 +251,10 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
         def latest_checkpoint(self):
             return calls["trainer"].get("latest_checkpoint")
 
+        @property
+        def best_model_selection(self):
+            return calls["trainer"].get("best_model_selection")
+
     fake_trainer = FakeTrainer()
 
     def from_pretrained(cls, model_name_or_path, **kwargs):
@@ -267,6 +271,13 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
     checkpoint_state = checkpoint_path / "trainer_state.pt"
     torch.save({"schema_version": 1}, checkpoint_state)
     calls["trainer"]["latest_checkpoint"] = str(checkpoint_path)
+    calls["trainer"]["best_model_selection"] = {
+        "metric_name": "eval_loss",
+        "greater_is_better": False,
+        "value": 1.25,
+        "step": 3,
+        "checkpoint": str(config.args.output_dir / "checkpoint-3"),
+    }
     result = run_finetuning(config, resume_from_checkpoint="latest")
 
     assert isinstance(result, TrainLMFineTuningResult)
@@ -298,6 +309,9 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
     assert result.summary()["resolved_tokenizer_revision"] == "c" * 40
     assert result.summary()["model_tokenizer_revision_match"] is True
     assert result.summary_path == tmp_path / "run" / "finetuning-summary.json"
+    assert result.summary()["best_model_selection"] == calls["trainer"][
+        "best_model_selection"
+    ]
     assert result.summary()["training_budget"] == {
         "num_train_epochs": None,
         "train_batches_per_epoch": None,
@@ -318,6 +332,9 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
     assert report["training_arguments"]["max_steps"] == 4
     assert report["model_tokenizer_revision_match"] is True
     assert report["evaluation"]["eval_loss"] == 1.5
+    assert report["best_model_selection"] == calls["trainer"][
+        "best_model_selection"
+    ]
     assert report["last_known_state"]["step"] == 4
     assert report["last_known_state"]["latest_checkpoint"] == str(checkpoint_path)
     restored = restore_finetuning_config(result.summary_path, max_steps=8)
@@ -337,6 +354,9 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
     legacy_report["training_arguments"].pop("num_train_epochs")
     legacy_report["training_arguments"].pop("save_strategy")
     legacy_report["training_arguments"].pop("eval_strategy")
+    legacy_report["training_arguments"].pop("load_best_model_at_end")
+    legacy_report["training_arguments"].pop("metric_for_best_model")
+    legacy_report["training_arguments"].pop("greater_is_better")
     legacy_summary_path = result.summary_path.parent / "legacy-summary.json"
     legacy_summary_path.write_text(json.dumps(legacy_report), encoding="utf-8")
     restored_legacy = restore_finetuning_config(

@@ -188,14 +188,17 @@ class Trainer:
         )
         checkpoint = getattr(self.config, "checkpoint", None)
         save_interval = getattr(checkpoint, "save_training_every_steps", None)
+        if should_evaluate:
+            self.evaluate()
+        # Evaluation callbacks may request a checkpoint for a newly selected
+        # best model. Read the control flag after evaluation so that checkpoint
+        # is published at the same optimizer step as its metric.
         should_save = self.control.should_save_checkpoint or (
             save_interval is not None and self.state.step % save_interval == 0
         ) or (
             getattr(checkpoint, "save_training_at_epoch_end", False)
             and self._epoch_end_pending
         )
-        if should_evaluate:
-            self.evaluate()
         if should_save:
             self.save_checkpoint(f"checkpoint-{self.state.step}")
         self._epoch_end_pending = False

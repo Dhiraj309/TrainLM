@@ -93,6 +93,41 @@ disables scheduled actions. `run_finetuning` still evaluates once at the end
 when a validation split is configured. When saving is enabled, the last
 successful training state is also checkpointed on normal completion.
 
+## Restore the best evaluation checkpoint
+
+Set `load_best_model_at_end=True` to load the model weights from the checkpoint
+with the best validation metric after training. Evaluation and saving must both
+be active and use the same strategy. For step-based schedules, `save_steps`
+must be a multiple of `eval_steps`; an improving evaluation is saved at its
+step even when it falls between regular save intervals. By default TrainLM
+selects the lowest `eval_loss`. Set `metric_for_best_model` and
+`greater_is_better` to choose another metric and direction:
+
+```python
+args = TrainLMTrainingArguments(
+    output_dir="runs/qwen-tinystories-best",
+    max_steps=200,
+    eval_strategy="steps",
+    eval_steps=25,
+    save_strategy="steps",
+    save_steps=100,
+    load_best_model_at_end=True,
+    metric_for_best_model="eval_loss",
+    greater_is_better=False,
+    save_total_limit=2,
+)
+```
+
+The selected metric, value, step, and checkpoint path appear in
+`trainer.best_model_selection` and the fine-tuning run summary. Checkpoint
+retention protects both the selected checkpoint and the newest save, so it can
+keep one additional directory beyond `save_total_limit`. The exported model
+uses the selected best weights; the newest training checkpoint continues to
+hold the final optimizer and trainer state for resuming. Best-model selection
+currently requires a single-device runtime and is not available through the
+legacy PyTorch/XLA coordinator. It has CPU test coverage but has not been
+validated on TPU hardware.
+
 ## Use preloaded datasets and your own formatting
 
 The same config can use dataset splits you loaded or filtered yourself. When
