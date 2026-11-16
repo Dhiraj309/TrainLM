@@ -194,6 +194,11 @@ the splits from the Hub. See the
 [fine-tuning guide](docs/tutorials/TEXT_FINETUNING.md) for this pattern and
 resume requirements.
 
+`TrainLMTrainingArguments` accepts either a step budget or
+`num_train_epochs` (`max_steps=None`). Epoch budgets count finite map-style
+data, respect batch size and gradient accumulation, and currently require a
+single-device runtime.
+
 To resume from the latest checkpoint, restore the saved run configuration and
 set a larger step budget. The helper reloads model, dataset, and training
 settings from the summary while anchoring the output directory to its location:

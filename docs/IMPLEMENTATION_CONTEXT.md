@@ -94,6 +94,16 @@ coverage verifies both direct-data metadata omission and pinned Hub validation:
 15 fine-tuning API, roadmap, and notebook-contract tests passed under Python
 3.12.14, torch 2.9.0+cpu, and pytest 9.1.1. No live Hub or TPU run was
 performed.
+The shared training arguments now also accept `num_train_epochs` with
+`max_steps=None` for finite map-style, single-device training. TrainLM resolves
+the budget using per-device batch size, stops on epoch boundaries, and flushes a
+partial final accumulation group. Checkpoint replay continues from the
+microbatch cursor. Streaming data, distributed runtimes, and the legacy XLA
+coordinator are explicitly unsupported for epoch budgets; TPU hardware
+validation remains owner-run. The latest focused suite across API lifecycle,
+fine-tuning, config, engine, roadmap, and notebook contracts passed 116 tests
+under Python 3.12.14, torch 2.9.0+cpu, and pytest 9.1.1. No live Hub or TPU run
+was performed.
 
 The [coding-agent guide](AI_AGENT_GUIDE.md) maps common training tasks to
 the current notebook, implementation, tests, and validation limits. Prefer it

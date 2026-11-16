@@ -96,7 +96,9 @@ def test_text_finetuning_notebook_is_copyable_and_uses_the_public_api():
     assert "resume_from_checkpoint=RESUME_FROM_CHECKPOINT or None" in source
     assert "SAVE_STEPS = 100" in source
     assert "save_steps=SAVE_STEPS" in source
-    assert "above the saved step" in source
+    assert "increase the selected budget" in source
+    assert 'TRAINING_BUDGET = "steps"' in source
+    assert "NUM_TRAIN_EPOCHS" in source
     assert "persistent storage" in source
     assert 'ACCELERATOR = "cpu"' in source
     assert '"native_tpu"' in source

@@ -109,6 +109,67 @@ _PERSISTED_TRAINER_STATE_FIELDS = frozenset(
 )
 
 
+def _resolve_epoch_budget(
+    train_dataset: Any,
+    *,
+    batch_size: int,
+    gradient_accumulation_steps: int,
+    num_train_epochs: float,
+) -> tuple[int, int, int]:
+    """Resolve epochs to a finite batch and update budget for map-style data."""
+    if isinstance(train_dataset, DataLoader):
+        if isinstance(train_dataset.dataset, IterableDataset):
+            raise ValueError(
+                "num_train_epochs requires a finite map-style dataset; streaming "
+                "IterableDataset loaders are not supported."
+            )
+        try:
+            batches_per_epoch = len(train_dataset)
+        except (TypeError, NotImplementedError, ValueError) as exc:
+            raise ValueError(
+                "num_train_epochs requires a DataLoader with a finite length."
+            ) from exc
+    else:
+        if (
+            isinstance(train_dataset, IterableDataset)
+            or not hasattr(train_dataset, "__len__")
+            or not hasattr(train_dataset, "__getitem__")
+        ):
+            raise ValueError(
+                "num_train_epochs requires a finite map-style dataset; streaming "
+                "datasets are not supported."
+            )
+        try:
+            sample_count = len(train_dataset)
+        except (TypeError, NotImplementedError, ValueError) as exc:
+            raise ValueError(
+                "num_train_epochs requires a finite map-style dataset."
+            ) from exc
+        if sample_count < 1:
+            raise ValueError("num_train_epochs cannot train on an empty dataset.")
+        batches_per_epoch = math.ceil(sample_count / batch_size)
+
+    if batches_per_epoch < 1:
+        raise ValueError("num_train_epochs cannot train on an empty dataset.")
+
+    epoch_count = float(num_train_epochs)
+    total_batch_budget = batches_per_epoch * epoch_count
+    if not math.isfinite(total_batch_budget):
+        raise ValueError("num_train_epochs produces an unrepresentable batch budget.")
+    max_train_batches = math.ceil(total_batch_budget)
+    full_epochs = int(epoch_count)
+    partial_epoch_batches = max_train_batches - full_epochs * batches_per_epoch
+    updates_per_full_epoch = math.ceil(
+        batches_per_epoch / gradient_accumulation_steps
+    )
+    effective_max_steps = full_epochs * updates_per_full_epoch
+    if partial_epoch_batches:
+        effective_max_steps += math.ceil(
+            partial_epoch_batches / gradient_accumulation_steps
+        )
+    return batches_per_epoch, max_train_batches, effective_max_steps
+
+
 def _checkpoint_component_type(value: Any) -> str:
     component_type = type(value)
     return f"{component_type.__module__}.{component_type.__qualname__}"
@@ -363,11 +424,14 @@ class TrainLMTrainingArguments:
     Advanced TrainLM configuration remains available through ``TrainConfig``
     and the lower-level engine. Defaults favor a portable first run; backend
     implementations may select more efficient values automatically later.
+    Set ``max_steps=None`` with ``num_train_epochs`` to train on a finite
+    map-style dataset for a dataset-relative budget.
     """
 
     output_dir: str | Path = Path("runs")
     max_steps: int | None = 1000
     max_tokens: int | None = None
+    num_train_epochs: float | None = None
     per_device_train_batch_size: int = 1
     per_device_eval_batch_size: int = 1
     sequence_length: int = 2048
@@ -398,8 +462,28 @@ class TrainLMTrainingArguments:
     save_total_limit: int | None = None
 
     def __post_init__(self) -> None:
-        if self.max_steps is None and self.max_tokens is None:
-            raise ValueError("Set max_steps or max_tokens.")
+        if self.num_train_epochs is not None:
+            try:
+                finite_epoch_count = math.isfinite(float(self.num_train_epochs))
+            except (OverflowError, TypeError, ValueError):
+                finite_epoch_count = False
+            if (
+                isinstance(self.num_train_epochs, bool)
+                or not isinstance(self.num_train_epochs, Real)
+                or not finite_epoch_count
+                or self.num_train_epochs <= 0
+            ):
+                raise ValueError("num_train_epochs must be positive and finite.")
+            if self.max_steps is not None:
+                raise ValueError(
+                    "Set max_steps=None when using num_train_epochs."
+                )
+        if (
+            self.max_steps is None
+            and self.max_tokens is None
+            and self.num_train_epochs is None
+        ):
+            raise ValueError("Set max_steps, max_tokens, or num_train_epochs.")
         for name in (
             "max_steps",
             "max_tokens",
@@ -649,6 +733,22 @@ class TrainLMTrainer:
         runtime: Any | None = None,
     ) -> None:
         self.args = args or TrainLMTrainingArguments()
+        self._train_batches_per_epoch: int | None = None
+        self._max_train_batches: int | None = None
+        self._effective_max_steps = self.args.max_steps
+        if self.args.num_train_epochs is not None:
+            (
+                self._train_batches_per_epoch,
+                self._max_train_batches,
+                self._effective_max_steps,
+            ) = _resolve_epoch_budget(
+                train_dataset,
+                batch_size=self.args.per_device_train_batch_size,
+                gradient_accumulation_steps=(
+                    self.args.gradient_accumulation_steps
+                ),
+                num_train_epochs=self.args.num_train_epochs,
+            )
         if tokenizer is not None and processing_class is not None:
             raise ValueError("Set either tokenizer or processing_class, not both.")
         self.processing_class = processing_class if processing_class is not None else tokenizer
@@ -671,6 +771,11 @@ class TrainLMTrainer:
         self._train_loader_generator_initial_state: torch.Tensor | None = None
         self._tpu_coordinator = None
         if self.args.accelerator == "tpu":
+            if self.args.num_train_epochs is not None:
+                raise NotImplementedError(
+                    "num_train_epochs is not supported by the legacy PyTorch/XLA "
+                    "coordinator; use a finite step budget there."
+                )
             if any(value is not None for value in (optimizer, scheduler, runtime)):
                 raise ValueError(
                     "TPU execution constructs runtime, optimizer, and scheduler inside "
@@ -709,6 +814,11 @@ class TrainLMTrainer:
             )
         self.model = self._resolve_model(model)
         self.runtime = runtime or self._make_runtime()
+        if self.args.num_train_epochs is not None and self.runtime.is_distributed:
+            raise NotImplementedError(
+                "num_train_epochs currently requires a single-device runtime; "
+                "distributed epoch accounting is not available yet."
+            )
         if self.args.save_total_limit is not None and self.runtime.is_distributed:
             raise ValueError("save_total_limit requires a single-device trainer.")
         self.optimizer = optimizer or self._make_optimizer()
@@ -859,7 +969,7 @@ class TrainLMTrainer:
         )
 
     def _make_scheduler(self) -> LRScheduler:
-        horizon = self.args.max_steps or 1
+        horizon = self._effective_max_steps or 1
         return create_scheduler(
             self.optimizer,
             SchedulerConfig(
@@ -898,13 +1008,14 @@ class TrainLMTrainer:
             ),
             scheduler=SchedulerConfig(
                 name=self.args.lr_scheduler_type,
-                horizon_steps=(self.args.max_steps or 1)
+                horizon_steps=(self._effective_max_steps or 1)
                 if self.args.lr_scheduler_type != "constant" else None,
                 warmup_steps=self.args.warmup_steps,
             ),
             trainer=TrainerConfig(
-                max_steps=self.args.max_steps,
+                max_steps=self._effective_max_steps,
                 max_tokens=self.args.max_tokens,
+                max_train_batches=self._max_train_batches,
                 gradient_accumulation_steps=self.args.gradient_accumulation_steps,
                 materialize_loss_every_steps=self.args.logging_steps,
                 max_grad_norm=1.0,
@@ -934,6 +1045,16 @@ class TrainLMTrainer:
         manifests use the same lookup as ``resume_from_checkpoint="latest"``.
         """
         return _latest_training_checkpoint(Path(self.args.output_dir))
+
+    @property
+    def training_budget(self) -> dict[str, int | float | None]:
+        """Return the requested epoch target and its resolved batch/step budget."""
+        return {
+            "num_train_epochs": self.args.num_train_epochs,
+            "train_batches_per_epoch": self._train_batches_per_epoch,
+            "max_train_batches": self._max_train_batches,
+            "effective_max_steps": self._effective_max_steps,
+        }
 
     def train(self, *, resume_from_checkpoint: str | Path | None = None):
         """Run training, optionally resuming from a path or ``"latest"``.

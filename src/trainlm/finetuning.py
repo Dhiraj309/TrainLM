@@ -6,6 +6,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, fields
 import json
 import math
+from numbers import Real
 import os
 import re
 import tempfile
@@ -100,6 +101,7 @@ class TrainLMFineTuningResult:
     resolved_tokenizer_revision: str | None = None
     model_tokenizer_revision_match: bool | None = None
     summary_path: Path | None = None
+    training_budget: Mapping[str, Any] = field(default_factory=dict)
 
     def summary(self) -> dict[str, Any]:
         """Return a compact, JSON-compatible run summary."""
@@ -122,6 +124,7 @@ class TrainLMFineTuningResult:
             "step": self.step,
             "train_loss": self.train_loss,
             "evaluation": evaluation,
+            "training_budget": _json_compatible(self.training_budget),
         }
 
 
@@ -191,9 +194,18 @@ def _json_compatible(value: Any) -> Any:
         return [_json_compatible(item) for item in value]
     if isinstance(value, float) and not math.isfinite(value):
         return None
+    if isinstance(value, Real) and not isinstance(value, (bool, int, float)):
+        return float(value)
     if value is None or isinstance(value, (str, int, float, bool)):
         return value
     raise TypeError(f"Unsupported run-summary value: {type(value).__name__}.")
+
+
+def _is_finite_epoch_count(value: Real) -> bool:
+    try:
+        return math.isfinite(float(value))
+    except (OverflowError, TypeError, ValueError):
+        return False
 
 
 def _write_summary(path: Path, report: Mapping[str, Any]) -> None:
@@ -313,6 +325,7 @@ def run_finetuning(
             model_tokenizer_revision_match=run_state.get(
                 "model_tokenizer_revision_match"
             ),
+            training_budget=run_state.get("training_budget", report["training_budget"]),
             last_known_state=_last_known_state(run_state),
         )
         known_state = report["last_known_state"]
@@ -371,8 +384,15 @@ def _initial_finetuning_summary(
             item.name: getattr(config.args, item.name)
             for item in fields(config.args)
         }),
+        "training_budget": {
+            "num_train_epochs": config.args.num_train_epochs,
+            "train_batches_per_epoch": None,
+            "max_train_batches": None,
+            "effective_max_steps": config.args.max_steps,
+        },
         "last_known_state": {
             "step": None,
+            "epoch": None,
             "train_loss": None,
             "evaluation": {},
             "latest_checkpoint": None,
@@ -418,6 +438,7 @@ def _last_known_state(run_state: Mapping[str, Any]) -> dict[str, Any]:
 
     return {
         "step": step,
+        "epoch": getattr(state, "epoch", None),
         "train_loss": train_loss,
         "evaluation": _json_compatible(run_state.get("evaluation", {})),
         "latest_checkpoint": latest_checkpoint,
@@ -491,21 +512,31 @@ def _validate_resume_checkpoint(checkpoint: Path) -> None:
 def restore_finetuning_config(
     summary_path: str | Path,
     *,
-    max_steps: int,
+    max_steps: int | None = None,
+    num_train_epochs: float | None = None,
 ) -> TrainLMFineTuningConfig:
     """Restore a fine-tuning config from its saved summary for checkpoint resume.
 
-    All recorded model, data, and training settings are restored. `max_steps`
-    is supplied by the caller so a resumed run can extend its previous budget.
-    The output directory is anchored to the summary file's current location.
-    A published checkpoint must exist before the config is returned.
+    All recorded model, data, and training settings are restored. Supply a
+    larger `max_steps` or `num_train_epochs` for the resumed run. The output
+    directory is anchored to the summary file's current location. A published
+    checkpoint must exist before the config is returned.
     """
-    if (
+    if (max_steps is None) == (num_train_epochs is None):
+        raise ValueError("Set exactly one of max_steps or num_train_epochs.")
+    if max_steps is not None and (
         isinstance(max_steps, bool)
         or not isinstance(max_steps, int)
         or max_steps < 1
     ):
         raise ValueError("max_steps must be a positive integer.")
+    if num_train_epochs is not None and (
+        isinstance(num_train_epochs, bool)
+        or not isinstance(num_train_epochs, Real)
+        or not _is_finite_epoch_count(num_train_epochs)
+        or num_train_epochs <= 0
+    ):
+        raise ValueError("num_train_epochs must be positive and finite.")
 
     path = Path(summary_path)
     try:
@@ -528,18 +559,44 @@ def restore_finetuning_config(
         raise ValueError("The fine-tuning summary is missing its saved settings.")
 
     expected_argument_names = {item.name for item in fields(TrainLMTrainingArguments)}
+    if set(training_args) == expected_argument_names - {"num_train_epochs"}:
+        # Additive argument for summaries written before epoch budgets existed.
+        training_args = {**training_args, "num_train_epochs": None}
     if set(training_args) != expected_argument_names:
         raise ValueError(
             "The saved training arguments do not match this TrainLM version."
         )
     restored_args = dict(training_args)
     restored_args["output_dir"] = path.parent
-    restored_args["max_steps"] = max_steps
+    saved_num_train_epochs = training_args.get("num_train_epochs")
+    if max_steps is not None:
+        restored_args["max_steps"] = max_steps
+        restored_args["num_train_epochs"] = None
+    else:
+        if saved_num_train_epochs is None:
+            raise ValueError(
+                "num_train_epochs can extend only a run that was configured "
+                "with an epoch budget."
+            )
+        if (
+            isinstance(saved_num_train_epochs, bool)
+            or not isinstance(saved_num_train_epochs, Real)
+            or not _is_finite_epoch_count(saved_num_train_epochs)
+            or saved_num_train_epochs <= 0
+        ):
+            raise ValueError("The saved epoch budget is invalid.")
+        if num_train_epochs <= saved_num_train_epochs:
+            raise ValueError(
+                "num_train_epochs must be greater than the saved epoch budget "
+                f"({saved_num_train_epochs})."
+            )
+        restored_args["max_steps"] = None
+        restored_args["num_train_epochs"] = num_train_epochs
     for name in ("betas", "report_to"):
         if isinstance(restored_args.get(name), list):
             restored_args[name] = tuple(restored_args[name])
     saved_step = report.get("step")
-    if saved_step is not None:
+    if max_steps is not None and saved_step is not None:
         if type(saved_step) is not int or saved_step < 0:
             raise ValueError("The fine-tuning summary has an invalid saved step.")
         if max_steps <= saved_step:
@@ -754,6 +811,9 @@ def _run_finetuning_impl(
         callbacks=callbacks,
     )
     run_state["trainer"] = trainer
+    resolved_training_budget = getattr(trainer, "training_budget", None)
+    if isinstance(resolved_training_budget, Mapping):
+        run_state["training_budget"] = dict(resolved_training_budget)
     loaded_metadata = getattr(getattr(trainer, "loaded", None), "metadata", None)
     resolved_model_revision = _resolved_commit(
         getattr(loaded_metadata, "resolved_revision", None)
@@ -813,5 +873,14 @@ def _run_finetuning_impl(
         resolved_tokenizer_revision=resolved_tokenizer_revision,
         model_tokenizer_revision_match=model_tokenizer_revision_match,
         summary_path=summary_path,
+        training_budget=run_state.get(
+            "training_budget",
+            {
+                "num_train_epochs": config.args.num_train_epochs,
+                "train_batches_per_epoch": None,
+                "max_train_batches": None,
+                "effective_max_steps": config.args.max_steps,
+            },
+        ),
     )
     return result
