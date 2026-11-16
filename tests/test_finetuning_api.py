@@ -134,11 +134,15 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
             self.loaded = SimpleNamespace(
                 metadata=SimpleNamespace(resolved_revision="c" * 40)
             )
+            self.engine = SimpleNamespace(state=SimpleNamespace(step=0, loss=None))
             calls["trainer"]["train_calls"] = 0
 
         def train(self, *, resume_from_checkpoint):
             calls["trainer"]["train_calls"] += 1
             calls["trainer"]["resume_from_checkpoint"] = resume_from_checkpoint
+            if calls["trainer"].get("fail_train"):
+                self.engine.state = SimpleNamespace(step=2, loss=0.75)
+                raise RuntimeError("simulated failure; token=must-not-be-saved")
             return SimpleNamespace(step=4, loss=1.25)
 
         def evaluate(self):
@@ -147,6 +151,10 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
         def save_model(self, path):
             calls["trainer"]["export_path"] = Path(path)
             return Path(path)
+
+        @property
+        def latest_checkpoint(self):
+            return calls["trainer"].get("latest_checkpoint")
 
     fake_trainer = FakeTrainer()
 
@@ -202,6 +210,8 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
     assert report["training_arguments"]["max_steps"] == 4
     assert report["model_tokenizer_revision_match"] is True
     assert report["evaluation"]["eval_loss"] == 1.5
+    assert report["last_known_state"]["step"] == 4
+    assert report["last_known_state"]["latest_checkpoint"] is None
 
     collator = trainer_kwargs["data_collator"]
     batch = collator(
@@ -216,6 +226,35 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
     with pytest.raises(RuntimeError, match="resolved to different Hub commits"):
         run_finetuning(config)
     assert calls["trainer"]["train_calls"] == 1
+    mismatch_report = json.loads(result.summary_path.read_text(encoding="utf-8"))
+    assert mismatch_report["status"] == "failed"
+    assert mismatch_report["phase"] == "model_loading"
+    assert mismatch_report["error_type"] == "RuntimeError"
+    assert mismatch_report["resolved_model_revision"] == "d" * 40
+    assert mismatch_report["resolved_tokenizer_revision"] == "c" * 40
+
+    fake_trainer.loaded.metadata.resolved_revision = "c" * 40
+    calls["trainer"]["fail_train"] = True
+    calls["trainer"]["latest_checkpoint"] = str(
+        tmp_path / "run" / "checkpoints" / "checkpoint-2"
+    )
+    with pytest.raises(RuntimeError, match="simulated failure"):
+        run_finetuning(config)
+    failed_report_text = result.summary_path.read_text(encoding="utf-8")
+    failed_report = json.loads(failed_report_text)
+    assert failed_report["status"] == "failed"
+    assert failed_report["phase"] == "training"
+    assert failed_report["error_type"] == "RuntimeError"
+    assert failed_report["last_known_state"] == {
+        "step": 2,
+        "train_loss": 0.75,
+        "evaluation": {},
+        "latest_checkpoint": str(
+            tmp_path / "run" / "checkpoints" / "checkpoint-2"
+        ),
+    }
+    assert "must-not-be-saved" not in failed_report_text
+    assert calls["trainer"]["train_calls"] == 2
 
 
 def test_run_finetuning_rejects_legacy_xla_export_path(tmp_path):

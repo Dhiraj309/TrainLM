@@ -16,10 +16,12 @@ export. Its summary records the requested model revision, resolved model and
 tokenizer commits, and whether they match when available. It pins model loading
 to the tokenizer's resolved commit; a detected mismatch stops before training.
 Each successful run writes a JSON summary beside the export with all training
-arguments, data splits, revisions, and metrics. Local sources may have no
-commit metadata. It does not upload artifacts, create a validation split, or
-format chat/instruction examples. Native TPU
-remains experimental and receives no certification from this API. The focused
+arguments, data splits, revisions, and metrics. Failed runs update that file
+with the phase, error type, and last known step/checkpoint, then re-raise the
+original exception without copying its message into the report. Local sources
+may have no commit metadata. It does not upload artifacts, create a validation
+split, or format chat/instruction examples. Native TPU remains experimental
+and receives no certification from this API. The focused
 CPU/API suites pass 73 tests under
 Python 3.12.14, torch 2.9.0+cpu,
 pytest 9.1.1, and Transformers 5.0.0. That Transformers version is below the
@@ -29,7 +31,7 @@ with a locally created GPT-2 model/tokenizer under Transformers 5.20.2 and
 torch 2.9.0+cpu; the dataset loader was an in-memory fixture. Ten notebook and
 roadmap contract tests pass. Real Hub fine-tuning and TPU execution remain
 unverified.
-The fine-tuning summary/provenance follow-up passes 17 focused API,
+The fine-tuning summary and failure-report follow-up passes 17 focused API,
 model-provider, notebook, and roadmap tests.
 `notebooks/TrainLM_Text_Fine_Tuning.ipynb` presents the API in short, copyable
 cells with a three-step smoke default and a local model bundle. It installs

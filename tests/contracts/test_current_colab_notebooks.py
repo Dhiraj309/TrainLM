@@ -86,8 +86,10 @@ def test_text_finetuning_notebook_is_copyable_and_uses_the_public_api():
     assert 'ACCELERATOR = "cpu"' in source
     assert '"native_tpu"' in source
     assert "files.download" in source
-    assert "summary_path = result.summary_path" in source
-    assert "summary_path.write_text" not in source
+    assert "finetuning-summary.json" in source
+    assert "json.loads(summary_path.read_text" in source
+    assert 'report["status"] == "completed"' in source
+    assert "run_status=failed" in source
     assert '"torch"' not in source
 
 
