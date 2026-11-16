@@ -573,6 +573,8 @@ def restore_finetuning_config(
         "load_best_model_at_end": False,
         "metric_for_best_model": None,
         "greater_is_better": None,
+        "early_stopping_patience": None,
+        "early_stopping_threshold": 0.0,
     }
     missing_additive = expected_argument_names - set(training_args)
     if (

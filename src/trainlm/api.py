@@ -438,6 +438,8 @@ class TrainLMTrainingArguments:
     ``save_strategy`` accept ``"no"``, ``"steps"``, or ``"epoch"``; omitted
     strategies preserve interval-based behavior. ``load_best_model_at_end``
     selects and restores the best evaluation checkpoint.
+    ``early_stopping_patience`` can stop training after consecutive evaluation
+    runs without a significant improvement.
     """
 
     output_dir: str | Path = Path("runs")
@@ -477,6 +479,8 @@ class TrainLMTrainingArguments:
     load_best_model_at_end: bool = False
     metric_for_best_model: str | None = None
     greater_is_better: bool | None = None
+    early_stopping_patience: int | None = None
+    early_stopping_threshold: float = 0.0
 
     def __post_init__(self) -> None:
         for name in ("save_strategy", "eval_strategy"):
@@ -572,6 +576,35 @@ class TrainLMTrainingArguments:
                 "metric_for_best_model and greater_is_better require "
                 "load_best_model_at_end=True."
             )
+        if self.early_stopping_patience is not None and (
+            isinstance(self.early_stopping_patience, bool)
+            or not isinstance(self.early_stopping_patience, int)
+            or self.early_stopping_patience < 1
+        ):
+            raise ValueError("early_stopping_patience must be a positive integer.")
+        if (
+            isinstance(self.early_stopping_threshold, bool)
+            or not isinstance(self.early_stopping_threshold, Real)
+            or not _is_finite_real(self.early_stopping_threshold)
+            or self.early_stopping_threshold < 0
+        ):
+            raise ValueError(
+                "early_stopping_threshold must be a finite, non-negative number."
+            )
+        if (
+            self.early_stopping_patience is not None
+            and not self.load_best_model_at_end
+        ):
+            raise ValueError(
+                "early_stopping_patience requires load_best_model_at_end=True."
+            )
+        if (
+            self.early_stopping_patience is None
+            and self.early_stopping_threshold != 0
+        ):
+            raise ValueError(
+                "early_stopping_threshold requires early_stopping_patience."
+            )
         for name in (
             "per_device_train_batch_size",
             "per_device_eval_batch_size",
@@ -642,18 +675,24 @@ class TrainLMTrainingArguments:
 
 
 class _BestModelSelectionCallback(TrainerCallback):
-    """Track the best evaluation metric and force its checkpoint to be saved."""
+    """Select best weights, save their checkpoint, and stop after a plateau."""
 
     def __init__(
         self,
         *,
         metric_name: str,
         greater_is_better: bool,
+        early_stopping_patience: int | None = None,
+        early_stopping_threshold: float = 0.0,
     ) -> None:
         self.metric_name = metric_name
         self.greater_is_better = greater_is_better
         self.best_metric: float | None = None
         self.best_step: int | None = None
+        self.early_stopping_patience = early_stopping_patience
+        self.early_stopping_threshold = float(early_stopping_threshold)
+        self.early_stopping_best_metric: float | None = None
+        self.early_stopping_wait = 0
 
     def on_metrics(self, state, control, metrics: Mapping[str, float]) -> None:
         if state.phase != TrainerPhase.EVALUATING:
@@ -682,6 +721,34 @@ class _BestModelSelectionCallback(TrainerCallback):
             self.best_metric = value
             self.best_step = state.step
             control.should_save_checkpoint = True
+        if self.early_stopping_patience is not None:
+            if self.early_stopping_best_metric is None:
+                self.early_stopping_best_metric = value
+            else:
+                significant_improvement = (
+                    value
+                    > self.early_stopping_best_metric
+                    + self.early_stopping_threshold
+                    if self.greater_is_better
+                    else value
+                    < self.early_stopping_best_metric
+                    - self.early_stopping_threshold
+                )
+                if significant_improvement:
+                    self.early_stopping_best_metric = value
+                    self.early_stopping_wait = 0
+                else:
+                    self.early_stopping_wait += 1
+                    if self.should_stop:
+                        control.request_stop()
+
+    @property
+    def should_stop(self) -> bool:
+        """Whether the configured patience has been exhausted."""
+        return (
+            self.early_stopping_patience is not None
+            and self.early_stopping_wait >= self.early_stopping_patience
+        )
 
     def state_dict(self) -> dict[str, Any]:
         return {
@@ -690,6 +757,8 @@ class _BestModelSelectionCallback(TrainerCallback):
             "greater_is_better": self.greater_is_better,
             "best_metric": self.best_metric,
             "best_step": self.best_step,
+            "early_stopping_best_metric": self.early_stopping_best_metric,
+            "early_stopping_wait": self.early_stopping_wait,
         }
 
     def validate_state_dict(
@@ -714,8 +783,7 @@ class _BestModelSelectionCallback(TrainerCallback):
         if metric is None or step is None:
             if metric is not None or step is not None:
                 raise ValueError("Best-model checkpoint metadata is incomplete.")
-            return None, None
-        if (
+        elif (
             isinstance(metric, bool)
             or not isinstance(metric, Real)
             or not _is_finite_real(metric)
@@ -724,6 +792,27 @@ class _BestModelSelectionCallback(TrainerCallback):
             or step > checkpoint_step
         ):
             raise ValueError("Best-model checkpoint metadata is invalid.")
+        early_metric = state.get("early_stopping_best_metric", metric)
+        early_wait = state.get("early_stopping_wait", 0)
+        if early_metric is not None and (
+            isinstance(early_metric, bool)
+            or not isinstance(early_metric, Real)
+            or not _is_finite_real(early_metric)
+        ):
+            raise ValueError("Early-stopping checkpoint metric is invalid.")
+        if metric is None and early_metric is not None:
+            raise ValueError(
+                "Early-stopping checkpoint metadata has no selected metric."
+            )
+        if (
+            isinstance(early_wait, bool)
+            or not isinstance(early_wait, int)
+            or early_wait < 0
+            or (early_metric is None and early_wait != 0)
+        ):
+            raise ValueError("Early-stopping checkpoint patience state is invalid.")
+        if metric is None:
+            return None, None
         return float(metric), step
 
     def load_state_dict(self, state: object, *, checkpoint_step: int) -> None:
@@ -731,6 +820,17 @@ class _BestModelSelectionCallback(TrainerCallback):
             state,
             checkpoint_step=checkpoint_step,
         )
+        if not isinstance(state, Mapping):
+            raise ValueError("Best-model checkpoint metadata must be a mapping.")
+        saved_early_metric = state.get(
+            "early_stopping_best_metric", self.best_metric
+        )
+        self.early_stopping_best_metric = (
+            float(saved_early_metric)
+            if saved_early_metric is not None
+            else None
+        )
+        self.early_stopping_wait = state.get("early_stopping_wait", 0)
 
 
 def _default_collator(features: Sequence[Any]) -> dict[str, torch.Tensor]:
@@ -925,6 +1025,8 @@ class TrainLMTrainer:
             self._best_model_callback = _BestModelSelectionCallback(
                 metric_name=metric_name,
                 greater_is_better=greater_is_better,
+                early_stopping_patience=self.args.early_stopping_patience,
+                early_stopping_threshold=self.args.early_stopping_threshold,
             )
         self._train_batches_per_epoch: int | None = None
         self._max_train_batches: int | None = None
@@ -1385,6 +1487,17 @@ class TrainLMTrainer:
             "value": callback.best_metric,
             "step": callback.best_step,
             "checkpoint": str(checkpoint) if checkpoint is not None else None,
+            "early_stopping": (
+                {
+                    "patience": callback.early_stopping_patience,
+                    "threshold": callback.early_stopping_threshold,
+                    "evaluations_without_improvement": (
+                        callback.early_stopping_wait
+                    ),
+                }
+                if callback.early_stopping_patience is not None
+                else None
+            ),
         }
 
     def _load_best_model_at_end(self) -> None:
@@ -1532,6 +1645,10 @@ class TrainLMTrainer:
             training_args.pop("metric_for_best_model", None)
         if self.args.greater_is_better is None:
             training_args.pop("greater_is_better", None)
+        if self.args.early_stopping_patience is None:
+            # Keep disabled early-stopping defaults out of older run fingerprints.
+            training_args.pop("early_stopping_patience", None)
+            training_args.pop("early_stopping_threshold", None)
         model_config = getattr(self.model, "config", None)
         model_config_dict = (
             model_config.to_dict()
@@ -2375,6 +2492,8 @@ class TrainLMTrainer:
                 payload["best_model_selection"],
                 checkpoint_step=engine.state.step,
             )
+            if self._best_model_callback.should_stop:
+                engine.control.request_stop()
         if engine._train_batches_per_epoch:
             # Older checkpoints persisted the epoch field without maintaining
             # it during training. Derive it from the exact batch cursor so a

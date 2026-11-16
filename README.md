@@ -208,6 +208,9 @@ and step-based save intervals must be multiples of the evaluation interval.
 The default selection metric is the lowest `eval_loss`. See the
 [fine-tuning guide](docs/tutorials/TEXT_FINETUNING.md#restore-the-best-evaluation-checkpoint)
 for metric selection, retention, resume behavior, and current limitations.
+Set `early_stopping_patience` to stop after consecutive validation checks fail
+to improve the selected metric by `early_stopping_threshold`; it requires
+`load_best_model_at_end=True` and uses the same evaluation/save schedule.
 
 To resume from the latest checkpoint, restore the saved run configuration and
 set a larger step budget. The helper reloads model, dataset, and training

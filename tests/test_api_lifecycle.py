@@ -9,8 +9,14 @@ import torch
 from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
 
 from trainlm import TrainLMTrainer, TrainLMTrainingArguments
-from trainlm.api import _latest_training_checkpoint
-from trainlm.training import TokenWSD, TrainerCallback
+from trainlm.api import _BestModelSelectionCallback, _latest_training_checkpoint
+from trainlm.training import (
+    TokenWSD,
+    TrainerCallback,
+    TrainerControl,
+    TrainerPhase,
+    TrainerState,
+)
 
 
 class TinyModel(torch.nn.Module):
@@ -292,6 +298,128 @@ def test_load_best_model_saves_and_restores_best_evaluation_checkpoint(tmp_path)
     )
     for name, value in trainer.model.state_dict().items():
         torch.testing.assert_close(value, best_payload["model"][name], rtol=0, atol=0)
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        (
+            {
+                "load_best_model_at_end": True,
+                "eval_strategy": "steps",
+                "eval_steps": 1,
+                "save_strategy": "steps",
+                "save_steps": 1,
+                "early_stopping_patience": 0,
+            },
+            "early_stopping_patience must be a positive integer",
+        ),
+        (
+            {
+                "early_stopping_patience": 1,
+            },
+            "requires load_best_model_at_end=True",
+        ),
+        (
+            {
+                "early_stopping_threshold": 0.1,
+            },
+            "requires early_stopping_patience",
+        ),
+        (
+            {
+                "load_best_model_at_end": True,
+                "eval_strategy": "steps",
+                "eval_steps": 1,
+                "save_strategy": "steps",
+                "save_steps": 1,
+                "early_stopping_patience": 1,
+                "early_stopping_threshold": -0.1,
+            },
+            "early_stopping_threshold must be a finite, non-negative number",
+        ),
+    ],
+)
+def test_early_stopping_validates_settings(overrides, message):
+    with pytest.raises(ValueError, match=message):
+        TrainLMTrainingArguments(**overrides)
+
+
+def test_early_stopping_threshold_counts_only_significant_improvement():
+    callback = _BestModelSelectionCallback(
+        metric_name="eval_loss",
+        greater_is_better=False,
+        early_stopping_patience=2,
+        early_stopping_threshold=0.5,
+    )
+
+    controls = []
+    for step, loss in enumerate((5.0, 4.8, 4.6), start=1):
+        state = TrainerState(step=step, phase=TrainerPhase.EVALUATING)
+        control = TrainerControl()
+        callback.on_metrics(state, control, {"eval_loss": loss})
+        controls.append(control)
+
+    assert callback.best_step == 3
+    assert callback.early_stopping_best_metric == 5.0
+    assert callback.early_stopping_wait == 2
+    assert controls[-1].should_stop is True
+
+
+def test_early_stopping_wait_state_resumes_and_stops_on_patience(tmp_path):
+    torch.manual_seed(212)
+    model = TinyModel()
+
+    class MakeSecondEvaluationWorse(TrainerCallback):
+        def on_step_end(self, state, control):
+            del control
+            if state.step == 2:
+                with torch.no_grad():
+                    model.projection.bias[7] += 100
+
+    def make_trainer(*, max_steps, callbacks=None):
+        return TrainLMTrainer(
+            model=model if callbacks else TinyModel(),
+            train_dataset=_dataset(),
+            eval_dataset=_dataset(),
+            callbacks=callbacks,
+            args=TrainLMTrainingArguments(
+                output_dir=tmp_path,
+                max_steps=max_steps,
+                sequence_length=4,
+                accelerator="cpu",
+                lr_scheduler_type="constant",
+                eval_strategy="steps",
+                eval_steps=1,
+                save_strategy="steps",
+                save_steps=2,
+                save_total_limit=1,
+                load_best_model_at_end=True,
+                early_stopping_patience=2,
+            ),
+        )
+
+    first = make_trainer(max_steps=2, callbacks=[MakeSecondEvaluationWorse()])
+    first_state = first.train()
+
+    assert first_state.step == 2
+    assert first.best_model_selection["step"] == 1
+    assert first.best_model_selection["early_stopping"] == {
+        "patience": 2,
+        "threshold": 0.0,
+        "evaluations_without_improvement": 1,
+    }
+    assert (tmp_path / "checkpoint-2" / "trainer_state.pt").is_file()
+
+    resumed = make_trainer(max_steps=5)
+    resumed_state = resumed.train(resume_from_checkpoint="latest")
+
+    assert resumed_state.step == 3
+    assert resumed_state.should_stop is True
+    assert resumed.best_model_selection["step"] == 1
+    assert resumed.best_model_selection["early_stopping"][
+        "evaluations_without_improvement"
+    ] == 2
 
 
 def test_epoch_schedule_resume_derives_epoch_from_batch_cursor(tmp_path):

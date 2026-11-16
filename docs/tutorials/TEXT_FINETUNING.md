@@ -128,6 +128,36 @@ currently requires a single-device runtime and is not available through the
 legacy PyTorch/XLA coordinator. It has CPU test coverage but has not been
 validated on TPU hardware.
 
+## Stop when validation stops improving
+
+Add `early_stopping_patience` to stop after that many consecutive validation
+checks fail to beat the best significant result. The threshold uses the same
+metric direction as best-checkpoint selection; the default is zero. Early
+stopping requires `load_best_model_at_end=True`, an active evaluation strategy,
+and a matching save strategy. The run restores the selected best weights when
+it stops. Its wait counter is included in local checkpoints and resumes with
+the training state.
+
+```python
+args = TrainLMTrainingArguments(
+    output_dir="runs/qwen-tinystories-early-stop",
+    max_steps=1000,
+    eval_strategy="steps",
+    eval_steps=50,
+    save_strategy="steps",
+    save_steps=100,
+    load_best_model_at_end=True,
+    early_stopping_patience=3,
+    early_stopping_threshold=0.01,
+)
+```
+
+Here patience `3` means three consecutive validation checks without a
+significant improvement, not three optimizer steps. The run summary reports
+the patience, threshold, selected metric, and evaluations since improvement.
+Early stopping has single-device CPU test coverage; TPU and distributed runs
+remain unverified or unsupported.
+
 ## Use preloaded datasets and your own formatting
 
 The same config can use dataset splits you loaded or filtered yourself. When

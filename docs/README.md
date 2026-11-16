@@ -29,7 +29,9 @@ again during resume. `eval_strategy` and `save_strategy` can schedule periodic
 actions by steps or at epoch boundaries. `load_best_model_at_end=True` restores
 the model weights from the selected validation checkpoint; this requires
 matching active evaluation and save strategies, and step save cadence must be
-a multiple of evaluation cadence. The
+a multiple of evaluation cadence. `early_stopping_patience` stops after the
+configured number of validation checks without significant improvement and
+requires best-model loading. The
 [fine-tuning notebook](../notebooks/TrainLM_Text_Fine_Tuning.ipynb)
 calls this API in short Colab/Kaggle cells and installs the package without
 reinstalling Torch. Each successful run writes `finetuning-summary.json` beside
