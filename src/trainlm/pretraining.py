@@ -96,6 +96,8 @@ class TrainLMPretrainingConfig:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "output_dir", Path(self.output_dir).expanduser())
+        if isinstance(self.betas, list):
+            object.__setattr__(self, "betas", tuple(self.betas))
         local_files = self.train_file is not None or self.validation_file is not None
         if local_files:
             if self.train_file is None or self.validation_file is None:
