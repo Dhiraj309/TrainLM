@@ -39,7 +39,13 @@ live Hub or TPU training was run.
 **Current branch update:** the from-scratch quickstart now exposes Colab and
 Kaggle launch buttons in its opening cell, with matching links from the
 notebook catalog. Kaggle imports the public notebook URL. These links do not
-select or provision runtime hardware.
+select or provision runtime hardware. `TrainLMPretrainingConfig` also exposes
+the existing `constant`, `linear`, `cosine`, and `wsd` schedules, with
+`warmup_steps=None` retaining the prior capped automatic warmup. Requested and
+effective values appear in the run report; schedule settings participate in
+checkpoint compatibility. Token-budget extension remains limited to cosine
+with automatic warmup. CPU and TPU validation for these current-branch changes
+has not yet been run.
 
 ### Implementation history
 

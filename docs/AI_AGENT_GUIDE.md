@@ -58,8 +58,12 @@ follow the linked implementation and tests before making a change.
   tokenizer inputs. `run_config.json` captures the effective model, tokenizer,
   packed data, optimizer, scheduler, training arguments, and runtime identity;
   each checkpoint stores the same fingerprint. Exact resume requires an exact
-  match and fails before restoring any state when settings differ. The explicit
-  `extend_training_budget=True` path permits only a strictly larger `max_tokens`
+  match and fails before restoring any state when settings differ.
+  `lr_scheduler_type` supports `constant`, `linear`, `cosine`, or `wsd`;
+  `warmup_steps=None` keeps the default automatic warmup (floor of 10% of the
+  step budget, capped at 100), while an integer sets it directly. The run report
+  records requested and effective values. `extend_training_budget=True`
+  permits only a strictly larger `max_tokens`
   and its derived horizon/cadence. After a compatible checkpoint is restored,
   it starts a new cosine schedule at the configured learning rate while keeping
   model and optimizer state; this can raise the learning rate, so use it

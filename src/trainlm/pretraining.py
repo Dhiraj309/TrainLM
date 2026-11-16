@@ -38,6 +38,9 @@ class TrainLMPretrainingConfig:
     training split and writes validated packed shards under ``output_dir``
     before constructing a trainer. Matching preparation inputs reuse
     integrity-checked tokenizer and shard artifacts from that directory.
+    The learning-rate schedule defaults to cosine; ``warmup_steps=None`` keeps
+    the derived floor-of-10%-of-steps warmup (capped at 100). Supported
+    schedules are ``constant``, ``linear``, ``cosine``, and ``wsd``.
     """
 
     output_dir: str | Path = Path("runs/pretraining")
@@ -71,6 +74,8 @@ class TrainLMPretrainingConfig:
     model_type: str = "gpt2"
     model_config_overrides: Mapping[str, Any] | None = None
     save_total_limit: int | None = None
+    lr_scheduler_type: Literal["constant", "linear", "cosine", "wsd"] = "cosine"
+    warmup_steps: int | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "output_dir", Path(self.output_dir).expanduser())
@@ -196,6 +201,21 @@ class TrainLMPretrainingConfig:
                 or not math.isfinite(self.learning_rate)
                 or self.learning_rate <= 0):
             raise ValueError("learning_rate must be finite and positive.")
+        if not isinstance(self.lr_scheduler_type, str) or self.lr_scheduler_type not in {
+            "constant", "linear", "cosine", "wsd"
+        }:
+            raise ValueError(
+                "lr_scheduler_type must be 'constant', 'linear', 'cosine', or 'wsd'."
+            )
+        if self.warmup_steps is not None and (
+            isinstance(self.warmup_steps, bool)
+            or not isinstance(self.warmup_steps, int)
+            or self.warmup_steps < 0
+        ):
+            raise ValueError(
+                "warmup_steps must be a non-negative integer or None for "
+                "automatic warmup."
+            )
         if (isinstance(self.weight_decay, bool)
                 or not isinstance(self.weight_decay, Real)
                 or not math.isfinite(self.weight_decay)
