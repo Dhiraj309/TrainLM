@@ -8,7 +8,20 @@
 
 ## Current project snapshot
 
-The [coding-agent guide](AI_AGENT_GUIDE.md) maps common pretraining tasks to
+The `feat/01-pretrained-finetuning-api` branch introduces an additive
+`run_finetuning(TrainLMFineTuningConfig(...))` workflow. It loads a pretrained
+causal LM and tokenizer, reads immutable Hub train and validation splits,
+tokenizes a plain-text field, then trains, evaluates, and saves a local model
+export. It does not upload artifacts, create a validation split, or format
+chat/instruction examples. Native TPU remains experimental and receives no
+certification from this API. The focused CPU/API suites pass 73 tests under
+Python 3.12.14, torch 2.9.0+cpu,
+pytest 9.1.1, and Transformers 5.0.0. That Transformers version is below the
+declared project minimum; the fine-tuning tests mock Hub dataset, tokenizer,
+and model loading, so real Hub fine-tuning and TPU execution remain unverified.
+The public API and roadmap contract suites pass another 6 tests.
+
+The [coding-agent guide](AI_AGENT_GUIDE.md) maps common training tasks to
 the current notebook, implementation, tests, and validation limits. Prefer it
 for file discovery; this document remains the detailed implementation record.
 

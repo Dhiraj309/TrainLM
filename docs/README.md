@@ -15,6 +15,14 @@ data preparation, random GPT-2 initialization, training, evaluation, export,
 and report writing. Notebook users see sparse training progress automatically;
 Python callers can opt in with `show_progress=True`. The lower-level
 `TrainLMTrainer.from_scratch(...)` lifecycle remains available for custom use.
+The public API also adds `run_finetuning(TrainLMFineTuningConfig(...))` for a
+pretrained causal LM and pinned Hub text dataset. It loads the model and
+tokenizer, tokenizes one text field, trains, evaluates, and exports locally.
+This path requires a separate validation split and does not handle
+chat-template formatting or task-specific label masking. Focused CPU
+API/lifecycle tests pass (73 tests), plus 6 public API and roadmap contract
+tests. The local Transformers version is below the declared minimum, and real
+Hub/accelerator execution remains unverified.
 The notebook distinguishes a 10,000-token workflow smoke test from a
 1,000,000-token starter budget and allows a custom target; neither budget
 certifies model convergence. Its advanced GPT-2 settings offer compact

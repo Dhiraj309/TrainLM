@@ -13,7 +13,7 @@ that existed at the time, primarily PyTorch/XLA. They do not imply native
 TorchTPU support. “Implemented” means present in that historical code path;
 “partial” means validation remained; “deferred” means it was not delivered.
 
-**Current user-workflow update (2026-11-15):** the package exposes
+**Current user-workflow update (2026-11-16):** the package exposes
 `TrainLMPretrainingConfig` and `TrainLMTrainer.from_scratch()` for raw text from
 a revision-pinned Hugging Face dataset. The API trains a byte-level tokenizer,
 prepares validated packed shards, initializes GPT-2 by default (or a configured
@@ -43,6 +43,18 @@ which artifacts are included in the bundle.
 Before the run call, it prints the effective model dimensions, token target,
 and requested backend from the active config, including restored config when
 resuming.
+The current feature branch adds a task-focused `run_finetuning` API for a
+pretrained causal LM and an immutable Hugging Face text-dataset revision. It
+loads the model/tokenizer, preserves separate train and validation splits,
+tokenizes one text field, trains, evaluates, and exports locally. It does not
+upload artifacts, create a validation split, or apply chat templates and
+instruction-specific label masks. The API implementation is present on its
+feature branch; the focused CPU/API suite passes 73 tests
+in the local Python 3.12.14, torch 2.9.0+cpu, pytest 9.1.1 environment, but its
+Transformers 5.0.0 installation is below the declared project minimum. The
+fine-tuning tests mock Hub dataset/tokenizer/model loading; real Hub and TPU
+fine-tuning have not been run. Six additional public API and roadmap contract
+tests pass.
 The package-root helpers are additive to the existing `api_version: "1"`
 configuration schema; the compatibility contract requires the v1 exports while
 allowing new public helpers without forcing a configuration-version change.

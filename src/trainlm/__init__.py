@@ -20,6 +20,11 @@ from .pretraining_run import (
     restore_pretraining_report,
     run_pretraining,
 )
+from .finetuning import (
+    TrainLMFineTuningConfig,
+    TrainLMFineTuningResult,
+    run_finetuning,
+)
 
 __all__ = [
     "DEPRECATED_CONFIG_KEYS",
@@ -31,9 +36,12 @@ __all__ = [
     "TrainLMPretrainingError",
     "TrainLMPretrainingResult",
     "TrainLMPretrainingResume",
+    "TrainLMFineTuningConfig",
+    "TrainLMFineTuningResult",
     "TrainLMTrainer",
     "TrainLMTrainingArguments",
     "bundle_pretraining_artifacts",
     "restore_pretraining_report",
     "run_pretraining",
+    "run_finetuning",
 ]
