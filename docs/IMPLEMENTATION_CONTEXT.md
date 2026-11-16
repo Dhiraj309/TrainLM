@@ -56,6 +56,11 @@ Its API, checkpoint lifecycle, notebook, roadmap, and installed-wheel checks
 pass 66 tests under Python 3.12.14, torch 2.9.0+cpu, and Transformers 5.20.2.
 The wheel test used command-scoped network permission to resolve its build
 dependency; no runtime packages were changed. No Hub or TPU training was run.
+The notebook now reports a missing or incompatible resume summary with a
+specific recovery action. If restore fails, its training and artifact-download
+cells skip, so a prior successful export cannot be mistaken for the new run.
+The 10 notebook and roadmap contract tests pass under Python 3.12.14; no
+accelerator training was run for this guard.
 
 The [coding-agent guide](AI_AGENT_GUIDE.md) maps common training tasks to
 the current notebook, implementation, tests, and validation limits. Prefer it

@@ -62,7 +62,9 @@ training settings, and uses the summary file's directory as `output_dir`. The
 saved checkpoint contains optimizer and trainer state; the exported `model`
 directory alone is not enough to resume. On Colab or Kaggle, keep the summary
 and checkpoints on persistent storage if a runtime reset should not discard
-the run.
+the run. In the notebook, a missing or incompatible summary produces recovery
+instructions and skips training and bundling, so a previous model is not
+presented as the resumed run.
 
 ```python
 from trainlm import restore_finetuning_config, run_finetuning

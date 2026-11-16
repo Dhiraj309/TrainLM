@@ -85,6 +85,10 @@ that does not exceed the recorded step. The notebook uses the helper for
 The focused API, checkpoint lifecycle, notebook, roadmap, and installed-wheel
 suite passes 66 tests under Python 3.12.14, torch 2.9.0+cpu, and Transformers
 5.20.2. Real Hub and TPU training remain unverified.
+The notebook also handles missing or incompatible resume summaries with a
+recovery message and skips training and bundling until the setup is corrected.
+This prevents the previous model export from appearing as a successful resumed
+run. The notebook and roadmap contract tests pass 10 checks.
 The package-root helpers are additive to the existing `api_version: "1"`
 configuration schema; the compatibility contract requires the v1 exports while
 allowing new public helpers without forcing a configuration-version change.
