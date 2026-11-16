@@ -357,6 +357,8 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
     legacy_report["training_arguments"].pop("load_best_model_at_end")
     legacy_report["training_arguments"].pop("metric_for_best_model")
     legacy_report["training_arguments"].pop("greater_is_better")
+    legacy_report["training_arguments"].pop("early_stopping_patience")
+    legacy_report["training_arguments"].pop("early_stopping_threshold")
     legacy_summary_path = result.summary_path.parent / "legacy-summary.json"
     legacy_summary_path.write_text(json.dumps(legacy_report), encoding="utf-8")
     restored_legacy = restore_finetuning_config(
