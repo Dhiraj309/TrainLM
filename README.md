@@ -182,7 +182,8 @@ version returns a summary rather than writing the detailed report used by the
 from-scratch workflow.
 
 See the [fine-tuning guide](docs/tutorials/TEXT_FINETUNING.md) for setup
-requirements and limitations.
+requirements and limitations. The [Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/feat%2F01-pretrained-finetuning-api/notebooks/TrainLM_Text_Fine_Tuning.ipynb)
+offers the same flow as short, copyable cells for Colab and Kaggle.
 
 The config defaults to a pinned TinyStories revision. In a standard Python
 environment, install the package with `pip install 'trainlm[pretraining]'`.

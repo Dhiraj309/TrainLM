@@ -8,6 +8,7 @@ ACTIVE_NOTEBOOKS = (
     Path("notebooks/TorchTPU_T1_v5e8_Distributed_Probe.ipynb"),
     Path("notebooks/TrainLM_Native_TorchTPU_Single_Device_Training.ipynb"),
     Path("notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb"),
+    Path("notebooks/TrainLM_Text_Fine_Tuning.ipynb"),
 )
 STALE_BRANCHES = (
     "docs/01-t1-v5e1-probe",
@@ -33,6 +34,8 @@ def test_active_colab_notebooks_clone_merged_main():
         source = _notebook_source(path)
         if path.name.startswith("TorchTPU_T1_"):
             assert 'PROBE_BRANCH = "main"' in source, path
+        elif path.name == "TrainLM_Text_Fine_Tuning.ipynb":
+            assert 'TRAINLM_REF = "feat/01-pretrained-finetuning-api"' in source, path
         else:
             assert re.search(r'"--branch",\s*"main"', source), path
         for stale_branch in STALE_BRANCHES:
@@ -62,6 +65,28 @@ def test_from_scratch_notebook_installs_only_missing_pretraining_extras():
     assert '"--quiet", "--disable-pip-version-check"' in setup
     assert "the setup cell leaves installed versions unchanged" in setup
     assert "trainlm[dev]" not in setup
+
+
+def test_text_finetuning_notebook_is_copyable_and_uses_the_public_api():
+    path = Path("notebooks/TrainLM_Text_Fine_Tuning.ipynb")
+    notebook = json.loads(path.read_text(encoding="utf-8"))
+    assert notebook["nbformat"] == 4
+    code_cells = [cell for cell in notebook["cells"] if cell["cell_type"] == "code"]
+    assert all(
+        cell["execution_count"] is None and not cell["outputs"]
+        for cell in code_cells
+    )
+    for index, cell in enumerate(code_cells):
+        compile("".join(cell["source"]), f"{path.name}:cell-{index}", "exec")
+
+    source = "\n".join("".join(cell["source"]) for cell in notebook["cells"])
+    assert 'TRAINLM_REF = "feat/01-pretrained-finetuning-api"' in source
+    assert "--no-deps" in source
+    assert "run_finetuning(config)" in source
+    assert 'ACCELERATOR = "cpu"' in source
+    assert '"native_tpu"' in source
+    assert "files.download" in source
+    assert '"torch"' not in source
 
 
 def test_from_scratch_notebook_exposes_opt_in_gradient_checkpointing():

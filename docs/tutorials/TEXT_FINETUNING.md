@@ -1,5 +1,7 @@
 # Fine-tune a pretrained causal language model
 
+[Open the copyable notebook in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/feat%2F01-pretrained-finetuning-api/notebooks/TrainLM_Text_Fine_Tuning.ipynb) · [View notebook source](../../notebooks/TrainLM_Text_Fine_Tuning.ipynb)
+
 Use this workflow when you already have pretrained weights and want to adapt
 them to a text domain. It is separate from [pretraining from scratch](../../README.md#start-here-pretrain-a-language-model-from-scratch),
 which initializes random weights and learns a tokenizer.
