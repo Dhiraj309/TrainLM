@@ -7,8 +7,8 @@ them to a text domain. It is separate from [pretraining from scratch](../../READ
 which initializes random weights and learns a tokenizer.
 
 `run_finetuning` owns dataset loading, tokenization, training, evaluation, and
-local model export. Give it an immutable dataset revision and a distinct
-validation split:
+local model export. When it loads a dataset from the Hub, give it an immutable
+dataset revision and a distinct validation split:
 
 ```python
 from trainlm import (
@@ -40,11 +40,14 @@ print(result.summary())
 
 ## Use preloaded datasets and your own formatting
 
-The same config can use dataset splits you loaded or filtered yourself. Keep
-the dataset ID and immutable revision in the config as the run's source
-identity. This example assumes a dataset whose rows contain `prompt` and
-`response` fields; update the config and field names for your data. The
-formatter receives one row and returns the text to tokenize:
+The same config can use dataset splits you loaded or filtered yourself. When
+you pass both splits directly, `dataset_id` and `dataset_revision` are
+optional. Include them if you want the run summary to record a source; for
+local or transformed data, omit them instead of inventing a Hub identity. If
+you load the splits from the Hub as below, keep the immutable ID and revision.
+This example assumes a dataset whose rows contain `prompt` and `response`
+fields; update the config and field names for your data. The formatter receives
+one row and returns the text to tokenize:
 
 ```python
 from datasets import load_dataset
@@ -68,6 +71,25 @@ result = run_finetuning(
     train_dataset=train_dataset,
     eval_dataset=eval_dataset,
     formatting_func=format_example,
+)
+```
+
+For local or transformed splits, create the config without any dataset
+identity and pass the two splits directly:
+
+```python
+from datasets import Dataset
+
+train_dataset = Dataset.from_dict({"text": ["Hello world.", "A second example."]})
+eval_dataset = Dataset.from_dict({"text": ["A held-out example."]})
+local_config = TrainLMFineTuningConfig(
+    model_name_or_path="Qwen/Qwen3-0.6B",
+    args=TrainLMTrainingArguments(output_dir="runs/local-finetuning"),
+)
+result = run_finetuning(
+    local_config,
+    train_dataset=train_dataset,
+    eval_dataset=eval_dataset,
 )
 ```
 

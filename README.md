@@ -186,7 +186,11 @@ experimental and has not been certified by this API example.
 
 For custom formatting, pass preloaded Hugging Face `Dataset` train and
 validation splits, a `formatting_func` that returns one text string per row,
-and optionally a tokenizer and custom `data_collator`. See the
+and optionally a tokenizer and custom `data_collator`. In this mode,
+`dataset_id` and `dataset_revision` are optional; provide them when you want
+the report to identify a source, but no placeholder Hub ID or revision is
+needed for local or transformed data. Both remain required when TrainLM loads
+the splits from the Hub. See the
 [fine-tuning guide](docs/tutorials/TEXT_FINETUNING.md) for this pattern and
 resume requirements.
 

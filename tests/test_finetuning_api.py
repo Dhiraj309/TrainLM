@@ -33,15 +33,36 @@ def _config(output_dir: Path, **overrides) -> TrainLMFineTuningConfig:
     return TrainLMFineTuningConfig(**values)
 
 
-def test_finetuning_config_requires_pinned_dataset_and_distinct_splits(tmp_path):
+def test_finetuning_config_validates_optional_dataset_metadata_and_splits(tmp_path):
     with pytest.raises(ValueError, match="immutable 40-character"):
         _config(tmp_path, dataset_revision="main")
+
+    local_config = _config(
+        tmp_path,
+        dataset_id=None,
+        dataset_revision=None,
+    )
+    assert local_config.dataset_id is None
+    assert local_config.dataset_revision is None
 
     with pytest.raises(ValueError, match="must be distinct"):
         _config(tmp_path, validation_split="train")
 
     with pytest.raises(TypeError, match="TrainLMTrainingArguments"):
         _config(tmp_path, args={"max_steps": 1})
+
+
+def test_run_finetuning_requires_pinned_metadata_for_hub_splits(tmp_path):
+    config = _config(
+        tmp_path,
+        dataset_id=None,
+        dataset_revision=None,
+    )
+
+    with pytest.raises(ValueError, match="required when .*loads splits"):
+        run_finetuning(config)
+
+    assert not (tmp_path / "finetuning-summary.json").exists()
 
 
 def test_restore_finetuning_config_rejects_unrelated_summary(tmp_path):
@@ -328,8 +349,8 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
 
     provided_config = _config(
         tmp_path / "provided",
-        dataset_id="org/custom-instructions",
-        dataset_revision="b" * 40,
+        dataset_id=None,
+        dataset_revision=None,
     )
     calls["trainer"]["fail_train"] = False
     calls["trainer"]["latest_checkpoint"] = None
@@ -373,8 +394,17 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
     assert provided_report["data"]["formatting_function"].endswith(
         ".format_example"
     )
-    assert provided_report["dataset_id"] == "org/custom-instructions"
-    assert provided_report["dataset_revision"] == "b" * 40
+    assert provided_report["dataset_id"] is None
+    assert provided_report["dataset_revision"] is None
+    provided_checkpoint = provided_result.summary_path.parent / "checkpoint-4"
+    provided_checkpoint.mkdir()
+    torch.save({"schema_version": 1}, provided_checkpoint / "trainer_state.pt")
+    restored_provided_config = restore_finetuning_config(
+        provided_result.summary_path,
+        max_steps=8,
+    )
+    assert restored_provided_config.dataset_id is None
+    assert restored_provided_config.dataset_revision is None
 
 
 def test_run_finetuning_rejects_legacy_xla_export_path(tmp_path):
