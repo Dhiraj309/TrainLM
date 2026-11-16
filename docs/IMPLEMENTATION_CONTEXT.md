@@ -104,6 +104,16 @@ validation remains owner-run. The latest focused suite across API lifecycle,
 fine-tuning, config, engine, roadmap, and notebook contracts passed 116 tests
 under Python 3.12.14, torch 2.9.0+cpu, and pytest 9.1.1. No live Hub or TPU run
 was performed.
+The public fine-tuning arguments now also expose `eval_strategy` and
+`save_strategy` with `"no"`, `"steps"`, or `"epoch"`. Legacy interval-only
+arguments retain their step behavior. Epoch actions flush any partial
+accumulation group at finite map-style dataset boundaries; distributed and
+legacy XLA epoch schedules are rejected. Older fine-tuning summaries remain
+restorable, and default strategy fields are omitted from scratch-run
+fingerprints to preserve existing checkpoint identity. The updated focused CPU
+suite passed 151 API, lifecycle, config, engine, notebook-contract, TPU
+coordinator, and packed-scratch tests under Python 3.12.14 and torch 2.9.0+cpu.
+No TPU or Hub run was performed.
 
 The [coding-agent guide](AI_AGENT_GUIDE.md) maps common training tasks to
 the current notebook, implementation, tests, and validation limits. Prefer it

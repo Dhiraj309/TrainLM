@@ -26,3 +26,9 @@ class EvaluationConfig:
     eval_every_tokens: int | None = None
 
     max_batches: int | None = None
+
+    eval_at_epoch_end: bool = False
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.eval_at_epoch_end, bool):
+            raise ValueError("'eval_at_epoch_end' must be a boolean.")

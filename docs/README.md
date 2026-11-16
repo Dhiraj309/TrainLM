@@ -25,7 +25,8 @@ identity when supplied; local or transformed datasets do not need a placeholder
 Hub ID or revision. Hub-loaded splits still require an immutable commit SHA.
 `TrainLMTrainingArguments` accepts steps or `num_train_epochs` for finite
 map-style single-device training. The same data and callbacks must be supplied
-again during resume. The
+again during resume. `eval_strategy` and `save_strategy` can schedule periodic
+actions by steps or at epoch boundaries. The
 [fine-tuning notebook](../notebooks/TrainLM_Text_Fine_Tuning.ipynb)
 calls this API in short Colab/Kaggle cells and installs the package without
 reinstalling Torch. Each successful run writes `finetuning-summary.json` beside
@@ -41,6 +42,11 @@ pytest 9.1.1; it did not run against the live Hub or an accelerator.
 The epoch-budget update passes 116 focused API, lifecycle, config, trainer, and
 notebook-contract tests in the same Python/Torch environment. This is CPU
 evidence only; native TPU epoch training remains unverified.
+The evaluation/save strategy follow-up adds exact epoch-end actions with
+partial-accumulation flushing; distributed and legacy XLA epoch schedules are
+not supported. Its focused API, lifecycle, config, engine, notebook, TPU
+coordinator, and packed-scratch suite passed 151 tests under Python 3.12.14
+with torch 2.9.0+cpu. No TPU or Hub run was performed.
 The additive `restore_finetuning_config` helper reloads those settings from a
 run summary, anchors `output_dir` to its location, verifies a published
 checkpoint archive or native TPU manifest is readable, and accepts a new

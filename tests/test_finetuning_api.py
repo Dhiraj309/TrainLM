@@ -335,6 +335,8 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
     )
     legacy_report = json.loads(json.dumps(report))
     legacy_report["training_arguments"].pop("num_train_epochs")
+    legacy_report["training_arguments"].pop("save_strategy")
+    legacy_report["training_arguments"].pop("eval_strategy")
     legacy_summary_path = result.summary_path.parent / "legacy-summary.json"
     legacy_summary_path.write_text(json.dumps(legacy_report), encoding="utf-8")
     restored_legacy = restore_finetuning_config(

@@ -163,7 +163,9 @@ config = TrainLMFineTuningConfig(
         sequence_length=512,
         per_device_train_batch_size=2,
         learning_rate=2e-5,
+        eval_strategy="steps",
         eval_steps=100,
+        save_strategy="steps",
         save_steps=100,
         save_total_limit=3,
     ),
@@ -197,7 +199,10 @@ resume requirements.
 `TrainLMTrainingArguments` accepts either a step budget or
 `num_train_epochs` (`max_steps=None`). Epoch budgets count finite map-style
 data, respect batch size and gradient accumulation, and currently require a
-single-device runtime.
+single-device runtime. `eval_strategy` and `save_strategy` schedule evaluation
+and training checkpoints by steps or at epoch boundaries; epoch schedules
+also require finite map-style data and flush partial accumulation at each
+boundary.
 
 To resume from the latest checkpoint, restore the saved run configuration and
 set a larger step budget. The helper reloads model, dataset, and training
@@ -425,9 +430,10 @@ trainlm train --config examples/dense_ar_pretraining.yaml \
   --eval-shard-start 8 --eval-shard-stop 9
 ```
 
-On CPU and CUDA, `save_steps` and `eval_steps` are handled by the same
-backend-neutral lifecycle used for training. A local run can continue from a
-TrainLM training checkpoint with
+Step and epoch save/evaluation strategies run through the same backend-neutral
+training lifecycle. Epoch actions require a finite map-style single-device
+loader and flush partial gradient accumulation at its boundary. A local run
+can continue from a TrainLM training checkpoint with
 `trainer.train(resume_from_checkpoint="runs/example/checkpoint-100")`.
 
 Custom stateful datasets can include their position in a checkpoint by

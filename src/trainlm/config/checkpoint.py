@@ -42,7 +42,11 @@ class CheckpointConfig:
 
     save_rng_state: bool = True
 
+    save_training_at_epoch_end: bool = False
+
     def __post_init__(self) -> None:
+        if not isinstance(self.save_training_at_epoch_end, bool):
+            raise ValueError("'save_training_at_epoch_end' must be a boolean.")
         for name in (
             "save_training_every_steps",
             "save_training_every_tokens",
