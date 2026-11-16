@@ -12,6 +12,8 @@ scheduler, logging, and checkpoint settings.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
+from numbers import Real
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,10 +68,11 @@ class TrainerConfig:
             raise ValueError("materialize_loss_every_steps must be positive.")
         if (
             isinstance(self.max_grad_norm, bool)
-            or not isinstance(self.max_grad_norm, (int, float))
-            or self.max_grad_norm <= 0
+            or not isinstance(self.max_grad_norm, Real)
+            or not math.isfinite(self.max_grad_norm)
+            or self.max_grad_norm < 0
         ):
-            raise ValueError("max_grad_norm must be positive.")
+            raise ValueError("max_grad_norm must be finite and non-negative.")
         if (
             isinstance(self.seed, bool)
             or not isinstance(self.seed, int)

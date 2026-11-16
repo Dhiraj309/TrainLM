@@ -589,7 +589,9 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
             first_moment_dtype=(
                 "bfloat16" if args.precision == "bf16" else "float32"
             ),
-            gradient_clip_norm=1.0,
+            gradient_clip_norm=(
+                args.max_grad_norm if args.max_grad_norm > 0 else None
+            ),
             gradient_reduction="mean",
         ),
         OptimizerConfig(
@@ -640,7 +642,7 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
             max_steps=args.max_steps,
             gradient_accumulation_steps=args.gradient_accumulation_steps,
             materialize_loss_every_steps=args.log_every_steps,
-            max_grad_norm=xla_optimizer.gradient_clip_norm,
+            max_grad_norm=args.max_grad_norm,
             seed=args.seed,
         ),
         checkpoint=CheckpointConfig(

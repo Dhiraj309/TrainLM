@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import json
+import math
 import os
 from pathlib import Path
 import signal
 import subprocess
 import sys
 import time
+from numbers import Real
 from typing import Any
 
 from trainlm.config import ModelSourceConfig
@@ -92,6 +94,7 @@ class _TPURunRequest:
     eval_manifest_dir: Path | None = None
     eval_every_steps: int | None = None
     max_eval_batches: int | None = None
+    max_grad_norm: float = 1.0
 
     def __post_init__(self) -> None:
         if (
@@ -142,6 +145,13 @@ class _TPURunRequest:
             raise ValueError("max_eval_batches must be positive when configured.")
         if self.max_eval_batches is not None and self.eval_manifest_dir is None:
             raise ValueError("max_eval_batches requires an evaluation dataset.")
+        if (
+            isinstance(self.max_grad_norm, bool)
+            or not isinstance(self.max_grad_norm, Real)
+            or not math.isfinite(self.max_grad_norm)
+            or self.max_grad_norm < 0
+        ):
+            raise ValueError("max_grad_norm must be finite and non-negative.")
 
     def to_dict(self) -> dict[str, Any]:
         values = asdict(self)
@@ -439,6 +449,7 @@ class _TPUCoordinator:
             "--beta1", str(request.betas[0]),
             "--beta2", str(request.betas[1]),
             "--eps", str(request.eps),
+            "--max-grad-norm", str(request.max_grad_norm),
             "--weight-decay", str(request.weight_decay),
             "--z-loss", "0.0",
             "--scheduler", request.scheduler,

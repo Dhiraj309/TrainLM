@@ -621,10 +621,12 @@ class Trainer:
                 gradient_scale = 1.0 / total_tokens
             self.runtime.scale_gradients(self.model.parameters(), gradient_scale)
 
-        grad_norm = self.runtime.clip_gradients(
-            self.model.parameters(),
-            self.config.trainer.max_grad_norm,
-        )
+        grad_norm = None
+        if self.config.trainer.max_grad_norm > 0:
+            grad_norm = self.runtime.clip_gradients(
+                self.model.parameters(),
+                self.config.trainer.max_grad_norm,
+            )
 
         self.runtime.optimizer_step(
             self.optimizer,

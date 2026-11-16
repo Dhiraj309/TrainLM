@@ -47,6 +47,8 @@ class TrainLMPretrainingConfig:
     `eval_steps` independently override the default cadence derived from the
     training budget. Best-checkpoint selection uses validation loss; optional
     early stopping counts consecutive evaluations without sufficient progress.
+    AdamW `betas` and `eps` set its moment estimates; `max_grad_norm=0` disables
+    gradient clipping.
     """
 
     output_dir: str | Path = Path("runs/pretraining")
@@ -88,6 +90,9 @@ class TrainLMPretrainingConfig:
     load_best_model_at_end: bool = False
     early_stopping_patience: int | None = None
     early_stopping_threshold: float = 0.0
+    betas: tuple[float, float] = (0.9, 0.95)
+    eps: float = 1e-8
+    max_grad_norm: float = 1.0
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "output_dir", Path(self.output_dir).expanduser())
@@ -301,6 +306,32 @@ class TrainLMPretrainingConfig:
                 or not math.isfinite(self.weight_decay)
                 or self.weight_decay < 0):
             raise ValueError("weight_decay must be finite and non-negative.")
+        if (
+            not isinstance(self.betas, tuple)
+            or len(self.betas) != 2
+            or any(
+                isinstance(beta, bool)
+                or not isinstance(beta, Real)
+                or not math.isfinite(beta)
+                or not 0 <= beta < 1
+                for beta in self.betas
+            )
+        ):
+            raise ValueError("betas must contain two finite values in [0, 1).")
+        if (
+            isinstance(self.eps, bool)
+            or not isinstance(self.eps, Real)
+            or not math.isfinite(self.eps)
+            or self.eps <= 0
+        ):
+            raise ValueError("eps must be finite and positive.")
+        if (
+            isinstance(self.max_grad_norm, bool)
+            or not isinstance(self.max_grad_norm, Real)
+            or not math.isfinite(self.max_grad_norm)
+            or self.max_grad_norm < 0
+        ):
+            raise ValueError("max_grad_norm must be finite and non-negative.")
         if isinstance(self.seed, bool) or not isinstance(self.seed, int) or self.seed < 0:
             raise ValueError("seed must be a non-negative integer.")
         if not isinstance(self.accelerator, str) or self.accelerator not in {
