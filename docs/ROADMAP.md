@@ -49,12 +49,17 @@ loads the model/tokenizer, preserves separate train and validation splits,
 tokenizes one text field, trains, evaluates, and exports locally. It does not
 upload artifacts, create a validation split, or apply chat templates and
 instruction-specific label masks. The API implementation is present on its
-feature branch; the focused CPU/API suite passes 73 tests
-in the local Python 3.12.14, torch 2.9.0+cpu, pytest 9.1.1 environment, but its
-Transformers 5.0.0 installation is below the declared project minimum. The
-fine-tuning tests mock Hub dataset/tokenizer/model loading; real Hub and TPU
-fine-tuning have not been run. Six additional public API and roadmap contract
-tests pass.
+feature branch. The focused CPU/API suite passes 73 tests in the local Python
+3.12.14, torch 2.9.0+cpu, pytest 9.1.1 environment, whose Transformers 5.0.0
+is below the declared minimum; those tests mock Hub/model loading. A separate
+one-step CPU fine-tuning run passed with a locally created GPT-2 model and
+tokenizer under Transformers 5.20.2, using an in-memory dataset fixture.
+Ten notebook/roadmap contract tests pass. Real Hub and TPU fine-tuning
+remain unverified. `notebooks/TrainLM_Text_Fine_Tuning.ipynb` provides the API in
+short, copyable Colab/Kaggle cells. It uses a tiny three-step smoke default,
+creates a local model bundle, and installs TrainLM without replacing Torch.
+Its source ref must be changed to `main` after merge before deleting the
+feature branch.
 The package-root helpers are additive to the existing `api_version: "1"`
 configuration schema; the compatibility contract requires the v1 exports while
 allowing new public helpers without forcing a configuration-version change.

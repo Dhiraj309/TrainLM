@@ -18,8 +18,16 @@ certification from this API. The focused CPU/API suites pass 73 tests under
 Python 3.12.14, torch 2.9.0+cpu,
 pytest 9.1.1, and Transformers 5.0.0. That Transformers version is below the
 declared project minimum; the fine-tuning tests mock Hub dataset, tokenizer,
-and model loading, so real Hub fine-tuning and TPU execution remain unverified.
-The public API and roadmap contract suites pass another 6 tests.
+and model loading. A separate CPU integration run passed one training step
+with a locally created GPT-2 model/tokenizer under Transformers 5.20.2 and
+torch 2.9.0+cpu; the dataset loader was an in-memory fixture. Ten notebook and
+roadmap contract tests pass. Real Hub fine-tuning and TPU execution remain
+unverified.
+`notebooks/TrainLM_Text_Fine_Tuning.ipynb` presents the API in short, copyable
+cells with a three-step smoke default and a local model bundle. It installs
+TrainLM without reinstalling Torch. During this branch review it installs from
+the feature branch; update its source ref to `main` after merge before deleting
+the feature branch.
 
 The [coding-agent guide](AI_AGENT_GUIDE.md) maps common training tasks to
 the current notebook, implementation, tests, and validation limits. Prefer it
