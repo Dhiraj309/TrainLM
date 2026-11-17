@@ -25,7 +25,9 @@ and explicitly selects the experimental native TorchTPU path. Fine-tuning's
 quick example targets CPU/CUDA; native TPU fine-tuning is unvalidated. Neither
 notebook establishes model quality, convergence, or TPU performance. See the
 [coding-agent guide](AI_AGENT_GUIDE.md) for the example, implementation, test,
-and evidence map.
+and evidence map. After scratch training, the notebook reloads the local
+export with standard Transformers classes and shows a short CPU generation
+preview; the smoke budget does not produce a useful model.
 
 **Merged scratch-workflow update (PR #112, 2026-11-16):** the from-scratch API
 accepts local text files or the pinned Hub source, and exposes the existing

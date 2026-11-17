@@ -21,7 +21,9 @@ accepts either a revision-pinned Hugging Face text dataset or separate local
 UTF-8 training and validation text files. It owns tokenizer fitting, packed
 data preparation, training, evaluation, export, and report writing. Notebook
 users see sparse training progress automatically; Python callers can opt in
-with `show_progress=True`. The lower-level
+with `show_progress=True`. The final notebook cell reloads the local export
+with standard Transformers classes and prints a short CPU generation preview.
+Its 10,000-token smoke output is not a model-quality result. The lower-level
 `TrainLMTrainer.from_scratch(...)` lifecycle remains available for custom use.
 The public API also adds `run_finetuning(TrainLMFineTuningConfig(...))` for a
 pretrained causal LM. It can load a pinned Hub text dataset or accept paired

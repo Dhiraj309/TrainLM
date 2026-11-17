@@ -23,6 +23,9 @@ settings live in the task guides. The from-scratch notebook explicitly selects
 the experimental native TorchTPU path; its 10,000-token default is a workflow
 smoke test. Fine-tuning examples target CPU or CUDA. Neither notebook is a
 TPU certification, quality benchmark, or convergence claim.
+The scratch notebook's final cell reloads the local export with Transformers
+and generates a short CPU preview. This demonstrates the Hugging Face export
+path; the default smoke budget does not imply useful output or model quality.
 
 **Merged scratch-workflow update (PR #112, 2026-11-16):** from-scratch
 configuration supports local UTF-8 train/validation files or the pinned Hub
