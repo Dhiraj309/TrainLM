@@ -317,7 +317,8 @@ context to report schema v4 and rebase-merged at verified `main` SHA
 
 - **Historical product:** Hugging Face-native dense autoregressive training
 - **Historical TPU backend:** PyTorch/XLA
-- **Current target:** Native TorchTPU on Cloud TPU; not yet verified
+- **Current target:** Native TorchTPU on Cloud TPU; one small v5e-1 workflow is
+  owner-reported, while production support remains unverified
 - **Current gate:** T0 is closed; PR #20 merged the T0.2 mapping. PR #28 merged
   the native single-device software foundation and starter pretraining notebook
   with merge commit `860bb289bf35444d8d435cf41caf51bcf77afaaf`. PR #29
@@ -550,7 +551,9 @@ context to report schema v4 and rebase-merged at verified `main` SHA
   exposed the old Hub lock, so commits `bbf1b2e` and `cfc05ed` align the minimum
   package pair. CI run `41752008510` then passed 893 tests and 41 subtests in
   both minimum and current profiles. No refreshed owner package report is
-  claimed yet.
+  claimed in this historical CI entry; the later owner-run pretraining result
+  below passed package preflight in the Colab runtime. A separate clean-install
+  profile remains unverified.
   The 18 old PR cards are candidates, not the active queue.
 
 - **Current implementation continuation (experimental):** the owner asked to
@@ -559,9 +562,9 @@ context to report schema v4 and rebase-merged at verified `main` SHA
   backed by the existing backend-neutral PyTorch trainer. The legacy
   `accelerator="tpu"` XLA coordinator is preserved; `auto` still refuses a
   detected TPU. A Colab-openable, copyable notebook exercises a tiny real HF
-  causal LM fine-tune and export. This is an implementation checkpoint, not a
-  validated training result: package compatibility, CPU conformance, eager
-  trainer execution, compile and multi-device support remain open. Native
+  causal LM fine-tune and export. The later owner run below confirms one small
+  native pretraining workflow, but does not establish package behavior across
+  runtimes, compile, resume, repeated lifecycle, or multi-device support. Native
   checkpoint state now includes an optional device RNG capture/restore contract;
   runtimes missing those APIs fail checkpoint/resume rather than implying
   exact continuation. PR #32 adds exact zero-worker packed-source recovery
@@ -592,15 +595,17 @@ context to report schema v4 and rebase-merged at verified `main` SHA
   parent notebook does not initialize TorchTPU. It now writes a downloadable
   JSON report with source revision, package versions, normalized device facts,
   and phase outcomes; process exit, child summary, and phase markers must agree
-  before the report passes. Raw logs remain local. This reporting path has
-  source-level validation only; the owner has not run the native trainer smoke.
+  before the report passes. Raw logs remain local. At the time of this harness
+  change, the owner had not yet run the native trainer smoke; later evidence is
+  recorded below.
   The notebook now runs the read-only T1 package checker before downloading
   `distilgpt2`. It blocks missing or conflicting training-stack dependencies
   and preserves a downloadable blocked report. The earlier Colab Torch 2.14
   source-range mismatch is addressed by the current core requirement; a fully
   parsed unrelated IPython/Jedi conflict remains visible but nonblocking.
-  Training-stack and unclassified conflicts still block. This gate has
-  source-level tests; a refreshed owner report remains pending.
+  Training-stack and unclassified conflicts still block. This gate had
+  source-level tests; the later owner run passed this package preflight in one
+  Colab runtime, while a clean-install profile remains pending.
   The trainer smoke pins `distilbert/distilgpt2` and its tokenizer to Hub commit
   `2290a62682d06624634c1f46a6ad5be0f47f38aa`; the downloadable evidence records
   that model revision for repeatable runs. No TPU trainer result is claimed.
@@ -629,7 +634,8 @@ context to report schema v4 and rebase-merged at verified `main` SHA
   path; PR #32 verified exact packed-data continuation and stale-data rejection;
   PR #33 verified notebook source freshness; PR #34 verified train-only BPE
   fitting and reporting; PR #35 verified local model config and report
-  provenance. Owner-run TPU validation and training convergence remain pending.
+  provenance. The owner later reported one successful small v5e-1 training
+  workflow; resume, larger-run convergence, and performance remain pending.
   Continue only behind explicit experimental selection until CPU and owner-run
   TPU checks pass.
   The public from-scratch API now checks installed metadata for core and
@@ -638,14 +644,17 @@ context to report schema v4 and rebase-merged at verified `main` SHA
   declared requirements. Merged PR #121 makes a blocked `run_pretraining()`
   call preserve its metadata report and summarize each missing or mismatched
   package in `TrainLMPretrainingError`; the API gate itself never installs or
-  changes packages. Both GitHub CPU dependency profiles passed, but the owner
-  has not refreshed the v5e-1 package profile. The local
+  changes packages. Both GitHub CPU dependency profiles passed. A later owner
+  run passed package preflight and completed a 10,000-token training smoke on
+  the Colab TPU previously identified as v5e-1; exact source SHA and full
+  package report were not included in the pasted output. A clean-install
+  profile remains unverified. The local
   `.venv` reports incompatible Hub/Transformers versions and missing `datasets`,
   so real local scratch training remains unavailable. The focused CPU/API
   suite passes with the package profile mocked for training-path tests and
   isolated tests verifying mismatch handling. This metadata gate does not
-  certify TPU execution; the owner-run v5e-1 full-training result remains
-  pending. See the [profile implementation](../src/trainlm/runtime/pretraining_profile.py),
+  certify general TPU support or convergence; the 10,000-token result is only
+  a smoke. See the [profile implementation](../src/trainlm/runtime/pretraining_profile.py),
   [profile tests](../tests/test_pretraining_profile.py), [API tests](../tests/test_pretraining_api.py),
   and the
   [scratch notebook](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb).

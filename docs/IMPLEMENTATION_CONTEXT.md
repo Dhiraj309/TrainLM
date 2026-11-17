@@ -47,8 +47,20 @@ package metadata blocks a run, `TrainLMPretrainingError` includes the unmet
 package name, required version, installed version or missing status, and the
 full report path. This keeps notebook and script output actionable while
 preserving the detailed JSON report. Both GitHub CPU dependency profiles
-passed; no TPU hardware run was performed, and a fresh owner-run package
-profile remains pending.
+passed. No TPU run was available when PR #121 merged; the later owner-run
+package preflight and training result are recorded below.
+
+**Owner-run native pretraining smoke (2026-11-17):** the owner reports that
+the current Colab workflow completed `run_pretraining()` on a TPU previously
+identified as v5e-1. The run completed 79 optimizer steps, processed 10,033
+tokens against a 10,000-token target, reported `eval_loss=9.2373714447`, and
+exported an 8,325,120-parameter `GPT2LMHeadModel`. Setup reported
+`torch-tpu==0.2.0` and `libtpu==0.0.50`; successful training means the
+read-only package preflight passed in that runtime. The pasted transcript does
+not include the exact source SHA, PyTorch version, or full device properties.
+This validates one small eager training/evaluation/export workflow, not model
+quality, performance, TPU resume, explicit compile, repeated lifecycle, or
+multi-device execution.
 
 **Current public API update:** the from-scratch config accepts a
 Transformers-style `warmup_ratio` from 0 to 1, rounded up to a whole optimizer
