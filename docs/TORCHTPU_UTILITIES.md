@@ -6,20 +6,21 @@ training lifecycle, not every operator in the upstream library.
 
 ## Evidence and source policy
 
-The owner supplied a successful Colab-run eager probe and a later
-`run_pretraining()` result. The latter completed fresh training and evaluation,
-then resumed from a TPU checkpoint in the same live runtime with an extended
-token budget. Setup reported `torch-tpu==0.2.0` and `libtpu==0.0.50`; the TPU
-was previously identified by the owner as v5e-1. The logs omit the exact
-source SHA, PyTorch version, and full device properties. Clean-process resume,
-`torch.compile`, repeated lifecycle, distributed operation, and performance
-remain unverified. This is owner-provided output, not a local rerun. The
-preceding process failure's exact cause remains unconfirmed.
+The owner supplied a successful Colab eager probe and `run_pretraining()`
+reports. The fresh 10,000-token run and 12,000-token continuation passed, and
+the owner repeated checkpoint restore after restarting the notebook session.
+The reports identify source revision
+`9593ff67f7afb744907c252813349e7a737e74fb`, torch 2.14.1+cpu,
+`torch-tpu==0.2.0`, and `libtpu==0.0.50`; discovery reported one v5e device.
+Detailed properties are `available_unverified` with null topology and HBM.
+Recovery after VM replacement, explicit `torch.compile`, repeated lifecycle,
+distributed operation, and performance remain unverified. This is owner-provided
+output, not a local rerun. The preceding process failure's exact cause remains
+unconfirmed.
 
-The notebook now reads the installed Git commit from pip's `direct_url.json`,
-passes it into the run report, and prints the source revision, runtime package
-versions, and accelerator discovery fields as JSON. Capture this line when
-retrying the kernel-restart check so hardware evidence is tied to its source.
+The notebook reads the installed Git commit from pip's `direct_url.json`,
+passes it into the run report, and prints source, package, and accelerator
+fields as JSON. The captured owner run ties its execution to this exact commit.
 
 Use versioned documentation plus the public API policy, then inspect the
 installed package's supported interfaces. An upstream API listing is not
@@ -171,11 +172,10 @@ These are T1 work packages, not new branches or renumbered GitHub PRs:
    properties and package versions. The standalone probe prints it; a
    non-allocating subset now feeds trainer preflight and opt-in explanation.
    A bounded device-owning artifact and worker-result diagnostic bridge exist,
-   but native worker production is pending. The owner now reports a successful
-   one-call native pretraining run; the complete structured report and source
-   SHA were not included in the shared transcript. Compare those runtime facts
-   with the probe report when available. Explicit compile evidence remains
-   pending.
+   but native worker production is pending. The owner supplied a structured
+   report tied to the exact source SHA, with package versions and discovery
+   fields. The report marks device properties unverified and leaves
+   topology/HBM null. Explicit compile evidence remains pending.
 3. **T1.3 — installation and lifecycle feasibility (partial):** the notebook
    runs a [read-only profile check](../examples/torchtpu_t1_install_preflight.py)
    comparing installed metadata to TrainLM's source requirements, TorchTPU's
@@ -186,9 +186,10 @@ These are T1 work packages, not new branches or renumbered GitHub PRs:
    performs bounded sequential restarts and records normalized observations.
    Its optional `--compile` mode requires compile and eager-parity markers from every
    fresh child; the notebook keeps compiled repeats off until the standalone
-   compile check passes. Only CPU contracts have run. Resolve the native
-   dependency profile and verify clean install/import, eager and compiled
-   repeated runs, cleanup and CPU regression gates on the chosen profile.
+   compile check passes. A v5e-1 eager fresh run and checkpoint restore after a
+   Python session restart have passed. Clean install/import, explicit compile,
+   repeated lifecycle cleanup, and CPU regression gates on the chosen profile
+   remain to be verified.
 4. **T1.4 — distributed entry feasibility (partial):** the opt-in
    [single-host v5e-8 notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TorchTPU_T1_v5e8_Distributed_Probe.ipynb)
    uses the [probe script](../examples/torchtpu_t1_distributed_probe.py).
@@ -210,20 +211,22 @@ discovery contracts, and no distributed certification from a single rank.
 Before enabling a provider by default, require explicit version/hardware
 evidence. The core dependency range now includes the observed Torch 2.14.1
 package and the CI workflow tests constrained minimum/current CPU profiles.
-The latest owner runs passed package preflight and eager single-device fresh
-training plus same-runtime checkpoint continuation. Next, validate
-fresh-process/post-reset recovery, explicit compile parity, and repeated
-process cleanup on v5e-1; run the T1.4 collective separately on an isolated
-v5e-8 host. Use those results to decide native automatic routing and the T2
-integration scope. Core CPU compatibility remains separate from broad
-TorchTPU support.
+The latest owner runs passed package preflight, eager single-device fresh
+training, and checkpoint continuation after a Python session restart. Next,
+validate explicit compile parity and repeated process cleanup on v5e-1; run the
+T1.4 collective separately on an isolated v5e-8 host. Recovery after VM
+replacement is still unverified. Use those results to decide native automatic
+routing and the T2 integration scope. Core CPU compatibility remains separate
+from broad TorchTPU support.
 
 Latest owner-run evidence (2026-11-17): setup reported `torch-tpu==0.2.0` and
-`libtpu==0.0.50`, and the one-call `run_pretraining()` completed on the Colab
-TPU the owner previously identified as v5e-1. It ran 79 optimizer steps,
-processed 10,033 tokens against a 10,000-token target, evaluated at loss
-9.23737, and exported an 8.325M-parameter GPT-2. This confirms package
-preflight and one eager train/evaluate/export path in that runtime. The pasted
-transcript lacks its source SHA, PyTorch version, and detailed topology, and
-does not validate clean installation, resume, explicit compilation, repeated
-process cleanup, or collectives. Keep those as separate T1 gates.
+`libtpu==0.0.50`; the run report records source revision
+`9593ff67f7afb744907c252813349e7a737e74fb` and torch 2.14.1+cpu. On a Colab
+TPU identified as v5e-1, the run completed 79 steps, 10,033 tokens against a
+10,000-token target, evaluation loss 9.23737, and an 8.325M-parameter GPT-2
+export. A continuation from checkpoint 79 reached step 95 and 12,065/12,000
+tokens with evaluation loss 9.24308, both in-session and after a Python session
+restart. The restart recovery used the retained run files; VM replacement,
+clean installation, explicit compilation, repeated lifecycle cleanup, and
+collectives remain separate T1 gates. Device discovery reported one v5e device
+but left topology/HBM unverified.

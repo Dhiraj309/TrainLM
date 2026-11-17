@@ -14,18 +14,25 @@
   `libtpu==0.0.50`; package preflight passed. In the same live runtime, the
   owner resumed from `checkpoint-79`, continued at step 80, and completed step
   95 at 12,065/12,000 tokens with evaluation loss 9.243080 and a separate
-  resumed export. This is owner-run evidence for one small eager run and
-  same-runtime checkpoint continuation, not clean-process or post-reset
-  recovery, exact uninterrupted-trajectory parity, quality, or performance.
-  The pasted output omits exact source SHA, PyTorch version, and full device
-  metadata. Explicit compile, repeated lifecycle/cleanup, clean-install
-  verification, and v5e-8 collectives remain unverified. Keep automatic TPU
-  routing disabled.
-- **Run provenance:** the notebook's pretraining and resume cells read the
-  installed Git commit from pip's `direct_url.json`, add it to the run report,
-  and print runtime package and accelerator discovery fields as JSON. Capture
-  this output with the next v5e-1 kernel-restart attempt; this does not replace
-  the pending hardware gates.
+  resumed export. The owner then restarted the notebook session and again
+  restored checkpoint 79, continuing from step 80 through step 95 with the
+  same final token count and evaluation loss. This verifies checkpoint restore
+  across a Python session restart while the run files and packages remained
+  available; it does not verify recovery after replacing the VM or deleting its
+  files.
+- **Captured run environment:** source `9593ff67f7afb744907c252813349e7a737e74fb`;
+  Python 3.13.18; torch 2.14.1+cpu; Transformers 5.22.1; TorchTPU 0.2.0;
+  libtpu 0.0.50. The report identified one visible device named TPU v5e,
+  world size 1, rank 0 and fp32. Device properties are marked
+  `available_unverified`; allocation for the property query was not run, and
+  topology/HBM fields are null. The RNG restore API emitted an experimental
+  warning, but resume completed. Explicit compile, repeated lifecycle/cleanup,
+  clean-install verification, and v5e-8 collectives remain unverified. Keep
+  automatic TPU routing disabled.
+- **Run provenance:** both reports contain the exact installed source SHA and
+  runtime/device metadata. The console also prints `loss unavailable` on
+  progress events without a loss value and repeats some step numbers; the run
+  completed and the final evaluation loss was available.
 - **Preflight UX:** PR #121 merged actionable missing/mismatched dependency
   details into `TrainLMPretrainingError` while keeping package checks
   read-only. Both GitHub CPU dependency profiles passed. The latest one-call
@@ -217,8 +224,10 @@
   subtests. One failure is the wheel smoke blocked by missing `pip`; five Phi
   cases arise from the installed Transformers 5.0.0 missing
   `PhiConfig.pad_token_id`; a separate TrainLM model reload test has mismatched
-  weights. TPU checkpoint validation remains pending. CPU tests, standalone
-  device probes, and complete TPU training are separate
+  weights. Owner-run v5e-1 checkpoint restore now passes in-session and after a
+  Python session restart; VM-replacement and distributed TPU checkpoint
+  validation remain pending. CPU tests, standalone device probes, and complete
+  TPU training are separate
   evidence; no TPU generation, convergence, or performance result is claimed.
 - **Current T5 checkpoint work:** PR #49 added schema-v3 shard checksums and
   coordinated distributed write/resume preflight; PR #50 added public trainer
@@ -232,7 +241,9 @@
   non-persisted lifecycle fields, PR #56 tests optional custom dataset
   `validate_state_dict` preflight, and PR #57 checks exact custom iterable
   continuation. PR #58 checks that identity/cursor corruption rejects before
-  trainer mutation. Native TPU checkpoint validation remains pending.
+  trainer mutation. The owner has verified single-device native checkpoint
+  restore, including after a Python session restart; VM-replacement and
+  distributed checkpoint validation remain pending.
 - **Older open PR stack:** PRs #22–#27 remain open on the older M8 branch chain.
   They are more than 250 commits behind current `main`; PR #22 is merge-conflicted and
   its recorded CPU run had 335 passed / 6 failed. Keep them separate until

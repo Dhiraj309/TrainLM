@@ -57,22 +57,27 @@ processed 10,033 tokens against a 10,000-token target, reported
 `eval_loss=9.2373714447`, and exported an 8,325,120-parameter
 `GPT2LMHeadModel`. Setup reported `torch-tpu==0.2.0` and `libtpu==0.0.50`;
 the read-only package preflight passed. In the same live runtime, the owner
-then restored `checkpoint-79` and continued from step 80 to step 95, reaching
+restored `checkpoint-79` and continued from step 80 to step 95, reaching
 12,065 tokens against the extended 12,000-token budget with
-`eval_loss=9.2430801392`. The resumed export and report were separate from the
-fresh-run artifacts. The pasted transcript omits the exact source SHA,
-PyTorch version, and full device properties. This verifies one eager
-fresh-run and same-runtime checkpoint continuation, not clean-process or
-post-reset recovery, exact uninterrupted-trajectory parity, model quality,
-performance, explicit compile, repeated lifecycle, or multi-device execution.
-TorchTPU warned that its RNG restore API is experimental, but the restore
-completed.
+`eval_loss=9.2430801392`. After restarting the notebook session, the owner
+again restored `checkpoint-79` and completed the same continuation. Both runs
+wrote separate resume reports and exports. The captured source revision is
+`9593ff67f7afb744907c252813349e7a737e74fb`; runtime packages were Python
+3.13.18, torch 2.14.1+cpu, Transformers 5.22.1, TorchTPU 0.2.0, libtpu 0.0.50,
+datasets 4.8.5 and tokenizers 0.23.3. Discovery reported one visible device,
+`TPU v5e`, world size 1, rank 0 and fp32. Property status is
+`available_unverified`; the property query did not allocate the device, and
+topology/HBM remain null. This verifies one eager fresh run and checkpoint
+restore after a Python session restart while the saved files and packages were
+available. It does not verify recovery after VM replacement, exact
+uninterrupted-trajectory parity, model quality, performance, explicit compile,
+repeated lifecycle, or multi-device execution. TorchTPU warned that its RNG
+restore API is experimental, but the restore completed.
 
-The notebook now reads the installed Git commit from pip's `direct_url.json`,
-passes it into each run report, and prints the source SHA, runtime package
-versions, and accelerator discovery fields as JSON. A future owner run should
-save this output alongside the resume result; this reporting change does not
-add new TPU execution evidence.
+The notebook reads the installed Git commit from pip's `direct_url.json`,
+passes it into each report, and prints source, package and accelerator fields
+as JSON. These captured fields tie the owner run to its installed code; they
+do not add evidence beyond the reported execution.
 
 The from-scratch notebook separates a fresh-run cell from an opt-in resume
 cell. The fresh run uses `FRESH_MAX_TOKENS=10_000` and a new default
@@ -86,9 +91,9 @@ restores the saved config/checkpoint, changes only `max_tokens` to
 path. It writes a separate resume report and model export, preserving the
 original baseline artifacts. If the VM was replaced, the full run directory
 and compatible packages must be restored first. The notebook's artifact cell
-bundles the latest run report/export. The owner has completed the same-runtime
-resume path on the TPU identified as v5e-1; a kernel-restart resume is now
-ready for owner validation, while post-reset recovery remains unverified.
+bundles the latest run report/export. The owner has completed this resume path
+on v5e-1 after restarting the Python session with its files retained; recovery
+after replacing the VM remains unverified.
 Notebook JSON and Python syntax were checked locally; hosted CI review also
 caught and drove fixes for the existing notebook size contracts.
 
@@ -110,8 +115,9 @@ default scratch fingerprints remain compatible. The internal legacy TPU
 coordinator also forwards the clipping value. After beta-list normalization
 for JSON report recovery, both hosted CPU suites passed with 988 tests and 41
 subtests each under the core-current and core-minimum dependency constraints.
-The owner-run fresh training and same-runtime resume exercise these settings
-on one small eager TPU run; they do not establish broader TPU support.
+The owner-run fresh training and same-runtime plus post-session-restart resume
+exercise these settings on one small eager TPU run; they do not establish
+broader TPU support.
 
 ### Implementation history
 

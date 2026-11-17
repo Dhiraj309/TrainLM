@@ -62,13 +62,19 @@ evaluation loss 9.237371, and an exported 8,325,120-parameter GPT-2. Setup
 reported `torch-tpu==0.2.0` and `libtpu==0.0.50`. In the same live runtime, the
 notebook then restored `checkpoint-79`, continued from step 80, and completed
 at step 95 with 12,065 tokens against a 12,000-token target and evaluation
-loss 9.243080. It wrote a separate resume report and model export. This
-verifies one eager fresh-run and budget-extension resume path on the owner's
-single-device runtime. The pasted logs omit the exact source SHA, PyTorch
-version, and full device properties. They do not establish clean-process or
-post-reset recovery, exact uninterrupted-trajectory parity, model quality,
-performance, compile, repeated lifecycle, or distributed support. TorchTPU
-also warned that its RNG restore API is experimental; the restore completed.
+loss 9.243080. It wrote a separate resume report and model export. The owner
+repeated restore from `checkpoint-79` after restarting the notebook session,
+again completing steps 80–95. The report records source revision
+`9593ff67f7afb744907c252813349e7a737e74fb`, Python 3.13.18, torch 2.14.1+cpu,
+Transformers 5.22.1, TorchTPU 0.2.0, and libtpu 0.0.50. Discovery reported one
+visible device named TPU v5e, world size 1, rank 0, fp32, and
+`torch_compile_enabled=false`. Device properties are `available_unverified`,
+property allocation was not run, and topology/HBM are null. This verifies one
+eager fresh run and checkpoint recovery after a Python session restart with
+the run files available. Recovery after VM replacement, exact
+uninterrupted-trajectory parity, model quality, performance, compile, repeated
+lifecycle, and distributed support remain unverified. TorchTPU warned that its
+RNG restore API is experimental, but restoration completed.
 
 The notebook now records the installed Git commit in the run report and
 prints it with runtime package versions and accelerator discovery fields as
@@ -84,8 +90,8 @@ versions, and full run directory. It validates the saved report, restores its
 config/checkpoint, changes only the budget to `RESUME_MAX_TOKENS=12_000`, and
 writes a separate resume report/export using the supported cosine/automatic-
 warmup extension. This preserves the baseline artifacts. The owner reports
-that continuation succeeded in the same live runtime; kernel-restart recovery
-is ready for validation, while post-reset recovery remains unverified.
+that continuation succeeded both in the same live runtime and after a Python
+session restart; recovery after VM replacement remains unverified.
 
 **Current public API update:** scratch pretraining accepts Transformers-style
 `warmup_ratio` in the inclusive range 0–1 and rounds it up to a whole optimizer
@@ -100,9 +106,9 @@ outstanding.
 The same config now exposes AdamW `betas` and `eps`, plus `max_grad_norm`
 (`0` disables clipping). Requested and effective optimizer settings are stored
 in the run report. Native TPU behavior remains experimental. The owner-run
-fresh training and same-runtime resume validate one small eager single-device
-path; kernel-restart restore and the other pending runtime gates still need
-owner validation. The notebook follow-up keeps its existing presentation
+fresh training and same-runtime plus kernel-restart resumes validate a small
+eager single-device path; VM-replacement recovery and the other pending runtime
+gates still need owner validation. The notebook follow-up keeps its existing presentation
 contracts: at most five cells, at most 30 lines in a code cell, and the literal
 10,000-token starter marker. Hosted CPU CI exposed these constraints during
 review; notebook-only JSON and syntax checks also pass locally.

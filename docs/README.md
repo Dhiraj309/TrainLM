@@ -71,12 +71,13 @@ randomly initialized GPT-2 weights. It does not certify convergence, TPU fit,
 or performance. Longer budgets and model dimensions are documented
 separately.
 The owner reports a 10,000-token native TPU pretraining smoke on a Colab TPU
-previously identified as v5e-1, followed in the same live runtime by a
-successful checkpoint continuation to a 12,000-token budget. The resumed run
-started from checkpoint 79 and completed step 95. This verifies one small
-eager fresh-run and same-runtime resume path. Clean-process or post-reset
-recovery, compilation, repeated lifecycle, distributed execution, model
-quality, and performance remain unverified; the backend remains experimental.
+identified as v5e-1, followed by checkpoint continuation to 12,000 tokens.
+After restarting the Python session, the notebook restored checkpoint 79 and
+completed step 95 again using the retained run files. This verifies one small
+eager fresh run and checkpoint recovery across a session restart. Recovery
+after VM replacement, compilation, repeated lifecycle, distributed execution,
+model quality, and performance remain unverified; the backend remains
+experimental.
 
 TrainLM is rebaselining toward native TorchTPU on Kaggle TPU v5e-8. The
 established backend is PyTorch/XLA. An experimental, explicitly selected
@@ -127,16 +128,19 @@ verified `main` SHA `6ab2b8c9fcde5895c71d5f8450808b7f5756c520`; CI run #308
 passed. It preflights packed-data cursor identity before trainer restore.
 Follow-on branch `fix/25-checkpoint-trainer-fields` rejects transient trainer
 fields in checkpoint payloads. Its full CPU suite passed (871 tests and 41
-subtests in Python 3.12.14 with torch 2.9.0+cpu); GitHub CI is pending. Native
-TPU checkpoint validation remains pending.
+subtests in Python 3.12.14 with torch 2.9.0+cpu); GitHub CI is pending. The
+owner has verified single-device checkpoint resume after a Python session
+restart; VM-replacement and distributed checkpoint recovery remain pending.
 T1 software probes cover shared hardware and capability discovery, dependency
-metadata and process lifecycle, and a distributed entry check; owner-run
-compile, lifecycle and v5e-8 collective evidence remain pending. Use v5e-1 for
-single-device checks and v5e-8 for collectives, DP8, sharding, distributed
-checkpoints, or scaling. The owner reported a passing standalone eager TPU
-smoke. Automatic native TPU routing remains disabled until compatibility and
-hardware gates pass. Trainer preflight exposes a non-allocating discovery
-snapshot; `accelerator="native_tpu"` is the opt-in single-device prototype.
+metadata and process lifecycle, and a distributed entry check. The owner now
+reports a passing v5e-1 fresh run and checkpoint resume after restarting the
+Python session, with the same run files and package versions. Explicit compile,
+repeated lifecycle/cleanup, clean installation, and v5e-8 collective evidence
+remain pending. Use v5e-1 for single-device checks and v5e-8 for collectives,
+DP8, sharding, distributed checkpoints, or scaling. Automatic native TPU
+routing remains disabled until compatibility and hardware gates pass. Trainer
+preflight exposes a non-allocating discovery snapshot;
+`accelerator="native_tpu"` is the opt-in single-device prototype.
 
 - [TorchTPU utility inventory, automatic discovery and UX](TORCHTPU_UTILITIES.md)
 - [T0–T11 roadmap and gates](TORCHTPU_REBASELINE.md)
