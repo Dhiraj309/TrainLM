@@ -13,6 +13,10 @@
   may continue behind explicit native selection while those hardware checks
   wait; do not enable automatic TPU routing or treat a core dependency change
   as native TorchTPU certification.
+- **Preflight UX:** PR #121 merged actionable missing/mismatched dependency
+  details into `TrainLMPretrainingError` while keeping package checks
+  read-only. Both GitHub CPU dependency profiles passed. The v5e-1 package
+  profile has not yet been refreshed against current `main`.
 - **Core dependency follow-up:** PR #83 widens the Torch range to `>=2.9,<2.15`,
   raises the Transformers floor to `5.15` and Hub floor to `1.5`, aligns the
   Python 3.13 current profile to Torch 2.14.1, and adds constrained

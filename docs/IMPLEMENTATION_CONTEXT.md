@@ -42,12 +42,13 @@ is still required; this code change alone does not certify TPU checkpointing.
 The adapter is in `src/trainlm/runtime/torchtpu.py`; existing runtime contract
 coverage is in `tests/runtime/test_torchtpu_runtime.py`.
 
-**Pretraining preflight error detail (working branch):** when package metadata
-blocks a run, `TrainLMPretrainingError` now includes the unmet package name,
-required version, installed version or missing status, and the full report path.
-This keeps notebook and script output actionable while preserving the detailed
-JSON report. The preflight remains read-only and does not install or replace
-PyTorch or TorchTPU. This change has not been tested or run on TPU hardware.
+**Merged pretraining preflight error detail (PR #121, 2026-11-17):** when
+package metadata blocks a run, `TrainLMPretrainingError` includes the unmet
+package name, required version, installed version or missing status, and the
+full report path. This keeps notebook and script output actionable while
+preserving the detailed JSON report. Both GitHub CPU dependency profiles
+passed; no TPU hardware run was performed, and a fresh owner-run package
+profile remains pending.
 
 **Current public API update:** the from-scratch config accepts a
 Transformers-style `warmup_ratio` from 0 to 1, rounded up to a whole optimizer
