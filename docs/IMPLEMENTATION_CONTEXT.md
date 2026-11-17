@@ -109,6 +109,12 @@ and compatible packages must be restored first. The notebook's artifact cell
 bundles the latest run report/export. The owner has completed this resume path
 on v5e-1 after restarting the Python session with its files retained; recovery
 after replacing the VM remains unverified.
+The fresh-run cell offers a `MODEL_SIZE` choice: `tiny` uses 4 layers, width
+256 and 4 heads (about 8.3M parameters with the default vocabulary); `small`
+uses 6 layers, width 384 and 6 heads. Both configure random GPT-2 weights.
+The `tiny` 10,000-token default is unchanged, and the larger preset has no
+TPU-fit or model-quality claim. The public Python API continues to expose the
+individual architecture dimensions.
 Notebook JSON and Python syntax were checked locally; hosted CI review also
 caught and drove fixes for the existing notebook size contracts.
 

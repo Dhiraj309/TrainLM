@@ -29,7 +29,11 @@ To scale a fresh run, raise `FRESH_MAX_TOKENS` (the config's `max_tokens`
 target); if preparation reports too few packed sequences, raise
 `FRESH_MAX_TRAIN_EXAMPLES` as well. The resume cell adds
 2,000 tokens to the saved target rather than assuming the original 10,000-token
-smoke budget.
+smoke budget. The notebook's `MODEL_SIZE` choice selects either `tiny`
+(4 layers, width 256, 4 heads; about 8.3M parameters with the default
+vocabulary) or `small` (6 layers, width 384, 6 heads). Both are randomly
+initialized GPT-2 models. Python users can set the corresponding dimensions
+directly in `TrainLMPretrainingConfig`.
 The public API also adds `run_finetuning(TrainLMFineTuningConfig(...))` for a
 pretrained causal LM. It can load a pinned Hub text dataset or accept paired
 preloaded Hugging Face `Dataset` splits. A row formatter and custom collator
