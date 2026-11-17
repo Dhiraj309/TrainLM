@@ -74,6 +74,13 @@ uninterrupted-trajectory parity, model quality, performance, explicit compile,
 repeated lifecycle, or multi-device execution. TorchTPU warned that its RNG
 restore API is experimental, but the restore completed.
 
+**Progress-output follow-up:** the owner run showed `show_progress=True`
+printing callback events whose loss was not yet materialized, including
+duplicate step numbers. The callback now skips loss-less events and emits no
+more than one snapshot per optimizer step. This only changes console output;
+it does not change metrics, training cadence, or checkpoint behavior. Hosted
+CI and owner confirmation on TPU remain pending.
+
 The notebook reads the installed Git commit from pip's `direct_url.json`,
 passes it into each report, and prints source, package and accelerator fields
 as JSON. These captured fields tie the owner run to its installed code; they
@@ -233,10 +240,12 @@ Successful `TrainLMPretrainingResult` values expose `parameter_count`, measured
 from the instantiated model, and include it in the concise run summary.
 When `run_pretraining` fails, the API writes detailed diagnostics to the
 report and raises `TrainLMPretrainingError` with the report path. A successful
-`run_pretraining(..., show_progress=True)` call emits step, token, loss, and
-learning-rate updates at the configured `logging_steps` cadence. The current
-quick-start notebook uses a compact GPT-2 configuration and a 10,000-token
-workflow smoke test; CPU coverage does not establish TPU fit or performance.
+`run_pretraining(..., show_progress=True)` call emits at most one step, token,
+materialized-loss, and learning-rate snapshot per optimizer step at the
+configured `logging_steps` cadence; events without a loss are suppressed. The
+current quick-start notebook uses a compact GPT-2 configuration and a
+10,000-token workflow smoke test; CPU coverage does not establish TPU fit or
+performance.
 The public `restore_pretraining_report` helper validates the recorded package
 profile and run artifacts before resume, and `bundle_pretraining_artifacts`
 creates the notebook download ZIP. The report records requested/effective
