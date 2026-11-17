@@ -32,10 +32,51 @@ class TrainLMPretrainingError(RuntimeError):
         self.report_path = report_path
         self.error_type = error_type
         self.report = report
+        details = self._package_preflight_details(report)
+        prefix = f"Pretraining failed ({error_type})"
+        if details:
+            prefix += f": {details}"
         super().__init__(
-            f"Pretraining failed ({error_type}); inspect the run report at "
-            f"{report_path}."
+            f"{prefix}. Full run report: {report_path}."
         )
+
+    @staticmethod
+    def _package_preflight_details(report: dict[str, Any]) -> str | None:
+        """Summarize safe package facts from a blocked preflight report."""
+        preflight = report.get("preflight")
+        profile = (
+            preflight.get("package_profile")
+            if isinstance(preflight, dict)
+            else None
+        )
+        requirements = (
+            profile.get("requirements") if isinstance(profile, dict) else None
+        )
+        if not isinstance(requirements, list):
+            return None
+
+        failures = []
+        for item in requirements:
+            if not isinstance(item, dict) or item.get("status") == "matched":
+                continue
+            package = item.get("package")
+            required = item.get("required")
+            installed = item.get("installed")
+            status = item.get("status")
+            if not all(
+                isinstance(value, str) and value
+                for value in (package, required, status)
+            ):
+                continue
+            observed = (
+                installed
+                if isinstance(installed, str) and installed
+                else "not installed"
+            )
+            failures.append(
+                f"{package} requires {required}; found {observed} ({status})"
+            )
+        return "; ".join(failures) if failures else None
 
 
 @dataclass(frozen=True, slots=True)
