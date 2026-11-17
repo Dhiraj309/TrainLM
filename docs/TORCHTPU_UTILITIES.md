@@ -6,12 +6,15 @@ training lifecycle, not every operator in the upstream library.
 
 ## Evidence and source policy
 
-The owner supplied a successful Colab-run eager probe: Python 3.13.18,
-torch 2.14.1+cpu, torch_tpu 0.2.0, libtpu 0.0.50, tpu-info 0.14.2.
-Allocation, three forward/backward steps and a reference AdamW update passed.
-Hardware model/topology, torch.compile, distributed operation, resume and
-performance are unverified. This is owner-provided output, not a local rerun.
-The preceding process failure's exact cause remains unconfirmed.
+The owner supplied a successful Colab-run eager probe and a later
+`run_pretraining()` result. The latter completed fresh training and evaluation,
+then resumed from a TPU checkpoint in the same live runtime with an extended
+token budget. Setup reported `torch-tpu==0.2.0` and `libtpu==0.0.50`; the TPU
+was previously identified by the owner as v5e-1. The logs omit the exact
+source SHA, PyTorch version, and full device properties. Clean-process resume,
+`torch.compile`, repeated lifecycle, distributed operation, and performance
+remain unverified. This is owner-provided output, not a local rerun. The
+preceding process failure's exact cause remains unconfirmed.
 
 Use versioned documentation plus the public API policy, then inspect the
 installed package's supported interfaces. An upstream API listing is not
@@ -202,11 +205,12 @@ discovery contracts, and no distributed certification from a single rank.
 Before enabling a provider by default, require explicit version/hardware
 evidence. The core dependency range now includes the observed Torch 2.14.1
 package and the CI workflow tests constrained minimum/current CPU profiles.
-The latest owner run passed package preflight and the eager single-device
-training lifecycle. Next, validate TPU resume, explicit compile parity, and
-repeated-process cleanup on v5e-1; run the T1.4 collective separately on an
-isolated v5e-8 host. Use those results to decide native automatic routing and
-the T2 integration scope. Core CPU compatibility remains separate from broad
+The latest owner runs passed package preflight and eager single-device fresh
+training plus same-runtime checkpoint continuation. Next, validate
+fresh-process/post-reset recovery, explicit compile parity, and repeated
+process cleanup on v5e-1; run the T1.4 collective separately on an isolated
+v5e-8 host. Use those results to decide native automatic routing and the T2
+integration scope. Core CPU compatibility remains separate from broad
 TorchTPU support.
 
 Latest owner-run evidence (2026-11-17): setup reported `torch-tpu==0.2.0` and

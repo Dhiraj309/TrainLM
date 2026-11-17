@@ -55,14 +55,20 @@ now points users to its setup-cell package report, and the native single-device
 smoke explains how to use a blocked report to select a compatible TorchTPU
 runtime. These wording changes do not alter runtime behavior or TPU evidence.
 
-**Owner-run native pretraining result (2026-11-17):** the owner reports a
-successful `run_pretraining()` call on a Colab TPU previously identified as
-v5e-1: 79 optimizer steps, 10,033 tokens against a 10,000-token target,
-evaluation loss 9.23737, and an exported 8,325,120-parameter GPT-2. The setup
-reported `torch-tpu==0.2.0` and `libtpu==0.0.50`. This is one small eager
-train/evaluate/export result; the transcript did not include source SHA or full
-device metadata and does not establish model quality, performance, resume,
-compile, repeated lifecycle, or distributed support.
+**Owner-run native pretraining and resume (2026-11-17):** the owner reports a
+successful fresh `run_pretraining()` run on a Colab TPU previously identified
+as v5e-1: 79 optimizer steps, 10,033 tokens against a 10,000-token target,
+evaluation loss 9.237371, and an exported 8,325,120-parameter GPT-2. Setup
+reported `torch-tpu==0.2.0` and `libtpu==0.0.50`. In the same live runtime, the
+notebook then restored `checkpoint-79`, continued from step 80, and completed
+at step 95 with 12,065 tokens against a 12,000-token target and evaluation
+loss 9.243080. It wrote a separate resume report and model export. This
+verifies one eager fresh-run and budget-extension resume path on the owner's
+single-device runtime. The pasted logs omit the exact source SHA, PyTorch
+version, and full device properties. They do not establish clean-process or
+post-reset recovery, exact uninterrupted-trajectory parity, model quality,
+performance, compile, repeated lifecycle, or distributed support. TorchTPU
+also warned that its RNG restore API is experimental; the restore completed.
 
 The scratch notebook now separates the fresh run from an optional continuation
 cell. Fresh training uses `FRESH_MAX_TOKENS=10_000` in a new default run
@@ -71,8 +77,8 @@ cell. That cell validates the saved report, restores its config/checkpoint,
 changes only the budget to `RESUME_MAX_TOKENS=12_000`, and writes a separate
 resume report/export using the supported cosine/automatic-warmup extension.
 This keeps first-time setup straightforward and preserves the baseline
-artifacts. It prepares the next owner check; TPU resume remains unverified
-until the continuation completes on hardware.
+artifacts. The owner reports that the continuation succeeded on the same live
+runtime. Fresh-process or post-reset recovery remains unverified.
 
 **Current public API update:** scratch pretraining accepts Transformers-style
 `warmup_ratio` in the inclusive range 0–1 and rounds it up to a whole optimizer
@@ -87,12 +93,12 @@ outstanding.
 The same config now exposes AdamW `betas` and `eps`, plus `max_grad_norm`
 (`0` disables clipping). Requested and effective optimizer settings are stored
 in the run report. Native TPU behavior remains experimental. The owner-run
-single-device result above does not validate checkpoint resume or the other
-pending runtime gates. The notebook follow-up keeps its existing presentation
-contracts: at most five cells, at most 30 lines in a code cell, and the literal
-10,000-token starter marker. Hosted CPU CI exposed these constraints during
-review; notebook-only JSON and syntax checks also pass locally. No TPU resume
-run has been performed.
+fresh training and same-runtime resume validate one small eager single-device
+path; they do not validate clean-process recovery or the other pending runtime
+gates. The notebook follow-up keeps its existing presentation contracts: at
+most five cells, at most 30 lines in a code cell, and the literal 10,000-token
+starter marker. Hosted CPU CI exposed these constraints during review;
+notebook-only JSON and syntax checks also pass locally.
 
 ### API and notebook implementation history
 

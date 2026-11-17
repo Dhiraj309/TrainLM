@@ -70,11 +70,13 @@ from-scratch notebook uses a 10,000-token workflow smoke test with compact
 randomly initialized GPT-2 weights. It does not certify convergence, TPU fit,
 or performance. Longer budgets and model dimensions are documented
 separately.
-The owner has completed one 10,000-token native TPU pretraining smoke through
-evaluation and export on a Colab TPU previously identified as v5e-1. Native
-TPU resume, compilation, repeated lifecycle, distributed execution, model
-quality, and performance are not certified by that run; the backend remains
-experimental.
+The owner reports a 10,000-token native TPU pretraining smoke on a Colab TPU
+previously identified as v5e-1, followed in the same live runtime by a
+successful checkpoint continuation to a 12,000-token budget. The resumed run
+started from checkpoint 79 and completed step 95. This verifies one small
+eager fresh-run and same-runtime resume path. Clean-process or post-reset
+recovery, compilation, repeated lifecycle, distributed execution, model
+quality, and performance remain unverified; the backend remains experimental.
 
 TrainLM is rebaselining toward native TorchTPU on Kaggle TPU v5e-8. The
 established backend is PyTorch/XLA. An experimental, explicitly selected

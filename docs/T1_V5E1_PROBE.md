@@ -88,7 +88,7 @@ conflicts visible but nonblocking. That revised profile has not yet been rerun
 in Colab. No packages were installed or changed by the notebook; explicit
 compile and repeat-process lifecycle checks were skipped.
 
-### Latest owner result (2026-11-17)
+### Latest owner results (2026-11-17)
 
 The owner reports that the Colab from-scratch notebook completed its one-call
 native TPU run after the package guidance update. Setup reported
@@ -97,23 +97,26 @@ and 10,033 tokens against a 10,000-token target; evaluation reported loss
 9.23737, and the API exported an 8,325,120-parameter GPT-2. The owner had
 previously identified this Colab TPU as v5e-1. The pasted output does not
 include the notebook's source SHA, PyTorch version, or detailed hardware
-properties. Treat this as one successful small eager workflow, not a
+properties. Treat the fresh run as a small eager workflow result, not a
 performance, convergence, or production-support claim.
 
-The package preflight and train/evaluate/export path now have owner-run
-evidence. Resume from the saved TPU checkpoint, explicit compile parity,
-repeated process lifecycle/cleanup, and v5e-8 collectives remain separate
-checks. Record the source SHA and actual machine/image details in the next
+In the same live runtime, the owner then resumed from `checkpoint-79`, started
+at step 80, and completed step 95 with 12,065 tokens against a 12,000-token
+budget, `eval_loss=9.243080`, and a separate model export. TorchTPU emitted an
+experimental RNG-restore warning, but restore and training completed. This is
+owner-run evidence for same-runtime checkpoint continuation with budget
+extension; it does not establish exact uninterrupted-trajectory parity or
+recovery after a process/runtime restart. The logs omit the exact source SHA,
+PyTorch version, and full hardware properties. Record these with the next
 downloaded report when available.
 
-For the next single-device check, use the separate resume cell in the
-[from-scratch notebook](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb).
-After the fresh run passes, set `RUN_RESUME=True` and run only that cell. It
-validates the saved report, restores the checkpoint/config, and raises the
-budget to 12,000 tokens while keeping the original model, data, runtime, and
-package versions. A successful result with a later step/token count is
-owner-run resume evidence. If the runtime was reset, restore the complete run
-directory before trying.
+The package preflight, eager train/evaluate/export path, and same-runtime
+resume now have owner-run evidence. The next single-device checks are
+fresh-process/post-reset recovery, explicit compile parity, and repeated
+process lifecycle/cleanup. Use the separate resume cell in the
+[from-scratch notebook](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb)
+only for an in-session continuation; if the runtime was reset, restore the
+complete run directory first. v5e-8 collectives remain a separate gate.
 
 Compilation may take longer than eager execution. Preserve the complete output
 and any runtime/compiler error; do not silently fall back to eager mode. TPU

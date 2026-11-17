@@ -50,17 +50,23 @@ preserving the detailed JSON report. Both GitHub CPU dependency profiles
 passed. No TPU run was available when PR #121 merged; the later owner-run
 package preflight and training result are recorded below.
 
-**Owner-run native pretraining smoke (2026-11-17):** the owner reports that
-the current Colab workflow completed `run_pretraining()` on a TPU previously
-identified as v5e-1. The run completed 79 optimizer steps, processed 10,033
-tokens against a 10,000-token target, reported `eval_loss=9.2373714447`, and
-exported an 8,325,120-parameter `GPT2LMHeadModel`. Setup reported
-`torch-tpu==0.2.0` and `libtpu==0.0.50`; successful training means the
-read-only package preflight passed in that runtime. The pasted transcript does
-not include the exact source SHA, PyTorch version, or full device properties.
-This validates one small eager training/evaluation/export workflow, not model
-quality, performance, TPU resume, explicit compile, repeated lifecycle, or
-multi-device execution.
+**Owner-run native pretraining and resume (2026-11-17):** the owner reports
+that the current Colab workflow completed `run_pretraining()` on a TPU
+previously identified as v5e-1. The fresh run completed 79 optimizer steps,
+processed 10,033 tokens against a 10,000-token target, reported
+`eval_loss=9.2373714447`, and exported an 8,325,120-parameter
+`GPT2LMHeadModel`. Setup reported `torch-tpu==0.2.0` and `libtpu==0.0.50`;
+the read-only package preflight passed. In the same live runtime, the owner
+then restored `checkpoint-79` and continued from step 80 to step 95, reaching
+12,065 tokens against the extended 12,000-token budget with
+`eval_loss=9.2430801392`. The resumed export and report were separate from the
+fresh-run artifacts. The pasted transcript omits the exact source SHA,
+PyTorch version, and full device properties. This verifies one eager
+fresh-run and same-runtime checkpoint continuation, not clean-process or
+post-reset recovery, exact uninterrupted-trajectory parity, model quality,
+performance, explicit compile, repeated lifecycle, or multi-device execution.
+TorchTPU warned that its RNG restore API is experimental, but the restore
+completed.
 
 The from-scratch notebook separates a fresh-run cell from an opt-in resume
 cell. The fresh run uses `FRESH_MAX_TOKENS=10_000` and a new default
@@ -69,13 +75,13 @@ only that cell. It validates `report.json` with `restore_pretraining_report`,
 restores the saved config/checkpoint, changes only `max_tokens` to
 `RESUME_MAX_TOKENS=12_000` and uses the supported cosine budget-extension
 path. It writes a separate resume report and model export, preserving the
-original baseline artifacts. Keep the runtime,
-package versions, and full run directory; a runtime reset requires restoring
-checkpoints and preparation files. The notebook's artifact cell bundles the
-latest run report/export. This is a runnable owner-validation path, not a TPU
-resume result. Notebook JSON and Python syntax were checked locally; hosted CI
-review also caught and drove fixes for the existing notebook size contracts.
-TPU resume remains owner-run validation.
+original baseline artifacts. Keep the same runtime, package versions, and full
+run directory; a runtime reset requires restoring checkpoints and preparation
+files. The notebook's artifact cell bundles the
+latest run report/export. The owner has completed this same-runtime resume
+path on the TPU identified as v5e-1; a fresh-process or post-reset resume is
+still unverified. Notebook JSON and Python syntax were checked locally; hosted
+CI review also caught and drove fixes for the existing notebook size contracts.
 
 **Current public API update:** the from-scratch config accepts a
 Transformers-style `warmup_ratio` from 0 to 1, rounded up to a whole optimizer
@@ -92,10 +98,11 @@ The scratch and shared training arguments now expose AdamW `betas` and `eps`,
 plus `max_grad_norm` for gradient clipping (`0` disables clipping). Requested
 and effective values are included in the run report and checkpoint identity;
 default scratch fingerprints remain compatible. The internal legacy TPU
-coordinator also forwards the clipping value. This API change has no owner-run
-TPU training evidence. After beta-list normalization for JSON report recovery,
-both hosted CPU suites passed with 988 tests and 41 subtests each under the
-core-current and core-minimum dependency constraints. No TPU training was run.
+coordinator also forwards the clipping value. After beta-list normalization
+for JSON report recovery, both hosted CPU suites passed with 988 tests and 41
+subtests each under the core-current and core-minimum dependency constraints.
+The owner-run fresh training and same-runtime resume exercise these settings
+on one small eager TPU run; they do not establish broader TPU support.
 
 ### Implementation history
 
