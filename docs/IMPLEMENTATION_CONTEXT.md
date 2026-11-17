@@ -62,20 +62,20 @@ This validates one small eager training/evaluation/export workflow, not model
 quality, performance, TPU resume, explicit compile, repeated lifecycle, or
 multi-device execution.
 
-The from-scratch notebook now exposes `RUN_DIR`, `MAX_TOKENS`,
-`RESUME_CHECKPOINT`, and `EXTEND_TRAINING_BUDGET` in its training cell.
-For the next owner check, keep the runtime, run directory, source/package
-versions, and all other settings unchanged; raise the token target from 10,000
-to 12,000, set the checkpoint selector to `"latest"`, and enable budget
-extension. This exercises the existing high-level resume path with its default
-cosine schedule and automatic warmup. The notebook prints the resumed-from path
-and latest checkpoint. A runtime reset requires restoring the full run
-directory, including checkpoints and preparation files; the model artifact ZIP
-does not contain those files. This is a runnable owner-validation path, not a
-TPU resume result. Local validation checks notebook JSON and Python syntax.
-Hosted CI review also caught and drove fixes for the existing notebook cell,
-code-line, and starter-budget presentation contracts. TPU resume remains
-owner-run validation.
+The from-scratch notebook separates a fresh-run cell from an opt-in resume
+cell. The fresh run uses `FRESH_MAX_TOKENS=10_000` and a new default
+`RUN_DIR`. After it succeeds, set `RUN_RESUME=True` in the resume cell and run
+only that cell. It validates `report.json` with `restore_pretraining_report`,
+restores the saved config/checkpoint, changes only `max_tokens` to
+`RESUME_MAX_TOKENS=12_000` and uses the supported cosine budget-extension
+path. It writes a separate resume report and model export, preserving the
+original baseline artifacts. Keep the runtime,
+package versions, and full run directory; a runtime reset requires restoring
+checkpoints and preparation files. The notebook's artifact cell bundles the
+latest run report/export. This is a runnable owner-validation path, not a TPU
+resume result. Notebook JSON and Python syntax were checked locally; hosted CI
+review also caught and drove fixes for the existing notebook size contracts.
+TPU resume remains owner-run validation.
 
 **Current public API update:** the from-scratch config accepts a
 Transformers-style `warmup_ratio` from 0 to 1, rounded up to a whole optimizer
