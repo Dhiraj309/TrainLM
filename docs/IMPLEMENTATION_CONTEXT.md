@@ -114,7 +114,11 @@ The fresh-run cell offers a `MODEL_SIZE` choice: `tiny` uses 4 layers, width
 uses 6 layers, width 384 and 6 heads. Both configure random GPT-2 weights.
 The `tiny` 10,000-token default is unchanged, and the larger preset has no
 TPU-fit or model-quality claim. The public Python API continues to expose the
-individual architecture dimensions.
+individual architecture dimensions. `TRAINING_PROFILE="longer"` sets a
+1,000,000-token target, a 20,000-example preparation cap, and 100-step logging;
+the default remains the 10,000-token `smoke` profile. Resume increases the
+saved token target by 20%, with a 2,000-token minimum. These settings provide a
+longer exploratory run, not a convergence or quality result.
 Notebook JSON and Python syntax were checked locally; hosted CI review also
 caught and drove fixes for the existing notebook size contracts.
 

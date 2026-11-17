@@ -25,11 +25,13 @@ with `show_progress=True`. The final notebook cell reloads the local export
 with standard Transformers classes and prints a short CPU generation preview.
 Its 10,000-token smoke output is not a model-quality result. The lower-level
 `TrainLMTrainer.from_scratch(...)` lifecycle remains available for custom use.
-To scale a fresh run, raise `FRESH_MAX_TOKENS` (the config's `max_tokens`
-target); if preparation reports too few packed sequences, raise
-`FRESH_MAX_TRAIN_EXAMPLES` as well. The resume cell adds
-2,000 tokens to the saved target rather than assuming the original 10,000-token
-smoke budget. The notebook's `MODEL_SIZE` choice selects either `tiny`
+To start a longer fresh run, set `TRAINING_PROFILE="longer"`; it uses a
+1,000,000-token target, up to 20,000 training examples, and logs every 100
+steps. The default `smoke` profile keeps the 10,000-token target. The longer
+profile is exploratory and does not establish model quality. If preparation
+reports too few packed sequences, increase its text-example cap. On resume,
+the notebook adds 20% to the saved target, with a 2,000-token minimum. The
+notebook's `MODEL_SIZE` choice selects either `tiny`
 (4 layers, width 256, 4 heads; about 8.3M parameters with the default
 vocabulary) or `small` (6 layers, width 384, 6 heads). Both are randomly
 initialized GPT-2 models. Python users can set the corresponding dimensions
