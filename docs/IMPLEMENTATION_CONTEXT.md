@@ -222,14 +222,17 @@ Transformers versions are below the project bounds and `datasets` is absent.
 CPU API tests use an isolated compatible metadata fixture, while dedicated
 tests cover mismatch and missing-package behavior. This is an early package
 gate only; it does not certify the native runtime or TPU training.
-The from-scratch notebook setup installs only missing `datasets` and
-`tokenizers` extras. It stops on incompatible installed versions and never
-installs or replaces Torch/TorchTPU. The notebook setup cell now prints the
-installed `torch-tpu` and `libtpu` metadata versions before a native TPU run;
-if either is missing, it explains that the user needs a runtime that provides
-TorchTPU. This is a read-only setup diagnostic; full package compatibility is
-still checked by TrainLM before data preparation, and the notebook change does
+**Merged notebook preflight update (PR #118, 2026-11-17):** the from-scratch
+notebook setup installs only missing `datasets` and `tokenizers` extras, never
+replaces Torch/TorchTPU, and reports installed `torch-tpu`/`libtpu` versions
+with a runtime-selection hint when either is missing. Full compatibility
+remains checked by TrainLM before data preparation; this read-only check does
 not certify TPU training.
+
+**Notebook UX audit follow-up (in progress, 2026-11-17):** correct the scratch
+notebook's setup-cell description and clarify which runtime action to take when
+the separate native single-device smoke's package preflight blocks a run. These
+are wording corrections; no runtime behavior or TPU evidence changes.
 The scratch API exposes opt-in `gradient_checkpointing` for Hugging Face
 models that implement `gradient_checkpointing_enable()`. TrainLM disables KV
 cache during checkpointed training and temporarily restores its original value
