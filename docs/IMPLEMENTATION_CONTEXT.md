@@ -63,7 +63,7 @@ quality, performance, TPU resume, explicit compile, repeated lifecycle, or
 multi-device execution.
 
 The from-scratch notebook now exposes `RUN_DIR`, `MAX_TOKENS`,
-`RESUME_FROM_CHECKPOINT`, and `EXTEND_TRAINING_BUDGET` in its training cell.
+`RESUME_CHECKPOINT`, and `EXTEND_TRAINING_BUDGET` in its training cell.
 For the next owner check, keep the runtime, run directory, source/package
 versions, and all other settings unchanged; raise the token target from 10,000
 to 12,000, set the checkpoint selector to `"latest"`, and enable budget
@@ -108,7 +108,7 @@ model-provider, notebook, and roadmap tests.
 cells with a three-step smoke default and a local model bundle. It installs
 TrainLM without reinstalling Torch. The current notebook source is merged
 `main`; the earlier feature-branch bootstrap note is obsolete.
-The notebook also exposes `SAVE_STEPS` and `RESUME_FROM_CHECKPOINT`;
+The notebook also exposes `SAVE_STEPS` and `RESUME_CHECKPOINT`;
 `"latest"` resumes the newest saved checkpoint under the same output directory.
 Its instructions require retaining that directory, keeping run settings, and
 increasing `MAX_STEPS`; persistent storage is needed across runtime resets.
@@ -120,7 +120,7 @@ The public `restore_finetuning_config(summary_path, max_steps=...)` helper now
 reconstructs a fine-tuning config from the validated run summary, reanchors
 `output_dir` to that summary's location, and requires the new step target to
 exceed the last recorded training step. The notebook invokes it when resuming
-with `RESUME_FROM_CHECKPOINT="latest"`, restoring the other settings
+with `RESUME_CHECKPOINT="latest"`, restoring the other settings
 automatically.
 Its API, checkpoint lifecycle, notebook, roadmap, and installed-wheel checks
 pass 66 tests under Python 3.12.14, torch 2.9.0+cpu, and Transformers 5.20.2.
@@ -276,7 +276,7 @@ remains off by default, and has CPU training/export coverage; TPU memory and
 performance effects have not been measured.
 
 The scratch notebook now uses a stable configurable `RUN_DIR` and exposes
-`RESUME_FROM_CHECKPOINT`. The public trainer accepts the sentinel
+`RESUME_CHECKPOINT`. The public trainer accepts the sentinel
 `resume_from_checkpoint="latest"`, selecting the newest published local
 checkpoint (`trainer_state.pt`) or native TPU checkpoint (`manifest.json`); a
 missing checkpoint raises an actionable error. Notebook instructions describe

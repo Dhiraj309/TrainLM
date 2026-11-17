@@ -66,7 +66,7 @@ compile, repeated lifecycle, or distributed support.
 
 The scratch notebook now exposes a short optional checkpoint-resume path:
 raise `MAX_TOKENS` from 10,000 to 12,000, set
-`RESUME_FROM_CHECKPOINT="latest"` and
+`RESUME_CHECKPOINT="latest"` and
 `EXTEND_TRAINING_BUDGET=True`, then rerun the training cell with the same run
 directory and settings. This uses the supported cosine/automatic-warmup budget
 extension. It makes the next owner check easier to run; TPU resume remains
@@ -154,7 +154,7 @@ Its source ref must be changed to `main` after merge before deleting the
 feature branch. The fine-tuning summary and failure-report follow-up passes 17
 focused API, model-provider, notebook, and roadmap tests.
 The notebook now exposes a periodic save cadence and a
-`RESUME_FROM_CHECKPOINT="latest"` control. It explains raising `MAX_STEPS` and
+`RESUME_CHECKPOINT="latest"` control. It explains raising `MAX_STEPS` and
 keeping the output directory on persistent storage for cross-session recovery.
 The API's final-step checkpoint is available when the configured cadence falls
 between the last periodic save and successful completion. The focused CPU/API,
@@ -165,7 +165,7 @@ The follow-up adds public `restore_finetuning_config(summary_path, max_steps=...
 It restores model, data, and training settings from the fine-tuning summary,
 anchors the run directory to the summary location, and rejects a target step
 that does not exceed the recorded step. The notebook uses the helper for
-`RESUME_FROM_CHECKPOINT="latest"` so users only provide the new step budget.
+`RESUME_CHECKPOINT="latest"` so users only provide the new step budget.
 The focused API, checkpoint lifecycle, notebook, roadmap, and installed-wheel
 suite passes 66 tests under Python 3.12.14, torch 2.9.0+cpu, and Transformers
 5.20.2. Real Hub and TPU training remain unverified.
@@ -220,7 +220,7 @@ run-directory, and resume settings as form controls; Kaggle retains ordinary
 Python assignments.
 
 The from-scratch notebook now keeps its run in an editable stable directory and
-passes an optional `RESUME_FROM_CHECKPOINT` value through the public trainer
+passes an optional `RESUME_CHECKPOINT` value through the public trainer
 API. `train(resume_from_checkpoint="latest")` resolves the newest published
 CPU or native TPU checkpoint and rejects a missing checkpoint instead of
 silently starting over. For Colab reset recovery, users can mount Drive and
