@@ -71,17 +71,20 @@ completed.
 The from-scratch notebook separates a fresh-run cell from an opt-in resume
 cell. The fresh run uses `FRESH_MAX_TOKENS=10_000` and a new default
 `RUN_DIR`. After it succeeds, set `RUN_RESUME=True` in the resume cell and run
-only that cell. It validates `report.json` with `restore_pretraining_report`,
+only that cell. It defines its own `RUN_DIR`, so it can also be run after a
+Python kernel/process restart without rerunning setup or fresh training, as
+long as the same VM, installed package versions, and full run directory remain
+available. It validates `report.json` with `restore_pretraining_report`,
 restores the saved config/checkpoint, changes only `max_tokens` to
 `RESUME_MAX_TOKENS=12_000` and uses the supported cosine budget-extension
 path. It writes a separate resume report and model export, preserving the
-original baseline artifacts. Keep the same runtime, package versions, and full
-run directory; a runtime reset requires restoring checkpoints and preparation
-files. The notebook's artifact cell bundles the
-latest run report/export. The owner has completed this same-runtime resume
-path on the TPU identified as v5e-1; a fresh-process or post-reset resume is
-still unverified. Notebook JSON and Python syntax were checked locally; hosted
-CI review also caught and drove fixes for the existing notebook size contracts.
+original baseline artifacts. If the VM was replaced, the full run directory
+and compatible packages must be restored first. The notebook's artifact cell
+bundles the latest run report/export. The owner has completed the same-runtime
+resume path on the TPU identified as v5e-1; a kernel-restart resume is now
+ready for owner validation, while post-reset recovery remains unverified.
+Notebook JSON and Python syntax were checked locally; hosted CI review also
+caught and drove fixes for the existing notebook size contracts.
 
 **Current public API update:** the from-scratch config accepts a
 Transformers-style `warmup_ratio` from 0 to 1, rounded up to a whole optimizer
