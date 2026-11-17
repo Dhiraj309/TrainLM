@@ -229,10 +229,10 @@ with a runtime-selection hint when either is missing. Full compatibility
 remains checked by TrainLM before data preparation; this read-only check does
 not certify TPU training.
 
-**Notebook UX audit follow-up (in progress, 2026-11-17):** correct the scratch
-notebook's setup-cell description and clarify which runtime action to take when
-the separate native single-device smoke's package preflight blocks a run. These
-are wording corrections; no runtime behavior or TPU evidence changes.
+**Notebook UX guidance update (PR #119, 2026-11-17):** the scratch notebook
+now points users to its setup-cell package report, and the native single-device
+smoke explains how to use a blocked report to select a compatible TorchTPU
+runtime. These wording changes do not alter runtime behavior or TPU evidence.
 The scratch API exposes opt-in `gradient_checkpointing` for Hugging Face
 models that implement `gradient_checkpointing_enable()`. TrainLM disables KV
 cache during checkpointed training and temporarily restores its original value

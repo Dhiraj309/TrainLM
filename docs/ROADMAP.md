@@ -50,10 +50,10 @@ that provides them if either is missing. It does not install packages or replace
 the accelerator stack; TrainLM's preflight still checks compatibility. This
 adds no TPU training evidence.
 
-**Notebook UX audit follow-up (in progress, 2026-11-17):** correct the scratch
-notebook's setup-cell description and clarify the runtime action for a blocked
-package preflight in the native single-device smoke notebook. These wording
-changes do not alter runtime behavior or TPU evidence.
+**Notebook UX guidance update (PR #119, 2026-11-17):** the scratch notebook
+now points users to its setup-cell package report, and the native single-device
+smoke explains how to use a blocked report to select a compatible TorchTPU
+runtime. These wording changes do not alter runtime behavior or TPU evidence.
 
 **Current public API update:** scratch pretraining accepts Transformers-style
 `warmup_ratio` in the inclusive range 0–1 and rounds it up to a whole optimizer
