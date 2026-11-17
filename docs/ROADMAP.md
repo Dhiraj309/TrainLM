@@ -635,10 +635,11 @@ context to report schema v4 and rebase-merged at verified `main` SHA
   The public from-scratch API now checks installed metadata for core and
   pretraining dependencies before reading or preparing the corpus. Explicit
   `native_tpu` runs additionally check TorchTPU's installed distribution and
-  declared requirements. A blocked `run_pretraining()` call preserves the
-  metadata report for users and summarizes each missing or mismatched package
-  in the raised `TrainLMPretrainingError`; the API gate itself never installs
-  or changes packages. The local
+  declared requirements. Merged PR #121 makes a blocked `run_pretraining()`
+  call preserve its metadata report and summarize each missing or mismatched
+  package in `TrainLMPretrainingError`; the API gate itself never installs or
+  changes packages. Both GitHub CPU dependency profiles passed, but the owner
+  has not refreshed the v5e-1 package profile. The local
   `.venv` reports incompatible Hub/Transformers versions and missing `datasets`,
   so real local scratch training remains unavailable. The focused CPU/API
   suite passes with the package profile mocked for training-path tests and
