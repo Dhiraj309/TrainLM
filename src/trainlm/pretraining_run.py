@@ -175,8 +175,9 @@ def run_pretraining(
     The report is written even when model preparation, training, evaluation,
     or export fails. In that case :class:`TrainLMPretrainingError` identifies
     the report path and preserves the original exception as its cause.
-    Set ``show_progress=True`` to print sparse step, token, loss, and learning
-    rate snapshots at the configured logging cadence.
+    Set ``show_progress=True`` to print one step, token, loss, and learning
+    rate snapshot per optimizer step when its loss is available, at the
+    configured logging cadence.
     """
     if not isinstance(config, TrainLMPretrainingConfig):
         raise TypeError("config must be a TrainLMPretrainingConfig instance.")
@@ -288,7 +289,7 @@ def run_pretraining(
 def _make_training_progress_callback(
     config: TrainLMPretrainingConfig,
 ) -> Any:
-    """Create a sparse console progress callback without extra dependencies."""
+    """Print one sparse console snapshot per step with a materialized loss."""
     from .training.callback import TrainerCallback
 
     tokens_per_step = (
@@ -297,6 +298,7 @@ def _make_training_progress_callback(
         * config.gradient_accumulation_steps
     )
     total_steps = math.ceil(config.max_tokens / tokens_per_step)
+    reported_steps: set[int] = set()
 
     class _ProgressCallback(TrainerCallback):
         def on_metrics(
@@ -308,12 +310,14 @@ def _make_training_progress_callback(
             step = int(metrics.get("step", state.step))
             tokens_seen = int(metrics.get("tokens_seen", state.tokens_seen))
             loss = metrics.get("loss")
+            if loss is None or step in reported_steps:
+                return
+            reported_steps.add(step)
             learning_rate = metrics.get("learning_rate", state.learning_rate)
-            loss_text = f"{loss:.4f}" if loss is not None else "unavailable"
             print(
                 f"train step {step}/{total_steps} | "
                 f"tokens {tokens_seen:,}/{config.max_tokens:,} | "
-                f"loss {loss_text} | lr {learning_rate:.3g}"
+                f"loss {loss:.4f} | lr {learning_rate:.3g}"
             )
 
     return _ProgressCallback()

@@ -32,7 +32,10 @@
 - **Run provenance:** both reports contain the exact installed source SHA and
   runtime/device metadata. The console also prints `loss unavailable` on
   progress events without a loss value and repeats some step numbers; the run
-  completed and the final evaluation loss was available.
+  completed and the final evaluation loss was available. The progress callback
+  now skips events without a materialized loss and prints
+  at most once per optimizer step. This is a console-only change; hosted CPU
+  CI and an owner rerun remain pending, and it adds no TPU evidence.
 - **Preflight UX:** PR #121 merged actionable missing/mismatched dependency
   details into `TrainLMPretrainingError` while keeping package checks
   read-only. Both GitHub CPU dependency profiles passed. The latest one-call
