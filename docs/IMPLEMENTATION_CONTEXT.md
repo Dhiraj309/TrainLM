@@ -78,8 +78,11 @@ restore API is experimental, but the restore completed.
 printing callback events whose loss was not yet materialized, including
 duplicate step numbers. The callback now skips loss-less events and emits no
 more than one snapshot per optimizer step. This only changes console output;
-it does not change metrics, training cadence, or checkpoint behavior. Hosted
-CI and owner confirmation on TPU remain pending.
+it does not change metrics, training cadence, or checkpoint behavior. PR #130
+rebase-merged at verified `main` SHA
+`5f1ecd1bff5d2615a54b1007d43f5c0efabb0890`, with both CPU dependency profiles
+passing. The owner has not rerun the notebook against this change, so it adds
+no TPU evidence.
 
 The notebook reads the installed Git commit from pip's `direct_url.json`,
 passes it into each report, and prints source, package and accelerator fields
