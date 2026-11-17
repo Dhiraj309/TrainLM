@@ -21,6 +21,11 @@
   metadata. Explicit compile, repeated lifecycle/cleanup, clean-install
   verification, and v5e-8 collectives remain unverified. Keep automatic TPU
   routing disabled.
+- **Run provenance:** the notebook's pretraining and resume cells read the
+  installed Git commit from pip's `direct_url.json`, add it to the run report,
+  and print runtime package and accelerator discovery fields as JSON. Capture
+  this output with the next v5e-1 kernel-restart attempt; this does not replace
+  the pending hardware gates.
 - **Preflight UX:** PR #121 merged actionable missing/mismatched dependency
   details into `TrainLMPretrainingError` while keeping package checks
   read-only. Both GitHub CPU dependency profiles passed. The latest one-call

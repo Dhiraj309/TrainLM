@@ -70,6 +70,11 @@ post-reset recovery, exact uninterrupted-trajectory parity, model quality,
 performance, compile, repeated lifecycle, or distributed support. TorchTPU
 also warned that its RNG restore API is experimental; the restore completed.
 
+The notebook now records the installed Git commit in the run report and
+prints it with runtime package versions and accelerator discovery fields as
+JSON. Capture this output with the next v5e-1 resume attempt; it improves
+provenance but adds no TPU execution evidence by itself.
+
 The scratch notebook now separates the fresh run from an optional continuation
 cell. Fresh training uses `FRESH_MAX_TOKENS=10_000` in a new default run
 directory. After it succeeds, set `RUN_RESUME=True` and run only the resume
