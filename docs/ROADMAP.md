@@ -55,6 +55,23 @@ now points users to its setup-cell package report, and the native single-device
 smoke explains how to use a blocked report to select a compatible TorchTPU
 runtime. These wording changes do not alter runtime behavior or TPU evidence.
 
+**Owner-run native pretraining result (2026-11-17):** the owner reports a
+successful `run_pretraining()` call on a Colab TPU previously identified as
+v5e-1: 79 optimizer steps, 10,033 tokens against a 10,000-token target,
+evaluation loss 9.23737, and an exported 8,325,120-parameter GPT-2. The setup
+reported `torch-tpu==0.2.0` and `libtpu==0.0.50`. This is one small eager
+train/evaluate/export result; the transcript did not include source SHA or full
+device metadata and does not establish model quality, performance, resume,
+compile, repeated lifecycle, or distributed support.
+
+The scratch notebook now exposes a short optional checkpoint-resume path:
+raise `MAX_TOKENS` from 10,000 to 12,000, set
+`RESUME_FROM_CHECKPOINT="latest"` and
+`EXTEND_TRAINING_BUDGET=True`, then rerun the training cell with the same run
+directory and settings. This uses the supported cosine/automatic-warmup budget
+extension. It makes the next owner check easier to run; TPU resume remains
+unverified until that continuation completes on hardware.
+
 **Current public API update:** scratch pretraining accepts Transformers-style
 `warmup_ratio` in the inclusive range 0–1 and rounds it up to a whole optimizer
 step. It cannot be combined with `warmup_steps`. Leaving both unset preserves
@@ -67,9 +84,11 @@ outstanding.
 
 The same config now exposes AdamW `betas` and `eps`, plus `max_grad_norm`
 (`0` disables clipping). Requested and effective optimizer settings are stored
-in the run report. Native TPU behavior remains experimental and awaits owner
-validation. The core-current and core-minimum hosted CPU suites each passed
-988 tests and 41 subtests; no TPU training was run.
+in the run report. Native TPU behavior remains experimental. The owner-run
+single-device result above does not validate checkpoint resume or the other
+pending runtime gates. The core-current and core-minimum hosted CPU suites each
+passed 988 tests and 41 subtests; no new CPU or TPU tests were run for the
+notebook guidance change.
 
 ### API and notebook implementation history
 

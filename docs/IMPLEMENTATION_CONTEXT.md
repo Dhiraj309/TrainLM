@@ -62,6 +62,19 @@ This validates one small eager training/evaluation/export workflow, not model
 quality, performance, TPU resume, explicit compile, repeated lifecycle, or
 multi-device execution.
 
+The from-scratch notebook now exposes `RUN_DIR`, `MAX_TOKENS`,
+`RESUME_FROM_CHECKPOINT`, and `EXTEND_TRAINING_BUDGET` in its training cell.
+For the next owner check, keep the runtime, run directory, source/package
+versions, and all other settings unchanged; raise the token target from 10,000
+to 12,000, set the checkpoint selector to `"latest"`, and enable budget
+extension. This exercises the existing high-level resume path with its default
+cosine schedule and automatic warmup. The notebook prints the resumed-from path
+and latest checkpoint. A runtime reset requires restoring the full run
+directory, including checkpoints and preparation files; the model artifact ZIP
+does not contain those files. This is a runnable owner-validation path, not a
+TPU resume result. No tests or accelerator runs were performed for the notebook
+change.
+
 **Current public API update:** the from-scratch config accepts a
 Transformers-style `warmup_ratio` from 0 to 1, rounded up to a whole optimizer
 step. It is mutually exclusive with `warmup_steps`; leaving both unset
