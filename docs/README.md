@@ -25,6 +25,10 @@ with `show_progress=True`. The final notebook cell reloads the local export
 with standard Transformers classes and prints a short CPU generation preview.
 Its 10,000-token smoke output is not a model-quality result. The lower-level
 `TrainLMTrainer.from_scratch(...)` lifecycle remains available for custom use.
+To scale a fresh run, raise `FRESH_MAX_TOKENS`; if preparation reports too few
+packed sequences, raise `FRESH_MAX_TRAIN_EXAMPLES` as well. The resume cell adds
+2,000 tokens to the saved target rather than assuming the original 10,000-token
+smoke budget.
 The public API also adds `run_finetuning(TrainLMFineTuningConfig(...))` for a
 pretrained causal LM. It can load a pinned Hub text dataset or accept paired
 preloaded Hugging Face `Dataset` splits. A row formatter and custom collator

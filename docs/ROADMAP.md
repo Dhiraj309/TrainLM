@@ -93,12 +93,15 @@ provenance but adds no TPU execution evidence by itself.
 
 The scratch notebook now separates the fresh run from an optional continuation
 cell. Fresh training uses `FRESH_MAX_TOKENS=10_000` in a new default run
-directory. After it succeeds, set `RUN_RESUME=True` and run only the resume
-cell. The cell defines its own run directory, so an owner can attempt recovery
-after restarting the Python kernel/process while keeping the same VM, package
-versions, and full run directory. It validates the saved report, restores its
-config/checkpoint, changes only the budget to `RESUME_MAX_TOKENS=12_000`, and
-writes a separate resume report/export using the supported cosine/automatic-
+directory, and exposes `FRESH_MAX_TRAIN_EXAMPLES` for expanding its text cap
+alongside a larger token target. After it succeeds, set `RUN_RESUME=True` and
+run only the resume cell. The cell defines its own run directory, so an owner
+can attempt recovery after restarting the Python kernel/process while keeping
+the same VM, package versions, and full run directory. It validates the saved
+report, restores its
+config/checkpoint and adds 2,000 tokens to its saved target, so the same resume
+step works after a larger fresh budget. It writes a separate resume
+report/export using the supported cosine/automatic-
 warmup extension. This preserves the baseline artifacts. The owner reports
 that continuation succeeded both in the same live runtime and after a Python
 session restart; recovery after VM replacement remains unverified.
