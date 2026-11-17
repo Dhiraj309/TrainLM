@@ -7,13 +7,13 @@
 > solely by publishing this plan.
 
 **Current gate:** T0 is closed; PR #20 merged the accepted T0.2 mapping. T1
-starts on v5e-1 for single-device feasibility; use v5e-8 for tests that need
-multiple devices. The owner reported a successful eager native TPU smoke;
-hardware generation, explicit compilation and TrainLM integration remain
-unverified. PR #28 merged the source-level T1 probes and explicit one-device
-trainer foundation; hardware compile, lifecycle and collective evidence still
-gate T1 closure. Follow the [utility inventory and delivery order](TORCHTPU_UTILITIES.md)
-for the remaining T1.1–T1.4 evidence.
+single-device feasibility now includes an owner-reported eager smoke and a
+10,000-token `run_pretraining()` completion on a Colab TPU the owner identified
+as v5e-1. The run passed package preflight, training, evaluation, and export.
+Explicit compile, TPU resume, repeated lifecycle/cleanup, and v5e-8 collective
+evidence still gate T1 closure. Follow the
+[utility inventory and delivery order](TORCHTPU_UTILITIES.md) for the remaining
+T1.1–T1.4 evidence.
 
 PR #45 rebase-merged agent-discoverability documentation at verified `main`
 SHA `d983408221b92d631aea817bee7539e07de1bbf5`. It did not close a T0–T11
@@ -190,7 +190,7 @@ attention, loss, optimizer, data, checkpoint, tests and documentation.
 | T0 | Architecture rebaseline and salvage | PR #16/#18 inventory; reusable/XLA-specific/uncertain classification; approved boundaries and PR mapping |
 | T1 | Native TorchTPU utilities and environment | T1.1 inventory → T1.2 shared hardware/capability report → T1.3 verified dependency and process lifecycle → T1.4 multi-device entry probe. Record actual device properties, eager/compile results and reproducible setup; prefer v5e-1 for single-device and v5e-8 for collective evidence. |
 | T2 | Python-first configs/API | Integrate shared discovery into auto backend selection, preflight and explain; verify HF contracts, CPU/CUDA compatibility and actionable errors without manual runtime setup. An explicit single-device prototype exists; automatic routing waits for T1/package and CPU evidence. |
-| T3 | Single-device training/data | PR #28 merged the generic engine adapter and random-init GPT-2/TinyStories starter; PR #29 merged streamed, validated uint32 shards and `PackedBinDataset` integration; PR #30 merged CPU reference parity for a packed-data causal-LM update; PR #31 merged the CPU random-init train/eval/checkpoint/export lifecycle; PR #32 added exact packed-data continuation; PR #33 fixed notebook source freshness; PR #34 added a train-only BPE tokenizer; PR #35 builds GPT-2 from explicit config; PR #36 accepts pinned user corpora; PR #37 adds opt-in BF16; PR #38 adds optimizer schedule and seed controls; PR #39 adds opt-in activation checkpointing; PR #40 exposes per-device batch sizes; PR #41 adds supervised-token targets and actual token counts; PR #42 adds sparse logging and terminal loss evidence; PR #43 bundles the model export and evidence report for Colab/Kaggle. The current implementation verifies CPU reload and short generation from that export; this is not TPU generation evidence. TPU validation and convergence remain owner-run. |
+| T3 | Single-device training/data | PR #28 merged the generic engine adapter and random-init GPT-2/TinyStories starter; PR #29 merged streamed, validated uint32 shards and `PackedBinDataset` integration; PR #30 merged CPU reference parity for a packed-data causal-LM update; PR #31 merged the CPU random-init train/eval/checkpoint/export lifecycle; PR #32 added exact packed-data continuation; PR #33 fixed notebook source freshness; PR #34 added a train-only BPE tokenizer; PR #35 builds GPT-2 from explicit config; PR #36 accepts pinned user corpora; PR #37 adds opt-in BF16; PR #38 adds optimizer schedule and seed controls; PR #39 adds opt-in activation checkpointing; PR #40 exposes per-device batch sizes; PR #41 adds supervised-token targets and actual token counts; PR #42 adds sparse logging and terminal loss evidence; PR #43 bundles the model export and evidence report for Colab/Kaggle. The current implementation verifies CPU reload and short generation from that export; the owner also reports one 10,000-token v5e-1 native pretraining run through evaluation and export. This is not TPU generation, convergence, or performance evidence. TPU resume and larger-run behavior remain owner-run. |
 | T4 | Eight-device data parallelism | Global valid-token-weighted gradients, unequal masks, accumulation and reference-parity proof |
 | T5 | Checkpoint/resume and HF export | Model/tokenizer `save_pretrained` export and generic accelerator RNG capture/restore exist. PR #32 adds a fingerprinted data cursor for packed iterable sources and exact CPU continuation tests. Zero loader workers remain required; native TPU and clean-process owner validation remain pending. |
 | T6 | Compilation foundations | Per-block compile parity, eager fallback, graph stability and debug/recompile evidence |

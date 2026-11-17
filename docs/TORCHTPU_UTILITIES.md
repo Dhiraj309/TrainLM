@@ -163,9 +163,11 @@ These are T1 work packages, not new branches or renumbered GitHub PRs:
    properties and package versions. The standalone probe prints it; a
    non-allocating subset now feeds trainer preflight and opt-in explanation.
    A bounded device-owning artifact and worker-result diagnostic bridge exist,
-   but native worker production is pending. Next: verify owner-run reports,
-   incomplete properties and version mismatches. Explicit compile evidence
-   remains pending.
+   but native worker production is pending. The owner now reports a successful
+   one-call native pretraining run; the complete structured report and source
+   SHA were not included in the shared transcript. Compare those runtime facts
+   with the probe report when available. Explicit compile evidence remains
+   pending.
 3. **T1.3 — installation and lifecycle feasibility (partial):** the notebook
    runs a [read-only profile check](../examples/torchtpu_t1_install_preflight.py)
    comparing installed metadata to TrainLM's source requirements, TorchTPU's
@@ -200,18 +202,19 @@ discovery contracts, and no distributed certification from a single rank.
 Before enabling a provider by default, require explicit version/hardware
 evidence. The core dependency range now includes the observed Torch 2.14.1
 package and the CI workflow tests constrained minimum/current CPU profiles.
-Next, run the T1.2/T1.3 owner hardware checks and the opt-in T1.4 collective on
-an isolated v5e-8 host; use the results to decide the native dependency profile
-and T2 integration scope. Core CPU compatibility is separate from native
+The latest owner run passed package preflight and the eager single-device
+training lifecycle. Next, validate TPU resume, explicit compile parity, and
+repeated-process cleanup on v5e-1; run the T1.4 collective separately on an
+isolated v5e-8 host. Use those results to decide native automatic routing and
+the T2 integration scope. Core CPU compatibility remains separate from broad
 TorchTPU support.
 
-Latest owner-run T1.2 observation: native allocation, forward/backward and
-AdamW update passed; runtime properties reported one visible device named
-`TPU v5e`; the owner confirmed v5e-1. The shared Colab output may omit VM
-image/topology details. Compilation and repeat-process behavior remain
-unrecorded. The captured package-profile result predates the current `<2.15`
-core contract and identified an unrelated IPython-to-Jedi `pip check` warning;
-the preflight now leaves a fully parsed unrelated warning visible but
-nonblocking. The owner should refresh the report against the current source.
-Treat the hardware result as a successful eager runtime smoke, not native
-trainer, clean-install or v5e VM shape certification.
+Latest owner-run evidence (2026-11-17): setup reported `torch-tpu==0.2.0` and
+`libtpu==0.0.50`, and the one-call `run_pretraining()` completed on the Colab
+TPU the owner previously identified as v5e-1. It ran 79 optimizer steps,
+processed 10,033 tokens against a 10,000-token target, evaluated at loss
+9.23737, and exported an 8.325M-parameter GPT-2. This confirms package
+preflight and one eager train/evaluate/export path in that runtime. The pasted
+transcript lacks its source SHA, PyTorch version, and detailed topology, and
+does not validate clean installation, resume, explicit compilation, repeated
+process cleanup, or collectives. Keep those as separate T1 gates.

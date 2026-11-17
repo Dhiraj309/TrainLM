@@ -6,17 +6,21 @@
   feasibility and v5e-8 for collectives, DP8, sharding, and scaling. The
   explicit `accelerator="native_tpu"` path is experimental, not a production
   support claim.
-- **Current gate:** T1 remains open. Owner-provided evidence confirms a
-  standalone eager allocation/forward/backward/AdamW smoke on v5e-1. Package
-  compatibility, TrainLM training on TPU, explicit compile, repeated lifecycle,
-  and v5e-8 collective results remain unverified. CPU-verifiable implementation
-  may continue behind explicit native selection while those hardware checks
-  wait; do not enable automatic TPU routing or treat a core dependency change
-  as native TorchTPU certification.
+- **Current gate:** T1 remains open. In addition to the standalone eager
+  allocation/forward/backward/AdamW smoke, the owner reports a successful
+  `run_pretraining()` on a Colab TPU previously identified as v5e-1. It trained
+  79 steps, processed 10,033 of the 10,000 target tokens, evaluated at loss
+  9.23737, and exported an 8.325M-parameter GPT-2. Setup reported
+  `torch-tpu==0.2.0` and `libtpu==0.0.50`; the run passed TrainLM's package
+  preflight. The pasted output omits the source SHA and full device metadata.
+  This is a small workflow smoke, not a quality or performance result. TPU
+  resume, explicit compile, repeated lifecycle, clean-install verification,
+  and v5e-8 collectives remain unverified. Keep automatic TPU routing disabled.
 - **Preflight UX:** PR #121 merged actionable missing/mismatched dependency
   details into `TrainLMPretrainingError` while keeping package checks
-  read-only. Both GitHub CPU dependency profiles passed. The v5e-1 package
-  profile has not yet been refreshed against current `main`.
+  read-only. Both GitHub CPU dependency profiles passed. The latest one-call
+  run passed package preflight in the owner's runtime; a separate clean-install
+  profile is still pending.
 - **Core dependency follow-up:** PR #83 widens the Torch range to `>=2.9,<2.15`,
   raises the Transformers floor to `5.15` and Hub floor to `1.5`, aligns the
   Python 3.13 current profile to Torch 2.14.1, and adds constrained
@@ -27,16 +31,16 @@
   commit `cfc05ed` aligns the project floor and minimum lock. CI run
   `41752008510` passed 893 tests and 41 subtests in each profile. The old 2.14.1
   mismatch and unrelated parsed IPython-to-Jedi warning are handled by the
-  branch. An owner-runtime report refresh is also pending. This does not
-  establish a native TPU install profile or end-to-end training support.
+  branch. The owner has since completed the one-call TPU smoke described above;
+  a clean-install profile and broader native support remain unverified.
 - **Raw-text API:** `run_pretraining(config)` wraps
   `TrainLMTrainer.from_scratch()` in a single preparation/train/evaluate/export
   call and returns a concise result with report and export paths. The lower-level
   trainer remains available for custom lifecycles. GPT-2 remains the default;
   `model_type` and `model_config_overrides` select another registered
-  architecture. The current working branch adds paired local UTF-8
-  train/validation text files alongside the pinned Hub source; their hashes
-  join the prepared-data cache identity. Its focused API/report/resume,
+  architecture. The merged API accepts paired local UTF-8 train/validation
+  text files alongside the pinned Hub source; their hashes join the
+  prepared-data cache identity. Its focused API/report/resume,
   notebook and roadmap CPU suite passes 31 tests under Python 3.12.14 and torch
   2.9.0+cpu; data loading was mocked, with no live Hub or TPU run. TrainLM
   derives vocabulary and special-token IDs from the trained tokenizer. The

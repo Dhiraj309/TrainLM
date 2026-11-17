@@ -88,11 +88,23 @@ conflicts visible but nonblocking. That revised profile has not yet been rerun
 in Colab. No packages were installed or changed by the notebook; explicit
 compile and repeat-process lifecycle checks were skipped.
 
-After the compatibility change is available on `main`, rerun the read-only
-profile check in the same Colab runtime and, separately, in a clean environment
-with TrainLM installed from source. Record the actual accelerator and VM image.
-Keep package, CPU-conformance and hardware results separate: a matching core
-version does not verify native trainer behavior or TorchTPU support.
+### Latest owner result (2026-11-17)
+
+The owner reports that the Colab from-scratch notebook completed its one-call
+native TPU run after the package guidance update. Setup reported
+`torch-tpu==0.2.0` and `libtpu==0.0.50`. Training completed 79 optimizer steps
+and 10,033 tokens against a 10,000-token target; evaluation reported loss
+9.23737, and the API exported an 8,325,120-parameter GPT-2. The owner had
+previously identified this Colab TPU as v5e-1. The pasted output does not
+include the notebook's source SHA, PyTorch version, or detailed hardware
+properties. Treat this as one successful small eager workflow, not a
+performance, convergence, or production-support claim.
+
+The package preflight and train/evaluate/export path now have owner-run
+evidence. Resume from the saved TPU checkpoint, explicit compile parity,
+repeated process lifecycle/cleanup, and v5e-8 collectives remain separate
+checks. Record the source SHA and actual machine/image details in the next
+downloaded report when available.
 
 Compilation may take longer than eager execution. Preserve the complete output
 and any runtime/compiler error; do not silently fall back to eager mode. TPU
