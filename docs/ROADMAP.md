@@ -43,6 +43,13 @@ the wrong RNG API. TorchTPU exposes capture through
 compatibility fallbacks. A rerun on the owner’s TPU is still needed to validate
 saving and resume; this fix does not imply TPU certification.
 
+**Notebook runtime preflight follow-up (in progress, 2026-11-17):** before
+native TPU training, the from-scratch notebook reports whether `torch-tpu` and
+`libtpu` package metadata are available. If either is missing, it gives a
+runtime-selection message before starting the run. The check does not install
+packages or replace the accelerator stack; TrainLM's existing preflight still
+checks package compatibility. No TPU training evidence is added by this change.
+
 **Current public API update:** scratch pretraining accepts Transformers-style
 `warmup_ratio` in the inclusive range 0–1 and rounds it up to a whole optimizer
 step. It cannot be combined with `warmup_steps`. Leaving both unset preserves
