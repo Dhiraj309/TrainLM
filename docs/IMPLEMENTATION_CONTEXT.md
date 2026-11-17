@@ -72,8 +72,10 @@ cosine schedule and automatic warmup. The notebook prints the resumed-from path
 and latest checkpoint. A runtime reset requires restoring the full run
 directory, including checkpoints and preparation files; the model artifact ZIP
 does not contain those files. This is a runnable owner-validation path, not a
-TPU resume result. No tests or accelerator runs were performed for the notebook
-change.
+TPU resume result. Local validation checks notebook JSON and Python syntax.
+Hosted CI review also caught and drove fixes for the existing notebook cell,
+code-line, and starter-budget presentation contracts. TPU resume remains
+owner-run validation.
 
 **Current public API update:** the from-scratch config accepts a
 Transformers-style `warmup_ratio` from 0 to 1, rounded up to a whole optimizer

@@ -86,9 +86,11 @@ The same config now exposes AdamW `betas` and `eps`, plus `max_grad_norm`
 (`0` disables clipping). Requested and effective optimizer settings are stored
 in the run report. Native TPU behavior remains experimental. The owner-run
 single-device result above does not validate checkpoint resume or the other
-pending runtime gates. The core-current and core-minimum hosted CPU suites each
-passed 988 tests and 41 subtests; no new CPU or TPU tests were run for the
-notebook guidance change.
+pending runtime gates. The notebook follow-up keeps its existing presentation
+contracts: at most five cells, at most 30 lines in a code cell, and the literal
+10,000-token starter marker. Hosted CPU CI exposed these constraints during
+review; notebook-only JSON and syntax checks also pass locally. No TPU resume
+run has been performed.
 
 ### API and notebook implementation history
 
