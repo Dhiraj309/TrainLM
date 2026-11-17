@@ -94,14 +94,15 @@ do not add evidence beyond the reported execution.
 
 The from-scratch notebook separates a fresh-run cell from an opt-in resume
 cell. The fresh run uses `FRESH_MAX_TOKENS=10_000` and a new default
-`RUN_DIR`. After it succeeds, set `RUN_RESUME=True` in the resume cell and run
-only that cell. It defines its own `RUN_DIR`, so it can also be run after a
+`RUN_DIR`; `FRESH_MAX_TRAIN_EXAMPLES` exposes the input-data cap for runs that
+need more text. After it succeeds, set `RUN_RESUME=True` in the resume cell and
+run only that cell. It defines its own `RUN_DIR`, so it can also be run after a
 Python kernel/process restart without rerunning setup or fresh training, as
 long as the same VM, installed package versions, and full run directory remain
 available. It validates `report.json` with `restore_pretraining_report`,
-restores the saved config/checkpoint, changes only `max_tokens` to
-`RESUME_MAX_TOKENS=12_000` and uses the supported cosine budget-extension
-path. It writes a separate resume report and model export, preserving the
+restores the saved config/checkpoint and increases its recorded token target
+by 2,000 using the supported cosine budget-extension path. It writes a
+separate resume report and model export, preserving the
 original baseline artifacts. If the VM was replaced, the full run directory
 and compatible packages must be restored first. The notebook's artifact cell
 bundles the latest run report/export. The owner has completed this resume path
