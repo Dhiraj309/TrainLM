@@ -6,16 +6,21 @@
   feasibility and v5e-8 for collectives, DP8, sharding, and scaling. The
   explicit `accelerator="native_tpu"` path is experimental, not a production
   support claim.
-- **Current gate:** T1 remains open. In addition to the standalone eager
+- **Current gate:** T1 remains open. Alongside the standalone eager
   allocation/forward/backward/AdamW smoke, the owner reports a successful
-  `run_pretraining()` on a Colab TPU previously identified as v5e-1. It trained
-  79 steps, processed 10,033 of the 10,000 target tokens, evaluated at loss
-  9.23737, and exported an 8.325M-parameter GPT-2. Setup reported
-  `torch-tpu==0.2.0` and `libtpu==0.0.50`; the run passed TrainLM's package
-  preflight. The pasted output omits the source SHA and full device metadata.
-  This is a small workflow smoke, not a quality or performance result. TPU
-  resume, explicit compile, repeated lifecycle, clean-install verification,
-  and v5e-8 collectives remain unverified. Keep automatic TPU routing disabled.
+  `run_pretraining()` fresh run on a Colab TPU previously identified as v5e-1:
+  79 steps, 10,033/10,000 tokens, evaluation loss 9.237371, and an 8.3M-
+  parameter GPT-2 export. Setup reported `torch-tpu==0.2.0` and
+  `libtpu==0.0.50`; package preflight passed. In the same live runtime, the
+  owner resumed from `checkpoint-79`, continued at step 80, and completed step
+  95 at 12,065/12,000 tokens with evaluation loss 9.243080 and a separate
+  resumed export. This is owner-run evidence for one small eager run and
+  same-runtime checkpoint continuation, not clean-process or post-reset
+  recovery, exact uninterrupted-trajectory parity, quality, or performance.
+  The pasted output omits exact source SHA, PyTorch version, and full device
+  metadata. Explicit compile, repeated lifecycle/cleanup, clean-install
+  verification, and v5e-8 collectives remain unverified. Keep automatic TPU
+  routing disabled.
 - **Preflight UX:** PR #121 merged actionable missing/mismatched dependency
   details into `TrainLMPretrainingError` while keeping package checks
   read-only. Both GitHub CPU dependency profiles passed. The latest one-call

@@ -82,7 +82,9 @@ follow the linked implementation and tests before making a change.
   it starts a new cosine schedule at the configured learning rate while keeping
   model and optimizer state; this can raise the learning rate, so use it
   deliberately. Other changed settings require a fresh `output_dir`. CPU/API
-  tests cover this lifecycle; TPU checkpoint resume remains unverified. GPT-2
+  tests cover this lifecycle; the owner reports one successful same-runtime
+  v5e-1 resume with budget extension. Fresh-process/post-reset resume remains
+  unverified. GPT-2
   is the default;
   `model_type` and `model_config_overrides` select a registered Transformers
   causal-LM configuration for random initialization. TrainLM fills vocabulary
