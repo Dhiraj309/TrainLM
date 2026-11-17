@@ -94,7 +94,8 @@ provenance but adds no TPU execution evidence by itself.
 The scratch notebook now separates the fresh run from an optional continuation
 cell. Fresh training uses `FRESH_MAX_TOKENS=10_000` in a new default run
 directory, and exposes `FRESH_MAX_TRAIN_EXAMPLES` for expanding its text cap
-alongside a larger token target. After it succeeds, set `RUN_RESUME=True` and
+alongside a larger token target. `FRESH_MAX_TOKENS` maps to the config's
+`max_tokens` value. After it succeeds, set `RUN_RESUME=True` and
 run only the resume cell. The cell defines its own run directory, so an owner
 can attempt recovery after restarting the Python kernel/process while keeping
 the same VM, package versions, and full run directory. It validates the saved
