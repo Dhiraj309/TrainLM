@@ -64,13 +64,15 @@ train/evaluate/export result; the transcript did not include source SHA or full
 device metadata and does not establish model quality, performance, resume,
 compile, repeated lifecycle, or distributed support.
 
-The scratch notebook now exposes a short optional checkpoint-resume path:
-raise `MAX_TOKENS` from 10,000 to 12,000, set
-`RESUME_CHECKPOINT="latest"` and
-`EXTEND_TRAINING_BUDGET=True`, then rerun the training cell with the same run
-directory and settings. This uses the supported cosine/automatic-warmup budget
-extension. It makes the next owner check easier to run; TPU resume remains
-unverified until that continuation completes on hardware.
+The scratch notebook now separates the fresh run from an optional continuation
+cell. Fresh training uses `FRESH_MAX_TOKENS=10_000` in a new default run
+directory. After it succeeds, set `RUN_RESUME=True` and run only the resume
+cell. That cell validates the saved report, restores its config/checkpoint,
+changes only the budget to `RESUME_MAX_TOKENS=12_000`, and writes a separate
+resume report/export using the supported cosine/automatic-warmup extension.
+This keeps first-time setup straightforward and preserves the baseline
+artifacts. It prepares the next owner check; TPU resume remains unverified
+until the continuation completes on hardware.
 
 **Current public API update:** scratch pretraining accepts Transformers-style
 `warmup_ratio` in the inclusive range 0–1 and rounds it up to a whole optimizer

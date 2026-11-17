@@ -106,14 +106,14 @@ repeated process lifecycle/cleanup, and v5e-8 collectives remain separate
 checks. Record the source SHA and actual machine/image details in the next
 downloaded report when available.
 
-For the next single-device check, use the optional continuation section in the
+For the next single-device check, use the separate resume cell in the
 [from-scratch notebook](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb).
-In the same runtime, keep the original run directory and settings, increase
-the token target to 12,000, select `resume_from_checkpoint="latest"`, and set
-`extend_training_budget=True`. A successful result with a later step/token
-count is owner-run resume evidence; changing hardware, package versions, model,
-data, or other training settings does not validate this checkpoint's resume.
-If the runtime was reset, restore the complete run directory before trying.
+After the fresh run passes, set `RUN_RESUME=True` and run only that cell. It
+validates the saved report, restores the checkpoint/config, and raises the
+budget to 12,000 tokens while keeping the original model, data, runtime, and
+package versions. A successful result with a later step/token count is
+owner-run resume evidence. If the runtime was reset, restore the complete run
+directory before trying.
 
 Compilation may take longer than eager execution. Preserve the complete output
 and any runtime/compiler error; do not silently fall back to eager mode. TPU
