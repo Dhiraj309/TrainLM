@@ -113,6 +113,11 @@ randomly initialized GPT-2 shape: `tiny` (4 layers, width 256, 4 heads) or
 8.3M-parameter tiny model and 10,000-token workflow smoke. This is a notebook
 configuration convenience; Python callers continue to set model dimensions
 directly, and no TPU fit or quality claim is implied for the larger preset.
+The run setup also provides a `longer` profile (1,000,000 token target, 20,000
+training-example cap, and 100-step logging) while keeping `smoke` as the
+default. Resume extends the saved target by 20%, with a 2,000-token minimum,
+so longer runs do not receive only a smoke-sized continuation. The profile is
+an exploratory training budget, not a convergence or quality claim.
 
 **Current public API update:** scratch pretraining accepts Transformers-style
 `warmup_ratio` in the inclusive range 0–1 and rounds it up to a whole optimizer
