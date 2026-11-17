@@ -107,6 +107,13 @@ warmup extension. This preserves the baseline artifacts. The owner reports
 that continuation succeeded both in the same live runtime and after a Python
 session restart; recovery after VM replacement remains unverified.
 
+The notebook's fresh-run cell now uses one `MODEL_SIZE` setting to choose a
+randomly initialized GPT-2 shape: `tiny` (4 layers, width 256, 4 heads) or
+`small` (6 layers, width 384, 6 heads). The default remains the approximately
+8.3M-parameter tiny model and 10,000-token workflow smoke. This is a notebook
+configuration convenience; Python callers continue to set model dimensions
+directly, and no TPU fit or quality claim is implied for the larger preset.
+
 **Current public API update:** scratch pretraining accepts Transformers-style
 `warmup_ratio` in the inclusive range 0–1 and rounds it up to a whole optimizer
 step. It cannot be combined with `warmup_steps`. Leaving both unset preserves
