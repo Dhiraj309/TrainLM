@@ -44,7 +44,7 @@ compatibility fallbacks. A rerun on the owner’s TPU is still needed to validat
 saving and resume; this fix does not imply TPU certification.
 
 **Notebook runtime preflight follow-up (in progress, 2026-11-17):** before
-native TPU training, the from-scratch notebook reports whether `torch-tpu` and
+native TPU training, the from-scratch notebook setup cell reports whether `torch-tpu` and
 `libtpu` package metadata are available. If either is missing, it gives a
 runtime-selection message before starting the run. The check does not install
 packages or replace the accelerator stack; TrainLM's existing preflight still

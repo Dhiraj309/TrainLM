@@ -224,7 +224,7 @@ tests cover mismatch and missing-package behavior. This is an early package
 gate only; it does not certify the native runtime or TPU training.
 The from-scratch notebook setup installs only missing `datasets` and
 `tokenizers` extras. It stops on incompatible installed versions and never
-installs or replaces Torch/TorchTPU. The notebook training cell now prints the
+installs or replaces Torch/TorchTPU. The notebook setup cell now prints the
 installed `torch-tpu` and `libtpu` metadata versions before a native TPU run;
 if either is missing, it explains that the user needs a runtime that provides
 TorchTPU. This is a read-only setup diagnostic; full package compatibility is
