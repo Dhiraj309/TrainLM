@@ -73,12 +73,14 @@ also warned that its RNG restore API is experimental; the restore completed.
 The scratch notebook now separates the fresh run from an optional continuation
 cell. Fresh training uses `FRESH_MAX_TOKENS=10_000` in a new default run
 directory. After it succeeds, set `RUN_RESUME=True` and run only the resume
-cell. That cell validates the saved report, restores its config/checkpoint,
-changes only the budget to `RESUME_MAX_TOKENS=12_000`, and writes a separate
-resume report/export using the supported cosine/automatic-warmup extension.
-This keeps first-time setup straightforward and preserves the baseline
-artifacts. The owner reports that the continuation succeeded on the same live
-runtime. Fresh-process or post-reset recovery remains unverified.
+cell. The cell defines its own run directory, so an owner can attempt recovery
+after restarting the Python kernel/process while keeping the same VM, package
+versions, and full run directory. It validates the saved report, restores its
+config/checkpoint, changes only the budget to `RESUME_MAX_TOKENS=12_000`, and
+writes a separate resume report/export using the supported cosine/automatic-
+warmup extension. This preserves the baseline artifacts. The owner reports
+that continuation succeeded in the same live runtime; kernel-restart recovery
+is ready for validation, while post-reset recovery remains unverified.
 
 **Current public API update:** scratch pretraining accepts Transformers-style
 `warmup_ratio` in the inclusive range 0–1 and rounds it up to a whole optimizer
@@ -94,11 +96,11 @@ The same config now exposes AdamW `betas` and `eps`, plus `max_grad_norm`
 (`0` disables clipping). Requested and effective optimizer settings are stored
 in the run report. Native TPU behavior remains experimental. The owner-run
 fresh training and same-runtime resume validate one small eager single-device
-path; they do not validate clean-process recovery or the other pending runtime
-gates. The notebook follow-up keeps its existing presentation contracts: at
-most five cells, at most 30 lines in a code cell, and the literal 10,000-token
-starter marker. Hosted CPU CI exposed these constraints during review;
-notebook-only JSON and syntax checks also pass locally.
+path; kernel-restart restore and the other pending runtime gates still need
+owner validation. The notebook follow-up keeps its existing presentation
+contracts: at most five cells, at most 30 lines in a code cell, and the literal
+10,000-token starter marker. Hosted CPU CI exposed these constraints during
+review; notebook-only JSON and syntax checks also pass locally.
 
 ### API and notebook implementation history
 
