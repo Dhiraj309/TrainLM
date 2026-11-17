@@ -8,11 +8,12 @@
 
 **Current gate:** T0 is closed; PR #20 merged the accepted T0.2 mapping. T1
 single-device evidence now includes an owner-reported 10,000-token
-`run_pretraining()` completion and a same-runtime checkpoint continuation to
-12,000 tokens on a Colab TPU the owner identified as v5e-1. Package preflight,
-training, evaluation, export, and restore from checkpoint 79 passed. T1 remains
-open: clean-process/post-reset recovery, explicit compile, repeated
-lifecycle/cleanup, and v5e-8 collective evidence are pending. Follow the
+`run_pretraining()` completion and a 12,000-token checkpoint continuation on
+a Colab TPU identified as v5e-1. The owner repeated the restore after a Python
+session restart, using the same saved run files and package versions. T1
+remains open: recovery after VM replacement, explicit compile, repeated
+lifecycle/cleanup, clean installation, and v5e-8 collective evidence are
+pending. Follow the
 [utility inventory and delivery order](TORCHTPU_UTILITIES.md) for the remaining
 T1.1–T1.4 evidence.
 
@@ -126,7 +127,7 @@ reversible.
 | Legacy integration | PR #18 merged into `main` on 2026-10-28; merge commit `23959d29434fd2ae3f78b20469e1d61c6b1e18c9` | T0.1 inventory is complete; XLA-era PR cards are not the active queue |
 | Earlier salvage | PR #16 was merged into PR #18, which is now merged into `main` | Inventory its code as part of the merged tree; do not merge it again |
 | Existing TPU backend | Primarily PyTorch/XLA with historical measurements | Classify reusable vs XLA-specific components |
-| Native TorchTPU | Explicit single-device software path; owner-reported eager fresh training and same-runtime resume passed on the identified v5e-1 runtime; broad support remains unverified | Keep explicit selection; verify clean-process lifecycle and compile on v5e-1, then collectives on v5e-8 before changing support claims |
+| Native TorchTPU | Explicit single-device software path; owner-reported eager fresh training and checkpoint resume after a Python session restart passed on v5e-1; broad support remains unverified | Keep explicit selection; verify recovery after VM replacement, compile and repeated lifecycle on v5e-1, then collectives on v5e-8 before changing support claims |
 | GitHub access | Previous authenticated collaborator `Dignity045` branch push succeeded | Recheck actual identity each task; owner account not assumed |
 | CPU tests | PR #18 snapshot: 700 passed / 21 failed under Python 3.12.14, torch 2.9.0+cpu, Transformers 5.0.0, Hub 1.3.5, pytest 9.1.1 | Re-run on merged `main` before the next code PR; failure groups are recorded in `HANDOFF.md` |
 | CPU profiles | `core-minimum` Python 3.10/torch 2.9/Transformers 5.15/Hub 1.5; `core-current` Python 3.13/torch 2.14.1/Transformers 5.20.2/Hub 1.33 | Both hosted suites passed on PR #125; do not infer accelerator certification |
@@ -191,9 +192,9 @@ attention, loss, optimizer, data, checkpoint, tests and documentation.
 | T0 | Architecture rebaseline and salvage | PR #16/#18 inventory; reusable/XLA-specific/uncertain classification; approved boundaries and PR mapping |
 | T1 | Native TorchTPU utilities and environment | T1.1 inventory → T1.2 shared hardware/capability report → T1.3 verified dependency and process lifecycle → T1.4 multi-device entry probe. Record actual device properties, eager/compile results and reproducible setup; prefer v5e-1 for single-device and v5e-8 for collective evidence. |
 | T2 | Python-first configs/API | Integrate shared discovery into auto backend selection, preflight and explain; verify HF contracts, CPU/CUDA compatibility and actionable errors without manual runtime setup. An explicit single-device prototype exists; automatic routing waits for T1/package and CPU evidence. |
-| T3 | Single-device training/data | PR #28 merged the generic engine adapter and random-init GPT-2/TinyStories starter; PR #29 merged streamed, validated uint32 shards and `PackedBinDataset` integration; PR #30 merged CPU reference parity for a packed-data causal-LM update; PR #31 merged the CPU random-init train/eval/checkpoint/export lifecycle; PR #32 added exact packed-data continuation; PR #33 fixed notebook source freshness; PR #34 added a train-only BPE tokenizer; PR #35 builds GPT-2 from explicit config; PR #36 accepts pinned user corpora; PR #37 adds opt-in BF16; PR #38 adds optimizer schedule and seed controls; PR #39 adds opt-in activation checkpointing; PR #40 exposes per-device batch sizes; PR #41 adds supervised-token targets and actual token counts; PR #42 adds sparse logging and terminal loss evidence; PR #43 bundles the model export and evidence report for Colab/Kaggle. CPU reload and short generation from export are verified. The owner also reports one small v5e-1 eager fresh run and a successful same-runtime resume from checkpoint 79. This does not establish clean-process recovery, TPU generation, convergence, or performance. |
+| T3 | Single-device training/data | PR #28 merged the generic engine adapter and random-init GPT-2/TinyStories starter; PR #29 merged streamed, validated uint32 shards and `PackedBinDataset` integration; PR #30 merged CPU reference parity for a packed-data causal-LM update; PR #31 merged the CPU random-init train/eval/checkpoint/export lifecycle; PR #32 added exact packed-data continuation; PR #33 fixed notebook source freshness; PR #34 added a train-only BPE tokenizer; PR #35 builds GPT-2 from explicit config; PR #36 accepts pinned user corpora; PR #37 adds opt-in BF16; PR #38 adds optimizer schedule and seed controls; PR #39 adds opt-in activation checkpointing; PR #40 exposes per-device batch sizes; PR #41 adds supervised-token targets and actual token counts; PR #42 adds sparse logging and terminal loss evidence; PR #43 bundles the model export and evidence report for Colab/Kaggle. CPU reload and short generation from export are verified. The owner reports a v5e-1 eager fresh run and checkpoint restore after a Python session restart from checkpoint 79. This does not establish recovery after VM replacement, TPU generation, convergence, or performance. |
 | T4 | Eight-device data parallelism | Global valid-token-weighted gradients, unequal masks, accumulation and reference-parity proof |
-| T5 | Checkpoint/resume and HF export | Model/tokenizer `save_pretrained` export and generic accelerator RNG capture/restore exist. PR #32 adds a fingerprinted data cursor for packed iterable sources and exact CPU continuation tests. The owner reports a successful same-runtime v5e-1 resume with budget extension; clean-process/post-reset TPU recovery, exact uninterrupted-trajectory parity, and distributed resume remain pending. Zero loader workers remain required. |
+| T5 | Checkpoint/resume and HF export | Model/tokenizer `save_pretrained` export and generic accelerator RNG capture/restore exist. PR #32 adds a fingerprinted data cursor for packed iterable sources and exact CPU continuation tests. The owner reports successful v5e-1 resume with budget extension, including restore after a Python session restart; VM-replacement recovery, exact uninterrupted-trajectory parity, and distributed resume remain pending. Zero loader workers remain required. |
 | T6 | Compilation foundations | Per-block compile parity, eager fallback, graph stability and debug/recompile evidence |
 | T7 | Optimized kernels | Guarded attention/fused CE, gradient/mask tests, explicit fallback and real TPU benchmarks |
 | T8 | Functional optimizers | Native AdamW parity and resume; opt-in Muon only after numerical/quality/TPU evidence |
