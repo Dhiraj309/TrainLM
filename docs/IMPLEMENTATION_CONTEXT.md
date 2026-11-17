@@ -68,6 +68,12 @@ performance, explicit compile, repeated lifecycle, or multi-device execution.
 TorchTPU warned that its RNG restore API is experimental, but the restore
 completed.
 
+The notebook now reads the installed Git commit from pip's `direct_url.json`,
+passes it into each run report, and prints the source SHA, runtime package
+versions, and accelerator discovery fields as JSON. A future owner run should
+save this output alongside the resume result; this reporting change does not
+add new TPU execution evidence.
+
 The from-scratch notebook separates a fresh-run cell from an opt-in resume
 cell. The fresh run uses `FRESH_MAX_TOKENS=10_000` and a new default
 `RUN_DIR`. After it succeeds, set `RUN_RESUME=True` in the resume cell and run

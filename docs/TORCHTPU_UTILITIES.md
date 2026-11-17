@@ -16,6 +16,11 @@ source SHA, PyTorch version, and full device properties. Clean-process resume,
 remain unverified. This is owner-provided output, not a local rerun. The
 preceding process failure's exact cause remains unconfirmed.
 
+The notebook now reads the installed Git commit from pip's `direct_url.json`,
+passes it into the run report, and prints the source revision, runtime package
+versions, and accelerator discovery fields as JSON. Capture this line when
+retrying the kernel-restart check so hardware evidence is tied to its source.
+
 Use versioned documentation plus the public API policy, then inspect the
 installed package's supported interfaces. An upstream API listing is not
 proof that a particular wheel, hardware generation or TrainLM path supports it.
