@@ -95,7 +95,8 @@ do not add evidence beyond the reported execution.
 The from-scratch notebook separates a fresh-run cell from an opt-in resume
 cell. The fresh run uses `FRESH_MAX_TOKENS=10_000` and a new default
 `RUN_DIR`; `FRESH_MAX_TRAIN_EXAMPLES` exposes the input-data cap for runs that
-need more text. After it succeeds, set `RUN_RESUME=True` in the resume cell and
+need more text, while `FRESH_MAX_TOKENS` maps to the config's `max_tokens`
+target. After it succeeds, set `RUN_RESUME=True` in the resume cell and
 run only that cell. It defines its own `RUN_DIR`, so it can also be run after a
 Python kernel/process restart without rerunning setup or fresh training, as
 long as the same VM, installed package versions, and full run directory remain
