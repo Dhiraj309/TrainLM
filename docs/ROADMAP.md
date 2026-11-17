@@ -79,8 +79,10 @@ RNG restore API is experimental, but restoration completed.
 **Progress-output follow-up:** the owner logs also showed progress events
 without a materialized loss and repeated optimizer-step numbers. The callback
 now suppresses those events and reports each step at most once. This is a
-console-only fix; hosted CPU CI and owner confirmation remain pending, and it
-adds no TPU execution evidence.
+console-only fix. PR #130 rebase-merged at verified `main` SHA
+`5f1ecd1bff5d2615a54b1007d43f5c0efabb0890`; both core-current and core-minimum
+CPU CI profiles passed. No owner TPU rerun was performed, so this adds no TPU
+execution evidence.
 
 The notebook now records the installed Git commit in the run report and
 prints it with runtime package versions and accelerator discovery fields as
