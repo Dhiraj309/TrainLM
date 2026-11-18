@@ -1,5 +1,12 @@
 # TrainLM native TorchTPU rebaseline — T0–T11
 
+**Product delivery companion:** the owner-directed
+[HF user-workflow backlog](HF_USER_WORKFLOWS.md) sets the next public API
+priorities for model/tokenizer/data reuse, scratch/CPT, export and publication.
+It complements these architecture and hardware gates. CPU-verifiable API
+work can proceed while TPU evidence is pending; no product story alone closes
+a hardware gate or establishes universal HF model compatibility.
+
 > **Proposed target architecture, not an implementation or certification claim.**
 > This document reconciles the 2026-10-27 consolidated handoff with the
 > repository's existing XLA-era M0–M14 work and 18 candidate PR cards.

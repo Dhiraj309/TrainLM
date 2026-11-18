@@ -5,6 +5,13 @@ PyTorch/XLA work. Read the status labels before treating an item as current.
 
 ## Current direction
 
+**Product priority (2026-11-17):** follow the
+[HF user-workflow roadmap](HF_USER_WORKFLOWS.md) for the current implementation
+queue: HF model/config and tokenizer reuse, raw/pretokenized datasets,
+scratch/CPT training, export and optional Hub publication. Its audited status
+table distinguishes existing building blocks from planned API work.
+[T0–T11](TORCHTPU_REBASELINE.md) continues to define runtime evidence gates.
+
 For a task-oriented map of the notebook, implementation, tests, and evidence
 limits, start with the [coding-agent guide](AI_AGENT_GUIDE.md).
 

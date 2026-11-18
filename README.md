@@ -4,6 +4,13 @@ TrainLM is a Hugging Face-native framework for efficient language-model
 pretraining, with Google TPU execution provided through replaceable runtime and
 kernel backends.
 
+The product goal is to bring an HF model, tokenizer, and raw or tokenized
+dataset; train from random weights or continue pretrained weights; then save,
+optionally publish, and use the result through Transformers. The
+[HF user-workflow roadmap](docs/HF_USER_WORKFLOWS.md) records what works today,
+the remaining gaps, and the next implementation order. Planned capabilities
+in that roadmap are not yet part of the API examples below.
+
 ## Start here: pretrain a language model from scratch
 
 Open the [from-scratch notebook in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb)

@@ -1,5 +1,14 @@
 # TrainLM Roadmap
 
+**Current product delivery plan (2026-11-17):**
+[Hugging Face user workflows, HF-01–HF-08](HF_USER_WORKFLOWS.md).
+The owner's priority is reusable HF models/tokenizers/datasets through
+scratch or continued pretraining, save, optional Hub publication and standard
+inference. The plan audits `main` at `68e0493`; the new stories are planned,
+not implemented. HF-01 starts with independent model/tokenizer sources.
+Notebook presets do not complete that workflow. T0–T11 remains the runtime
+architecture/evidence plan; the M0–M17 specification below remains historical.
+
 > **Status: historical M0–M17 specification.** This document preserves the
 > detailed PyTorch/XLA-era roadmap and evidence for traceability. Its milestone
 > checkboxes and old XLA PR cards do not describe the active native TorchTPU

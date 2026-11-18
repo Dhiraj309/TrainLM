@@ -2,6 +2,14 @@
 
 ## Current roadmap state
 
+- **Current product priority:** the owner's 2026-11-17 direction is captured
+  in [HF user workflows](HF_USER_WORKFLOWS.md), with source-backed gaps and
+  HF-01–HF-08 acceptance criteria. Begin HF-01 with independent model/tokenizer
+  sources; then connect HF config/tokenizer reuse, raw/pretokenized data and
+  CPT to the existing trainer, portable exports and explicit Hub publication.
+  These stories are planned. This is the product implementation queue;
+  the runtime gates below still govern accelerator claims.
+
 - **Direction:** native TorchTPU on Cloud TPU. Use v5e-1 for single-device
   feasibility and v5e-8 for collectives, DP8, sharding, and scaling. The
   explicit `accelerator="native_tpu"` path is experimental, not a production

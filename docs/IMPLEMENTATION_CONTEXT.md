@@ -8,6 +8,18 @@
 
 ## Current project snapshot
 
+**Owner priority reset (2026-11-17):** the active product backlog is
+[HF user workflows](HF_USER_WORKFLOWS.md), audited against merged `main`
+`68e049357b1ab82fb853ae9a9ca0bc26669dcd21`. Reuse the existing HF provider and
+trainer to connect model/config selection, existing tokenizers, raw or
+pretokenized datasets, scratch/CPT, export and explicit Hub publication.
+Lower-level model acquisition and CPT-style causal loss already exist;
+convenient scratch tokenizer reuse, a prepared-data route, independent
+model/tokenizer revision handling and public Hub upload have gaps.
+HF-01–HF-08 are planned stories with acceptance criteria, not completion
+claims. Next is HF-01, fixing independent model/tokenizer source resolution.
+This planning change adds no runtime behavior or TPU evidence.
+
 The merged `main` branch exposes two task-focused, Hugging Face-style entry
 points: `run_pretraining(TrainLMPretrainingConfig(...))` for random-weight
 pretraining from pinned text, and

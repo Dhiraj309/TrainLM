@@ -1,5 +1,13 @@
 # TrainLM sequential pull-request delivery plan
 
+**Active product outcomes (2026-11-17):**
+[HF-01–HF-08: Hugging Face user workflows](HF_USER_WORKFLOWS.md#delivery-order-and-acceptance-criteria)
+is the current owner-directed product queue. It reuses the existing trainer
+and loaders and starts with independent model/tokenizer source handling.
+These story IDs are separate from Git branch sequence numbers. Keep serial,
+focused PRs and the established commit/merge conventions. T0–T11 evidence
+gates remain in force; the historical cards below are not the active queue.
+
 > **Status: historical candidate cards plus accepted T0.2 mapping.** The 18
 > cards below were written for the PyTorch/XLA roadmap. They are not the active
 > TorchTPU queue. PR #18 is merged; T0.1 inventory is in
