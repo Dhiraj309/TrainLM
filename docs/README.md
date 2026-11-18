@@ -51,6 +51,11 @@ trains, evaluates, and exports locally; it requires a separate validation
 split. For caller-supplied splits, TrainLM records the declared dataset
 identity when supplied; local or transformed datasets do not need a placeholder
 Hub ID or revision. Hub-loaded splits still require an immutable commit SHA.
+Set `tokenizer_name_or_path` and `tokenizer_revision` when the tokenizer is
+hosted separately; otherwise, TrainLM uses the model source and revision.
+Summaries record each source independently, check known token-ID bounds and
+static context limits, and label token-semantic compatibility as unverified.
+TrainLM does not resize pretrained embeddings or remap IDs.
 `TrainLMTrainingArguments` accepts steps or `num_train_epochs` for finite
 map-style single-device training. The same data and callbacks must be supplied
 again during resume. `eval_strategy` and `save_strategy` can schedule periodic

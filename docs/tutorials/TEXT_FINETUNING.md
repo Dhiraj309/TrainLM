@@ -225,16 +225,50 @@ labels. Caller-provided splits must expose Hugging Face Dataset's
 formatter, and collator again; the summary records their source identity and
 formatter name but cannot recreate Python objects or callback code.
 
+When loading model and tokenizer separately, configure both source IDs and
+revisions. This is useful when the tokenizer lives in a compatible companion
+repository:
+
+```python
+config = TrainLMFineTuningConfig(
+    model_name_or_path="org/model",
+    model_revision="model-commit-or-branch",
+    tokenizer_name_or_path="org/model-tokenizer",
+    tokenizer_revision="tokenizer-commit-or-branch",
+    dataset_id="org/text-data",
+    dataset_revision="DATASET_COMMIT_SHA",
+    args=TrainLMTrainingArguments(output_dir="runs/cpt"),
+)
+```
+
+TrainLM records these sources independently and never uses a separate
+tokenizer repository's commit to choose the model version. If the tokenizer
+source is omitted, TrainLM defaults it to the model source and inherits
+`model_revision`; the two files are
+then pinned to the same resolved commit when available. TrainLM does not
+remap token IDs, resize pretrained embeddings, or infer that two tokenizers
+are semantically compatible because their vocabulary sizes match. The run
+summary reports whether known token IDs fit the model's input embeddings and
+whether the configured sequence length fits a known static context limit;
+checks can be `unknown` when the model API does not expose those values. Select
+a tokenizer whose IDs and token meanings are compatible with the model. A
+supplied `tokenizer` object remains usable; its provenance is recorded only
+when the object exposes it or the config declares its source. Token meaning
+compatibility is reported as `not_verified_by_trainlm` and remains the user's
+responsibility.
+
 The model and tokenizer are saved under `config.args.output_dir/model`. The
 helper does not upload artifacts. `result.summary()` returns the requested and
 resolved model revisions, pinned dataset revision, resolved tokenizer
 revision, final step, loss, evaluation metrics, export path, and summary path.
-The JSON report at `result.summary_path` also records the data source, text
-field, split names, formatter name, and all `TrainLMTrainingArguments`. TrainLM
-pins model loading to the tokenizer's resolved Hub commit when available. If
-both revisions are available
-and differ, the run stops before training. Revision fields are `null` for local
-sources or loaders that do not expose commit metadata. If a run fails, the same
+The JSON report at `result.summary_path` also records model and tokenizer
+sources, requested/resolved revisions, the data source, text field, split
+names, formatter name, and all `TrainLMTrainingArguments`. For the same source
+and revision contract, TrainLM pins model loading to the tokenizer's resolved
+Hub commit when available and stops if the loaders report different commits.
+Separate sources and explicitly separate revisions are resolved independently;
+different commit SHAs are expected and are not compared. Revision fields are
+`null` for local sources or loaders that do not expose commit metadata. If a run fails, the same
 file records the failed phase, error type, last known step, metrics, and
 checkpoint path before the original exception is raised. The error message is
 not copied into the report. Install the optional dataset dependency with

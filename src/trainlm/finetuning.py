@@ -36,7 +36,10 @@ class TrainLMFineTuningConfig:
     The train and validation splits stay separate. The default path loads the
     pinned Hub dataset and tokenizes ``text_field``. ``run_finetuning`` can
     instead receive dataset objects and a row formatter. Training and
-    evaluation settings live in :class:`TrainLMTrainingArguments`.
+    evaluation settings live in :class:`TrainLMTrainingArguments`. The
+    tokenizer defaults to ``model_name_or_path`` and ``model_revision``;
+    configure ``tokenizer_name_or_path`` and ``tokenizer_revision`` to select
+    an independent tokenizer source.
     """
 
     model_name_or_path: str
@@ -49,6 +52,8 @@ class TrainLMFineTuningConfig:
     train_split: str = "train"
     validation_split: str = "validation"
     model_revision: str | None = None
+    tokenizer_name_or_path: str | None = None
+    tokenizer_revision: str | None = None
 
     def __post_init__(self) -> None:
         if (
@@ -72,6 +77,18 @@ class TrainLMFineTuningConfig:
             not isinstance(self.model_revision, str) or not self.model_revision.strip()
         ):
             raise ValueError("model_revision must be non-empty when configured.")
+        if self.tokenizer_name_or_path is not None and (
+            not isinstance(self.tokenizer_name_or_path, str)
+            or not self.tokenizer_name_or_path.strip()
+        ):
+            raise ValueError(
+                "tokenizer_name_or_path must be non-empty when configured."
+            )
+        if self.tokenizer_revision is not None and (
+            not isinstance(self.tokenizer_revision, str)
+            or not self.tokenizer_revision.strip()
+        ):
+            raise ValueError("tokenizer_revision must be non-empty when configured.")
         if not all(
             isinstance(value, str) and _FIELD_NAME.fullmatch(value)
             for value in (self.text_field, self.train_split, self.validation_split)
@@ -103,6 +120,9 @@ class TrainLMFineTuningResult:
     summary_path: Path | None = None
     training_budget: Mapping[str, Any] = field(default_factory=dict)
     best_model_selection: Mapping[str, Any] | None = None
+    tokenizer_name_or_path: str | None = None
+    tokenizer_revision: str | None = None
+    tokenizer_compatibility: Mapping[str, Any] | None = None
 
     def summary(self) -> dict[str, Any]:
         """Return a compact, JSON-compatible run summary."""
@@ -118,6 +138,11 @@ class TrainLMFineTuningResult:
             "resolved_model_revision": self.resolved_model_revision,
             "resolved_tokenizer_revision": self.resolved_tokenizer_revision,
             "model_tokenizer_revision_match": self.model_tokenizer_revision_match,
+            "tokenizer_name_or_path": self.tokenizer_name_or_path,
+            "tokenizer_revision": self.tokenizer_revision,
+            "tokenizer_compatibility": _json_compatible(
+                self.tokenizer_compatibility
+            ),
             "summary_path": str(self.summary_path) if self.summary_path else None,
             "dataset_id": self.dataset_id,
             "dataset_revision": self.dataset_revision,
@@ -187,6 +212,105 @@ def _tokenizer_commit(tokenizer: Any) -> str | None:
             "train with an inconsistent tokenizer."
         )
     return None
+
+
+def _tokenizer_model_compatibility(
+    model: Any,
+    tokenizer: Any,
+    *,
+    sequence_length: int,
+    same_source: bool,
+    source_known: bool,
+    revision_match: bool | None,
+) -> dict[str, Any]:
+    """Report structural checks without claiming token-semantic equivalence."""
+    token_ids: list[int] = []
+    get_vocab = getattr(tokenizer, "get_vocab", None)
+    if callable(get_vocab):
+        vocabulary = get_vocab()
+        if isinstance(vocabulary, Mapping):
+            token_ids.extend(
+                value
+                for value in vocabulary.values()
+                if type(value) is int and value >= 0
+            )
+    all_special_ids = getattr(tokenizer, "all_special_ids", ())
+    if isinstance(all_special_ids, Sequence) and not isinstance(
+        all_special_ids, (str, bytes)
+    ):
+        token_ids.extend(
+            value
+            for value in all_special_ids
+            if type(value) is int and value >= 0
+        )
+    try:
+        tokenizer_size = len(tokenizer)
+    except (TypeError, NotImplementedError):
+        tokenizer_size = None
+    if type(tokenizer_size) is int and tokenizer_size > 0:
+        token_ids.append(tokenizer_size - 1)
+    max_token_id = max(token_ids) if token_ids else None
+
+    embedding_rows = None
+    get_input_embeddings = getattr(model, "get_input_embeddings", None)
+    if callable(get_input_embeddings):
+        embeddings = get_input_embeddings()
+        rows = getattr(embeddings, "num_embeddings", None)
+        if type(rows) is int and rows > 0:
+            embedding_rows = rows
+        else:
+            weight = getattr(embeddings, "weight", None)
+            shape = getattr(weight, "shape", None)
+            if shape is not None and len(shape) > 0:
+                rows = int(shape[0])
+                if rows > 0:
+                    embedding_rows = rows
+    model_config = getattr(model, "config", None)
+    if embedding_rows is None:
+        rows = getattr(model_config, "vocab_size", None)
+        if type(rows) is int and rows > 0:
+            embedding_rows = rows
+
+    if max_token_id is None or embedding_rows is None:
+        token_id_bounds = "unknown"
+    elif max_token_id < embedding_rows:
+        token_id_bounds = "compatible"
+    else:
+        token_id_bounds = "incompatible"
+
+    context_limit = None
+    # Rope scaling can extend a base positional limit. Avoid rejecting those
+    # models using a static config field that may no longer describe the limit.
+    if not getattr(model_config, "rope_scaling", None):
+        for attribute in ("max_position_embeddings", "n_positions", "max_seq_len"):
+            value = getattr(model_config, attribute, None)
+            if type(value) is int and value > 0:
+                context_limit = value
+                break
+    if context_limit is None:
+        context_status = "unknown"
+    elif sequence_length <= context_limit:
+        context_status = "compatible"
+    else:
+        context_status = "exceeds_model_limit"
+
+    return {
+        "source_relation": (
+            "same_source"
+            if same_source
+            else "separate_source"
+            if source_known
+            else "unknown"
+        ),
+        "revision_match": revision_match,
+        "token_id_bounds": token_id_bounds,
+        "tokenizer_max_token_id": max_token_id,
+        "model_embedding_rows": embedding_rows,
+        "context_length": context_status,
+        "configured_sequence_length": sequence_length,
+        "model_context_limit": context_limit,
+        "token_semantics": "not_verified_by_trainlm",
+    }
 
 
 def _json_compatible(value: Any) -> Any:
@@ -295,6 +419,7 @@ def run_finetuning(
         "state": None,
         "evaluation": {},
         "best_model_selection": None,
+        "tokenizer_compatibility": None,
     }
     try:
         result = _run_finetuning_impl(
@@ -330,6 +455,9 @@ def run_finetuning(
             model_tokenizer_revision_match=run_state.get(
                 "model_tokenizer_revision_match"
             ),
+            tokenizer_name_or_path=run_state.get("tokenizer_name_or_path"),
+            tokenizer_revision=run_state.get("tokenizer_revision"),
+            tokenizer_compatibility=run_state.get("tokenizer_compatibility"),
             training_budget=run_state.get("training_budget", report["training_budget"]),
             best_model_selection=run_state.get("best_model_selection"),
             last_known_state=_last_known_state(run_state),
@@ -369,9 +497,12 @@ def _initial_finetuning_summary(
         "summary_path": str(summary_path),
         "model_name_or_path": config.model_name_or_path,
         "model_revision": config.model_revision,
+        "tokenizer_name_or_path": config.tokenizer_name_or_path,
+        "tokenizer_revision": config.tokenizer_revision,
         "resolved_model_revision": None,
         "resolved_tokenizer_revision": None,
         "model_tokenizer_revision_match": None,
+        "tokenizer_compatibility": None,
         "dataset_id": config.dataset_id,
         "dataset_revision": config.dataset_revision,
         "model_path": str(Path(config.args.output_dir) / "model"),
@@ -635,6 +766,8 @@ def restore_finetuning_config(
         config = TrainLMFineTuningConfig(
             model_name_or_path=report["model_name_or_path"],
             model_revision=report.get("model_revision"),
+            tokenizer_name_or_path=report.get("tokenizer_name_or_path"),
+            tokenizer_revision=report.get("tokenizer_revision"),
             dataset_id=report.get("dataset_id"),
             dataset_revision=report.get("dataset_revision"),
             text_field=data["text_field"],
@@ -690,6 +823,7 @@ def _run_finetuning_impl(
         resume_from_checkpoint, (str, Path)
     ):
         raise TypeError("resume_from_checkpoint must be a path or None.")
+    tokenizer_was_provided = tokenizer is not None
 
     if train_dataset is None:
         if eval_dataset is not None:
@@ -709,21 +843,61 @@ def _run_finetuning_impl(
 
     model_revision = config.model_revision
     run_state["phase"] = "tokenizer_loading"
+    tokenizer_source = config.tokenizer_name_or_path
+    tokenizer_source_is_declared = tokenizer_source is not None
     if tokenizer is None:
         from transformers import AutoTokenizer
 
+        if tokenizer_source is None:
+            tokenizer_source = config.model_name_or_path
+        tokenizer_requested_revision = config.tokenizer_revision
+        if tokenizer_requested_revision is None and (
+            tokenizer_source == config.model_name_or_path
+        ):
+            tokenizer_requested_revision = model_revision
+        run_state["tokenizer_name_or_path"] = tokenizer_source
+        run_state["tokenizer_revision"] = tokenizer_requested_revision
         try:
             tokenizer = AutoTokenizer.from_pretrained(
-                config.model_name_or_path,
-                **({"revision": model_revision} if model_revision is not None else {}),
+                tokenizer_source,
+                **(
+                    {"revision": tokenizer_requested_revision}
+                    if tokenizer_requested_revision is not None
+                    else {}
+                ),
             )
         except Exception as exc:
             raise RuntimeError(
-                f"Could not load tokenizer for {config.model_name_or_path!r}. "
+                f"Could not load tokenizer for {tokenizer_source!r}. "
                 "Check the model ID, revision, and Hub access."
             ) from exc
+    else:
+        if tokenizer_source is None:
+            candidate = getattr(tokenizer, "name_or_path", None)
+            if isinstance(candidate, str) and candidate.strip():
+                tokenizer_source = candidate
+        tokenizer_requested_revision = config.tokenizer_revision
+    if tokenizer_source is None and not tokenizer_source_is_declared:
+        # A caller-supplied tokenizer object without an identifier has unknown
+        # provenance. Its commit must not be treated as the model's revision.
+        tokenizer_source_is_same_as_model = False
+    else:
+        tokenizer_source_is_same_as_model = (
+            tokenizer_source == config.model_name_or_path
+        )
+    shared_revision_contract = (
+        tokenizer_source_is_same_as_model
+        and (
+            not tokenizer_was_provided
+            or config.tokenizer_revision is not None
+        )
+        and tokenizer_requested_revision == config.model_revision
+    )
+    run_state["tokenizer_name_or_path"] = tokenizer_source
+    run_state["tokenizer_revision"] = tokenizer_requested_revision
     resolved_tokenizer_revision = (
-        _tokenizer_commit(tokenizer) or _resolved_commit(model_revision)
+        _tokenizer_commit(tokenizer)
+        or _resolved_commit(tokenizer_requested_revision)
     )
     run_state["resolved_tokenizer_revision"] = resolved_tokenizer_revision
 
@@ -817,12 +991,17 @@ def _run_finetuning_impl(
         ),
     )
 
-    model_load_revision = resolved_tokenizer_revision or model_revision
+    model_load_revision = (
+        (resolved_tokenizer_revision or model_revision)
+        if shared_revision_contract
+        else model_revision
+    )
     run_state["phase"] = "model_loading"
     trainer = TrainLMTrainer.from_pretrained(
         config.model_name_or_path,
-        # Pin model loading to the tokenizer's resolved commit when available,
-        # so a moving branch cannot select different model and tokenizer files.
+        # Pin to the tokenizer snapshot only when model and tokenizer use the
+        # same source and requested revision. Independent repositories and
+        # revisions must be resolved separately.
         revision=model_load_revision,
         args=config.args,
         train_dataset=train_dataset,
@@ -854,9 +1033,16 @@ def _run_finetuning_impl(
         resolved_model_revision = _resolved_commit(model_load_revision)
     run_state["resolved_model_revision"] = resolved_model_revision
     model_tokenizer_revision_match = None
-    if resolved_model_revision and resolved_tokenizer_revision:
+    if (
+        shared_revision_contract
+        and resolved_model_revision
+        and resolved_tokenizer_revision
+    ):
         model_tokenizer_revision_match = (
             resolved_model_revision == resolved_tokenizer_revision
+        )
+        run_state["model_tokenizer_revision_match"] = (
+            model_tokenizer_revision_match
         )
         if not model_tokenizer_revision_match:
             raise RuntimeError(
@@ -870,6 +1056,29 @@ def _run_finetuning_impl(
         model_config = trainer.model.config
         if getattr(model_config, "pad_token_id", None) is None:
             model_config.pad_token_id = tokenizer.pad_token_id
+    tokenizer_compatibility = _tokenizer_model_compatibility(
+        trainer.model,
+        tokenizer,
+        sequence_length=config.args.sequence_length,
+        same_source=tokenizer_source_is_same_as_model,
+        source_known=tokenizer_source is not None,
+        revision_match=model_tokenizer_revision_match,
+    )
+    run_state["tokenizer_compatibility"] = tokenizer_compatibility
+    if tokenizer_compatibility["token_id_bounds"] == "incompatible":
+        raise ValueError(
+            "The tokenizer can emit token ID "
+            f"{tokenizer_compatibility['tokenizer_max_token_id']}, but the model "
+            "input embeddings contain only "
+            f"{tokenizer_compatibility['model_embedding_rows']} rows. TrainLM "
+            "will not resize embeddings or remap token IDs."
+        )
+    if tokenizer_compatibility["context_length"] == "exceeds_model_limit":
+        raise ValueError(
+            f"sequence_length={config.args.sequence_length} exceeds the model's "
+            "configured context limit of "
+            f"{tokenizer_compatibility['model_context_limit']}."
+        )
     run_state["phase"] = "training"
     state = trainer.train(resume_from_checkpoint=resume_from_checkpoint)
     run_state["state"] = state
@@ -900,6 +1109,9 @@ def _run_finetuning_impl(
         resolved_model_revision=resolved_model_revision,
         resolved_tokenizer_revision=resolved_tokenizer_revision,
         model_tokenizer_revision_match=model_tokenizer_revision_match,
+        tokenizer_name_or_path=tokenizer_source,
+        tokenizer_revision=tokenizer_requested_revision,
+        tokenizer_compatibility=tokenizer_compatibility,
         summary_path=summary_path,
         training_budget=run_state.get(
             "training_budget",

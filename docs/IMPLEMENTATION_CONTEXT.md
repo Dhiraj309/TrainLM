@@ -16,9 +16,12 @@ pretokenized datasets, scratch/CPT, export and explicit Hub publication.
 Lower-level model acquisition and CPT-style causal loss already exist;
 convenient scratch tokenizer reuse, a prepared-data route, independent
 model/tokenizer revision handling and public Hub upload have gaps.
-HF-01–HF-08 are planned stories with acceptance criteria, not completion
-claims. Next is HF-01, fixing independent model/tokenizer source resolution.
-This planning change adds no runtime behavior or TPU evidence.
+HF-01–HF-08 remain staged stories, not completion claims. HF-01 is in
+progress: `run_finetuning` accepts separate tokenizer IDs and revisions,
+records each source independently, and preserves same-source snapshot pinning.
+Known token-ID bounds and static context limits are checked before training;
+unknown structural checks are reported. Token meanings remain unverified and
+are the user's responsibility. This work adds no TPU evidence.
 
 The merged `main` branch exposes two task-focused, Hugging Face-style entry
 points: `run_pretraining(TrainLMPretrainingConfig(...))` for random-weight
@@ -157,6 +160,21 @@ exercise these settings on one small eager TPU run; they do not establish
 broader TPU support.
 
 ### Implementation history
+
+**HF-01 partial implementation:** fine-tuning now resolves the model using
+`model_name_or_path` and `model_revision`, and independently resolves an
+optional `tokenizer_name_or_path` and `tokenizer_revision`. If no separate
+tokenizer is configured, it still loads the model's tokenizer and pins both
+loads to the same immutable commit when available. Distinct repositories or
+explicitly distinct revision contracts are not compared by SHA. Supplied
+tokenizer objects remain supported; when their provenance is unavailable,
+the report leaves it unknown instead of using their commit to select model
+weights. Before training, the report records token-ID/embedding and known
+context-length checks; incompatible IDs or a sequence longer than a known
+static context limit fail early. Token semantic compatibility is explicitly
+`not_verified_by_trainlm` and remains the user's responsibility. Regression
+coverage passes under the established CPU environment; no TPU or live-Hub
+validation is implied.
 
 The entries below preserve the API and validation history. Branch names,
 intermediate notebook controls, and test counts in those entries describe past

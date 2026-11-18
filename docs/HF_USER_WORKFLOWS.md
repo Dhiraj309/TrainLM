@@ -50,7 +50,7 @@ remain separate scopes. Unsupported cases need an actionable early error.
 | Random initialization from a Hub config | Lower-level `ModelSourceConfig(initialization="config")` and HF provider already load a Hub config then call `from_config` | Convenient scratch API only exposes `model_type`/overrides; connect the existing source loader |
 | Start from pretrained weights for CPT | `TrainLMTrainer.from_pretrained` and default `run_finetuning` causal-LM loss exist | Expose CPT clearly, share preparation and budgeting, and validate the intended TPU path |
 | Reuse an HF tokenizer | Fine-tuning loads or accepts one; scratch always trains byte-level BPE | Accept an independent tokenizer ID/path/revision or object in scratch; make training a new tokenizer an explicit choice |
-| Independently hosted tokenizer | Fine-tuning accepts a tokenizer object | It currently uses the tokenizer commit to load the model and enforces SHA equality. Resolve each repository independently; commits from different repositories need not match |
+| Independently hosted tokenizer | `run_finetuning` accepts separate model/tokenizer IDs and revisions, resolves them independently, and checks known token-ID bounds and static context limits | Token meanings cannot be proven from Hub IDs or vocabulary sizes; the report marks them unverified and an explicit user policy remains |
 | Raw HF datasets | Scratch streams pinned text; fine-tuning loads Hub splits or caller-provided HF datasets and maps text | Shared source options for dataset config/subset, split expressions, files, objects, and caching; avoid requiring users to look up SHAs manually |
 | Pretokenized HF datasets | Generic trainer accepts prepared mappings/DataLoaders; default collator stacks equal-length tensors | Convenient workflows always tokenize raw text. Add an explicit tokens route with appropriate collation and label/mask preservation |
 | Modern HF vocabularies | Packed writer supports uint32 | Scratch config still has a 65,536 vocabulary ceiling. Reconcile it with tokenizer reuse and validate actual token-ID range without overflow |
@@ -147,7 +147,21 @@ preceding PR merges and `main` is verified. Keep the requested co-author
 trailer and use rebase-and-merge first, merge commits second; squash only on an
 explicit request. The planning PR changes documentation only.
 
-### HF-01 — Independent model and tokenizer sources (P0, next)
+### HF-01 — Independent model and tokenizer sources (P0, in progress)
+
+**Progress:** `run_finetuning` loads and records model and tokenizer IDs and
+requested/resolved revisions independently. A separate tokenizer commit no
+longer selects the model snapshot or causes a false SHA mismatch. The
+same-source, same-revision path still pins both loads to one immutable commit.
+Before training, it checks known tokenizer IDs against model embedding rows and
+the configured sequence length against a known static model context limit; it
+records `unknown` when these values cannot be determined or rope scaling makes
+a static limit ambiguous. It never resizes embeddings or remaps IDs. Token
+meaning compatibility is not machine-verifiable and is marked
+`not_verified_by_trainlm`; the user must choose a tokenizer compatible with
+the model. A remaining HF-01 task is to decide whether that explicit report
+and caller responsibility are sufficient or whether a separate opt-in is
+needed for unverified tokenizer semantics.
 
 **User outcome:** choose a model and compatible HF tokenizer without manually
 rebuilding their configs or making the repositories share a commit.

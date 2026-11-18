@@ -232,6 +232,12 @@ standard `TrainLMTrainer` remains available when you already have a model and
 tokenized datasets or need a custom lifecycle. Native TorchTPU fine-tuning is
 experimental and has not been certified by this API example.
 
+If your tokenizer is hosted separately, set `tokenizer_name_or_path` and
+`tokenizer_revision` on `TrainLMFineTuningConfig`. TrainLM resolves that source
+independently, checks known token-ID bounds and context length, and reports
+token-semantic compatibility as unverified. Choose a tokenizer whose token
+meanings match the model; TrainLM does not resize or remap pretrained weights.
+
 For custom formatting, pass preloaded Hugging Face `Dataset` train and
 validation splits, a `formatting_func` that returns one text string per row,
 and optionally a tokenizer and custom `data_collator`. In this mode,
