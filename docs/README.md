@@ -5,11 +5,14 @@ PyTorch/XLA work. Read the status labels before treating an item as current.
 
 ## Current direction
 
-**Product priority (2026-11-17):** follow the
+**Product priority (2026-11-18):** follow the
 [HF user-workflow roadmap](HF_USER_WORKFLOWS.md) for the current implementation
 queue: HF model/config and tokenizer reuse, raw/pretokenized datasets,
 scratch/CPT training, export and optional Hub publication. Its audited status
-table distinguishes existing building blocks from planned API work.
+table distinguishes merged work, the current HF-02 implementation branch, and
+planned API work. The public config now connects Hub/local model configs and
+tokenizers to random initialization or CPT; the notebook still shows the short
+legacy GPT-2/BPE workflow pending the notebook-specific story.
 [T0–T11](TORCHTPU_REBASELINE.md) continues to define runtime evidence gates.
 
 For a task-oriented map of the notebook, implementation, tests, and evidence
@@ -20,7 +23,7 @@ the public API call, and the saved result. Use the task guides for custom data,
 checkpoint recovery, longer schedules, best-model selection, and other
 advanced options.
 
-The from-scratch notebook calls the one-call public
+The current from-scratch notebook calls the one-call public
 `run_pretraining(TrainLMPretrainingConfig(...))` workflow. It explicitly uses
 `model_type="gpt2"`: TrainLM creates a Hugging Face `GPT2Config` and randomly
 initializes `GPT2LMHeadModel`; it does not load pretrained weights. The API
@@ -43,6 +46,11 @@ notebook's `MODEL_SIZE` choice selects either `tiny`
 vocabulary) or `small` (6 layers, width 384, 6 heads). Both are randomly
 initialized GPT-2 models. Python users can set the corresponding dimensions
 directly in `TrainLMPretrainingConfig`.
+The HF-02 API branch also accepts `model_name_or_path`, independent tokenizer
+sources, and `model_initialization="pretrained"` for CPT. It preserves HF
+config fields, fingerprints the selected tokenizer mapping, and rejects
+pretrained tokenizer IDs outside the model embedding rows. The new path has
+offline CPU tests; it has not yet run against live Hub models or on TPU.
 The public API also adds `run_finetuning(TrainLMFineTuningConfig(...))` for a
 pretrained causal LM. It can load a pinned Hub text dataset or accept paired
 preloaded Hugging Face `Dataset` splits. A row formatter and custom collator

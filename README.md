@@ -8,8 +8,9 @@ The product goal is to bring an HF model, tokenizer, and raw or tokenized
 dataset; train from random weights or continue pretrained weights; then save,
 optionally publish, and use the result through Transformers. The
 [HF user-workflow roadmap](docs/HF_USER_WORKFLOWS.md) records what works today,
-the remaining gaps, and the next implementation order. Planned capabilities
-in that roadmap are not yet part of the API examples below.
+the remaining gaps, and the next implementation order. HF-02 is currently
+under implementation; its example below shows the new HF config and tokenizer
+options while the hosted notebook still demonstrates the legacy default.
 
 ## Start here: pretrain a language model from scratch
 
@@ -55,11 +56,41 @@ the instantiated model; `result.summary()` includes the same count. Progress
 updates use the configured `logging_steps` cadence. Omit `show_progress=True`
 for a quiet library call.
 
-The default architecture is Hugging Face GPT-2 (`model_type="gpt2"`). TrainLM
-builds its config from the model dimensions and tokenizer vocabulary, then
-initializes new weights with `AutoModelForCausalLM.from_config`; it does not
-load a pretrained checkpoint. Set `model_type` and architecture-specific
-`model_config_overrides` to build another registered Transformers causal LM.
+With no model or tokenizer source configured, the original convenience path
+builds a small GPT-2 config and trains a byte-level BPE tokenizer on the
+training split. To use an architecture and tokenizer already hosted on the HF
+Hub, set `model_name_or_path`; TrainLM loads its config and tokenizer, then
+creates random model weights without downloading pretrained weights:
+
+```python
+config = TrainLMPretrainingConfig(
+    output_dir="runs/gpt2-from-config",
+    model_name_or_path="openai-community/gpt2",
+    model_revision="main",
+    model_initialization="random",
+    max_tokens=10_000,
+    sequence_length=128,
+    accelerator="native_tpu",
+)
+result = run_pretraining(config, show_progress=True)
+```
+
+For continued pretraining (CPT), use the same config with
+`model_initialization="pretrained"`; TrainLM loads the existing weights and
+defaults to the tokenizer in that model repository. Set
+`tokenizer_name_or_path` and `tokenizer_revision` to select a separately hosted
+tokenizer. TrainLM checks known token-ID bounds and context length, never
+resizes pretrained embeddings or remaps IDs, and reports that semantic token
+compatibility for an independently selected tokenizer remains your
+responsibility. Hub `revision` values may be branch or tag names; TrainLM pins
+model config and weights to the resolved snapshot recorded in the run report.
+
+Set `tokenizer_mode="train_bpe"` to explicitly use the corpus-trained BPE
+tokenizer with a random model. It cannot be combined with pretrained weights.
+For a locally cached source without Hub access, set `local_files_only=True`.
+Use `trust_remote_code=True` only when the selected repository requires its
+own model or tokenizer implementation. Architecture fields from the selected
+HF config are preserved; `model_config_overrides` applies explicit changes.
 
 To use your own corpus instead of the default pinned Hub dataset, provide
 separate UTF-8 text files for training and validation. Each non-empty line is
@@ -186,7 +217,9 @@ The default `model_embedding_size`, `model_layers`, and
 `model_attention_heads` settings apply to GPT-2. For other architectures,
 provide the relevant Transformers config fields in `model_config_overrides`.
 Only model types supported by `AutoModelForCausalLM` are suitable; TrainLM does
-not load custom remote model code in this scratch path.
+not enable custom remote model code unless `trust_remote_code=True` is
+explicitly selected. Dense causal-LM compatibility and accelerator support
+still depend on the model implementation and runtime.
 
 `run_pretraining` writes a versioned report containing the effective settings,
 model and tokenizer details, selected backend, package versions, and training
