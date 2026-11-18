@@ -286,6 +286,11 @@ file's directory as `output_dir`, and checks local archive or native TPU
 manifest metadata before returning the config. This catches missing or
 malformed publication without unpickling local
 checkpoint data; the trainer checks model/state compatibility during restore.
+Resolved immutable model and tokenizer commits take precedence over mutable
+branch names. If the original tokenizer was a caller-provided object with no
+source ID, the summary marks `tokenizer_object_required`; pass that object to
+`run_finetuning` again. When the original object exposed a commit, TrainLM
+checks that it matches the recorded tokenizer revision before resuming.
 The saved checkpoint contains optimizer and trainer state; the exported
 `model` directory alone is not enough to resume. On Colab or Kaggle, keep the
 summary and checkpoints on persistent storage if a runtime reset should not

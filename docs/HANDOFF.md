@@ -8,7 +8,9 @@
   independent model/tokenizer sources and revisions, with same-source snapshot
   pinning retained. Known token ID bounds and static context limits fail before
   training when incompatible; token semantic compatibility remains the user's
-  responsibility and is marked unverified.
+  responsibility and is marked unverified. Restore uses resolved commits and
+  requires source-less tokenizer objects to be supplied again, checking their
+  recorded commit when available.
   Next, connect HF config/tokenizer reuse, raw/pretokenized data and CPT to the
   existing trainer, portable exports and explicit Hub publication. This is the
   product implementation queue; the runtime gates below still govern

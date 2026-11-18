@@ -153,15 +153,20 @@ explicit request. The planning PR changes documentation only.
 requested/resolved revisions independently. A separate tokenizer commit no
 longer selects the model snapshot or causes a false SHA mismatch. The
 same-source, same-revision path still pins both loads to one immutable commit.
+`restore_finetuning_config` pins to resolved model/tokenizer commits instead
+of replaying movable branch names. A tokenizer object with no reproducible
+source must be supplied again on resume; its recorded commit is checked when
+available.
 Before training, it checks known tokenizer IDs against model embedding rows and
 the configured sequence length against a known static model context limit; it
 records `unknown` when these values cannot be determined or rope scaling makes
 a static limit ambiguous. It never resizes embeddings or remaps IDs. Token
 meaning compatibility is not machine-verifiable and is marked
 `not_verified_by_trainlm`; the user must choose a tokenizer compatible with
-the model. A remaining HF-01 task is to decide whether that explicit report
-and caller responsibility are sufficient or whether a separate opt-in is
-needed for unverified tokenizer semantics.
+the model. The explicit policy is caller responsibility for semantic
+compatibility, with structural checks and unknowns recorded; TrainLM does not
+add a second acknowledgement switch for this user-selected source. Arbitrary
+dataset stream/cursor identity remains part of HF-06.
 
 **User outcome:** choose a model and compatible HF tokenizer without manually
 rebuilding their configs or making the repositories share a commit.

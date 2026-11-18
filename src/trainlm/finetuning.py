@@ -54,6 +54,12 @@ class TrainLMFineTuningConfig:
     model_revision: str | None = None
     tokenizer_name_or_path: str | None = None
     tokenizer_revision: str | None = None
+    _tokenizer_object_required: bool = field(
+        default=False, init=False, repr=False, compare=False
+    )
+    _expected_tokenizer_revision: str | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
 
     def __post_init__(self) -> None:
         if (
@@ -123,6 +129,7 @@ class TrainLMFineTuningResult:
     tokenizer_name_or_path: str | None = None
     tokenizer_revision: str | None = None
     tokenizer_compatibility: Mapping[str, Any] | None = None
+    tokenizer_object_required: bool = False
 
     def summary(self) -> dict[str, Any]:
         """Return a compact, JSON-compatible run summary."""
@@ -143,6 +150,7 @@ class TrainLMFineTuningResult:
             "tokenizer_compatibility": _json_compatible(
                 self.tokenizer_compatibility
             ),
+            "tokenizer_object_required": self.tokenizer_object_required,
             "summary_path": str(self.summary_path) if self.summary_path else None,
             "dataset_id": self.dataset_id,
             "dataset_revision": self.dataset_revision,
@@ -396,6 +404,19 @@ def run_finetuning(
         )
     if tokenizer is not None and not callable(tokenizer):
         raise TypeError("tokenizer must be callable when provided.")
+    if config._tokenizer_object_required and tokenizer is None:
+        raise ValueError(
+            "This restored run used a tokenizer object without a reproducible "
+            "source ID. Pass that tokenizer object again to resume."
+        )
+    if config._tokenizer_object_required and tokenizer is not None:
+        expected_revision = config._expected_tokenizer_revision
+        actual_revision = _tokenizer_commit(tokenizer)
+        if expected_revision is not None and actual_revision != expected_revision:
+            raise ValueError(
+                "The supplied tokenizer does not match the immutable revision "
+                "recorded by the restored run."
+            )
     if formatting_func is not None and not callable(formatting_func):
         raise TypeError("formatting_func must be callable when provided.")
     if data_collator is not None and not callable(data_collator):
@@ -420,6 +441,7 @@ def run_finetuning(
         "evaluation": {},
         "best_model_selection": None,
         "tokenizer_compatibility": None,
+        "tokenizer_object_required": config._tokenizer_object_required,
     }
     try:
         result = _run_finetuning_impl(
@@ -458,6 +480,9 @@ def run_finetuning(
             tokenizer_name_or_path=run_state.get("tokenizer_name_or_path"),
             tokenizer_revision=run_state.get("tokenizer_revision"),
             tokenizer_compatibility=run_state.get("tokenizer_compatibility"),
+            tokenizer_object_required=run_state.get(
+                "tokenizer_object_required", False
+            ),
             training_budget=run_state.get("training_budget", report["training_budget"]),
             best_model_selection=run_state.get("best_model_selection"),
             last_known_state=_last_known_state(run_state),
@@ -503,6 +528,7 @@ def _initial_finetuning_summary(
         "resolved_tokenizer_revision": None,
         "model_tokenizer_revision_match": None,
         "tokenizer_compatibility": None,
+        "tokenizer_object_required": config._tokenizer_object_required,
         "dataset_id": config.dataset_id,
         "dataset_revision": config.dataset_revision,
         "model_path": str(Path(config.args.output_dir) / "model"),
@@ -655,10 +681,13 @@ def restore_finetuning_config(
 ) -> TrainLMFineTuningConfig:
     """Restore a fine-tuning config from its saved summary for checkpoint resume.
 
-    All recorded model, data, and training settings are restored. Supply a
-    larger `max_steps` or `num_train_epochs` for the resumed run. The output
-    directory is anchored to the summary file's current location. A published
-    checkpoint must exist before the config is returned.
+    All recorded model, data, and training settings are restored. Resolved
+    immutable model/tokenizer commits take precedence over mutable revision
+    names. If the original tokenizer was a caller-supplied object without a
+    reproducible source ID, the same object is required again. Supply a larger
+    `max_steps` or `num_train_epochs` for the resumed run. The output directory
+    is anchored to the summary file's current location. A published checkpoint
+    must exist before the config is returned.
     """
     if (max_steps is None) == (num_train_epochs is None):
         raise ValueError("Set exactly one of max_steps or num_train_epochs.")
@@ -765,9 +794,16 @@ def restore_finetuning_config(
         args = TrainLMTrainingArguments(**restored_args)
         config = TrainLMFineTuningConfig(
             model_name_or_path=report["model_name_or_path"],
-            model_revision=report.get("model_revision"),
+            model_revision=(
+                _resolved_commit(report.get("resolved_model_revision"))
+                or report.get("model_revision")
+            ),
             tokenizer_name_or_path=report.get("tokenizer_name_or_path"),
-            tokenizer_revision=report.get("tokenizer_revision"),
+            tokenizer_revision=(
+                _resolved_commit(report.get("resolved_tokenizer_revision"))
+                if report.get("tokenizer_name_or_path") is not None
+                else report.get("tokenizer_revision")
+            ),
             dataset_id=report.get("dataset_id"),
             dataset_revision=report.get("dataset_revision"),
             text_field=data["text_field"],
@@ -775,6 +811,20 @@ def restore_finetuning_config(
             validation_split=data["validation_split"],
             args=args,
         )
+        tokenizer_object_required = report.get(
+            "tokenizer_object_required", False
+        )
+        if type(tokenizer_object_required) is not bool:
+            raise ValueError("The saved tokenizer source metadata is invalid.")
+        object.__setattr__(
+            config, "_tokenizer_object_required", tokenizer_object_required
+        )
+        if tokenizer_object_required:
+            object.__setattr__(
+                config,
+                "_expected_tokenizer_revision",
+                _resolved_commit(report.get("resolved_tokenizer_revision")),
+            )
     except (KeyError, TypeError, ValueError) as exc:
         raise ValueError(
             "The fine-tuning summary contains invalid saved settings."
@@ -895,6 +945,8 @@ def _run_finetuning_impl(
     )
     run_state["tokenizer_name_or_path"] = tokenizer_source
     run_state["tokenizer_revision"] = tokenizer_requested_revision
+    tokenizer_object_required = tokenizer_was_provided and tokenizer_source is None
+    run_state["tokenizer_object_required"] = tokenizer_object_required
     resolved_tokenizer_revision = (
         _tokenizer_commit(tokenizer)
         or _resolved_commit(tokenizer_requested_revision)
@@ -1112,6 +1164,7 @@ def _run_finetuning_impl(
         tokenizer_name_or_path=tokenizer_source,
         tokenizer_revision=tokenizer_requested_revision,
         tokenizer_compatibility=tokenizer_compatibility,
+        tokenizer_object_required=tokenizer_object_required,
         summary_path=summary_path,
         training_budget=run_state.get(
             "training_budget",

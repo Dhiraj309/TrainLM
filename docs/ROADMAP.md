@@ -8,7 +8,9 @@ inference. The plan audits `main` at `68e0493`; HF-01 is in progress and
 HF-02–HF-08 remain planned. Fine-tuning now resolves independent
 model/tokenizer IDs and revisions, preserves same-source snapshot pinning,
 checks known tokenizer ID bounds and static context limits, and reports
-unknown checks. Token meanings are not verifiable by TrainLM and remain the
+unknown checks. Resume pins to resolved source commits; source-less tokenizer
+objects must be supplied again and are checked against their recorded commit
+when available. Token meanings are not verifiable by TrainLM and remain the
 user's responsibility. Notebook presets do not complete that workflow.
 T0–T11 remains the runtime architecture/evidence plan; the M0–M17
 specification below remains historical.

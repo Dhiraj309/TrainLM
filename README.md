@@ -266,7 +266,10 @@ to improve the selected metric by `early_stopping_threshold`; it requires
 
 To resume from the latest checkpoint, restore the saved run configuration and
 set a larger step budget. The helper reloads model, dataset, and training
-settings from the summary while anchoring the output directory to its location:
+settings from the summary, anchors the output directory to its location, and
+pins resolved model/tokenizer commits rather than mutable branches. If the
+summary marks `tokenizer_object_required`, pass the original tokenizer object
+again; TrainLM checks its recorded commit when available:
 
 ```python
 from trainlm import restore_finetuning_config, run_finetuning

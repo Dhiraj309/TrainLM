@@ -86,8 +86,11 @@ not supported. Its focused API, lifecycle, config, engine, notebook, TPU
 coordinator, and packed-scratch suite passed 151 tests under Python 3.12.14
 with torch 2.9.0+cpu. No TPU or Hub run was performed.
 The additive `restore_finetuning_config` helper reloads settings from a run
-summary, anchors `output_dir` to its location, verifies that a published
-checkpoint is readable, and accepts a new training-step target for resume.
+summary, pins resolved model/tokenizer commits rather than mutable branches,
+anchors `output_dir` to its location, verifies that a published checkpoint
+is readable, and accepts a new training-step target for resume. If a summary
+marks `tokenizer_object_required`, pass the original source-less tokenizer
+object again; its recorded commit is checked when available.
 This early check does not unpickle local checkpoint data; trainer restore
 still checks model/state compatibility. Resume is covered by CPU lifecycle
 tests; the quick-start notebook leaves these controls to the guide. The
