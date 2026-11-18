@@ -24,7 +24,10 @@ checksummed sidecars, derives labels from `input_ids` when absent, and applies
 one causal shift. Selected tokenizer provenance is recorded while compatibility
 remains caller responsibility. Raw multi-column datasets support a named
 `formatting_func` whose identity participates in preparation and checkpoint
-resume. Unified provenance remains incomplete. HF-04–HF-08 remain planned;
+resume. Local raw inputs support paired text, CSV, JSON/JSONL, and Parquet
+files; extension-based or explicit parser selection, source-column selection,
+and named row formatting are recorded in cache identity and reports. Unified
+cross-workflow provenance remains incomplete. HF-04–HF-08 remain planned;
 notebook presets do not complete those workflows. The
 previous token-input slice passed 54 local tests plus 14 subtests, and CI for
 `e4e1c9f621148a76cf10efb6d00ceb5769d4e5ce` passed both core profiles. This
@@ -36,7 +39,8 @@ optional for legacy manifests; the affected CPU suite passed 82 tests plus 14
 subtests, and both hosted CI profiles passed on correction commit
 `c4822048162d84b01348ebdd2c61bf9770070357`. The multi-column row formatter
 passes 99 focused CPU tests plus 14 subtests, and both hosted core profiles
-pass on `594ec2d75bd8c721847f6350be611642a5debe4d`.
+pass on `594ec2d75bd8c721847f6350be611642a5debe4d`. The local structured-file
+follow-up passes 43 focused CPU tests; it adds no live Hub or TPU evidence.
 T0–T11 remains the runtime architecture/evidence plan; the M0–M17
 specification below remains historical.
 

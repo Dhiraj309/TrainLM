@@ -242,8 +242,12 @@ slices. Named refs resolve to one commit before the stream is opened. The
 resolved commit and config enter the preparation fingerprint and run
 configuration, and generated resume settings pin to that commit. When train
 and validation use one underlying split, TrainLM accepts them only as
-non-overlapping slices. Raw local text files and text-column tokenization
-remain supported. The pretrained `run_finetuning` helper also accepts
+non-overlapping slices. Local raw files support UTF-8 text, CSV, JSON/JSONL,
+and Parquet; `local_data_format="auto"` selects the parser from the extension,
+or you can set it explicitly. Select a structured source column with
+`text_field`, or use the existing row formatter for multiple columns. Local
+file hashes and the parser enter preparation-cache identity and the run report.
+The pretrained `run_finetuning` helper also accepts
 prepared HF `Dataset` splits with `data_format="tokens"`: it validates aligned
 token columns, checks known model embedding bounds, preserves unshifted labels
 and masks, and pads ragged batches. Tokenized scratch/CPT accepts optional
@@ -255,7 +259,7 @@ tokenizer source and mapping, but cannot verify that the dataset token IDs were
 produced by that tokenizer. Raw text datasets with multiple columns accept a
 `formatting_func(row) -> str`; its stable `text_formatter_name` is included in
 the preparation cache and checkpoint identity, and the caller supplies the
-same formatter again on resume. Arbitrary local data files and unified
+same formatter again on resume. Other local formats and unified
 cross-workflow source/resume fingerprints remain outstanding.
 Raw text HF `Dataset` splits now enter scratch/CPT through
 `run_pretraining(..., train_dataset=..., eval_dataset=...)` or
@@ -339,6 +343,23 @@ the prepared-data cache rather than silently reusing data formatted another
 way. The generated resume example asks for the formatter to be redefined and
 passes it back into TrainLM. Treat the name like a formatter version and
 change it whenever formatting behavior changes.
+
+For local structured files, set the source column and let TrainLM choose the
+parser from the matching train/validation extensions:
+
+```python
+from trainlm import TrainLMPretrainingConfig, run_pretraining
+
+config = TrainLMPretrainingConfig(
+    dataset_id=None,
+    dataset_revision=None,
+    train_file="data/train.csv",
+    validation_file="data/validation.csv",
+    text_field="content",
+    output_dir="trainlm-cpt",
+)
+result = run_pretraining(config, show_progress=True)
+```
 
 For an already-tokenized Hub dataset, the pretrained fine-tuning API accepts
 the `Dataset` splits directly. Use the same tokenizer that produced the token

@@ -17,7 +17,7 @@ from typing import Any
 import zipfile
 
 from ._notebook_resume import build_resume_report
-from .pretraining import TrainLMPretrainingConfig
+from .pretraining import TrainLMPretrainingConfig, _configured_local_data_format
 
 
 _SOURCE_REVISION = re.compile(r"[0-9a-f]{40}\Z")
@@ -350,6 +350,14 @@ def _initial_report(
         config.tokenizer_name_or_path is not None
         or config.model_name_or_path is not None
     )
+    if config.dataset_source == "provided":
+        dataset_source_type = "huggingface_dataset_objects"
+    elif config.train_file is None:
+        dataset_source_type = "huggingface_hub"
+    elif _configured_local_data_format(config) == "text":
+        dataset_source_type = "local_text_files"
+    else:
+        dataset_source_type = "local_structured_files"
     return {
         "schema_version": 6,
         "scope": (
@@ -369,15 +377,7 @@ def _initial_report(
             "packages": packages,
         },
         "data": {
-            "source_type": (
-                "huggingface_dataset_objects"
-                if config.dataset_source == "provided"
-                else (
-                    "local_text_files"
-                    if config.train_file is not None
-                    else "huggingface_hub"
-                )
-            ),
+            "source_type": dataset_source_type,
             "dataset_source": (
                 "local_files"
                 if config.train_file is not None
@@ -402,6 +402,11 @@ def _initial_report(
             "validation_split": config.validation_split,
             "text_field": config.text_field,
             "text_formatter_name": config.text_formatter_name,
+            "local_data_format": (
+                _configured_local_data_format(config)
+                if config.train_file is not None
+                else None
+            ),
             "max_train_examples": config.max_train_examples,
             "max_eval_examples": config.max_eval_examples,
             "local_files": (
@@ -534,9 +539,15 @@ def _capture_local_text_sources(
             }
     if config.train_file is not None and config.validation_file is not None:
         files = inputs.get("local_text_files")
-        if not isinstance(files, Mapping) or set(files) != {"train", "validation"}:
+        if files is None:
+            files = inputs.get("local_structured_files")
+        expected_keys = {"train", "validation"}
+        local_format = _configured_local_data_format(config)
+        if local_format != "text":
+            expected_keys.add("format")
+        if not isinstance(files, Mapping) or set(files) != expected_keys:
             raise RuntimeError(
-                "The prepared-data cache does not record both local text files."
+                "The prepared-data cache does not record both local source files."
             )
         report["data"]["local_files"] = files
 

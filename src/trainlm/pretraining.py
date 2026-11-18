@@ -36,6 +36,39 @@ _SPLIT_SELECTOR = re.compile(
 )
 _PREPARATION_CACHE_SCHEMA = 1
 _PREPARATION_ALGORITHM = "byte-level-bpe-v1"
+_LOCAL_DATA_FORMATS = {"auto", "text", "csv", "json", "parquet"}
+_LOCAL_DATA_SUFFIXES = {
+    ".txt": "text",
+    ".text": "text",
+    ".csv": "csv",
+    ".json": "json",
+    ".jsonl": "json",
+    ".ndjson": "json",
+    ".parquet": "parquet",
+}
+
+
+def _resolve_local_data_format(
+    requested: str, paths: Sequence[Path]
+) -> str:
+    """Resolve the Hugging Face Datasets builder for paired local sources."""
+    if requested != "auto":
+        return requested
+    inferred = []
+    for path in paths:
+        data_format = _LOCAL_DATA_SUFFIXES.get(path.suffix.lower())
+        if data_format is None:
+            raise ValueError(
+                f"Cannot infer the local data format from {path.name!r}; "
+                "set local_data_format to 'text', 'csv', 'json', or 'parquet'."
+            )
+        inferred.append(data_format)
+    if len(set(inferred)) != 1:
+        raise ValueError(
+            "Training and validation files must use the same data format; "
+            "set local_data_format only when both files share that format."
+        )
+    return inferred[0]
 
 
 def _parse_split_selector(
@@ -112,7 +145,7 @@ def _validate_disjoint_split_selectors(
 
 @dataclass(frozen=True, slots=True)
 class TrainLMPretrainingConfig:
-    """Settings for causal pretraining from a Hub, Dataset, or local text source.
+    """Settings for causal pretraining from a Hub, Dataset, or local source.
 
     The default path preserves the original GPT-2 plus corpus-trained BPE
     workflow. Set ``model_name_or_path`` to use a registered Transformers
@@ -149,6 +182,7 @@ class TrainLMPretrainingConfig:
     dataset_revision: str | None = None
     train_file: str | Path | None = None
     validation_file: str | Path | None = None
+    local_data_format: Literal["auto", "text", "csv", "json", "parquet"] = "auto"
     train_split: str = "train"
     validation_split: str = "validation"
     text_field: str = "text"
@@ -292,6 +326,13 @@ class TrainLMPretrainingConfig:
             "hub", "provided"
         }:
             raise ValueError("dataset_source must be 'hub' or 'provided'.")
+        if (
+            not isinstance(self.local_data_format, str)
+            or self.local_data_format not in _LOCAL_DATA_FORMATS
+        ):
+            raise ValueError(
+                "local_data_format must be 'auto', 'text', 'csv', 'json', or 'parquet'."
+            )
         local_files = self.train_file is not None or self.validation_file is not None
         if local_files:
             if self.train_file is None or self.validation_file is None:
@@ -305,12 +346,8 @@ class TrainLMPretrainingConfig:
                 or self.dataset_source != "hub"
             ):
                 raise ValueError(
-                    "Choose either local text files or a Hugging Face dataset, "
+                    "Choose either local files or a Hugging Face dataset, "
                     "not both; provided Dataset objects are another exclusive source."
-                )
-            if self.text_field != "text":
-                raise ValueError(
-                    "Local text files use the 'text' field; set text_field='text'."
                 )
             paths = []
             for name in ("train_file", "validation_file"):
@@ -319,12 +356,24 @@ class TrainLMPretrainingConfig:
                     raise ValueError(f"{name} must be a non-empty file path.")
                 path = Path(raw_path).expanduser().resolve()
                 if not path.is_file():
-                    raise ValueError(f"{name} must point to a regular text file.")
+                    raise ValueError(f"{name} must point to a regular data file.")
                 object.__setattr__(self, name, path)
                 paths.append(path)
             if paths[0] == paths[1]:
                 raise ValueError("Training and validation files must be distinct.")
+            resolved_format = _resolve_local_data_format(
+                self.local_data_format, paths
+            )
+            if resolved_format == "text" and self.text_field != "text":
+                raise ValueError(
+                    "Local text files provide the 'text' field; set text_field='text'."
+                )
         else:
+            if self.local_data_format != "auto":
+                raise ValueError(
+                    "local_data_format applies only when train_file and "
+                    "validation_file are configured."
+                )
             if self.dataset_source == "provided":
                 if any(value is not None for value in (
                     self.dataset_id, self.dataset_revision, self.dataset_config_name
@@ -1521,7 +1570,7 @@ def _preparation_cache_inputs(
             if key != "source_relation"
         }
     if config.train_file is not None and config.validation_file is not None:
-        inputs["local_text_files"] = {
+        local_files = {
             "train": {
                 "path": str(config.train_file),
                 "sha256": _sha256_file(config.train_file),
@@ -1531,7 +1580,25 @@ def _preparation_cache_inputs(
                 "sha256": _sha256_file(config.validation_file),
             },
         }
+        local_data_format = _configured_local_data_format(config)
+        if local_data_format == "text":
+            # Keep the legacy key and fingerprint stable for existing text runs.
+            inputs["local_text_files"] = local_files
+        else:
+            inputs["local_structured_files"] = {
+                "format": local_data_format,
+                **local_files,
+            }
     return inputs
+
+
+def _configured_local_data_format(config: TrainLMPretrainingConfig) -> str:
+    if config.train_file is None or config.validation_file is None:
+        raise ValueError("A local data format requires both local files.")
+    return _resolve_local_data_format(
+        config.local_data_format,
+        (Path(config.train_file), Path(config.validation_file)),
+    )
 
 
 def _preparation_cache_fingerprint(inputs: Mapping[str, Any]) -> str:
@@ -1547,7 +1614,7 @@ def _load_scratch_text_source(
     resolved_dataset_revision: str | None = None,
     provided_datasets: Mapping[str, Any] | None = None,
 ):
-    """Open one pinned Hub split or one local UTF-8 text file as a stream."""
+    """Open one pinned Hub split or local data file as a stream."""
     split_name = config.train_split if split == "train" else config.validation_split
     local_file = config.train_file if split == "train" else config.validation_file
     if config.dataset_source == "provided":
@@ -1557,8 +1624,9 @@ def _load_scratch_text_source(
             )
         return provided_datasets[split]
     if local_file is not None:
+        builder = _configured_local_data_format(config)
         return load_dataset(
-            "text",
+            builder,
             data_files={split_name: str(local_file)},
             split=split_name,
             streaming=True,
@@ -2100,7 +2168,7 @@ def _prepare_scratch_training(
             train_dataset.close()
             eval_dataset.close()
             raise RuntimeError(
-                "The source text files changed while TrainLM was preparing data. "
+                "The local source files changed while TrainLM was preparing data. "
                 "Restore the original files or choose a fresh output_dir."
             )
         _check_scratch_dataset_sizes(config, train_dataset, eval_dataset)
@@ -2118,7 +2186,11 @@ def _prepare_scratch_training(
             else (
                 "huggingface_hub"
                 if config.dataset_id is not None
-                else "local_text_files"
+                else (
+                    "local_text_files"
+                    if _configured_local_data_format(config) == "text"
+                    else "local_structured_files"
+                )
             )
         ),
         "dataset_id": config.dataset_id,
@@ -2131,6 +2203,10 @@ def _prepare_scratch_training(
         "text_formatter_name": config.text_formatter_name,
         "data_format": config.data_format,
     }
+    if config.train_file is not None:
+        dataset_source_metadata["local_data_format"] = (
+            _configured_local_data_format(config)
+        )
     if provided_datasets is not None:
         dataset_source_metadata["provided_datasets"] = provided_datasets
     train_dataset._trainlm_dataset_source_metadata = dataset_source_metadata

@@ -38,8 +38,12 @@ the user's responsibility. Scratch/CPT raw-text inputs also accept a
 `formatting_func(row) -> str` for multi-column data when the config supplies a
 stable `text_formatter_name`; this name enters cache and checkpoint identity,
 and callers pass the same function again on resume. Arbitrary local structured
-files and unified cross-workflow source identity remain incomplete. These
-changes add no live-Hub or TPU execution evidence.
+files now support CSV, JSON/JSONL, and Parquet alongside text, with parser
+selection inferred from paired file extensions or selected explicitly. A
+structured source can select one `text_field` or use the named row formatter;
+its parser and source hashes are recorded in preparation cache identity and
+the run report. More local formats and unified cross-workflow source identity
+remain incomplete. These changes add no live-Hub or TPU execution evidence.
 
 **HF-03 CI follow-up (2026-11-18):** GitHub Actions for commit
 `0b765601fea2ea3416415b23af9c73970bf53d5f` passed both `core-minimum` and
@@ -71,6 +75,14 @@ training/evaluation rows that are packed. The affected CPU suite passes 99
 tests plus 14 subtests; both hosted core profiles pass on
 `594ec2d75bd8c721847f6350be611642a5debe4d`. No TPU or live Hub run was
 performed.
+
+**HF-03 local structured data (2026-11-18):** local raw scratch/CPT sources
+now accept CSV, JSON/JSONL, and Parquet files through Hugging Face Datasets,
+alongside the existing text-file path. Train and validation formats must
+match; users can select a structured column with `text_field` or provide the
+versioned row formatter. Parser selection and file hashes enter the prepared
+data cache, while the run report records each file and effective parser.
+Focused CPU tests pass; no live Hub or TPU execution was performed.
 
 The merged `main` branch exposes two task-focused, Hugging Face-style entry
 points: `run_pretraining(TrainLMPretrainingConfig(...))` for random-weight
