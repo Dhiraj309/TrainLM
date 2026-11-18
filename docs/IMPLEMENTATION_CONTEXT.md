@@ -46,6 +46,16 @@ and one expected the notebook's former literal token-budget setting. No TPU run
 was performed. CI for the subsequent token-input commit
 `e4e1c9f621148a76cf10efb6d00ceb5769d4e5ce` also passed both core profiles.
 
+**Packed-manifest schema follow-up (2026-11-18):** both PR #140 CI profiles
+then failed the packed-manifest JSON Schema contract after HF-03 added optional
+`target_ids` and `loss_mask` sidecars. The schema had not been updated and
+rejected both the serialized `null` values used by legacy manifests and the
+new sidecar objects. The schema now accepts either null or a typed, checksummed
+sidecar object while keeping the fields optional for older manifests. The
+legacy/supervised schema regression tests pass (9 tests), and the affected CPU
+suite passes 82 tests plus 14 subtests. Hosted CI has not yet rerun. No TPU or
+live Hub execution was performed.
+
 The merged `main` branch exposes two task-focused, Hugging Face-style entry
 points: `run_pretraining(TrainLMPretrainingConfig(...))` for random-weight
 pretraining from pinned text, and
