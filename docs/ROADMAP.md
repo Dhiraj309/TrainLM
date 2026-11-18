@@ -4,10 +4,14 @@
 [Hugging Face user workflows, HF-01–HF-08](HF_USER_WORKFLOWS.md).
 The owner's priority is reusable HF models/tokenizers/datasets through
 scratch or continued pretraining, save, optional Hub publication and standard
-inference. The plan audits `main` at `68e0493`; the new stories are planned,
-not implemented. HF-01 starts with independent model/tokenizer sources.
-Notebook presets do not complete that workflow. T0–T11 remains the runtime
-architecture/evidence plan; the M0–M17 specification below remains historical.
+inference. The plan audits `main` at `68e0493`; HF-01 is in progress and
+HF-02–HF-08 remain planned. Fine-tuning now resolves independent
+model/tokenizer IDs and revisions, preserves same-source snapshot pinning,
+checks known tokenizer ID bounds and static context limits, and reports
+unknown checks. Token meanings are not verifiable by TrainLM and remain the
+user's responsibility. Notebook presets do not complete that workflow.
+T0–T11 remains the runtime architecture/evidence plan; the M0–M17
+specification below remains historical.
 
 > **Status: historical M0–M17 specification.** This document preserves the
 > detailed PyTorch/XLA-era roadmap and evidence for traceability. Its milestone
@@ -179,9 +183,11 @@ The API follow-up added `eval_strategy` and `save_strategy` values
 finite map-style dataset boundaries. Epoch scheduling requires a single device
 and is not implemented in the legacy XLA coordinator. The focused CPU suite for
 this change passed 151 API, lifecycle, config, engine, notebook, TPU coordinator,
-and packed-scratch tests. No accelerator run was performed. Model loading is
-pinned to the tokenizer's resolved commit; a detected mismatch stops before
-training. Each successful run writes a JSON summary beside the export with
+and packed-scratch tests. No accelerator run was performed. At that point,
+model loading was pinned to the tokenizer's resolved commit and a detected
+mismatch stopped before training. HF-01 now retains that behavior only for a
+shared source/revision contract; separately hosted tokenizers resolve without
+coupling their commit IDs. Each successful run writes a JSON summary beside the export with
 the arguments, data splits, revisions,
 and metrics. Failed runs record the phase, error type, and last known
 step/checkpoint before re-raising the original exception; the exception text is

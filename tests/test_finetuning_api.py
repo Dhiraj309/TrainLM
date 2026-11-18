@@ -51,6 +51,11 @@ def test_finetuning_config_validates_optional_dataset_metadata_and_splits(tmp_pa
     with pytest.raises(TypeError, match="TrainLMTrainingArguments"):
         _config(tmp_path, args={"max_steps": 1})
 
+    with pytest.raises(ValueError, match="tokenizer_name_or_path must be non-empty"):
+        _config(tmp_path, tokenizer_name_or_path=" ")
+    with pytest.raises(ValueError, match="tokenizer_revision must be non-empty"):
+        _config(tmp_path, tokenizer_revision=" ")
+
 
 def test_run_finetuning_requires_pinned_metadata_for_hub_splits(tmp_path):
     config = _config(
@@ -198,6 +203,9 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
                 "attention_mask": [[1, 1] for _ in texts],
             }
 
+        def get_vocab(self):
+            return {"<eos>": 2, "sample": 10}
+
         def pad(self, features, *, padding, return_tensors):
             assert padding is True
             assert return_tensors == "pt"
@@ -305,6 +313,11 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
     assert result.resolved_model_revision == "c" * 40
     assert result.resolved_tokenizer_revision == "c" * 40
     assert result.model_tokenizer_revision_match is True
+    assert result.tokenizer_name_or_path == "org/model"
+    assert result.tokenizer_revision == "main"
+    assert result.tokenizer_compatibility["token_semantics"] == (
+        "not_verified_by_trainlm"
+    )
     assert result.summary()["resolved_model_revision"] == "c" * 40
     assert result.summary()["resolved_tokenizer_revision"] == "c" * 40
     assert result.summary()["model_tokenizer_revision_match"] is True
@@ -489,6 +502,9 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
     )
     assert provided_report["dataset_id"] is None
     assert provided_report["dataset_revision"] is None
+    assert provided_result.model_tokenizer_revision_match is None
+    assert provided_report["tokenizer_name_or_path"] is None
+    assert provided_report["tokenizer_revision"] is None
     provided_checkpoint = provided_result.summary_path.parent / "checkpoint-4"
     provided_checkpoint.mkdir()
     torch.save({"schema_version": 1}, provided_checkpoint / "trainer_state.pt")
@@ -498,6 +514,77 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
     )
     assert restored_provided_config.dataset_id is None
     assert restored_provided_config.dataset_revision is None
+
+    # Model and tokenizer repositories resolve different commit SHAs. The
+    # tokenizer revision must never be used to select the model snapshot or
+    # compared as if both repositories shared a commit history.
+    fake_trainer.loaded.metadata.resolved_revision = "d" * 40
+    independent_config = _config(
+        tmp_path / "independent-sources",
+        model_revision="model-ref",
+        tokenizer_name_or_path="org/compatible-tokenizer",
+        tokenizer_revision="tokenizer-ref",
+    )
+    independent_result = run_finetuning(independent_config)
+    independent_model_name, independent_model_kwargs = calls["trainer"][
+        "model_load"
+    ]
+    assert independent_model_name == "org/model"
+    assert independent_model_kwargs["revision"] == "model-ref"
+    assert calls["trainer"]["tokenizer_load"] == (
+        "org/compatible-tokenizer",
+        {"revision": "tokenizer-ref"},
+    )
+    assert independent_result.resolved_model_revision == "d" * 40
+    assert independent_result.resolved_tokenizer_revision == "c" * 40
+    assert independent_result.model_tokenizer_revision_match is None
+    assert independent_result.tokenizer_name_or_path == "org/compatible-tokenizer"
+    assert independent_result.tokenizer_revision == "tokenizer-ref"
+    independent_report = json.loads(
+        independent_result.summary_path.read_text(encoding="utf-8")
+    )
+    assert independent_report["model_revision"] == "model-ref"
+    assert independent_report["tokenizer_revision"] == "tokenizer-ref"
+    assert independent_result.tokenizer_compatibility["source_relation"] == (
+        "separate_source"
+    )
+
+    # Structural incompatibilities are recorded and rejected before training;
+    # TrainLM does not silently resize pretrained embeddings or change IDs.
+    fake_trainer.model.get_input_embeddings = lambda: SimpleNamespace(
+        num_embeddings=8
+    )
+    bounds_config = _config(
+        tmp_path / "tokenizer-out-of-range",
+        tokenizer_name_or_path="org/compatible-tokenizer",
+    )
+    train_calls_before = calls["trainer"]["train_calls"]
+    with pytest.raises(ValueError, match="will not resize embeddings"):
+        run_finetuning(bounds_config)
+    assert calls["trainer"]["train_calls"] == train_calls_before
+    bounds_report = json.loads(
+        (bounds_config.args.output_dir / "finetuning-summary.json").read_text()
+    )
+    assert bounds_report["tokenizer_compatibility"]["token_id_bounds"] == (
+        "incompatible"
+    )
+
+    fake_trainer.model.get_input_embeddings = lambda: SimpleNamespace(
+        num_embeddings=11
+    )
+    fake_trainer.model.config.max_position_embeddings = 4
+    context_config = _config(
+        tmp_path / "sequence-too-long",
+        tokenizer_name_or_path="org/compatible-tokenizer",
+    )
+    with pytest.raises(ValueError, match="exceeds the model's configured context"):
+        run_finetuning(context_config)
+    context_report = json.loads(
+        (context_config.args.output_dir / "finetuning-summary.json").read_text()
+    )
+    assert context_report["tokenizer_compatibility"]["context_length"] == (
+        "exceeds_model_limit"
+    )
 
 
 def test_run_finetuning_rejects_legacy_xla_export_path(tmp_path):
