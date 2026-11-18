@@ -22,9 +22,12 @@ bounds and known context limits without resizing or remapping.
 The current branch `feat/20-hf-dataset-sources` begins HF-03. It adds dataset
 config names, friendly Hub revisions that resolve to immutable commits, and
 non-overlapping split slices to the streamed raw-text scratch path. The
-resolved source enters the data fingerprint and resume configuration. Direct
-HF Dataset objects, tokenized inputs, custom raw-text formatters, label/mask
-handling, and ragged collation remain incomplete. Independently hosted
+resolved source enters the data fingerprint and resume configuration. For
+pretrained fine-tuning, the same branch accepts supplied HF Dataset splits
+with already-tokenized causal-LM columns, validates them, preserves labels and
+masks, checks known embedding bounds, and pads ragged rows. Direct tokenized
+Dataset input to scratch/CPT, custom raw-text formatters for scratch, and
+unified cross-workflow source identity remain incomplete. Independently hosted
 tokenizer semantics remain the user's responsibility. These CPU changes add
 no live-Hub or TPU execution evidence.
 
@@ -209,10 +212,14 @@ from one underlying split must be disjoint. The resolved commit is part of the
 preparation cache identity, the saved run configuration, and generated resume
 settings, so a resumed branch selection stays pinned to the original data.
 Local paired text files and the existing text-column tokenizer path still work.
-Focused CPU tests cover config/revision selection, split overlap, source pinning
-and cache/report identity. This does not yet accept arbitrary HF Dataset
-objects, pretokenized rows or arbitrary local data files, and does not establish
-live-Hub or TPU execution.
+For pretrained fine-tuning, `TrainLMFineTuningConfig.data_format="tokens"`
+accepts supplied HF Dataset splits with `input_ids` and optional labels/masks;
+the default collator pads variable-length rows without retokenizing or shifting
+labels twice. Its report records source Dataset fingerprints and maximum token
+ID, and resume restores the selected data format. Focused CPU tests cover this
+route. Scratch/CPT still does not accept pretokenized HF Dataset objects or
+arbitrary local data files, and there is no unified cross-workflow source or
+resume identity yet. These changes do not establish live-Hub or TPU execution.
 
 The entries below preserve the API and validation history. Branch names,
 intermediate notebook controls, and test counts in those entries describe past

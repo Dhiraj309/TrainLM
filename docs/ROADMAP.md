@@ -13,9 +13,12 @@ connects scratch pretraining to an HF model config and tokenizer: random
 initialization or pretrained CPT, with an explicit BPE option and uint32 token
 IDs. Independent tokenizer meaning remains the user's responsibility. HF-03
 is in progress on `feat/20-hf-dataset-sources`: streamed raw Hub data now
-supports configs, friendly revisions, and non-overlapping split slices. Direct
-HF dataset objects and already-tokenized rows remain unimplemented. HF-04–HF-08
-remain planned; notebook presets do not complete those workflows.
+supports configs, friendly revisions, and non-overlapping split slices. The
+pretrained fine-tuning helper also accepts prepared HF Dataset rows through
+`data_format="tokens"`, preserving causal labels/masks and padding ragged
+batches. Direct tokenized Dataset input to scratch/CPT and unified provenance
+remain incomplete. HF-04–HF-08 remain planned; notebook presets do not
+complete those workflows.
 T0–T11 remains the runtime architecture/evidence plan; the M0–M17
 specification below remains historical.
 

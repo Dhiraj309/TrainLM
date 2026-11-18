@@ -53,8 +53,8 @@ remain separate scopes. Unsupported cases need an actionable early error.
 | Start from pretrained weights for CPT | `TrainLMPretrainingConfig.model_initialization="pretrained"` loads the HF checkpoint; the same pretraining lifecycle accepts raw text | HF-02 is merged; prepared-token dataset input and public upload remain later work |
 | Reuse an HF tokenizer | Scratch defaults to the model repository's tokenizer or accepts independent `tokenizer_name_or_path` and `tokenizer_revision`; `tokenizer_mode="train_bpe"` retains corpus training for random initialization | HF-02 fingerprints tokenizer mapping and resolved source; independently hosted token meaning remains the user's responsibility |
 | Independently hosted tokenizer | `run_finetuning` accepts separate model/tokenizer IDs and revisions, resolves them independently, and checks known token-ID bounds and static context limits | Token meanings cannot be proven from Hub IDs or vocabulary sizes; the report marks them unverified and an explicit user policy remains |
-| Raw HF datasets | Scratch streams Hub text with a dataset config, named revision, selected split or non-overlapping train/eval slices; local text files remain supported | HF-03 currently covers streamed raw text and auto-resolves mutable Hub refs; direct `Dataset` objects, arbitrary data files, formatters and tokenized datasets remain |
-| Pretokenized HF datasets | Generic trainer accepts prepared mappings/DataLoaders; default collator stacks equal-length tensors | Convenient workflows always tokenize raw text. Add an explicit tokens route with appropriate collation and label/mask preservation |
+| Raw HF datasets | Scratch streams Hub text with a dataset config, named revision, selected split or non-overlapping train/eval slices; fine-tuning accepts HF `Dataset` splits and row formatters | Scratch pretraining still needs direct `Dataset` inputs, arbitrary data files, and a shared text formatter contract |
+| Pretokenized HF datasets | `run_finetuning(..., data_format="tokens")` accepts HF token rows with `input_ids` and optional labels/masks, validates shapes and token ranges, and pads ragged batches | Apply the same source and token contract to random-init/CPT pretraining; record tokenizer provenance and data identity consistently across workflows |
 | Modern HF vocabularies | Packed writer and scratch config support uint32 IDs; scratch derives required capacity from the largest tokenizer ID, including sparse/added IDs | HF-02 removed the 65,536 ceiling; a CPU round-trip covers token ID 70,000 |
 | Train/evaluate/save/resume | Public trainer and helper lifecycles exist; scratch has strong prepared-data identity checks | Share contracts across HF data paths; include tokenizer/data identity and declare which streams can resume exactly |
 | Standard HF model export | `save_model` uses `save_pretrained` and saves the processing class when supplied | Verify a complete export independently of TrainLM, including tokenizer and applicable generation configuration |
@@ -112,9 +112,10 @@ to allocate both models. Use the model's existing tokenizer by default for
 CPT. An alternative tokenizer must preserve token semantics; equal vocabulary
 length or equal commit strings do not establish compatibility.
 
-**Target UX sketch, not a runnable current API contract:** `data_format`,
-`text_field`, and the publication method below require implementation and
-final API review. HF loading supplies `model`, `tokenizer`, and dataset splits.
+**Unifying API target sketch:** the current specialized fine-tuning helper
+supports `data_format="tokens"`; a single model-object trainer interface and
+publication method remain future work. HF loading supplies `model`,
+`tokenizer`, and dataset splits.
 
 ```python
 trainer = TrainLMTrainer(
@@ -132,9 +133,13 @@ trainer.save_model("my-model")
 trainer.push_to_hub("my-account/my-model", private=True)
 ```
 
-Raw text should be tokenized/packed internally according to an explicit
-policy. Tokens should pass through without decoding/re-tokenizing, retaining
-valid caller labels and masks. A caller-provided collator remains supported.
+For current fine-tuning, use `run_finetuning` with `data_format="tokens"` for
+prepared HF Dataset rows; token IDs pass through without decoding or
+re-tokenizing. The default collator preserves caller labels and masks while
+padding variable-length rows, and a caller-provided collator remains supported.
+Unifying tokenized inputs with random-init/CPT pretraining and defining its data
+fingerprints and resume contract remain outstanding. Raw text should be
+tokenized/packed internally according to an explicit policy.
 Convenience calls should also accept source IDs/paths plus separate revisions,
 using the existing loaders. Final names must align with the existing API;
 `TrainLMTrainer.from_config` currently means TrainLM configuration, so do not
@@ -238,9 +243,13 @@ resolved commit and config enter the preparation fingerprint and run
 configuration, and generated resume settings pin to that commit. When train
 and validation use one underlying split, TrainLM accepts them only as
 non-overlapping slices. Raw local text files and text-column tokenization
-remain supported. This is the raw-text portion only; direct HF Dataset objects,
-arbitrary local data files, formatters, tokenized examples, label/mask
-preservation and ragged collation are still outstanding.
+remain supported. The pretrained `run_finetuning` helper also accepts
+prepared HF `Dataset` splits with `data_format="tokens"`: it validates aligned
+token columns, checks known model embedding bounds, preserves unshifted labels
+and masks, and pads ragged batches. Tokenized dataset input to random-init/CPT
+pretraining, arbitrary local data files, and unified source/resume fingerprints
+remain outstanding. This branch has CPU evidence only; it does not establish
+live-Hub or TPU execution.
 
 Runnable example: [examples/pretrain_from_scratch.py](../examples/pretrain_from_scratch.py).
 Its 10,000-token budget is only a workflow smoke test, not a useful training
@@ -269,6 +278,42 @@ print(result.summary())
 
 The report records the requested ref and resolved SHA. A later resume uses the
 resolved SHA so a moved branch cannot silently change the corpus.
+
+For an already-tokenized Hub dataset, the pretrained fine-tuning API accepts
+the `Dataset` splits directly. Use the same tokenizer that produced the token
+IDs; TrainLM does not decode or retokenize them:
+
+```python
+from datasets import load_dataset
+from trainlm import (
+    TrainLMFineTuningConfig,
+    TrainLMTrainingArguments,
+    run_finetuning,
+)
+
+MODEL_ID = "your-org/your-causal-lm"
+MODEL_REVISION = "<model-commit-sha>"
+tokenized = load_dataset("your-org/your-tokenized-dataset", revision="<commit-sha>")
+
+config = TrainLMFineTuningConfig(
+    model_name_or_path=MODEL_ID,
+    model_revision=MODEL_REVISION,
+    dataset_id=None,
+    dataset_revision=None,
+    data_format="tokens",
+    args=TrainLMTrainingArguments(output_dir="trainlm-finetuned", max_steps=100),
+)
+result = run_finetuning(
+    config,
+    train_dataset=tokenized["train"],
+    eval_dataset=tokenized["validation"],
+)
+print(result.summary())
+```
+
+Replace the example IDs, commit, and split names with values from your run.
+Dataset token IDs and tokenizer must be semantically compatible; TrainLM can
+check dimensions and known ID bounds, but cannot prove what each ID means.
 
 - Support dataset ID/config/subset/revision, named or sliced splits, local data
   files and selected `DatasetDict` splits through standard `datasets` loaders.
