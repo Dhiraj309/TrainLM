@@ -621,6 +621,8 @@ def test_from_scratch_streams_local_text_files_and_checks_content_hashes(
     assert run_config["configuration"]["pretraining"]["train_file"] == str(
         train_file.resolve()
     )
+    assert "local_data_format" not in run_config["configuration"]["pretraining"]
+    trainer._preflight_run_configuration({"run_configuration": run_config})
     cache = json.loads(
         (config.output_dir / "preparation_cache.json").read_text(encoding="utf-8")
     )

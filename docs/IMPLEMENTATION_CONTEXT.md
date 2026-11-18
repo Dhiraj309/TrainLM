@@ -84,6 +84,13 @@ versioned row formatter. Parser selection and file hashes enter the prepared
 data cache, while the run report records each file and effective parser.
 Focused CPU tests pass; no live Hub or TPU execution was performed.
 
+**HF-03 checkpoint compatibility follow-up (2026-11-18):** the new
+`local_data_format="auto"` convenience is omitted from the scratch run
+fingerprint when left at its default. This preserves equality with manifests
+written before the field existed; explicit parser choices remain fingerprinted.
+The local text-source regression checks the legacy manifest shape and accepts
+it during checkpoint preflight. CPU tests only; no TPU execution was performed.
+
 The merged `main` branch exposes two task-focused, Hugging Face-style entry
 points: `run_pretraining(TrainLMPretrainingConfig(...))` for random-weight
 pretraining from pinned text, and

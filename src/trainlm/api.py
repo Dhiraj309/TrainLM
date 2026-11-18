@@ -1673,6 +1673,11 @@ class TrainLMTrainer:
         if config.dataset_source == "hub":
             # Keep old Hub/local checkpoint configuration fingerprints stable.
             pretraining.pop("dataset_source", None)
+        if config.local_data_format == "auto":
+            # Auto is a parser convenience, not a training setting. Omitting
+            # this default keeps checkpoints written before this field was
+            # added compatible with the equivalent current configuration.
+            pretraining.pop("local_data_format", None)
         if config.data_format == "text":
             pretraining.pop("data_format", None)
         dataset_source = getattr(
