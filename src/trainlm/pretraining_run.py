@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 import hashlib
 import json
@@ -161,6 +161,7 @@ def run_pretraining(
     *,
     train_dataset: Any | None = None,
     eval_dataset: Any | None = None,
+    formatting_func: Callable[[Mapping[str, Any]], str] | None = None,
     resume_from_checkpoint: str | Path | None = None,
     extend_training_budget: bool = False,
     show_progress: bool = False,
@@ -177,6 +178,9 @@ def run_pretraining(
     ``data_format="tokens"`` for ``input_ids`` plus an optional
     ``attention_mask``, ``labels`` and ``loss_mask``; supplied labels and masks
     are preserved, while missing labels are generated from ``input_ids``.
+    For raw rows with a custom schema, pass ``formatting_func`` and set the
+    matching stable ``text_formatter_name`` in the config. Supply the same
+    formatter and name when resuming; the name participates in cache identity.
 
     The report is written even when model preparation, training, evaluation,
     or export fails. In that case :class:`TrainLMPretrainingError` identifies
@@ -214,6 +218,7 @@ def run_pretraining(
             "extend_training_budget": extend_training_budget,
             "train_dataset": train_dataset,
             "eval_dataset": eval_dataset,
+            "formatting_func": formatting_func,
         }
         if show_progress:
             trainer_options["callbacks"] = [_make_training_progress_callback(config)]
@@ -396,6 +401,7 @@ def _initial_report(
             "train_split": config.train_split,
             "validation_split": config.validation_split,
             "text_field": config.text_field,
+            "text_formatter_name": config.text_formatter_name,
             "max_train_examples": config.max_train_examples,
             "max_eval_examples": config.max_eval_examples,
             "local_files": (

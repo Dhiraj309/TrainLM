@@ -22,17 +22,21 @@ fingerprinted preparation inputs and resume checks. For token inputs, TrainLM
 adds EOS when absent, preserves optional aligned labels and loss masks in
 checksummed sidecars, derives labels from `input_ids` when absent, and applies
 one causal shift. Selected tokenizer provenance is recorded while compatibility
-remains caller responsibility. Unified provenance remains incomplete. HF-04–
-HF-08 remain planned; notebook presets do not complete those workflows. The
+remains caller responsibility. Raw multi-column datasets support a named
+`formatting_func` whose identity participates in preparation and checkpoint
+resume. Unified provenance remains incomplete. HF-04–HF-08 remain planned;
+notebook presets do not complete those workflows. The
 previous token-input slice passed 54 local tests plus 14 subtests, and CI for
 `e4e1c9f621148a76cf10efb6d00ceb5769d4e5ce` passed both core profiles. This
 follow-up passed 78 focused local tests plus 14 subtests. PR #140's hosted
 `core-minimum` and `core-current` jobs then exposed a schema contract gap:
 the v1 manifest schema did not accept the new nullable or populated supervision
 sidecar fields. The schema now covers both forms, with sidecars remaining
-optional for legacy manifests; focused regression checks pass locally and
-the affected CPU suite passes 82 tests plus 14 subtests; hosted CI for this
-correction is pending.
+optional for legacy manifests; the affected CPU suite passed 82 tests plus 14
+subtests, and both hosted CI profiles passed on correction commit
+`c4822048162d84b01348ebdd2c61bf9770070357`. The multi-column row formatter
+now passes 99 focused CPU tests plus 14 subtests; hosted CI for that change is
+pending.
 T0–T11 remains the runtime architecture/evidence plan; the M0–M17
 specification below remains historical.
 

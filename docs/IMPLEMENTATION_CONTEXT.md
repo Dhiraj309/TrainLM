@@ -34,9 +34,12 @@ checksummed packed sidecars; it derives labels from `input_ids` when labels are
 absent. EOS is added when needed and the task applies one internal shift. The
 configured HF tokenizer source and mapping are recorded with the dataset
 fingerprints; token-to-tokenizer compatibility is still unverified and remains
-the user's responsibility. Custom raw-text formatters for scratch and unified
-cross-workflow source identity remain incomplete. These changes add no
-live-Hub or TPU execution evidence.
+the user's responsibility. Scratch/CPT raw-text inputs also accept a
+`formatting_func(row) -> str` for multi-column data when the config supplies a
+stable `text_formatter_name`; this name enters cache and checkpoint identity,
+and callers pass the same function again on resume. Arbitrary local structured
+files and unified cross-workflow source identity remain incomplete. These
+changes add no live-Hub or TPU execution evidence.
 
 **HF-03 CI follow-up (2026-11-18):** GitHub Actions for commit
 `0b765601fea2ea3416415b23af9c73970bf53d5f` passed both `core-minimum` and
@@ -53,8 +56,20 @@ rejected both the serialized `null` values used by legacy manifests and the
 new sidecar objects. The schema now accepts either null or a typed, checksummed
 sidecar object while keeping the fields optional for older manifests. The
 legacy/supervised schema regression tests pass (9 tests), and the affected CPU
-suite passes 82 tests plus 14 subtests. Hosted CI has not yet rerun. No TPU or
-live Hub execution was performed.
+suite passes 82 tests plus 14 subtests. Both hosted core profiles subsequently
+passed on `c4822048162d84b01348ebdd2c61bf9770070357`. No TPU or live Hub
+execution was performed.
+
+**HF-03 multi-column text formatting (2026-11-18):** `run_pretraining` and
+`TrainLMTrainer.from_scratch` now accept the same row-level `formatting_func`
+pattern as fine-tuning for raw datasets with custom column layouts. Callers
+set `text_formatter_name` in the config and pass the matching callable; its
+name changes preparation-cache and checkpoint-resume identity and is recorded
+in the run report and generated resume example. When TrainLM trains a corpus
+tokenizer, the formatter supplies its training text; it also supplies the
+training/evaluation rows that are packed. The affected CPU suite passes 99
+tests plus 14 subtests; hosted CI for this change is pending. No TPU or live
+Hub run was performed.
 
 The merged `main` branch exposes two task-focused, Hugging Face-style entry
 points: `run_pretraining(TrainLMPretrainingConfig(...))` for random-weight
