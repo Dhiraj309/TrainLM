@@ -98,13 +98,19 @@ class TrainLMFineTuningConfig:
             or not self.tokenizer_revision.strip()
         ):
             raise ValueError("tokenizer_revision must be non-empty when configured.")
-        if not all(
-            isinstance(value, str) and _FIELD_NAME.fullmatch(value)
-            for value in (self.text_field, self.train_split, self.validation_split)
+        if not isinstance(self.text_field, str) or not _FIELD_NAME.fullmatch(
+            self.text_field
         ):
             raise ValueError(
-                "text_field and split names must be simple non-empty names."
+                "text_field must be a simple non-empty field name."
             )
+        if any(
+            not isinstance(split, str)
+            or not split.strip()
+            or any(ord(char) < 32 for char in split)
+            for split in (self.train_split, self.validation_split)
+        ):
+            raise ValueError("Dataset split selectors must be non-empty strings.")
         if self.train_split == self.validation_split:
             raise ValueError("Training and validation splits must be distinct.")
         if not isinstance(self.data_format, str) or self.data_format not in {
@@ -392,6 +398,41 @@ def _validate_tokenized_batch(
         for name, sequence in row.items():
             result.setdefault(name, []).append(sequence)
     return result, maximum_id
+
+
+def _scan_tokenized_dataset(dataset: Any, *, sequence_length: int) -> int:
+    """Validate mapped token rows even when Hugging Face reuses its map cache."""
+    maximum_id = -1
+    dataset_iter = getattr(dataset, "iter", None)
+    if callable(dataset_iter):
+        batches = dataset_iter(batch_size=1024)
+    else:
+        # Lightweight Dataset-compatible implementations can expose ``map``
+        # without Hugging Face Dataset.iter. Force the validation callback to
+        # run on the returned data instead of relying on its transform cache.
+        mapper = getattr(dataset, "map", None)
+        if not callable(mapper):
+            raise TypeError(
+                "Mapped tokenized data must expose Dataset.iter or Dataset.map."
+            )
+
+        def collect(batch: Mapping[str, Any]) -> Mapping[str, Any]:
+            nonlocal maximum_id
+            _, batch_maximum = _validate_tokenized_batch(
+                batch, sequence_length=sequence_length
+            )
+            maximum_id = max(maximum_id, batch_maximum)
+            return batch
+
+        mapper(collect, batched=True, remove_columns=[])
+        return maximum_id
+
+    for batch in batches:
+        _, batch_maximum = _validate_tokenized_batch(
+            batch, sequence_length=sequence_length
+        )
+        maximum_id = max(maximum_id, batch_maximum)
+    return maximum_id
 
 
 def _resolved_commit(value: Any) -> str | None:
@@ -1276,14 +1317,9 @@ def _run_finetuning_impl(
         validation_mapper = tokenize
     else:
         def validate_tokens(batch: Mapping[str, Any]) -> Mapping[str, Any]:
-            token_columns, maximum_id = _validate_tokenized_batch(
+            token_columns, _ = _validate_tokenized_batch(
                 batch,
                 sequence_length=config.args.sequence_length,
-            )
-            previous_maximum = run_state.get("max_dataset_token_id")
-            run_state["max_dataset_token_id"] = max(
-                maximum_id,
-                previous_maximum if isinstance(previous_maximum, int) else -1,
             )
             return token_columns
 
@@ -1302,6 +1338,21 @@ def _run_finetuning_impl(
             [] if data_collator is not None else validation_source.column_names
         ),
     )
+    if config.data_format == "tokens":
+        # Dataset.map may return cached rows without invoking validate_tokens.
+        # Scan the mapped output in bounded batches so embedding-bound and row
+        # validation remain effective on both cache hits and cache misses.
+        train_maximum = _scan_tokenized_dataset(
+            train_dataset,
+            sequence_length=config.args.sequence_length,
+        )
+        validation_maximum = _scan_tokenized_dataset(
+            validation_dataset,
+            sequence_length=config.args.sequence_length,
+        )
+        run_state["max_dataset_token_id"] = max(
+            train_maximum, validation_maximum
+        )
 
     model_load_revision = (
         (resolved_tokenizer_revision or model_revision)
