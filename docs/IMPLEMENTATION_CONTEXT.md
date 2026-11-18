@@ -123,6 +123,14 @@ microbatch. The derived rate is checkpointed so budget extension uses the same
 data-aware horizon. Unmasked text runs keep their existing horizon and legacy
 checkpoint identity.
 
+**Fresh-process export inference (2026-11-18):** the scratch export regression
+now starts an isolated Python interpreter, loads both `AutoTokenizer` and
+`AutoModelForCausalLM` from the saved directory, and generates a continuation.
+The scratch notebook uses the same separate-process path, and
+`examples/infer_local_export.py` shows ordinary Transformers inference after a
+training process exits. This is a small CPU round-trip only; it does not certify
+TorchTPU export or other inference engines.
+
 The merged `main` branch exposes two task-focused, Hugging Face-style entry
 points: `run_pretraining(TrainLMPretrainingConfig(...))` for random-weight
 pretraining from pinned text, and
