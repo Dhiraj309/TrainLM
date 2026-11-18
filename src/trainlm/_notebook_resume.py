@@ -28,6 +28,15 @@ def build_resume_report(
     """
     settings = asdict(config)
     settings["output_dir"] = str(Path(config.output_dir).resolve())
+    dataset_source = getattr(
+        getattr(trainer, "train_dataset", None),
+        "_trainlm_dataset_source_metadata",
+        None,
+    )
+    if isinstance(dataset_source, Mapping):
+        resolved_revision = dataset_source.get("resolved_revision")
+        if isinstance(resolved_revision, str):
+            settings["dataset_revision"] = resolved_revision
     for name in ("train_file", "validation_file"):
         if settings[name] is not None:
             settings[name] = str(Path(settings[name]).resolve())
