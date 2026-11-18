@@ -10,6 +10,7 @@ import zipfile
 import pytest
 
 from trainlm import (
+    PackedBinDataset,
     TrainLMPretrainingConfig,
     TrainLMPretrainingError,
     TrainLMTrainer,
@@ -151,7 +152,7 @@ def test_run_pretraining_accepts_tokenized_hf_dataset_and_records_label_policy(
     tokenizer.save_pretrained(tokenizer_dir)
 
     class TokenDataset:
-        column_names = ["input_ids", "attention_mask"]
+        column_names = ["input_ids", "attention_mask", "labels", "loss_mask"]
 
         def __init__(self, label):
             self._fingerprint = f"{label}-token-fingerprint"
@@ -164,6 +165,10 @@ def test_run_pretraining_accepts_tokenized_hf_dataset_and_records_label_policy(
                 )
                 if index % 2:
                     ids.append(tokenizer.eos_token_id)
+                labels = list(ids)
+                labels[1] = -100
+                loss_mask = [1] * len(ids)
+                loss_mask[3] = 0
                 self.expected_token_count += (
                     len(ids) if ids[-1] == tokenizer.eos_token_id else len(ids) + 1
                 )
@@ -171,6 +176,8 @@ def test_run_pretraining_accepts_tokenized_hf_dataset_and_records_label_policy(
                 self.rows.append({
                     "input_ids": ids + [tokenizer.pad_token_id] * padding,
                     "attention_mask": [1] * len(ids) + [0] * padding,
+                    "labels": labels + [-100] * padding,
+                    "loss_mask": loss_mask + [0] * padding,
                 })
 
         def __iter__(self):
@@ -198,7 +205,8 @@ def test_run_pretraining_accepts_tokenized_hf_dataset_and_records_label_policy(
     assert result.status == "passed"
     assert result.report["data"]["data_format"] == "tokens"
     assert result.report["data"]["causal_target_policy"] == (
-        "TrainLM copies input_ids to labels and applies one next-token shift."
+        "TrainLM preserves aligned labels/loss masks, generates labels from "
+        "input_ids when absent, and applies one next-token shift."
     )
     assert result.report["data"]["tokenizer_dataset_match"] == (
         "not_verified_by_trainlm"
@@ -210,23 +218,63 @@ def test_run_pretraining_accepts_tokenized_hf_dataset_and_records_label_policy(
     cache = json.loads(
         (config.output_dir / "preparation_cache.json").read_text(encoding="utf-8")
     )
-    assert cache["inputs"]["algorithm"] == "prepared_hf_token_ids_v1"
+    assert cache["inputs"]["algorithm"] == "prepared_hf_token_ids_v2_supervision"
     assert cache["inputs"]["data_format"] == "tokens"
+    assert cache["inputs"]["token_supervision_policy"] == (
+        "preserve_aligned_labels_and_loss_mask_v1"
+    )
     train_manifest = json.loads(
         (config.output_dir / "data/train/train.manifest.json").read_text(
             encoding="utf-8"
         )
     )
     assert train_manifest["token_count"] == train_data.expected_token_count
+    assert train_manifest["target_ids"]["dtype"] == "int64"
+    assert train_manifest["loss_mask"]["dtype"] == "uint8"
     assert "dataset_tokenizer_match" not in result.report["tokenizer"]
     compile(result.report["resume"]["code"], "resume.py", "exec")
 
-    with pytest.raises(ValueError, match="TrainLM generates next-token targets"):
-        list(_token_id_documents(
-            [{"input_ids": [1, 2], "labels": [1, 2]}],
+    prepared = list(
+        _token_id_documents(
+            [
+                {
+                    "input_ids": [1, 2],
+                    "labels": [1, -100],
+                    "loss_mask": [True, False],
+                }
+            ],
             tokenizer,
             max_examples=1,
-        ))
+        )
+    )[0]
+    assert prepared.target_ids == [1, -100, -100]
+    assert prepared.loss_mask == [1, 0, 0]
+
+    validation_packed = PackedBinDataset.from_directory(
+        config.output_dir / "data" / "validation",
+        sequence_length=config.sequence_length,
+        split="validation",
+    )
+    try:
+        first_batch = next(iter(validation_packed))
+    finally:
+        validation_packed.close()
+    first_row = eval_data.rows[0]
+    active_length = sum(first_row["attention_mask"])
+    expected_ids = first_row["input_ids"][:active_length]
+    expected_labels = first_row["labels"][:active_length]
+    expected_mask = first_row["loss_mask"][:active_length]
+    if expected_ids[-1] != tokenizer.eos_token_id:
+        expected_ids = expected_ids + [tokenizer.eos_token_id]
+        expected_labels = expected_labels + [
+            tokenizer.eos_token_id if expected_labels[-1] != -100 else -100
+        ]
+        expected_mask = expected_mask + [expected_mask[-1]]
+    assert first_batch["input_ids"].tolist() == expected_ids[:8]
+    assert first_batch["labels"].tolist() == expected_labels[:8]
+    assert first_batch["loss_mask"].tolist() == [
+        bool(value) for value in expected_mask[:8]
+    ]
 
 
 def test_run_pretraining_reports_and_restores_local_text_files(tmp_path, monkeypatch):

@@ -36,6 +36,8 @@ class PackedShardFile(Protocol):
     data_file: Path
     manifest: PackedBinaryShardManifest
     validation: ValidatedPackedBinaryShard
+    target_ids_file: Path | None
+    loss_mask_file: Path | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,7 +89,41 @@ class _MappedTokenShard:
                     count=shard.manifest.token_count,
                     offset=shard.manifest.header_bytes,
                 )
+            self._target_file = None
+            self._target_mapping = None
+            if shard.manifest.target_ids is not None:
+                target_path = getattr(shard, "target_ids_file", None)
+                if target_path is None or not Path(target_path).is_file():
+                    raise FileNotFoundError("Target-ID sidecar is required by manifest.")
+                target_path = Path(target_path)
+                if target_path.stat().st_size != shard.manifest.target_ids.size_bytes:
+                    raise ValueError("Target-ID sidecar size changed after validation.")
+                self._target_file = target_path.open("rb")
+                self._target_mapping = mmap.mmap(
+                    self._target_file.fileno(), length=0, access=mmap.ACCESS_COPY
+                )
+            self._loss_mask_file = None
+            self._loss_mask_mapping = None
+            if shard.manifest.loss_mask is not None:
+                mask_path = getattr(shard, "loss_mask_file", None)
+                if mask_path is None or not Path(mask_path).is_file():
+                    raise FileNotFoundError("Loss-mask sidecar is required by manifest.")
+                mask_path = Path(mask_path)
+                if mask_path.stat().st_size != shard.manifest.loss_mask.size_bytes:
+                    raise ValueError("Loss-mask sidecar size changed after validation.")
+                self._loss_mask_file = mask_path.open("rb")
+                self._loss_mask_mapping = mmap.mmap(
+                    self._loss_mask_file.fileno(), length=0, access=mmap.ACCESS_COPY
+                )
         except BaseException:
+            for name in ("_target_mapping", "_loss_mask_mapping"):
+                mapping = getattr(self, name, None)
+                if mapping is not None:
+                    mapping.close()
+            for name in ("_target_file", "_loss_mask_file"):
+                handle = getattr(self, name, None)
+                if handle is not None:
+                    handle.close()
             mapping = getattr(self, "_mapping", None)
             if mapping is not None:
                 mapping.close()
@@ -118,12 +154,57 @@ class _MappedTokenShard:
         )
         return torch.tensor(tuple(values), dtype=torch.int64)
 
+    def read_target_ids(self, token_offset: int, token_count: int) -> torch.Tensor | None:
+        if self._target_mapping is None:
+            return None
+        if token_offset < 0 or token_count < 1:
+            raise ValueError("Token offset and count must describe a non-empty span.")
+        if token_offset + token_count > self.shard.manifest.token_count:
+            raise IndexError("Target-ID read exceeds the sidecar payload.")
+        if sys.byteorder == "little":
+            values = torch.frombuffer(
+                self._target_mapping,
+                dtype=torch.int64,
+                count=self.shard.manifest.token_count,
+            ).narrow(0, token_offset, token_count)
+            return values.to(dtype=torch.int64, copy=True)
+        byte_start = token_offset * 8
+        byte_stop = byte_start + token_count * 8
+        values = struct.iter_unpack(
+            "<q", self._target_mapping[byte_start:byte_stop]
+        )
+        return torch.tensor(tuple(value[0] for value in values), dtype=torch.int64)
+
+    def read_loss_mask(self, token_offset: int, token_count: int) -> torch.Tensor | None:
+        if self._loss_mask_mapping is None:
+            return None
+        if token_offset < 0 or token_count < 1:
+            raise ValueError("Token offset and count must describe a non-empty span.")
+        if token_offset + token_count > self.shard.manifest.token_count:
+            raise IndexError("Loss-mask read exceeds the sidecar payload.")
+        values = torch.frombuffer(
+            self._loss_mask_mapping,
+            dtype=torch.uint8,
+            count=self.shard.manifest.token_count,
+        ).narrow(0, token_offset, token_count)
+        return values.to(dtype=torch.bool, copy=True)
+
     def close(self) -> None:
         native_tokens = self._native_tokens
         self._native_tokens = None
         del native_tokens
         self._mapping.close()
         self._file.close()
+        for name in ("_target_mapping", "_loss_mask_mapping"):
+            mapping = getattr(self, name, None)
+            if mapping is not None:
+                mapping.close()
+                setattr(self, name, None)
+        for name in ("_target_file", "_loss_mask_file"):
+            handle = getattr(self, name, None)
+            if handle is not None:
+                handle.close()
+                setattr(self, name, None)
 
 
 class ContiguousPackedBatchReader:
@@ -223,11 +304,21 @@ class ContiguousPackedBatchReader:
             location.token_count,
         ).reshape(self.batch_size, self.sequence_length)
         mask = torch.ones_like(input_ids, dtype=torch.bool)
+        labels = mapped.read_target_ids(
+            location.token_offset, location.token_count
+        )
+        loss_mask = mapped.read_loss_mask(
+            location.token_offset, location.token_count
+        )
         return {
             "input_ids": input_ids,
-            "labels": input_ids,
+            "labels": input_ids if labels is None else labels.reshape(
+                self.batch_size, self.sequence_length
+            ),
             "attention_mask": mask,
-            "loss_mask": mask,
+            "loss_mask": mask if loss_mask is None else loss_mask.reshape(
+                self.batch_size, self.sequence_length
+            ),
             "shard_id": location.shard_id,
             "batch_index": location.batch_index,
             "token_offset": location.token_offset,

@@ -13,6 +13,7 @@ import torch
 from trainlm.data import (
     ContiguousPackedBatchReader,
     PackedBinaryShardManifest,
+    TokenSidecar,
     ValidatedPackedBinaryShard,
     validate_packed_binary_shard,
 )
@@ -24,6 +25,8 @@ class LocalShard:
     data_file: Path
     manifest: PackedBinaryShardManifest
     validation: ValidatedPackedBinaryShard
+    target_ids_file: Path | None = None
+    loss_mask_file: Path | None = None
 
 
 def _local_shard(
@@ -166,6 +169,55 @@ def test_reader_rejects_stale_validation_and_post_validation_size_change(tmp_pat
     with pytest.raises(ValueError, match="size changed"):
         reader.read_batch(0)
     reader.close()
+
+
+def test_reader_preserves_sidecar_labels_and_loss_masks(tmp_path):
+    tokens = tuple(range(16))
+    shard = _local_shard(tmp_path, shard_id="supervised", tokens=tokens)
+    target_ids = tuple(token + 20 for token in tokens)
+    target_ids = target_ids[:5] + (-100,) + target_ids[6:]
+    loss_values = (1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1)
+    target_path = tmp_path / "supervised.target_ids.i64"
+    target_path.write_bytes(struct.pack(f"<{len(target_ids)}q", *target_ids))
+    mask_path = tmp_path / "supervised.loss_mask.u8"
+    mask_path.write_bytes(bytes(loss_values))
+    manifest = replace(
+        shard.manifest,
+        target_ids=TokenSidecar(
+            path=target_path.name,
+            dtype="int64",
+            sha256=hashlib.sha256(target_path.read_bytes()).hexdigest(),
+            size_bytes=target_path.stat().st_size,
+        ),
+        loss_mask=TokenSidecar(
+            path=mask_path.name,
+            dtype="uint8",
+            sha256=hashlib.sha256(mask_path.read_bytes()).hexdigest(),
+            size_bytes=mask_path.stat().st_size,
+        ),
+    )
+    validation = validate_packed_binary_shard(
+        manifest,
+        shard.data_file,
+        target_ids_file=target_path,
+        loss_mask_file=mask_path,
+    )
+    supervised_shard = replace(
+        shard,
+        manifest=manifest,
+        validation=validation,
+        target_ids_file=target_path,
+        loss_mask_file=mask_path,
+    )
+
+    with ContiguousPackedBatchReader(
+        (supervised_shard,), batch_size=1, sequence_length=8
+    ) as reader:
+        batch = reader.read_batch(0)
+
+    assert batch["input_ids"].tolist() == [list(tokens[:8])]
+    assert batch["labels"].tolist() == [list(target_ids[:8])]
+    assert batch["loss_mask"].tolist() == [[bool(value) for value in loss_values[:8]]]
 
 
 def test_reader_rejects_invalid_geometry_and_batch_indices(tmp_path):

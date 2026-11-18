@@ -111,6 +111,8 @@ class ResolvedHuggingFaceShard:
     document_index_file: Path | None
     manifest: PackedBinaryShardManifest
     validation: ValidatedPackedBinaryShard
+    target_ids_file: Path | None = None
+    loss_mask_file: Path | None = None
 
 
 def _default_download_file(**kwargs: Any) -> str:
@@ -157,10 +159,22 @@ class HuggingFacePackedShardSource:
                 if document_path is None:
                     raise ValueError("Document-index path is missing from manifest.")
                 document_file = self._download(document_path)
+            target_ids_file = (
+                self._download(manifest.target_ids.path)
+                if manifest.target_ids is not None
+                else None
+            )
+            loss_mask_file = (
+                self._download(manifest.loss_mask.path)
+                if manifest.loss_mask is not None
+                else None
+            )
             validation = validate_packed_binary_shard(
                 manifest,
                 data_file,
                 document_index_file=document_file,
+                target_ids_file=target_ids_file,
+                loss_mask_file=loss_mask_file,
             )
             resolved.append(
                 ResolvedHuggingFaceShard(
@@ -172,6 +186,8 @@ class HuggingFacePackedShardSource:
                     manifest_file=manifest_file,
                     data_file=data_file,
                     document_index_file=document_file,
+                    target_ids_file=target_ids_file,
+                    loss_mask_file=loss_mask_file,
                     manifest=manifest,
                     validation=validation,
                 )

@@ -30,6 +30,8 @@ class _ResolvedPackedShard:
     manifest_file: Path
     data_file: Path
     document_index_file: Path | None
+    target_ids_file: Path | None
+    loss_mask_file: Path | None
     manifest: PackedBinaryShardManifest
     validation: ValidatedPackedBinaryShard
 
@@ -189,6 +191,8 @@ class PackedBinDataset(IterableDataset):
                 manifest_file=data_file.with_suffix(".manifest.json"),
                 data_file=data_file,
                 document_index_file=None,
+                target_ids_file=None,
+                loss_mask_file=None,
                 manifest=manifest,
                 validation=validation,
             ))
@@ -292,6 +296,16 @@ class PackedBinDataset(IterableDataset):
             if shard.manifest.documents.path is not None:
                 document_path = root / shard.manifest.documents.path
                 self._link_or_copy(Path(shard.document_index_file), document_path)
+            for sidecar, source in (
+                (shard.manifest.target_ids, shard.target_ids_file),
+                (shard.manifest.loss_mask, shard.loss_mask_file),
+            ):
+                if sidecar is not None:
+                    if source is None:
+                        raise RuntimeError(
+                            f"Validated shard {shard.shard_id} lost a sidecar path."
+                        )
+                    self._link_or_copy(source, root / sidecar.path)
             manifest_path.write_text(shard.manifest.to_json() + "\n", encoding="utf-8")
         return root
 
@@ -308,14 +322,30 @@ class PackedBinDataset(IterableDataset):
             if manifest.documents.path is not None
             else None
         )
+        target_ids_file = (
+            root / manifest.target_ids.path
+            if manifest.target_ids is not None
+            else None
+        )
+        loss_mask_file = (
+            root / manifest.loss_mask.path
+            if manifest.loss_mask is not None
+            else None
+        )
         validation = validate_packed_binary_shard(
-            manifest, data_file, document_index_file=document_file
+            manifest,
+            data_file,
+            document_index_file=document_file,
+            target_ids_file=target_ids_file,
+            loss_mask_file=loss_mask_file,
         )
         return _ResolvedPackedShard(
             shard_id=manifest.shard_id,
             manifest_file=path,
             data_file=data_file,
             document_index_file=document_file,
+            target_ids_file=target_ids_file,
+            loss_mask_file=loss_mask_file,
             manifest=manifest,
             validation=validation,
         )
@@ -325,6 +355,17 @@ class PackedBinDataset(IterableDataset):
         ids = tuple(shard.shard_id for shard in shards)
         if len(ids) != len(set(ids)):
             raise ValueError("Packed dataset shard IDs must be unique.")
+        paths = []
+        for shard in shards:
+            paths.append(shard.manifest.data_path)
+            if shard.manifest.documents.path is not None:
+                paths.append(shard.manifest.documents.path)
+            if shard.manifest.target_ids is not None:
+                paths.append(shard.manifest.target_ids.path)
+            if shard.manifest.loss_mask is not None:
+                paths.append(shard.manifest.loss_mask.path)
+        if len(paths) != len(set(paths)):
+            raise ValueError("Packed dataset shards must use unique payload paths.")
 
     @staticmethod
     def _link_or_copy(source: Path, destination: Path) -> None:
