@@ -4,15 +4,18 @@
 [Hugging Face user workflows, HF-01–HF-08](HF_USER_WORKFLOWS.md).
 The owner's priority is reusable HF models/tokenizers/datasets through
 scratch or continued pretraining, save, optional Hub publication and standard
-inference. Verified `main` is `9591d8b`; HF-01 is complete and HF-02 is in
-progress on `feat/19-hf-architecture-and-tokenizer`. HF-01 resolves independent
-fine-tuning model/tokenizer IDs and revisions, preserves same-source snapshot
-pinning, checks known token-ID bounds and static context limits, and pins
-resume to resolved source commits. HF-02 connects scratch pretraining to an HF
-model config and tokenizer: random initialization or pretrained CPT, with an
-explicit BPE option and uint32 token IDs. Independent tokenizer meaning remains
-the user's responsibility. HF-03–HF-08 remain planned; notebook presets do
-not complete those workflows.
+inference. Verified merged `main` is
+`c9ece9a2e9057260586636a428dfd7679c42e8fa`; HF-01 and HF-02 are complete
+through PR #139. HF-01 resolves independent fine-tuning model/tokenizer IDs and
+revisions, preserves same-source snapshot pinning, checks known token-ID bounds
+and static context limits, and pins resume to resolved source commits. HF-02
+connects scratch pretraining to an HF model config and tokenizer: random
+initialization or pretrained CPT, with an explicit BPE option and uint32 token
+IDs. Independent tokenizer meaning remains the user's responsibility. HF-03
+is in progress on `feat/20-hf-dataset-sources`: streamed raw Hub data now
+supports configs, friendly revisions, and non-overlapping split slices. Direct
+HF dataset objects and already-tokenized rows remain unimplemented. HF-04–HF-08
+remain planned; notebook presets do not complete those workflows.
 T0–T11 remains the runtime architecture/evidence plan; the M0–M17
 specification below remains historical.
 

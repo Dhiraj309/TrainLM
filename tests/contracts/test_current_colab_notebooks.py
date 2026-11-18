@@ -83,10 +83,14 @@ def test_training_notebooks_keep_the_common_path_short_and_copyable():
     )
     assert 'accelerator="native_tpu"' in scratch
     assert "10,000-token" in scratch
-    assert 'model_type="gpt2"' in scratch
-    assert "Hugging Face GPT-2" in scratch
-    assert "GPT2LMHeadModel" in scratch
-    assert "does not load a pretrained GPT-2 checkpoint" in scratch
+    assert (
+        'MODEL_ID, MODEL_INITIALIZATION = "openai-community/gpt2", "random"'
+        in scratch
+    )
+    assert "MODEL_INITIALIZATION" in scratch and '"pretrained"' in scratch
+    assert 'DATASET_ID, DATASET_CONFIG_NAME = "roneneldan/TinyStories", None' in scratch
+    assert 'TRAIN_SPLIT, VALIDATION_SPLIT = "train[:90%]", "train[90%:]"' in scratch
+    assert "without downloading model weights" in scratch
     finetuning = _notebook_source(Path("notebooks/TrainLM_Text_Fine_Tuning.ipynb"))
     assert 'accelerator="auto"' in finetuning
     assert "Native TorchTPU fine-tuning is not validated yet" in finetuning
@@ -104,8 +108,9 @@ def test_python_quickstart_examples_are_small_public_api_examples():
         assert api_name in source
         assert "10_000" in source or "max_steps=3" in source
     scratch = Path("examples/pretrain_from_scratch.py").read_text(encoding="utf-8")
-    assert 'model_type="gpt2"' in scratch
-    assert "randomly initialized hugging face gpt-2" in scratch.lower()
+    assert 'model_name_or_path="openai-community/gpt2"' in scratch
+    assert 'model_initialization="random"' in scratch
+    assert 'dataset_revision="main"' in scratch
 
 
 def test_legacy_smollm2_yaml_is_identified_as_xla():

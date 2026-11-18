@@ -3,9 +3,11 @@
 ## User training quickstarts
 
 - [Pretrain from scratch](TrainLM_Native_TorchTPU_From_Scratch.ipynb) ([open in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) · [open in Kaggle](https://kaggle.com/kernels/welcome?src=https://raw.githubusercontent.com/Dhiraj309/TrainLM/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb)) uses
-  Hugging Face GPT-2 with randomly initialized weights. The training cell sets
-  `model_type="gpt2"`, dimensions, context length, and the experimental
-  `native_tpu` backend. It does not load a pretrained model checkpoint.
+  the Hugging Face GPT-2 config and tokenizer with random weights by default,
+  plus raw TinyStories text from the Hub. Edit the model ID and choose random
+  initialization or continued pretraining; the train/evaluation slices are
+  configured in the single public API cell. It targets experimental native
+  TorchTPU and keeps the default smoke budget small.
 - [Fine-tune text](TrainLM_Text_Fine_Tuning.ipynb) starts from a pretrained
   causal-LM checkpoint and targets CPU or CUDA.
 
