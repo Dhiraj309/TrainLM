@@ -107,6 +107,13 @@ embedding-bound validation still runs when Datasets reuses cached map output.
 The report's maximum token ID now comes from that scan. This adds one pass over
 already-prepared token rows; no live Hub or accelerator run was performed.
 
+**Causal target masking for left padding (2026-11-18):** next-token supervision
+now requires both the target position and its preceding input position to be
+unmasked. The first real token in a left-padded sequence is therefore ignored
+because no preceding real token exists. The same ignored target is reflected
+in the full labels passed to models with model-owned causal loss, keeping that
+path aligned with TrainLM's loss implementation.
+
 The merged `main` branch exposes two task-focused, Hugging Face-style entry
 points: `run_pretraining(TrainLMPretrainingConfig(...))` for random-weight
 pretraining from pinned text, and
