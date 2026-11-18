@@ -50,6 +50,9 @@ three-step smoke run; larger workflows can widen the slices.
 Fine-tuning config accepts Hugging Face split-slice selectors, and tokenized
 train/evaluation rows are checked after mapping in bounded batches so cached
 `.map()` output cannot skip structural or model-embedding-bound validation.
+Causal-LM supervision now masks targets whose preceding input position is
+padding, including the first real token of left-padded rows, for both TrainLM
+and model-owned loss paths.
 T0–T11 remains the runtime architecture/evidence plan; the M0–M17
 specification below remains historical.
 

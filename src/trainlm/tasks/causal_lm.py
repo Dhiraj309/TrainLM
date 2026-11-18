@@ -321,7 +321,12 @@ class CausalLMTask:
                 raise ValueError("'attention_mask' must be a tensor.")
             if attention_mask.shape != input_ids.shape:
                 raise ValueError("'attention_mask' must match 'input_ids'.")
-            target_mask &= attention_mask[..., 1:].to(dtype=torch.bool)
+            attention_mask = attention_mask.to(dtype=torch.bool)
+            # A target needs both a real target token and a real preceding
+            # token. The latter matters for left-padded batches: otherwise the
+            # first real token would be trained as a continuation of padding.
+            target_mask &= attention_mask[..., 1:]
+            target_mask &= attention_mask[..., :-1]
 
         loss_mask = batch.get("loss_mask")
         if loss_mask is not None:
@@ -334,6 +339,9 @@ class CausalLMTask:
         if not self.assume_all_supervised:
             target_mask &= effective_labels.ne(self.ignore_index)
         effective_labels.masked_fill_(~target_mask, self.ignore_index)
+        # Keep labels handed to models that own their causal loss consistent
+        # with the same shifted target mask used by TrainLM's loss path.
+        model_labels[..., 1:].masked_fill_(~target_mask, self.ignore_index)
 
         targets = effective_labels.numel()
         # Raw packed streams have a fixed, fully supervised geometry. Avoid a
