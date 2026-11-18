@@ -7,6 +7,12 @@ documentation describes the PyTorch/XLA era.
 
 ## Find the implementation by task
 
+For new product work, start with the owner-directed
+[HF user-workflow backlog](HF_USER_WORKFLOWS.md). It contains the audited
+capability gaps and prioritized acceptance criteria. Implement shared library
+contracts before adding more notebook settings; keep planned API sketches
+distinct from the callable surface listed below.
+
 | Task | Start here | Related evidence |
 | --- | --- | --- |
 | Fine-tune a pretrained causal LM | [short Colab notebook](../notebooks/TrainLM_Text_Fine_Tuning.ipynb) · [short Python example](../examples/finetune_text.py) · [full guide](tutorials/TEXT_FINETUNING.md) | [`run_finetuning`](../src/trainlm/finetuning.py), [API tests](../tests/test_finetuning_api.py), [notebook contract](../tests/contracts/test_current_colab_notebooks.py); use CPU or CUDA, native TPU fine-tuning is not validated |
