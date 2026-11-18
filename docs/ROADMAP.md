@@ -26,7 +26,13 @@ remains caller responsibility. Unified provenance remains incomplete. HF-04–
 HF-08 remain planned; notebook presets do not complete those workflows. The
 previous token-input slice passed 54 local tests plus 14 subtests, and CI for
 `e4e1c9f621148a76cf10efb6d00ceb5769d4e5ce` passed both core profiles. This
-follow-up passes 78 focused local tests plus 14 subtests; hosted CI is pending.
+follow-up passed 78 focused local tests plus 14 subtests. PR #140's hosted
+`core-minimum` and `core-current` jobs then exposed a schema contract gap:
+the v1 manifest schema did not accept the new nullable or populated supervision
+sidecar fields. The schema now covers both forms, with sidecars remaining
+optional for legacy manifests; focused regression checks pass locally and
+the affected CPU suite passes 82 tests plus 14 subtests; hosted CI for this
+correction is pending.
 T0–T11 remains the runtime architecture/evidence plan; the M0–M17
 specification below remains historical.
 

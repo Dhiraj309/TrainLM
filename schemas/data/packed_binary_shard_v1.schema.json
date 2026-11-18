@@ -42,7 +42,19 @@
     "vocab_size": {"type": "integer", "minimum": 1},
     "file_size_bytes": {"type": "integer", "minimum": 1},
     "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-    "documents": {"$ref": "#/$defs/document_index"}
+    "documents": {"$ref": "#/$defs/document_index"},
+    "target_ids": {
+      "anyOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/target_ids"}
+      ]
+    },
+    "loss_mask": {
+      "anyOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/loss_mask"}
+      ]
+    }
   },
   "allOf": [
     {
@@ -61,6 +73,33 @@
     }
   ],
   "$defs": {
+    "sidecar": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "dtype", "sha256", "size_bytes"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+        },
+        "dtype": {"enum": ["int64", "uint8"]},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "size_bytes": {"type": "integer", "minimum": 1}
+      }
+    },
+    "target_ids": {
+      "allOf": [
+        {"$ref": "#/$defs/sidecar"},
+        {"properties": {"dtype": {"const": "int64"}}}
+      ]
+    },
+    "loss_mask": {
+      "allOf": [
+        {"$ref": "#/$defs/sidecar"},
+        {"properties": {"dtype": {"const": "uint8"}}}
+      ]
+    },
     "document_index": {
       "type": "object",
       "additionalProperties": false,

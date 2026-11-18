@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 import json
 from pathlib import Path
 
@@ -10,6 +11,7 @@ import jsonschema
 from trainlm.data import (
     PackedDataCursor,
     PartitionedPackedBatchReader,
+    TokenSidecar,
     plan_packed_batch_partition,
 )
 
@@ -33,6 +35,28 @@ def _schema(name):
 
 def test_packed_binary_manifest_matches_versioned_json_schema(tmp_path):
     _, manifest = legacy_shard(tmp_path)
+    schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+
+    jsonschema.validate(json.loads(manifest.to_json()), schema)
+
+
+def test_packed_binary_manifest_schema_accepts_supervision_sidecars(tmp_path):
+    _, manifest = legacy_shard(tmp_path)
+    manifest = replace(
+        manifest,
+        target_ids=TokenSidecar(
+            path="train-00000.target_ids.i64",
+            dtype="int64",
+            sha256="a" * 64,
+            size_bytes=manifest.token_count * 8,
+        ),
+        loss_mask=TokenSidecar(
+            path="train-00000.loss_mask.u8",
+            dtype="uint8",
+            sha256="b" * 64,
+            size_bytes=manifest.token_count,
+        ),
+    )
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
 
     jsonschema.validate(json.loads(manifest.to_json()), schema)
