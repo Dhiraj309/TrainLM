@@ -344,6 +344,7 @@ def _initial_report(
         "source_revision": source_revision,
         "dataset_id": config.dataset_id,
         "dataset_revision": config.dataset_revision,
+        "dataset_config_name": config.dataset_config_name,
         "device": config.accelerator,
         "runtime": {
             "python_version": platform.python_version(),
@@ -358,6 +359,9 @@ def _initial_report(
             ),
             "dataset_id": config.dataset_id,
             "dataset_revision": config.dataset_revision,
+            "dataset_revision_requested": config.dataset_revision,
+            "dataset_revision_resolved": None,
+            "dataset_config_name": config.dataset_config_name,
             "train_split": config.train_split,
             "validation_split": config.validation_split,
             "text_field": config.text_field,
@@ -452,17 +456,27 @@ def _initial_report(
 def _capture_local_text_sources(
     report: dict[str, Any], config: TrainLMPretrainingConfig
 ) -> None:
-    """Record the source hashes already checked during packed-data prep."""
-    if config.train_file is None or config.validation_file is None:
-        return
+    """Record immutable Hub identity or local hashes from the prepared cache."""
     cache_path = Path(config.output_dir) / "preparation_cache.json"
     cache = json.loads(cache_path.read_text(encoding="utf-8"))
-    files = cache.get("inputs", {}).get("local_text_files")
-    if not isinstance(files, Mapping) or set(files) != {"train", "validation"}:
-        raise RuntimeError(
-            "The prepared-data cache does not record both local text files."
+    inputs = cache.get("inputs", {})
+    if not isinstance(inputs, Mapping):
+        raise RuntimeError("The prepared-data cache has no source metadata.")
+    if config.dataset_id is not None:
+        report["data"]["dataset_revision_requested"] = config.dataset_revision
+        report["data"]["dataset_revision_resolved"] = inputs.get(
+            "dataset_revision"
         )
-    report["data"]["local_files"] = files
+        report["data"]["dataset_config_name"] = inputs.get(
+            "dataset_config_name", config.dataset_config_name
+        )
+    if config.train_file is not None and config.validation_file is not None:
+        files = inputs.get("local_text_files")
+        if not isinstance(files, Mapping) or set(files) != {"train", "validation"}:
+            raise RuntimeError(
+                "The prepared-data cache does not record both local text files."
+            )
+        report["data"]["local_files"] = files
 
 
 def _capture_effective_configuration(report: dict[str, Any], trainer: Any) -> None:
@@ -674,6 +688,15 @@ def _capture_resume(
             trainer=trainer,
             checkpoint=report.get("checkpoint", {"latest_path": None}),
         )
+        resolved_dataset_revision = report.get("data", {}).get(
+            "dataset_revision_resolved"
+        )
+        resume_config = report["resume"].get("pretraining_config")
+        if (
+            isinstance(resolved_dataset_revision, str)
+            and isinstance(resume_config, dict)
+        ):
+            resume_config["dataset_revision"] = resolved_dataset_revision
     except Exception as exc:
         report["resume"] = {
             "status": "unavailable",

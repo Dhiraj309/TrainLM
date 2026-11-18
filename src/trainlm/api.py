@@ -1657,6 +1657,17 @@ class TrainLMTrainer:
 
         pretraining = asdict(config)
         pretraining.pop("output_dir", None)
+        dataset_source = getattr(
+            train_dataset, "_trainlm_dataset_source_metadata", None
+        )
+        if isinstance(dataset_source, Mapping):
+            resolved_dataset_revision = dataset_source.get("resolved_revision")
+            if isinstance(resolved_dataset_revision, str):
+                # Resume against the exact data snapshot even when the user
+                # originally selected a movable branch or tag.
+                pretraining["dataset_revision"] = resolved_dataset_revision
+        if config.dataset_config_name is None:
+            pretraining.pop("dataset_config_name", None)
         # Keep fingerprints of older default BPE runs stable after optional HF
         # source/initialization fields were added to the public config.
         for name in (

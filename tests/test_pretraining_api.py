@@ -36,11 +36,27 @@ def _config(output_dir: Path, **overrides) -> TrainLMPretrainingConfig:
     return TrainLMPretrainingConfig(**values)
 
 
-def test_pretraining_config_requires_immutable_revision_and_disjoint_splits(tmp_path):
-    with pytest.raises(ValueError, match="40-character commit SHA"):
-        _config(tmp_path, dataset_revision="main")
-    with pytest.raises(ValueError, match="must be distinct"):
+def test_pretraining_config_accepts_hub_revisions_and_disjoint_splits(tmp_path):
+    assert _config(tmp_path, dataset_revision="main").dataset_revision == "main"
+    assert _config(tmp_path, dataset_revision=None).dataset_revision == "main"
+    with pytest.raises(ValueError, match="same source split"):
         _config(tmp_path, validation_split="train")
+    with pytest.raises(ValueError, match="must not overlap"):
+        _config(
+            tmp_path,
+            train_split="train[:90%]",
+            validation_split="train[80%:]",
+        )
+    assert _config(
+        tmp_path,
+        train_split="train[:80%]",
+        validation_split="train[80%:]",
+    ).validation_split == "train[80%:]"
+    with pytest.raises(ValueError, match="simple HF slices"):
+        _config(tmp_path, train_split="train[-10:]")
+    with pytest.raises(ValueError, match="requires dataset_id"):
+        _config(tmp_path, dataset_id=None, dataset_revision=None,
+                dataset_config_name="default")
     with pytest.raises(ValueError, match="divisible"):
         _config(tmp_path, model_embedding_size=15)
     assert _config(tmp_path, tokenizer_vocab_size=65_537).tokenizer_vocab_size == 65_537
@@ -218,6 +234,85 @@ def test_from_scratch_builds_and_trains_a_small_cpu_model(tmp_path, monkeypatch)
         TrainLMTrainer.from_scratch(
             _config(config.output_dir, gradient_checkpointing=True)
         )
+
+
+def test_from_scratch_resolves_hub_config_and_sliced_splits_once(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    rows = [
+        {"text": f"A selected dataset row about trees and stars number {index}. " * 4}
+        for index in range(16)
+    ]
+    calls = []
+    datasets_module = ModuleType("datasets")
+
+    def load_dataset(dataset_id, **kwargs):
+        calls.append((dataset_id, kwargs))
+        return iter(rows)
+
+    datasets_module.load_dataset = load_dataset
+    monkeypatch.setitem(sys.modules, "datasets", datasets_module)
+
+    huggingface_hub = ModuleType("huggingface_hub")
+
+    class FakeHfApi:
+        def dataset_info(self, *, repo_id, revision):
+            assert repo_id == "org/custom-corpus"
+            assert revision == "main"
+            return SimpleNamespace(sha="b" * 40)
+
+    huggingface_hub.HfApi = FakeHfApi
+    monkeypatch.setitem(sys.modules, "huggingface_hub", huggingface_hub)
+
+    config = _config(
+        tmp_path / "hub-config-run",
+        dataset_id="org/custom-corpus",
+        dataset_config_name="default",
+        dataset_revision="main",
+        train_split="train[:80%]",
+        validation_split="train[80%:]",
+    )
+    trainer = TrainLMTrainer.from_scratch(config)
+
+    assert trainer.model.config.model_type == "gpt2"
+    assert len(calls) == 3
+    assert all(dataset_id == "org/custom-corpus" for dataset_id, _ in calls)
+    assert [kwargs["split"] for _, kwargs in calls] == [
+        "train[:80%]",
+        "train[:80%]",
+        "train[80%:]",
+    ]
+    assert all(kwargs["revision"] == "b" * 40 for _, kwargs in calls)
+    assert all(kwargs["name"] == "default" for _, kwargs in calls)
+
+    cache = json.loads(
+        (config.output_dir / "preparation_cache.json").read_text(encoding="utf-8")
+    )
+    assert cache["inputs"]["dataset_revision"] == "b" * 40
+    assert cache["inputs"]["dataset_config_name"] == "default"
+    run_config = json.loads(
+        (config.output_dir / "run_config.json").read_text(encoding="utf-8")
+    )
+    assert (
+        run_config["configuration"]["pretraining"]["dataset_revision"] == "b" * 40
+    )
+
+    from trainlm._notebook_resume import build_resume_report
+    from trainlm.pretraining_run import _capture_local_text_sources
+
+    report = {"data": {}}
+    _capture_local_text_sources(report, config)
+    assert report["data"]["dataset_revision_requested"] == "main"
+    assert report["data"]["dataset_revision_resolved"] == "b" * 40
+    checkpoint = trainer._save_training_checkpoint(
+        trainer.engine, "checkpoint-0"
+    )
+    resume = build_resume_report(
+        config,
+        trainer=trainer,
+        checkpoint={"latest_path": str(checkpoint)},
+    )
+    assert resume["pretraining_config"]["dataset_revision"] == "b" * 40
 
 
 def test_from_scratch_streams_local_text_files_and_checks_content_hashes(

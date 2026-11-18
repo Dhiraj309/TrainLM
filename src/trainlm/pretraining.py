@@ -25,8 +25,83 @@ DEFAULT_DATASET_REVISION = "f54c09fd23315a6f9c86f9dc80f725de7d8f9c64"
 _DATASET_ID = re.compile(r"[A-Za-z0-9._-]{1,96}/[A-Za-z0-9._-]{1,96}\Z")
 _COMMIT_SHA = re.compile(r"[0-9a-f]{40}\Z")
 _FIELD_NAME = re.compile(r"[A-Za-z0-9._+-]{1,96}\Z")
+_SPLIT_SELECTOR = re.compile(
+    r"(?P<name>[A-Za-z0-9._+-]{1,96})"
+    r"(?:\[(?P<start>[0-9]+%?)?:(?P<stop>[0-9]+%?)?\])?\Z"
+)
 _PREPARATION_CACHE_SCHEMA = 1
 _PREPARATION_ALGORITHM = "byte-level-bpe-v1"
+
+
+def _parse_split_selector(
+    value: str,
+) -> tuple[str, int | None, int | None, str | None, bool]:
+    """Parse the single HF split or numeric/percentage slice we support."""
+    if not isinstance(value, str):
+        raise ValueError("Dataset split selectors must be strings.")
+    match = _SPLIT_SELECTOR.fullmatch(value)
+    if match is None:
+        raise ValueError(
+            "Dataset splits must be names or simple HF slices such as "
+            "'train[:90%]' and 'train[90%:]'."
+        )
+    raw_start, raw_stop = match.group("start", "stop")
+    if raw_start is None and raw_stop is None:
+        return match.group("name"), None, None, None, False
+    units = {
+        "%" if raw.endswith("%") else "examples"
+        for raw in (raw_start, raw_stop)
+        if raw is not None
+    }
+    if len(units) != 1:
+        raise ValueError(
+            "A split slice must use either example counts or percentages, not both."
+        )
+    unit = next(iter(units))
+    start = (
+        int(raw_start[:-1] if unit == "%" else raw_start)
+        if raw_start is not None
+        else None
+    )
+    stop = (
+        int(raw_stop[:-1] if unit == "%" else raw_stop)
+        if raw_stop is not None
+        else None
+    )
+    if unit == "%" and any(
+        value is not None and value > 100 for value in (start, stop)
+    ):
+        raise ValueError("Percentage split boundaries must be between 0 and 100.")
+    if start is not None and stop is not None and start >= stop:
+        raise ValueError("A split slice must have a start before its stop.")
+    return match.group("name"), start, stop, unit, True
+
+
+def _validate_disjoint_split_selectors(
+    train: tuple[str, int | None, int | None, str | None, bool],
+    validation: tuple[str, int | None, int | None, str | None, bool],
+) -> None:
+    """Reject identical or overlapping selections from one source split."""
+    if train[0] != validation[0]:
+        return
+    if not train[4] or not validation[4] or train[3] != validation[3]:
+        raise ValueError(
+            "Training and validation cannot select the same source split unless "
+            "both use disjoint slices in the same units."
+        )
+    unit = train[3]
+    default_stop = 100 if unit == "%" else math.inf
+    train_start = train[1] if train[1] is not None else 0
+    train_stop = train[2] if train[2] is not None else default_stop
+    validation_start = validation[1] if validation[1] is not None else 0
+    validation_stop = validation[2] if validation[2] is not None else default_stop
+    if not (
+        train_stop <= validation_start or validation_stop <= train_start
+    ):
+        raise ValueError(
+            "Training and validation slices from the same source split "
+            "must not overlap."
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,6 +181,7 @@ class TrainLMPretrainingConfig:
     betas: tuple[float, float] = (0.9, 0.95)
     eps: float = 1e-8
     max_grad_norm: float = 1.0
+    dataset_config_name: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "output_dir", Path(self.output_dir).expanduser())
@@ -181,7 +257,11 @@ class TrainLMPretrainingConfig:
                 raise ValueError(
                     "train_file and validation_file must be configured together."
                 )
-            if self.dataset_id is not None or self.dataset_revision is not None:
+            if (
+                self.dataset_id is not None
+                or self.dataset_config_name is not None
+                or self.dataset_revision is not None
+            ):
                 raise ValueError(
                     "Choose either local text files or a Hugging Face dataset, not both."
                 )
@@ -202,6 +282,10 @@ class TrainLMPretrainingConfig:
             if paths[0] == paths[1]:
                 raise ValueError("Training and validation files must be distinct.")
         else:
+            if self.dataset_config_name is not None and self.dataset_id is None:
+                raise ValueError(
+                    "dataset_config_name requires dataset_id."
+                )
             if self.dataset_id is None and self.dataset_revision is None:
                 object.__setattr__(self, "dataset_id", DEFAULT_DATASET_ID)
                 object.__setattr__(self, "dataset_revision", DEFAULT_DATASET_REVISION)
@@ -209,20 +293,35 @@ class TrainLMPretrainingConfig:
                 self.dataset_id
             ):
                 raise ValueError("dataset_id must be a Hugging Face owner/name ID.")
-            if (not isinstance(self.dataset_revision, str)
-                    or not _COMMIT_SHA.fullmatch(self.dataset_revision)):
+            if self.dataset_revision is None:
+                object.__setattr__(self, "dataset_revision", "main")
+            if (
+                not isinstance(self.dataset_revision, str)
+                or not self.dataset_revision.strip()
+                or len(self.dataset_revision) > 256
+                or "\x00" in self.dataset_revision
+            ):
                 raise ValueError(
-                    "dataset_revision must be an immutable 40-character commit SHA."
+                    "dataset_revision must be a non-empty Hub revision."
                 )
-        if not all(
-            isinstance(value, str) and _FIELD_NAME.fullmatch(value)
-            for value in (self.train_split, self.validation_split, self.text_field)
+        if self.dataset_config_name is not None and (
+            not isinstance(self.dataset_config_name, str)
+            or not self.dataset_config_name.strip()
+            or len(self.dataset_config_name) > 256
+            or "\x00" in self.dataset_config_name
         ):
-            raise ValueError("Dataset splits and text_field must be simple names.")
-        if self.train_split == self.validation_split:
             raise ValueError(
-                "Training and validation split names must be distinct."
+                "dataset_config_name must be a non-empty Hugging Face dataset config."
             )
+        if not isinstance(self.text_field, str) or not _FIELD_NAME.fullmatch(
+            self.text_field
+        ):
+            raise ValueError("text_field must be a simple field name.")
+        train_selector = _parse_split_selector(self.train_split)
+        validation_selector = _parse_split_selector(self.validation_split)
+        _validate_disjoint_split_selectors(train_selector, validation_selector)
+        if local_files and (train_selector[3] or validation_selector[3]):
+            raise ValueError("Split slicing is only supported for Hub datasets.")
 
         for name in (
             "max_tokens", "sequence_length", "max_train_examples",
@@ -838,23 +937,26 @@ def _validate_scratch_dataset_source(
     *,
     dataset_id: str,
     dataset_revision: str,
+    dataset_config_name: str | None = None,
     train_split: str,
     validation_split: str,
     text_field: str,
 ) -> None:
-    """Validate the revision-pinned source contract used by the recipe."""
+    """Validate one HF raw-text source and separate train/evaluation slices."""
     if not isinstance(dataset_id, str) or not _DATASET_ID.fullmatch(dataset_id):
         raise ValueError("dataset_id must be a Hugging Face owner/name ID.")
-    if (not isinstance(dataset_revision, str)
-            or not _COMMIT_SHA.fullmatch(dataset_revision)):
-        raise ValueError("dataset_revision must be an immutable 40-character commit SHA.")
-    if not all(
-        isinstance(value, str) and _FIELD_NAME.fullmatch(value)
-        for value in (train_split, validation_split, text_field)
+    if not isinstance(dataset_revision, str) or not dataset_revision.strip():
+        raise ValueError("dataset_revision must be a non-empty Hub revision.")
+    if dataset_config_name is not None and (
+        not isinstance(dataset_config_name, str) or not dataset_config_name.strip()
     ):
-        raise ValueError("Dataset splits and text_field must be simple names.")
-    if train_split == validation_split:
-        raise ValueError("Training and validation split names must be distinct.")
+        raise ValueError("dataset_config_name must be non-empty when configured.")
+    if not isinstance(text_field, str) or not _FIELD_NAME.fullmatch(text_field):
+        raise ValueError("text_field must be a simple field name.")
+    _validate_disjoint_split_selectors(
+        _parse_split_selector(train_split),
+        _parse_split_selector(validation_split),
+    )
 
 
 def _resolve_training_steps(
@@ -952,6 +1054,7 @@ def _preparation_cache_inputs(
     config: TrainLMPretrainingConfig,
     *,
     tokenizer_source: Mapping[str, Any] | None = None,
+    resolved_dataset_revision: str | None = None,
 ) -> dict[str, Any]:
     """Return the settings that define tokenizer and packed-shard contents."""
     inputs = {
@@ -961,7 +1064,7 @@ def _preparation_cache_inputs(
             else _PREPARATION_ALGORITHM
         ),
         "dataset_id": config.dataset_id,
-        "dataset_revision": config.dataset_revision,
+        "dataset_revision": resolved_dataset_revision or config.dataset_revision,
         "train_split": config.train_split,
         "validation_split": config.validation_split,
         "text_field": config.text_field,
@@ -971,6 +1074,8 @@ def _preparation_cache_inputs(
             None if tokenizer_source is not None else config.tokenizer_vocab_size
         ),
     }
+    if config.dataset_config_name is not None:
+        inputs["dataset_config_name"] = config.dataset_config_name
     if tokenizer_source is not None:
         inputs["tokenizer_source"] = {
             key: value
@@ -1001,6 +1106,7 @@ def _load_scratch_text_source(
     config: TrainLMPretrainingConfig,
     *,
     split: Literal["train", "validation"],
+    resolved_dataset_revision: str | None = None,
 ):
     """Open one pinned Hub split or one local UTF-8 text file as a stream."""
     split_name = config.train_split if split == "train" else config.validation_split
@@ -1012,12 +1118,42 @@ def _load_scratch_text_source(
             split=split_name,
             streaming=True,
         )
-    return load_dataset(
-        config.dataset_id,
-        revision=config.dataset_revision,
-        split=split_name,
-        streaming=True,
-    )
+    kwargs: dict[str, Any] = {
+        "revision": resolved_dataset_revision or config.dataset_revision,
+        "split": split_name,
+        "streaming": True,
+    }
+    if config.dataset_config_name is not None:
+        kwargs["name"] = config.dataset_config_name
+    if config.cache_dir is not None:
+        kwargs["cache_dir"] = config.cache_dir
+    return load_dataset(config.dataset_id, **kwargs)
+
+
+def _resolve_scratch_dataset_revision(
+    config: TrainLMPretrainingConfig,
+) -> str | None:
+    """Resolve a friendly Hub ref once so both splits and caches are immutable."""
+    if config.dataset_id is None:
+        return None
+    revision = config.dataset_revision or "main"
+    if _COMMIT_SHA.fullmatch(revision):
+        return revision
+    try:
+        from huggingface_hub import HfApi
+    except ImportError as exc:
+        raise ImportError(
+            "Resolving a named Hugging Face dataset revision needs "
+            "'huggingface_hub'. Install the TrainLM Hub dependencies."
+        ) from exc
+    info = HfApi().dataset_info(repo_id=config.dataset_id, revision=revision)
+    resolved = getattr(info, "sha", None)
+    if not isinstance(resolved, str) or not _COMMIT_SHA.fullmatch(resolved):
+        raise ValueError(
+            "Hugging Face did not resolve the dataset source to a lowercase "
+            "40-character commit SHA."
+        )
+    return resolved
 
 
 def _sha256_file(path: Path) -> str:
@@ -1275,9 +1411,12 @@ def _prepare_scratch_training(config: TrainLMPretrainingConfig):
     root = Path(config.output_dir)
     data_root = root / "data"
     root.mkdir(parents=True, exist_ok=True)
+    resolved_dataset_revision = _resolve_scratch_dataset_revision(config)
     tokenizer, tokenizer_source = _load_existing_scratch_tokenizer(config)
     preparation_inputs = _preparation_cache_inputs(
-        config, tokenizer_source=tokenizer_source
+        config,
+        tokenizer_source=tokenizer_source,
+        resolved_dataset_revision=resolved_dataset_revision,
     )
     cached = _load_scratch_preparation_cache(
         config,
@@ -1299,7 +1438,10 @@ def _prepare_scratch_training(config: TrainLMPretrainingConfig):
 
         if tokenizer is None:
             train_source = _load_scratch_text_source(
-                load_dataset, config, split="train"
+                load_dataset,
+                config,
+                split="train",
+                resolved_dataset_revision=resolved_dataset_revision,
             )
             tokenizer, _ = _train_byte_level_tokenizer(
                 train_source,
@@ -1311,10 +1453,16 @@ def _prepare_scratch_training(config: TrainLMPretrainingConfig):
 
         # Reopen the immutable stream after fitting the tokenizer on training text.
         train_source = _load_scratch_text_source(
-            load_dataset, config, split="train"
+            load_dataset,
+            config,
+            split="train",
+            resolved_dataset_revision=resolved_dataset_revision,
         )
         validation_source = _load_scratch_text_source(
-            load_dataset, config, split="validation"
+            load_dataset,
+            config,
+            split="validation",
+            resolved_dataset_revision=resolved_dataset_revision,
         )
         write_packed_binary_shard(
             _token_documents(
@@ -1355,7 +1503,9 @@ def _prepare_scratch_training(config: TrainLMPretrainingConfig):
             train_dataset.close()
             raise
         if _preparation_cache_inputs(
-            config, tokenizer_source=tokenizer_source
+            config,
+            tokenizer_source=tokenizer_source,
+            resolved_dataset_revision=resolved_dataset_revision,
         ) != preparation_inputs:
             train_dataset.close()
             eval_dataset.close()
@@ -1370,6 +1520,21 @@ def _prepare_scratch_training(config: TrainLMPretrainingConfig):
             tokenizer=tokenizer,
             inputs=preparation_inputs,
         )
+
+    dataset_source_metadata = {
+        "source_type": (
+            "huggingface_hub" if config.dataset_id is not None else "local_text_files"
+        ),
+        "dataset_id": config.dataset_id,
+        "dataset_config_name": config.dataset_config_name,
+        "requested_revision": config.dataset_revision,
+        "resolved_revision": resolved_dataset_revision,
+        "train_split": config.train_split,
+        "validation_split": config.validation_split,
+        "text_field": config.text_field,
+    }
+    train_dataset._trainlm_dataset_source_metadata = dataset_source_metadata
+    eval_dataset._trainlm_dataset_source_metadata = dataset_source_metadata
 
     torch.manual_seed(config.seed)
     model = _load_scratch_model(config, tokenizer=tokenizer)
