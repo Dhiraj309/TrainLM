@@ -6,13 +6,13 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, fields
 import json
 import math
-from numbers import Real
+from numbers import Integral, Real
 import os
 import re
 import tempfile
 import zipfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from .api import (
     TrainLMTrainer,
@@ -34,9 +34,11 @@ class TrainLMFineTuningConfig:
     """Inputs and data provenance for pretrained causal-LM fine-tuning.
 
     The train and validation splits stay separate. The default path loads the
-    pinned Hub dataset and tokenizes ``text_field``. ``run_finetuning`` can
-    instead receive dataset objects and a row formatter. Training and
-    evaluation settings live in :class:`TrainLMTrainingArguments`. The
+    pinned Hub dataset and tokenizes ``text_field``. Set ``data_format="tokens"``
+    when dataset rows already contain aligned ``input_ids`` and optional
+    causal-LM labels or masks. ``run_finetuning`` can also receive dataset
+    objects and a row formatter for text input. Training and evaluation
+    settings live in :class:`TrainLMTrainingArguments`. The
     tokenizer defaults to ``model_name_or_path`` and ``model_revision``;
     configure ``tokenizer_name_or_path`` and ``tokenizer_revision`` to select
     an independent tokenizer source.
@@ -54,6 +56,7 @@ class TrainLMFineTuningConfig:
     model_revision: str | None = None
     tokenizer_name_or_path: str | None = None
     tokenizer_revision: str | None = None
+    data_format: Literal["text", "tokens"] = "text"
     _tokenizer_object_required: bool = field(
         default=False, init=False, repr=False, compare=False
     )
@@ -104,6 +107,11 @@ class TrainLMFineTuningConfig:
             )
         if self.train_split == self.validation_split:
             raise ValueError("Training and validation splits must be distinct.")
+        if not isinstance(self.data_format, str) or self.data_format not in {
+            "text",
+            "tokens",
+        }:
+            raise ValueError("data_format must be 'text' or 'tokens'.")
         if not isinstance(self.args, TrainLMTrainingArguments):
             raise TypeError("args must be a TrainLMTrainingArguments instance.")
 
@@ -184,6 +192,206 @@ class _CausalLMCollator:
         labels[attention_mask == 0] = -100
         batch["labels"] = labels
         return batch
+
+
+@dataclass(frozen=True, slots=True)
+class _TokenizedCausalLMCollator:
+    """Pad prepared causal-LM token rows without changing their targets."""
+
+    tokenizer: Any
+    sequence_length: int
+
+    def __call__(
+        self, features: Sequence[Mapping[str, Any]]
+    ) -> Mapping[str, Any]:
+        import torch
+
+        if not features:
+            raise ValueError("Cannot collate an empty tokenized batch.")
+        pad_token_id = getattr(self.tokenizer, "pad_token_id", None)
+        if isinstance(pad_token_id, bool) or not isinstance(pad_token_id, Integral):
+            raise ValueError(
+                "Tokenized causal-LM batches need an integer tokenizer pad_token_id."
+            )
+        pad_token_id = int(pad_token_id)
+        lengths = [len(feature["input_ids"]) for feature in features]
+        max_length = max(lengths)
+        if max_length > self.sequence_length:
+            raise ValueError(
+                f"Tokenized sequence length {max_length} exceeds configured "
+                f"sequence_length={self.sequence_length}; TrainLM will not "
+                "silently truncate prepared tokens."
+            )
+
+        batch: dict[str, Any] = {}
+        batch["input_ids"] = torch.tensor(
+            [
+                list(feature["input_ids"])
+                + [pad_token_id] * (max_length - len(feature["input_ids"]))
+                for feature in features
+            ],
+            dtype=torch.long,
+        )
+        batch["attention_mask"] = torch.tensor(
+            [
+                list(feature.get("attention_mask", [1] * length))
+                + [0] * (max_length - length)
+                for feature, length in zip(features, lengths)
+            ],
+            dtype=torch.long,
+        )
+        batch["labels"] = torch.tensor(
+            [
+                list(feature.get("labels", feature["input_ids"]))
+                + [-100] * (max_length - len(feature["input_ids"]))
+                for feature in features
+            ],
+            dtype=torch.long,
+        )
+
+        if any("loss_mask" in feature for feature in features):
+            batch["loss_mask"] = torch.tensor(
+                [
+                    list(feature.get("loss_mask", [1] * length))
+                    + [0] * (max_length - length)
+                    for feature, length in zip(features, lengths)
+                ],
+                dtype=torch.long,
+            )
+        if any("position_ids" in feature for feature in features):
+            batch["position_ids"] = torch.tensor(
+                [
+                    list(feature.get("position_ids", range(length)))
+                    + [0] * (max_length - length)
+                    for feature, length in zip(features, lengths)
+                ],
+                dtype=torch.long,
+            )
+        if any("token_type_ids" in feature for feature in features):
+            batch["token_type_ids"] = torch.tensor(
+                [
+                    list(feature.get("token_type_ids", [0] * length))
+                    + [0] * (max_length - length)
+                    for feature, length in zip(features, lengths)
+                ],
+                dtype=torch.long,
+            )
+        return batch
+
+
+_TOKENIZED_MODEL_FIELDS = (
+    "input_ids",
+    "attention_mask",
+    "labels",
+    "loss_mask",
+    "position_ids",
+    "token_type_ids",
+)
+
+
+def _tokenized_sequence(
+    value: Any,
+    *,
+    field_name: str,
+    allow_ignore_index: bool = False,
+) -> list[int]:
+    """Validate one token or mask sequence and normalize it to Python ints."""
+    if hasattr(value, "tolist") and callable(value.tolist):
+        value = value.tolist()
+    if (
+        not isinstance(value, Sequence)
+        or isinstance(value, (str, bytes))
+        or not value
+    ):
+        raise ValueError(f"Tokenized {field_name} values must be non-empty sequences.")
+    result: list[int] = []
+    for item in value:
+        is_mask = field_name in {"attention_mask", "loss_mask"}
+        if (isinstance(item, bool) and not is_mask) or not isinstance(item, Integral):
+            raise ValueError(f"Tokenized {field_name} values must be integers.")
+        item = int(item)
+        if allow_ignore_index:
+            if item < 0 and item != -100:
+                raise ValueError("Tokenized labels may use only -100 as a negative ID.")
+        elif item < 0:
+            raise ValueError(f"Tokenized {field_name} values must be non-negative.")
+        result.append(item)
+    return result
+
+
+def _validate_tokenized_batch(
+    batch: Mapping[str, Any],
+    *,
+    sequence_length: int,
+) -> tuple[dict[str, list[list[int]]], int]:
+    """Validate HF token columns without decoding, shifting, or truncating."""
+    if "input_ids" not in batch:
+        raise ValueError("Tokenized datasets must contain an 'input_ids' column.")
+    input_rows = batch["input_ids"]
+    if hasattr(input_rows, "tolist") and callable(input_rows.tolist):
+        input_rows = input_rows.tolist()
+    if not isinstance(input_rows, Sequence) or isinstance(input_rows, (str, bytes)):
+        raise ValueError("Tokenized 'input_ids' batches must be sequences.")
+
+    columns: dict[str, Any] = {}
+    for name in _TOKENIZED_MODEL_FIELDS:
+        if name not in batch:
+            continue
+        value = batch[name]
+        if hasattr(value, "tolist") and callable(value.tolist):
+            value = value.tolist()
+        if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+            raise ValueError(f"Tokenized {name!r} batches must be sequences.")
+        if len(value) != len(input_rows):
+            raise ValueError(
+                f"Tokenized {name!r} batch size must match 'input_ids'."
+            )
+        columns[name] = value
+
+    result: dict[str, list[list[int]]] = {name: [] for name in columns}
+    maximum_id = -1
+    for index, raw_input_ids in enumerate(input_rows):
+        input_ids = _tokenized_sequence(
+            raw_input_ids, field_name="input_ids"
+        )
+        if len(input_ids) < 2:
+            raise ValueError("Causal-LM token rows need at least two input IDs.")
+        if len(input_ids) > sequence_length:
+            raise ValueError(
+                f"Tokenized sequence length {len(input_ids)} exceeds configured "
+                f"sequence_length={sequence_length}; TrainLM will not "
+                "silently truncate prepared tokens."
+            )
+        maximum_id = max(maximum_id, max(input_ids))
+        row: dict[str, list[int]] = {"input_ids": input_ids}
+        for name in columns:
+            if name == "input_ids":
+                continue
+            values = columns[name]
+            allow_ignore = name == "labels"
+            sequence = _tokenized_sequence(
+                values[index],
+                field_name=name,
+                allow_ignore_index=allow_ignore,
+            )
+            if len(sequence) != len(input_ids):
+                raise ValueError(
+                    f"Tokenized {name!r} rows must match the input_ids length."
+                )
+            if name in {"attention_mask", "loss_mask"} and any(
+                value not in {0, 1} for value in sequence
+            ):
+                raise ValueError(
+                    f"Tokenized {name!r} values must contain only 0 or 1."
+                )
+            if name == "labels":
+                valid_ids = [value for value in sequence if value >= 0]
+                if valid_ids:
+                    maximum_id = max(maximum_id, max(valid_ids))
+            row[name] = sequence
+        for name, sequence in row.items():
+            result.setdefault(name, []).append(sequence)
+    return result, maximum_id
 
 
 def _resolved_commit(value: Any) -> str | None:
@@ -378,14 +586,16 @@ def run_finetuning(
     callbacks: Sequence[TrainerCallback] | None = None,
     resume_from_checkpoint: str | Path | None = None,
 ) -> TrainLMFineTuningResult:
-    """Run pretrained text fine-tuning and persist a success or failure summary.
+    """Run pretrained causal-LM fine-tuning and persist a run summary.
 
     By default, load the configured pinned Hub dataset. To use preloaded
     Hugging Face ``Dataset`` splits, pass both ``train_dataset`` and
-    ``eval_dataset``. ``formatting_func`` receives one row and returns its
-    training text; a custom ``data_collator`` receives the mapped token fields
-    and original columns so it can build task-specific labels. Supply the same
-    objects and callbacks again when resuming such a run.
+    ``eval_dataset``. With the default ``data_format="text"``,
+    ``formatting_func`` receives one row and returns its training text. With
+    ``data_format="tokens"``, rows must already contain ``input_ids`` and are
+    validated and passed through without decoding or tokenization. A custom
+    ``data_collator`` receives the mapped token fields and original columns.
+    Supply the same objects and callbacks again when resuming such a run.
 
     The JSON summary is written under ``args.output_dir`` before work begins,
     then finalized on success or updated with the failed phase and last known
@@ -419,6 +629,11 @@ def run_finetuning(
             )
     if formatting_func is not None and not callable(formatting_func):
         raise TypeError("formatting_func must be callable when provided.")
+    if config.data_format == "tokens" and formatting_func is not None:
+        raise ValueError(
+            "formatting_func is only used with data_format='text'; tokenized "
+            "rows are passed through without decoding or retokenizing."
+        )
     if data_collator is not None and not callable(data_collator):
         raise TypeError("data_collator must be callable when provided.")
 
@@ -442,6 +657,8 @@ def run_finetuning(
         "best_model_selection": None,
         "tokenizer_compatibility": None,
         "tokenizer_object_required": config._tokenizer_object_required,
+        "dataset_fingerprints": None,
+        "max_dataset_token_id": None,
     }
     try:
         result = _run_finetuning_impl(
@@ -456,6 +673,12 @@ def run_finetuning(
             run_state=run_state,
         )
         report.update(result.summary())
+        report["data"]["dataset_fingerprints"] = run_state.get(
+            "dataset_fingerprints"
+        )
+        report["data"]["max_dataset_token_id"] = run_state.get(
+            "max_dataset_token_id"
+        )
         report.update(
             status="completed",
             phase="completed",
@@ -465,6 +688,12 @@ def run_finetuning(
         _write_summary(summary_path, report)
         return result
     except Exception as exc:
+        report["data"]["dataset_fingerprints"] = run_state.get(
+            "dataset_fingerprints"
+        )
+        report["data"]["max_dataset_token_id"] = run_state.get(
+            "max_dataset_token_id"
+        )
         report.update(
             status="failed",
             phase=run_state["phase"],
@@ -539,10 +768,13 @@ def _initial_finetuning_summary(
         "best_model_selection": None,
         "data": {
             "source": dataset_source,
+            "data_format": config.data_format,
             "text_field": config.text_field,
             "train_split": config.train_split,
             "validation_split": config.validation_split,
             "formatting_function": _callable_label(formatting_func),
+            "dataset_fingerprints": None,
+            "max_dataset_token_id": None,
         },
         "training_arguments": _json_compatible({
             item.name: getattr(config.args, item.name)
@@ -809,6 +1041,7 @@ def restore_finetuning_config(
             text_field=data["text_field"],
             train_split=data["train_split"],
             validation_split=data["validation_split"],
+            data_format=data.get("data_format", "text"),
             args=args,
         )
         tokenizer_object_required = report.get(
@@ -976,6 +1209,10 @@ def _run_finetuning_impl(
     else:
         train_source = train_dataset
         validation_source = eval_dataset
+    run_state["dataset_fingerprints"] = {
+        "train": getattr(train_source, "_fingerprint", None),
+        "validation": getattr(validation_source, "_fingerprint", None),
+    }
     for split_name, dataset in (
         (config.train_split, train_source),
         (config.validation_split, validation_source),
@@ -992,7 +1229,11 @@ def _run_finetuning_impl(
                 f"{split_name} dataset must expose the Hugging Face Dataset "
                 "`map` method."
             )
-        if formatting_func is None and config.text_field not in columns:
+        if (
+            config.data_format == "text"
+            and formatting_func is None
+            and config.text_field not in columns
+        ):
             raise ValueError(
                 f"Dataset split {split_name!r} has no {config.text_field!r} column."
             )
@@ -1002,41 +1243,60 @@ def _run_finetuning_impl(
         except (TypeError, NotImplementedError):
             pass
 
-    def tokenize(batch: Mapping[str, Any]) -> Mapping[str, Any]:
-        if formatting_func is None:
-            texts = batch[config.text_field]
-        else:
-            values = tuple(batch.values())
-            if not values:
-                raise ValueError("Cannot format a dataset batch with no columns.")
-            size = len(values[0])
-            if any(len(column) != size for column in values):
-                raise ValueError("Dataset batch columns have inconsistent lengths.")
-            texts = [
-                formatting_func({name: batch[name][index] for name in batch})
-                for index in range(size)
-            ]
-        if not isinstance(texts, list) or any(
-            not isinstance(text, str) for text in texts
-        ):
-            raise ValueError(
-                "The selected dataset text or formatting_func must produce "
-                "one string per example."
-            )
-        return tokenizer(
-            texts,
-            truncation=True,
-            max_length=config.args.sequence_length,
-        )
-
     run_state["phase"] = "tokenizing"
+    if config.data_format == "text":
+        def tokenize(batch: Mapping[str, Any]) -> Mapping[str, Any]:
+            if formatting_func is None:
+                texts = batch[config.text_field]
+            else:
+                values = tuple(batch.values())
+                if not values:
+                    raise ValueError("Cannot format a dataset batch with no columns.")
+                size = len(values[0])
+                if any(len(column) != size for column in values):
+                    raise ValueError("Dataset batch columns have inconsistent lengths.")
+                texts = [
+                    formatting_func({name: batch[name][index] for name in batch})
+                    for index in range(size)
+                ]
+            if not isinstance(texts, list) or any(
+                not isinstance(text, str) for text in texts
+            ):
+                raise ValueError(
+                    "The selected dataset text or formatting_func must produce "
+                    "one string per example."
+                )
+            return tokenizer(
+                texts,
+                truncation=True,
+                max_length=config.args.sequence_length,
+            )
+
+        train_mapper = tokenize
+        validation_mapper = tokenize
+    else:
+        def validate_tokens(batch: Mapping[str, Any]) -> Mapping[str, Any]:
+            token_columns, maximum_id = _validate_tokenized_batch(
+                batch,
+                sequence_length=config.args.sequence_length,
+            )
+            previous_maximum = run_state.get("max_dataset_token_id")
+            run_state["max_dataset_token_id"] = max(
+                maximum_id,
+                previous_maximum if isinstance(previous_maximum, int) else -1,
+            )
+            return token_columns
+
+        train_mapper = validate_tokens
+        validation_mapper = validate_tokens
+
     train_dataset = train_source.map(
-        tokenize,
+        train_mapper,
         batched=True,
         remove_columns=[] if data_collator is not None else train_source.column_names,
     )
     validation_dataset = validation_source.map(
-        tokenize,
+        validation_mapper,
         batched=True,
         remove_columns=(
             [] if data_collator is not None else validation_source.column_names
@@ -1062,7 +1322,13 @@ def _run_finetuning_impl(
         data_collator=(
             data_collator
             if data_collator is not None
-            else _CausalLMCollator(tokenizer)
+            else (
+                _CausalLMCollator(tokenizer)
+                if config.data_format == "text"
+                else _TokenizedCausalLMCollator(
+                    tokenizer, config.args.sequence_length
+                )
+            )
         ),
         callbacks=callbacks,
     )
@@ -1124,6 +1390,19 @@ def _run_finetuning_impl(
             "input embeddings contain only "
             f"{tokenizer_compatibility['model_embedding_rows']} rows. TrainLM "
             "will not resize embeddings or remap token IDs."
+        )
+    maximum_dataset_token_id = run_state.get("max_dataset_token_id")
+    embedding_rows = tokenizer_compatibility.get("model_embedding_rows")
+    if (
+        isinstance(maximum_dataset_token_id, int)
+        and isinstance(embedding_rows, int)
+        and maximum_dataset_token_id >= embedding_rows
+    ):
+        raise ValueError(
+            "The tokenized dataset contains token ID "
+            f"{maximum_dataset_token_id}, but the model input embeddings contain "
+            f"only {embedding_rows} rows. TrainLM will not resize embeddings or "
+            "remap token IDs."
         )
     if tokenizer_compatibility["context_length"] == "exceeds_model_limit":
         raise ValueError(
