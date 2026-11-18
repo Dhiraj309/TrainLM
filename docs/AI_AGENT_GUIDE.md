@@ -17,7 +17,7 @@ distinct from the callable surface listed below.
 | --- | --- | --- |
 | Fine-tune a pretrained causal LM | [short Colab notebook](../notebooks/TrainLM_Text_Fine_Tuning.ipynb) · [short Python example](../examples/finetune_text.py) · [full guide](tutorials/TEXT_FINETUNING.md) | [`run_finetuning`](../src/trainlm/finetuning.py), [API tests](../tests/test_finetuning_api.py), [notebook contract](../tests/contracts/test_current_colab_notebooks.py); use CPU or CUDA, native TPU fine-tuning is not validated |
 | Configure fine-tuning evaluation, best-checkpoint selection, early stopping, or resume | [fine-tuning guide](tutorials/TEXT_FINETUNING.md) | [`TrainLMTrainingArguments`](../src/trainlm/api.py), [`restore_finetuning_config`](../src/trainlm/finetuning.py), [lifecycle tests](../tests/test_api_lifecycle.py) |
-| Pretrain a causal LM from Hub text or local text files | [short Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) · [short Python example](../examples/pretrain_from_scratch.py) | [`run_pretraining`](../src/trainlm/pretraining_run.py), [`TrainLMPretrainingConfig`](../src/trainlm/pretraining.py), [CPU workflow tests](../tests/test_pretraining_run.py); defaults to random Hugging Face GPT-2; notebook reloads its export and previews CPU generation; native TPU remains experimental |
+| Pretrain from an HF config/tokenizer or continue pretrained weights | [short Colab notebook](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) · [HF model config example](../README.md#start-here-pretrain-a-language-model-from-scratch) · [pretraining guide](tutorials/TPU_PACKED_BIN_PRETRAINING.md) | [`run_pretraining`](../src/trainlm/pretraining_run.py), [`TrainLMPretrainingConfig`](../src/trainlm/pretraining.py), [HF model provider](../src/trainlm/model/huggingface.py), [CPU workflow tests](../tests/test_pretraining_api.py); default no-source route stays random GPT-2 + trained BPE; live Hub and native TPU remain unverified |
 | Change model dimensions, training budget, or resume a scratch run | [short notebook](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) (`MODEL_SIZE=tiny` or `small`; `TRAINING_PROFILE=smoke` or `longer`) · [pretraining guide](tutorials/TPU_PACKED_BIN_PRETRAINING.md) · [README API reference](../README.md#start-here-pretrain-a-language-model-from-scratch) | [`restore_pretraining_report` and `bundle_pretraining_artifacts`](../src/trainlm/pretraining_run.py), [recovery tests](../tests/test_notebook_resume.py) |
 | Use the lower-level trainer lifecycle or inspect checkpoints | [README API reference](../README.md) | [`TrainLMTrainer`](../src/trainlm/api.py), [checkpoint retention](../src/trainlm/checkpoint/retention.py), [lifecycle tests](../tests/test_api_lifecycle.py) |
 | Check native TPU availability and package compatibility | [T1 v5e-1 guide](T1_V5E1_PROBE.md) | [hardware discovery](../src/trainlm/runtime/torchtpu_discovery.py), [package preflight](../src/trainlm/runtime/torchtpu_trainer_preflight.py) |
@@ -81,7 +81,15 @@ follow the linked implementation and tests before making a change.
   before the token target and is reported explicitly. Set AdamW `betas` and
   `eps` as usual; `max_grad_norm` defaults to `1.0`, and `0` disables gradient
   clipping. The run report records requested and effective values. TPU behavior
-  remains experimental.
+  remains experimental. With no HF model source, GPT-2 plus corpus-trained BPE
+  remains the compatibility default. `model_name_or_path` selects a Hub/local
+  config; random initialization reuses its architecture and tokenizer without
+  loading checkpoint weights. Set `model_initialization="pretrained"` for
+  continued pretraining and preserve the matching embedding matrix. The
+  default tokenizer comes from the model source; `tokenizer_name_or_path` and
+  `tokenizer_revision` select one independently. Use `tokenizer_mode="train_bpe"`
+  for a newly trained tokenizer with random weights. `trust_remote_code=True`
+  is an explicit opt-in for repositories that provide custom HF model code.
   `extend_training_budget=True` permits only a strictly larger `max_tokens`
   when effective schedule, warmup, and cadence still match the automatic
   cosine defaults. After a compatible checkpoint is restored,
@@ -90,12 +98,14 @@ follow the linked implementation and tests before making a change.
   deliberately. Other changed settings require a fresh `output_dir`. CPU/API
   tests cover this lifecycle; the owner reports one successful same-runtime
   v5e-1 resume with budget extension. Fresh-process/post-reset resume remains
-  unverified. GPT-2
-  is the default;
-  `model_type` and `model_config_overrides` select a registered Transformers
-  causal-LM configuration for random initialization. TrainLM fills vocabulary
-  and special-token IDs from the newly trained tokenizer. The path does not
-  load custom remote model code.
+  unverified. With no model source, GPT-2 plus corpus-trained BPE remains the
+  default. `model_name_or_path` selects a Hub/local config for random
+  initialization; setting `model_initialization="pretrained"` continues from
+  checkpoint weights and keeps the model's embeddings unchanged. The model's
+  tokenizer is used by default; `tokenizer_name_or_path` and
+  `tokenizer_revision` select an independent source. The config's model fields
+  are preserved and `model_config_overrides` applies explicit random-init
+  changes. `trust_remote_code=True` is required for custom HF model code.
 - `gradient_checkpointing=True` enables the selected Hugging Face model's
   standard activation-checkpointing hook when available and disables KV cache
   during training. Export restores the original cache setting. It is off by
