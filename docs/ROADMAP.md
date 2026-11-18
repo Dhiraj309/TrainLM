@@ -16,15 +16,16 @@ is in progress on `feat/20-hf-dataset-sources`: streamed raw Hub data now
 supports configs, friendly revisions, and non-overlapping split slices. The
 pretrained fine-tuning helper also accepts prepared HF Dataset rows through
 `data_format="tokens"`, preserving causal labels/masks and padding ragged
-batches. The current HF-03 branch also accepts raw-text HF Dataset objects
-directly in `run_pretraining` / `TrainLMTrainer.from_scratch`, fingerprinting
-both splits for preparation-cache and resume safety. Direct tokenized Dataset
-input to scratch/CPT and unified provenance remain incomplete. HF-04–HF-08
-remain planned; notebook presets do not complete those workflows.
-The latest PR #140 CI run failed three pretraining smoke-contract tests that
-still encoded the previous revision, error-message, and notebook-budget
-contracts. The follow-up updates those expectations; local focused tests pass,
-and hosted CI is pending.
+batches. The current HF-03 branch also accepts raw-text and tokenized HF
+Dataset objects in `run_pretraining` / `TrainLMTrainer.from_scratch`, with
+fingerprinted preparation inputs and resume checks. For token inputs, TrainLM
+adds EOS when absent, builds labels from `input_ids`, and applies one causal
+shift; caller labels and loss masks are rejected, and selected tokenizer
+provenance is recorded while compatibility remains caller responsibility. Unified
+provenance remains incomplete. HF-04–HF-08 remain planned; notebook presets do
+not complete those workflows. CI for PR #140 commit
+`0b765601fea2ea3416415b23af9c73970bf53d5f` passed both core profiles. The new
+token-input slice passes 54 local tests plus 14 subtests; hosted CI is pending.
 T0–T11 remains the runtime architecture/evidence plan; the M0–M17
 specification below remains historical.
 

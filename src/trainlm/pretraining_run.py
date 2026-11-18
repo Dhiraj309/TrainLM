@@ -173,7 +173,9 @@ def run_pretraining(
     This is the convenient end-to-end path. Users who need a custom lifecycle
     can continue to construct :class:`TrainLMTrainer` directly and call its
     ``train``, ``evaluate``, and ``save_model`` methods. For raw HF Dataset
-    objects, set ``dataset_source="provided"`` and pass both splits here.
+    objects, set ``dataset_source="provided"`` and pass both splits here. Set
+    ``data_format="tokens"`` for ``input_ids`` plus an optional
+    ``attention_mask``; TrainLM generates causal labels from the IDs.
 
     The report is written even when model preparation, training, evaluation,
     or export fails. In that case :class:`TrainLMPretrainingError` identifies
@@ -344,7 +346,11 @@ def _initial_report(
     )
     return {
         "schema_version": 6,
-        "scope": "experimental_single_device_raw_text_pretraining",
+        "scope": (
+            "experimental_single_device_tokenized_pretraining"
+            if config.data_format == "tokens"
+            else "experimental_single_device_raw_text_pretraining"
+        ),
         "status": "not_started",
         "source_revision": source_revision,
         "dataset_id": config.dataset_id,
@@ -370,6 +376,15 @@ def _initial_report(
                 "local_files"
                 if config.train_file is not None
                 else config.dataset_source
+            ),
+            "data_format": config.data_format,
+            "causal_target_policy": (
+                "TrainLM copies input_ids to labels and applies one next-token shift."
+            ),
+            "tokenizer_dataset_match": (
+                "not_verified_by_trainlm"
+                if config.data_format == "tokens"
+                else None
             ),
             "dataset_id": config.dataset_id,
             "dataset_revision": config.dataset_revision,
@@ -493,6 +508,22 @@ def _capture_local_text_sources(
                 "The prepared-data cache does not record both provided Dataset inputs."
             )
         report["data"]["provided_datasets"] = datasets
+        if config.data_format == "tokens":
+            tokenizer_source = inputs.get("tokenizer_source")
+            if not isinstance(tokenizer_source, Mapping):
+                raise RuntimeError(
+                    "The prepared token Dataset cache does not record tokenizer provenance."
+                )
+            report["data"]["tokenizer_provenance"] = {
+                name: tokenizer_source.get(name)
+                for name in (
+                    "requested_source",
+                    "requested_revision",
+                    "resolved_revision",
+                    "local_source",
+                    "mapping_sha256",
+                )
+            }
     if config.train_file is not None and config.validation_file is not None:
         files = inputs.get("local_text_files")
         if not isinstance(files, Mapping) or set(files) != {"train", "validation"}:

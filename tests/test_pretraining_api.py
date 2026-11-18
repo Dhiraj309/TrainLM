@@ -134,6 +134,29 @@ def test_pretraining_config_accepts_paired_local_text_files(tmp_path):
         )
 
 
+def test_tokenized_pretraining_requires_a_selected_hf_tokenizer(tmp_path):
+    source = {
+        "dataset_source": "provided",
+        "dataset_id": None,
+        "dataset_revision": None,
+        "dataset_config_name": None,
+        "data_format": "tokens",
+    }
+    with pytest.raises(ValueError, match="requires tokenizer_name_or_path"):
+        _config(tmp_path / "missing-tokenizer", **source)
+    assert _config(
+        tmp_path / "with-tokenizer",
+        **source,
+        tokenizer_name_or_path="org/base-model",
+    ).data_format == "tokens"
+    with pytest.raises(ValueError, match="requires dataset_source='provided'"):
+        _config(
+            tmp_path / "hub-tokens",
+            data_format="tokens",
+            tokenizer_name_or_path="org/base-model",
+        )
+
+
 def test_from_scratch_accepts_fingerprinted_raw_hf_dataset_objects(
     tmp_path, monkeypatch
 ):

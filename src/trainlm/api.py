@@ -903,9 +903,10 @@ class TrainLMTrainer:
         The method keeps the familiar ``trainer.train()``, ``evaluate()``, and
         ``save_model()`` lifecycle while owning streaming tokenization and
         packed-data preparation. Set ``dataset_source="provided"`` and pass
-        raw-text ``train_dataset`` and ``eval_dataset`` objects to prepare HF
-        Dataset splits without loading them again. Matching inputs reuse
-        integrity-checked tokenizer and packed-shard artifacts in
+        ``train_dataset`` and ``eval_dataset`` objects to prepare HF Dataset
+        splits without loading them again. Use ``data_format="tokens"`` for
+        pretokenized ``input_ids``; TrainLM generates labels and shifts once.
+        Matching inputs reuse integrity-checked tokenizer and packed-shard artifacts in
         ``config.output_dir``. Native TorchTPU must be explicitly selected and
         remains experimental. Set
         ``extend_training_budget=True`` only when resuming an existing scratch
@@ -1665,6 +1666,8 @@ class TrainLMTrainer:
         if config.dataset_source == "hub":
             # Keep old Hub/local checkpoint configuration fingerprints stable.
             pretraining.pop("dataset_source", None)
+        if config.data_format == "text":
+            pretraining.pop("data_format", None)
         dataset_source = getattr(
             train_dataset, "_trainlm_dataset_source_metadata", None
         )
