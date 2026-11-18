@@ -2,8 +2,9 @@
 
 ## Start here
 
-- [Pretrain from scratch](pretrain_from_scratch.py): one public API call; the
-  default architecture is randomly initialized Hugging Face GPT-2, and the
+- [Pretrain from scratch](pretrain_from_scratch.py): one public API call that
+  uses a Hugging Face GPT-2 config and tokenizer with random weights, streams
+  raw TinyStories text, and takes a non-overlapping validation slice. The
   10,000-token setting is a workflow smoke test.
 - [Fine-tune text](finetune_text.py): one public API call using a tiny model and
   three steps; increase the budget and choose a model for a real run.

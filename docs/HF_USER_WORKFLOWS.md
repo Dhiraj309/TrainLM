@@ -5,7 +5,8 @@ product delivery plan. T0–T11 remains the architecture and accelerator evidenc
 plan. Story labels below distinguish merged work, the current implementation
 branch, and work that remains planned.
 The baseline audit is merged `main` at
-`9591d8b9823c9a8757630d1b79e724e3590d7028` (PR #138).
+`9591d8b9823c9a8757630d1b79e724e3590d7028` (PR #138). The latest merged
+`main` includes HF-02 at `c9ece9a2e9057260586636a428dfd7679c42e8fa` (PR #139).
 
 ## The experience we are building
 
@@ -48,13 +49,13 @@ remain separate scopes. Unsupported cases need an actionable early error.
 | User need | Audited baseline | Gap to close |
 | --- | --- | --- |
 | Bring an HF model object and tokenizer | `TrainLMTrainer(model=..., processing_class=..., ...)` accepts them | Make this a first-class documented route, including prepared datasets and custom collators |
-| Random initialization from a Hub config | `TrainLMPretrainingConfig.model_name_or_path` loads an HF config and initializes random weights through `from_config`; model weights are not fetched | Current HF-02 branch implements the convenient route; live Hub and TPU execution remain unverified |
-| Start from pretrained weights for CPT | `TrainLMPretrainingConfig.model_initialization="pretrained"` loads the HF checkpoint; the same pretraining lifecycle accepts raw text | Current HF-02 branch implements the initial path; prepared-token dataset input and public upload remain later work |
-| Reuse an HF tokenizer | Scratch defaults to the model repository's tokenizer or accepts independent `tokenizer_name_or_path` and `tokenizer_revision`; `tokenizer_mode="train_bpe"` retains corpus training for random initialization | Current HF-02 branch fingerprints tokenizer mapping and resolved source; independently hosted token meaning remains the user's responsibility |
+| Random initialization from a Hub config | `TrainLMPretrainingConfig.model_name_or_path` loads an HF config and initializes random weights through `from_config`; model weights are not fetched | HF-02 is merged; live Hub and TPU execution remain unverified |
+| Start from pretrained weights for CPT | `TrainLMPretrainingConfig.model_initialization="pretrained"` loads the HF checkpoint; the same pretraining lifecycle accepts raw text | HF-02 is merged; prepared-token dataset input and public upload remain later work |
+| Reuse an HF tokenizer | Scratch defaults to the model repository's tokenizer or accepts independent `tokenizer_name_or_path` and `tokenizer_revision`; `tokenizer_mode="train_bpe"` retains corpus training for random initialization | HF-02 fingerprints tokenizer mapping and resolved source; independently hosted token meaning remains the user's responsibility |
 | Independently hosted tokenizer | `run_finetuning` accepts separate model/tokenizer IDs and revisions, resolves them independently, and checks known token-ID bounds and static context limits | Token meanings cannot be proven from Hub IDs or vocabulary sizes; the report marks them unverified and an explicit user policy remains |
-| Raw HF datasets | Scratch streams pinned text; fine-tuning loads Hub splits or caller-provided HF datasets and maps text | Shared source options for dataset config/subset, split expressions, files, objects, and caching; avoid requiring users to look up SHAs manually |
+| Raw HF datasets | Scratch streams Hub text with a dataset config, named revision, selected split or non-overlapping train/eval slices; local text files remain supported | HF-03 currently covers streamed raw text and auto-resolves mutable Hub refs; direct `Dataset` objects, arbitrary data files, formatters and tokenized datasets remain |
 | Pretokenized HF datasets | Generic trainer accepts prepared mappings/DataLoaders; default collator stacks equal-length tensors | Convenient workflows always tokenize raw text. Add an explicit tokens route with appropriate collation and label/mask preservation |
-| Modern HF vocabularies | Packed writer and scratch config support uint32 IDs; scratch derives required capacity from the largest tokenizer ID, including sparse/added IDs | Current HF-02 branch removes the 65,536 ceiling; a CPU round-trip covers token ID 70,000 |
+| Modern HF vocabularies | Packed writer and scratch config support uint32 IDs; scratch derives required capacity from the largest tokenizer ID, including sparse/added IDs | HF-02 removed the 65,536 ceiling; a CPU round-trip covers token ID 70,000 |
 | Train/evaluate/save/resume | Public trainer and helper lifecycles exist; scratch has strong prepared-data identity checks | Share contracts across HF data paths; include tokenizer/data identity and declare which streams can resume exactly |
 | Standard HF model export | `save_model` uses `save_pretrained` and saves the processing class when supplied | Verify a complete export independently of TrainLM, including tokenizer and applicable generation configuration |
 | Publish to HF Hub | Users can use HF tools themselves; TrainLM has no public `push_to_hub` operation | Add explicit publication of the selected export, model card/provenance, and a returned immutable revision |
@@ -141,8 +142,9 @@ silently reinterpret it as a Transformers `PretrainedConfig` factory.
 
 ## Delivery order and acceptance criteria
 
-HF-01 is merged; HF-02 is in progress on
-`feat/19-hf-architecture-and-tokenizer`; HF-03–HF-08 remain planned. IDs
+HF-01 and HF-02 are merged through PR #139 at
+`c9ece9a2e9057260586636a428dfd7679c42e8fa`. HF-03 is in progress on
+`feat/20-hf-dataset-sources`; HF-04–HF-08 remain planned. IDs
 HF-01–HF-08 identify outcomes, not Git branch sequence numbers. Deliver each
 outcome in a focused PR with meaningful
 implementation/regression/docs commits. Start each new branch after the
@@ -193,9 +195,9 @@ rebuilding their configs or making the repositories share a commit.
 The implementation commits are `aee61b6` (independent source resolution) and
 `31a581d` (resume source identity).
 
-### HF-02 — HF architecture, tokenizer reuse, and CPT initialization (P0, in progress)
+### HF-02 — HF architecture, tokenizer reuse, and CPT initialization (P0, complete)
 
-**Progress:** the current feature branch extends
+**Progress:** PR #139 extended
 `TrainLMPretrainingConfig` with a Hub/local HF model source, separate source
 revisions, `random` or `pretrained` initialization, tokenizer reuse and an
 explicit `train_bpe` option. Random initialization loads the HF config and
@@ -224,10 +226,49 @@ existing HF tokenizer, using one ordinary TrainLM workflow.
   both can reuse a tokenizer without fitting it; a vocabulary above 65,536
   round-trips safely; old scratch calls and saved-run compatibility are covered.
 
-### HF-03 — One raw/pretokenized HF dataset path (P0)
+### HF-03 — One raw/pretokenized HF dataset path (P0, in progress)
 
 **User outcome:** supply a Hub dataset or HF dataset object and tell TrainLM
 whether it contains text or tokens.
+
+**Progress on `feat/20-hf-dataset-sources`:** the scratch pretraining helper
+accepts a dataset config name, branch or tag revision, and simple HF split
+slices. Named refs resolve to one commit before the stream is opened. The
+resolved commit and config enter the preparation fingerprint and run
+configuration, and generated resume settings pin to that commit. When train
+and validation use one underlying split, TrainLM accepts them only as
+non-overlapping slices. Raw local text files and text-column tokenization
+remain supported. This is the raw-text portion only; direct HF Dataset objects,
+arbitrary local data files, formatters, tokenized examples, label/mask
+preservation and ragged collation are still outstanding.
+
+Runnable example: [examples/pretrain_from_scratch.py](../examples/pretrain_from_scratch.py).
+Its 10,000-token budget is only a workflow smoke test, not a useful training
+budget or quality claim.
+
+For example, this branch supports choosing a named dataset revision and
+holding out the final 10% of one split without requiring users to find a
+commit SHA:
+
+```python
+from trainlm import TrainLMPretrainingConfig, run_pretraining
+
+config = TrainLMPretrainingConfig(
+    model_name_or_path="openai-community/gpt2",
+    model_initialization="pretrained",
+    dataset_id="roneneldan/TinyStories",
+    dataset_revision="main",
+    train_split="train[:90%]",
+    validation_split="train[90%:]",
+    text_field="text",
+    output_dir="trainlm-cpt",
+)
+result = run_pretraining(config, show_progress=True)
+print(result.summary())
+```
+
+The report records the requested ref and resolved SHA. A later resume uses the
+resolved SHA so a moved branch cannot silently change the corpus.
 
 - Support dataset ID/config/subset/revision, named or sliced splits, local data
   files and selected `DatasetDict` splits through standard `datasets` loaders.

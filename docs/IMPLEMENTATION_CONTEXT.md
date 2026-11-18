@@ -9,19 +9,24 @@
 ## Current project snapshot
 
 **Owner priority reset (2026-11-17):** the active product backlog is
-[HF user workflows](HF_USER_WORKFLOWS.md), now based on verified merged `main`
-`9591d8b9823c9a8757630d1b79e724e3590d7028`. HF-01 is merged through PRs #137
-and #138. The current HF-02 branch connects scratch/CPT to the existing HF
-provider: load a Hub/local config, choose random or pretrained initialization,
-reuse the matching HF tokenizer by default or select one independently, and
-retain corpus-trained BPE as an explicit random-init option. Tokenizer mapping
-and resolved source identity participate in prepared-data and checkpoint
-identity. The packed path now accepts token IDs through uint32 and validates
-pretrained embedding bounds and known context limits without resizing or
-remapping. HF-03–HF-08 remain planned, including prepared-token data,
-publication, and broader inference evidence. Independently hosted tokenizer
-semantics remain the user's responsibility. These CPU changes add no TPU or
-live-Hub evidence.
+[HF user workflows](HF_USER_WORKFLOWS.md). The latest verified merged `main`
+is `c9ece9a2e9057260586636a428dfd7679c42e8fa`, with HF-01 and HF-02 merged
+through PR #139. HF-02 connects scratch/CPT to the existing HF provider: load
+a Hub/local config, choose random or pretrained initialization, reuse the
+matching HF tokenizer by default or select one independently, and retain
+corpus-trained BPE as an explicit random-init option. Tokenizer mapping and
+resolved source identity participate in prepared-data and checkpoint identity.
+The packed path accepts uint32 token IDs and validates pretrained embedding
+bounds and known context limits without resizing or remapping.
+
+The current branch `feat/20-hf-dataset-sources` begins HF-03. It adds dataset
+config names, friendly Hub revisions that resolve to immutable commits, and
+non-overlapping split slices to the streamed raw-text scratch path. The
+resolved source enters the data fingerprint and resume configuration. Direct
+HF Dataset objects, tokenized inputs, custom raw-text formatters, label/mask
+handling, and ragged collation remain incomplete. Independently hosted
+tokenizer semantics remain the user's responsibility. These CPU changes add
+no live-Hub or TPU execution evidence.
 
 The merged `main` branch exposes two task-focused, Hugging Face-style entry
 points: `run_pretraining(TrainLMPretrainingConfig(...))` for random-weight
@@ -179,7 +184,7 @@ source-less tokenizer object again, and checks that object's recorded commit
 when available. This does not verify arbitrary dataset-stream identity or
 provide TPU/live-Hub validation.
 
-**HF-02 implementation in progress:** `TrainLMPretrainingConfig` accepts HF
+**HF-02 complete (PR #139):** TrainLMPretrainingConfig accepts HF
 model/tokenizer IDs or local paths, separate revisions, `model_initialization`
 (`random` or `pretrained`), and `tokenizer_mode="train_bpe"`. With a model
 source, random mode uses the Hub/local `PretrainedConfig` as architecture input
@@ -192,9 +197,22 @@ Tokenizer source revisions and tokenizer mappings are fingerprinted for
 prepared data and run identity. Tokenizer vocabulary capacity uses the
 highest actual ID, not only the number of entries. The legacy no-source BPE
 path remains the default and keeps its earlier run fingerprint shape. Focused
-offline CPU coverage passes for random-init, CPT, incompatible token IDs,
+offline CPU coverage passed for random-init, CPT, incompatible token IDs,
 tokenizer cache reuse and a uint32 round-trip above 65,535; live Hub and TPU
 validation remain owner-run.
+
+**HF-03 implementation in progress:** `TrainLMPretrainingConfig` accepts
+`dataset_config_name`, friendly dataset revisions, and simple named or sliced
+Hub splits. Mutable refs are resolved through `HfApi.dataset_info` before
+loading; both streamed splits use the resulting SHA. Train/evaluation slices
+from one underlying split must be disjoint. The resolved commit is part of the
+preparation cache identity, the saved run configuration, and generated resume
+settings, so a resumed branch selection stays pinned to the original data.
+Local paired text files and the existing text-column tokenizer path still work.
+Focused CPU tests cover config/revision selection, split overlap, source pinning
+and cache/report identity. This does not yet accept arbitrary HF Dataset
+objects, pretokenized rows or arbitrary local data files, and does not establish
+live-Hub or TPU execution.
 
 The entries below preserve the API and validation history. Branch names,
 intermediate notebook controls, and test counts in those entries describe past

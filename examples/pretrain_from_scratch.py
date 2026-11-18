@@ -1,16 +1,19 @@
-"""Small native TorchTPU from-scratch pretraining example."""
+"""Short native TorchTPU example using a Hub architecture and raw HF text."""
 
 from trainlm import TrainLMPretrainingConfig, run_pretraining
 
 
 config = TrainLMPretrainingConfig(
-    output_dir="runs/tinystories",
+    output_dir="runs/tinystories-gpt2",
     max_tokens=10_000,  # Workflow smoke only; increase for real training.
     sequence_length=128,
-    model_type="gpt2",  # Randomly initialized Hugging Face GPT-2.
-    model_embedding_size=256,
-    model_layers=4,
-    model_attention_heads=4,
+    model_name_or_path="openai-community/gpt2",
+    model_initialization="random",  # HF config and tokenizer; no model weights.
+    dataset_id="roneneldan/TinyStories",
+    dataset_revision="main",  # TrainLM records the resolved immutable commit.
+    train_split="train[:90%]",
+    validation_split="train[90%:]",
+    text_field="text",
     accelerator="native_tpu",
 )
 result = run_pretraining(config, show_progress=True)
