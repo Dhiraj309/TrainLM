@@ -72,6 +72,7 @@ class PackedBinDataset(IterableDataset):
         self._partition = PartitionedPackedBatchReader(self._reader, plan)
         self._cursor: PackedDataCursor | None = None
         self._source_revision: str | None = None
+        self._supervised_tokens_per_epoch_cache: int | None = None
 
     @classmethod
     def from_directory(
@@ -221,6 +222,36 @@ class PackedBinDataset(IterableDataset):
 
     def __len__(self) -> int:
         return len(self._partition)
+
+    def _count_supervised_tokens_per_epoch(self) -> int:
+        """Count valid next-token targets without changing the training cursor."""
+        if self._supervised_tokens_per_epoch_cache is not None:
+            return self._supervised_tokens_per_epoch_cache
+
+        has_supervision_sidecars = any(
+            shard.manifest.target_ids is not None
+            or shard.manifest.loss_mask is not None
+            for shard in self.shards
+        )
+        if not has_supervision_sidecars:
+            count = len(self) * (self.sequence_length - 1)
+            self._supervised_tokens_per_epoch_cache = count
+            return count
+
+        count = 0
+        for batch_index in range(len(self._partition)):
+            batch = self._partition.read_batch(batch_index)
+            labels = batch["labels"][..., 1:]
+            target_mask = (
+                batch["attention_mask"][..., :-1]
+                & batch["attention_mask"][..., 1:]
+                & batch["loss_mask"][..., 1:]
+                & labels.ne(-100)
+            )
+            count += int(target_mask.sum().item())
+
+        self._supervised_tokens_per_epoch_cache = count
+        return count
 
     def __iter__(self):
         worker = get_worker_info()

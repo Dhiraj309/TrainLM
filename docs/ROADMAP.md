@@ -53,6 +53,10 @@ train/evaluation rows are checked after mapping in bounded batches so cached
 Causal-LM supervision now masks targets whose preceding input position is
 padding, including the first real token of left-padded rows, for both TrainLM
 and model-owned loss paths.
+Scratch runs with packed labels or loss masks derive the step/scheduler horizon
+from observed supervised-token density, while the live counter still stops on
+actual supervised targets and may pass the requested budget by a final
+microbatch.
 T0–T11 remains the runtime architecture/evidence plan; the M0–M17
 specification below remains historical.
 

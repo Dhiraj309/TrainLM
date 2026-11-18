@@ -114,6 +114,15 @@ because no preceding real token exists. The same ignored target is reflected
 in the full labels passed to models with model-owned causal loss, keeping that
 path aligned with TrainLM's loss implementation.
 
+**Masked scratch token budgets (2026-11-18):** packed pretraining now counts
+actual supervised targets across its train partition when labels or loss-mask
+sidecars exist. It uses the observed supervised-token density to derive the
+optimizer-step/scheduler horizon; runtime stopping still uses the live exact
+supervised-token counter and can overshoot the requested target by the final
+microbatch. The derived rate is checkpointed so budget extension uses the same
+data-aware horizon. Unmasked text runs keep their existing horizon and legacy
+checkpoint identity.
+
 The merged `main` branch exposes two task-focused, Hugging Face-style entry
 points: `run_pretraining(TrainLMPretrainingConfig(...))` for random-weight
 pretraining from pinned text, and
