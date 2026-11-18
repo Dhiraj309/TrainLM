@@ -55,6 +55,60 @@ def test_finetuning_config_validates_optional_dataset_metadata_and_splits(tmp_pa
         _config(tmp_path, tokenizer_name_or_path=" ")
     with pytest.raises(ValueError, match="tokenizer_revision must be non-empty"):
         _config(tmp_path, tokenizer_revision=" ")
+    with pytest.raises(ValueError, match="data_format must be"):
+        _config(tmp_path, data_format="unknown")
+
+
+def test_tokenized_dataset_validation_and_padding_preserve_unshifted_targets():
+    from trainlm.finetuning import (
+        _TokenizedCausalLMCollator,
+        _validate_tokenized_batch,
+    )
+
+    columns, maximum_id = _validate_tokenized_batch(
+        {
+            "input_ids": [[5, 2, 7], [8, 2]],
+            "labels": [[5, -100, 2], [8, 2]],
+            "attention_mask": [[1, 1, 1], [1, 1]],
+            "loss_mask": [[1, 0, 1], [1, 1]],
+            "position_ids": [[0, 1, 2], [0, 1]],
+        },
+        sequence_length=4,
+    )
+    assert maximum_id == 8
+    rows = [
+        {name: values[index] for name, values in columns.items()}
+        for index in range(2)
+    ]
+    collator = _TokenizedCausalLMCollator(
+        SimpleNamespace(pad_token_id=2),
+        sequence_length=4,
+    )
+    batch = collator(rows)
+    assert batch["input_ids"].tolist() == [[5, 2, 7], [8, 2, 2]]
+    assert batch["attention_mask"].tolist() == [[1, 1, 1], [1, 1, 0]]
+    assert batch["labels"].tolist() == [[5, -100, 2], [8, 2, -100]]
+    assert batch["loss_mask"].tolist() == [[1, 0, 1], [1, 1, 0]]
+    assert batch["position_ids"].tolist() == [[0, 1, 2], [0, 1, 0]]
+    inferred = collator([{"input_ids": [4, 2]}])
+    assert inferred["labels"].tolist() == [[4, 2]]
+    assert inferred["attention_mask"].tolist() == [[1, 1]]
+
+    with pytest.raises(ValueError, match="must match the input_ids length"):
+        _validate_tokenized_batch(
+            {"input_ids": [[1, 2]], "labels": [[1]]},
+            sequence_length=4,
+        )
+    with pytest.raises(ValueError, match="will not silently truncate"):
+        _validate_tokenized_batch(
+            {"input_ids": [[1, 2, 3, 4, 5]]},
+            sequence_length=4,
+        )
+    with pytest.raises(ValueError, match="only 0 or 1"):
+        _validate_tokenized_batch(
+            {"input_ids": [[1, 2]], "attention_mask": [[1, 2]]},
+            sequence_length=4,
+        )
 
 
 def test_run_finetuning_requires_pinned_metadata_for_hub_splits(tmp_path):
@@ -336,10 +390,13 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
     assert report["status"] == "completed"
     assert report["data"] == {
         "source": "huggingface_hub",
+        "data_format": "text",
         "text_field": "text",
         "train_split": "train",
         "validation_split": "validation",
         "formatting_function": None,
+        "dataset_fingerprints": {"train": None, "validation": None},
+        "max_dataset_token_id": None,
     }
     assert report["training_arguments"]["output_dir"] == str(tmp_path / "run")
     assert report["training_arguments"]["max_steps"] == 4
@@ -374,6 +431,7 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
     legacy_report["training_arguments"].pop("greater_is_better")
     legacy_report["training_arguments"].pop("early_stopping_patience")
     legacy_report["training_arguments"].pop("early_stopping_threshold")
+    legacy_report["data"].pop("data_format")
     legacy_summary_path = result.summary_path.parent / "legacy-summary.json"
     legacy_summary_path.write_text(json.dumps(legacy_report), encoding="utf-8")
     restored_legacy = restore_finetuning_config(
@@ -381,6 +439,7 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
         max_steps=8,
     )
     assert restored_legacy.args.num_train_epochs is None
+    assert restored_legacy.data_format == "text"
     with pytest.raises(ValueError, match="greater than the last recorded"):
         restore_finetuning_config(result.summary_path, max_steps=4)
     checkpoint_state.write_bytes(b"truncated checkpoint")
@@ -524,6 +583,66 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
             train_dataset=FakeDataset([{"text": "train"}]),
             eval_dataset=FakeDataset([{"text": "eval"}]),
         )
+
+    tokenized_config = _config(
+        tmp_path / "tokenized",
+        dataset_id=None,
+        dataset_revision=None,
+        data_format="tokens",
+    )
+    tokenized_train = FakeDataset(
+        [
+            {
+                "input_ids": [5, 2, 7],
+                "labels": [5, -100, 7],
+                "attention_mask": [1, 1, 1],
+            },
+            {
+                "input_ids": [8, 2],
+                "labels": [8, 2],
+                "attention_mask": [1, 1],
+            },
+        ]
+    )
+    tokenized_eval = FakeDataset(
+        [{"input_ids": [4, 2], "labels": [4, 2], "attention_mask": [1, 1]}]
+    )
+    tokenized_train._fingerprint = "train-token-fingerprint"
+    tokenized_eval._fingerprint = "eval-token-fingerprint"
+    tokenized_checkpoint = tokenized_config.args.output_dir / "checkpoint-4"
+    tokenized_checkpoint.mkdir(parents=True)
+    torch.save({"schema_version": 1}, tokenized_checkpoint / "trainer_state.pt")
+    previous_tokenization_count = len(calls["trainer"]["tokenized_texts"])
+    calls["trainer"]["latest_checkpoint"] = str(tokenized_checkpoint)
+    tokenized_result = run_finetuning(
+        tokenized_config,
+        train_dataset=tokenized_train,
+        eval_dataset=tokenized_eval,
+        tokenizer=tokenizer,
+    )
+    assert len(calls["trainer"]["tokenized_texts"]) == previous_tokenization_count
+    _, tokenized_trainer_kwargs = calls["trainer"]["model_load"]
+    mapped_train = tokenized_trainer_kwargs["train_dataset"]
+    assert mapped_train.column_names == ["input_ids", "attention_mask", "labels"]
+    token_batch = tokenized_trainer_kwargs["data_collator"](mapped_train.rows)
+    assert token_batch["input_ids"].tolist() == [[5, 2, 7], [8, 2, 2]]
+    assert token_batch["attention_mask"].tolist() == [[1, 1, 1], [1, 1, 0]]
+    assert token_batch["labels"].tolist() == [[5, -100, 7], [8, 2, -100]]
+    tokenized_report = json.loads(
+        tokenized_result.summary_path.read_text(encoding="utf-8")
+    )
+    assert tokenized_report["data"]["data_format"] == "tokens"
+    assert tokenized_report["data"]["dataset_fingerprints"] == {
+        "train": "train-token-fingerprint",
+        "validation": "eval-token-fingerprint",
+    }
+    assert tokenized_report["data"]["max_dataset_token_id"] == 8
+    restored_tokenized = restore_finetuning_config(
+        tokenized_result.summary_path,
+        max_steps=8,
+    )
+    assert restored_tokenized.data_format == "tokens"
+    calls["trainer"]["latest_checkpoint"] = str(checkpoint_path)
 
     different_tokenizer = FakeTokenizer()
     different_tokenizer.init_kwargs = {
