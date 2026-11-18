@@ -333,6 +333,10 @@ def _initial_report(
         except PackageNotFoundError:
             packages[distribution] = None
 
+    uses_hf_tokenizer = config.tokenizer_mode == "auto" and (
+        config.tokenizer_name_or_path is not None
+        or config.model_name_or_path is not None
+    )
     return {
         "schema_version": 6,
         "scope": "experimental_single_device_raw_text_pretraining",
@@ -371,11 +375,44 @@ def _initial_report(
         "model": {
             "requested_model_type": config.model_type,
             "requested_config_overrides": dict(config.model_config_overrides),
+            "requested_source": (
+                str(config.model_name_or_path)
+                if config.model_name_or_path is not None
+                else None
+            ),
+            "requested_revision": config.model_revision,
+            "requested_initialization": config.model_initialization,
         },
         "tokenizer": {
-            "algorithm": "byte_level_bpe",
+            "algorithm": (
+                "huggingface"
+                if uses_hf_tokenizer
+                else "byte_level_bpe"
+            ),
+            "requested_source": (
+                str(config.tokenizer_name_or_path or config.model_name_or_path)
+                if uses_hf_tokenizer
+                else None
+            ),
+            "requested_revision": (
+                (
+                    config.tokenizer_revision
+                    if config.tokenizer_revision is not None
+                    else (
+                        config.model_revision
+                        if config.tokenizer_name_or_path is None
+                        else None
+                    )
+                )
+                if uses_hf_tokenizer
+                else None
+            ),
             "training_split": config.train_split,
-            "requested_vocab_size": config.tokenizer_vocab_size,
+            "requested_vocab_size": (
+                config.tokenizer_vocab_size
+                if not uses_hf_tokenizer
+                else None
+            ),
         },
         "training_config": {
             "requested": {
@@ -444,6 +481,12 @@ def _capture_effective_configuration(report: dict[str, Any], trainer: Any) -> No
             if parameter.requires_grad
         ),
     })
+    model_source = getattr(model, "_trainlm_model_source_metadata", None)
+    if isinstance(model_source, Mapping):
+        report["model"]["source"] = model_source
+        report["model"]["initialization"] = report["model"][
+            "requested_initialization"
+        ]
     report["tokenizer"].update({
         "class": type(tokenizer).__name__,
         "base_vocab_size": int(tokenizer.vocab_size),
@@ -464,6 +507,14 @@ def _capture_effective_configuration(report: dict[str, Any], trainer: Any) -> No
             for name in ("unk", "pad", "bos", "eos")
         },
     })
+    tokenizer_source = getattr(
+        model, "_trainlm_tokenizer_source_metadata", None
+    )
+    if isinstance(tokenizer_source, Mapping):
+        report["tokenizer"]["source"] = tokenizer_source
+        report["tokenizer"]["token_id_capacity"] = max(
+            len(tokenizer), max(tokenizer.get_vocab().values()) + 1
+        )
 
     args = trainer.args
     optimizer = getattr(trainer, "optimizer", None)

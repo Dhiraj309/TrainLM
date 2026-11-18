@@ -9,21 +9,19 @@
 ## Current project snapshot
 
 **Owner priority reset (2026-11-17):** the active product backlog is
-[HF user workflows](HF_USER_WORKFLOWS.md), audited against merged `main`
-`68e049357b1ab82fb853ae9a9ca0bc26669dcd21`. Reuse the existing HF provider and
-trainer to connect model/config selection, existing tokenizers, raw or
-pretokenized datasets, scratch/CPT, export and explicit Hub publication.
-Lower-level model acquisition and CPT-style causal loss already exist;
-convenient scratch tokenizer reuse, a prepared-data route, independent
-model/tokenizer revision handling and public Hub upload have gaps.
-HF-01–HF-08 remain staged stories, not completion claims. HF-01 is in
-progress: `run_finetuning` accepts separate tokenizer IDs and revisions,
-records each source independently, and preserves same-source snapshot pinning.
-Known token-ID bounds and static context limits are checked before training;
-unknown structural checks are reported. Token meanings remain unverified and
-are the user's responsibility. Resume restores resolved immutable model and
-tokenizer commits; an unidentifiable supplied tokenizer must be passed again.
-This work adds no TPU evidence.
+[HF user workflows](HF_USER_WORKFLOWS.md), now based on verified merged `main`
+`9591d8b9823c9a8757630d1b79e724e3590d7028`. HF-01 is merged through PRs #137
+and #138. The current HF-02 branch connects scratch/CPT to the existing HF
+provider: load a Hub/local config, choose random or pretrained initialization,
+reuse the matching HF tokenizer by default or select one independently, and
+retain corpus-trained BPE as an explicit random-init option. Tokenizer mapping
+and resolved source identity participate in prepared-data and checkpoint
+identity. The packed path now accepts token IDs through uint32 and validates
+pretrained embedding bounds and known context limits without resizing or
+remapping. HF-03–HF-08 remain planned, including prepared-token data,
+publication, and broader inference evidence. Independently hosted tokenizer
+semantics remain the user's responsibility. These CPU changes add no TPU or
+live-Hub evidence.
 
 The merged `main` branch exposes two task-focused, Hugging Face-style entry
 points: `run_pretraining(TrainLMPretrainingConfig(...))` for random-weight
@@ -163,7 +161,7 @@ broader TPU support.
 
 ### Implementation history
 
-**HF-01 partial implementation:** fine-tuning now resolves the model using
+**HF-01 complete implementation:** fine-tuning now resolves the model using
 `model_name_or_path` and `model_revision`, and independently resolves an
 optional `tokenizer_name_or_path` and `tokenizer_revision`. If no separate
 tokenizer is configured, it still loads the model's tokenizer and pins both
@@ -180,6 +178,23 @@ resolved model/tokenizer commits instead of movable branch names, requires a
 source-less tokenizer object again, and checks that object's recorded commit
 when available. This does not verify arbitrary dataset-stream identity or
 provide TPU/live-Hub validation.
+
+**HF-02 implementation in progress:** `TrainLMPretrainingConfig` accepts HF
+model/tokenizer IDs or local paths, separate revisions, `model_initialization`
+(`random` or `pretrained`), and `tokenizer_mode="train_bpe"`. With a model
+source, random mode uses the Hub/local `PretrainedConfig` as architecture input
+and calls `from_config`; it does not load checkpoint weights. Pretrained mode
+uses the selected causal-LM checkpoint, keeps its embedding matrix unchanged,
+and defaults to the tokenizer from the same model snapshot. The shared provider
+pins model weights to the resolved config commit, and the workflow rejects
+same-source model/tokenizer snapshot mismatches when both commits are known.
+Tokenizer source revisions and tokenizer mappings are fingerprinted for
+prepared data and run identity. Tokenizer vocabulary capacity uses the
+highest actual ID, not only the number of entries. The legacy no-source BPE
+path remains the default and keeps its earlier run fingerprint shape. Focused
+offline CPU coverage passes for random-init, CPT, incompatible token IDs,
+tokenizer cache reuse and a uint32 round-trip above 65,535; live Hub and TPU
+validation remain owner-run.
 
 The entries below preserve the API and validation history. Branch names,
 intermediate notebook controls, and test counts in those entries describe past

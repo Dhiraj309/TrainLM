@@ -2,9 +2,10 @@
 
 **Priority reset requested by the owner on 2026-11-17.** This is the active
 product delivery plan. T0–T11 remains the architecture and accelerator evidence
-plan. The stories below are planned work, not newly implemented capabilities.
+plan. Story labels below distinguish merged work, the current implementation
+branch, and work that remains planned.
 The baseline audit is merged `main` at
-`68e049357b1ab82fb853ae9a9ca0bc26669dcd21` (PR #135).
+`9591d8b9823c9a8757630d1b79e724e3590d7028` (PR #138).
 
 ## The experience we are building
 
@@ -47,13 +48,13 @@ remain separate scopes. Unsupported cases need an actionable early error.
 | User need | Audited baseline | Gap to close |
 | --- | --- | --- |
 | Bring an HF model object and tokenizer | `TrainLMTrainer(model=..., processing_class=..., ...)` accepts them | Make this a first-class documented route, including prepared datasets and custom collators |
-| Random initialization from a Hub config | Lower-level `ModelSourceConfig(initialization="config")` and HF provider already load a Hub config then call `from_config` | Convenient scratch API only exposes `model_type`/overrides; connect the existing source loader |
-| Start from pretrained weights for CPT | `TrainLMTrainer.from_pretrained` and default `run_finetuning` causal-LM loss exist | Expose CPT clearly, share preparation and budgeting, and validate the intended TPU path |
-| Reuse an HF tokenizer | Fine-tuning loads or accepts one; scratch always trains byte-level BPE | Accept an independent tokenizer ID/path/revision or object in scratch; make training a new tokenizer an explicit choice |
+| Random initialization from a Hub config | `TrainLMPretrainingConfig.model_name_or_path` loads an HF config and initializes random weights through `from_config`; model weights are not fetched | Current HF-02 branch implements the convenient route; live Hub and TPU execution remain unverified |
+| Start from pretrained weights for CPT | `TrainLMPretrainingConfig.model_initialization="pretrained"` loads the HF checkpoint; the same pretraining lifecycle accepts raw text | Current HF-02 branch implements the initial path; prepared-token dataset input and public upload remain later work |
+| Reuse an HF tokenizer | Scratch defaults to the model repository's tokenizer or accepts independent `tokenizer_name_or_path` and `tokenizer_revision`; `tokenizer_mode="train_bpe"` retains corpus training for random initialization | Current HF-02 branch fingerprints tokenizer mapping and resolved source; independently hosted token meaning remains the user's responsibility |
 | Independently hosted tokenizer | `run_finetuning` accepts separate model/tokenizer IDs and revisions, resolves them independently, and checks known token-ID bounds and static context limits | Token meanings cannot be proven from Hub IDs or vocabulary sizes; the report marks them unverified and an explicit user policy remains |
 | Raw HF datasets | Scratch streams pinned text; fine-tuning loads Hub splits or caller-provided HF datasets and maps text | Shared source options for dataset config/subset, split expressions, files, objects, and caching; avoid requiring users to look up SHAs manually |
 | Pretokenized HF datasets | Generic trainer accepts prepared mappings/DataLoaders; default collator stacks equal-length tensors | Convenient workflows always tokenize raw text. Add an explicit tokens route with appropriate collation and label/mask preservation |
-| Modern HF vocabularies | Packed writer supports uint32 | Scratch config still has a 65,536 vocabulary ceiling. Reconcile it with tokenizer reuse and validate actual token-ID range without overflow |
+| Modern HF vocabularies | Packed writer and scratch config support uint32 IDs; scratch derives required capacity from the largest tokenizer ID, including sparse/added IDs | Current HF-02 branch removes the 65,536 ceiling; a CPU round-trip covers token ID 70,000 |
 | Train/evaluate/save/resume | Public trainer and helper lifecycles exist; scratch has strong prepared-data identity checks | Share contracts across HF data paths; include tokenizer/data identity and declare which streams can resume exactly |
 | Standard HF model export | `save_model` uses `save_pretrained` and saves the processing class when supplied | Verify a complete export independently of TrainLM, including tokenizer and applicable generation configuration |
 | Publish to HF Hub | Users can use HF tools themselves; TrainLM has no public `push_to_hub` operation | Add explicit publication of the selected export, model card/provenance, and a returned immutable revision |
@@ -140,16 +141,19 @@ silently reinterpret it as a Transformers `PretrainedConfig` factory.
 
 ## Delivery order and acceptance criteria
 
-All stories below are **planned**. IDs HF-01–HF-08 identify outcomes, not Git
-branch sequence numbers. Deliver each outcome in a focused PR with meaningful
+HF-01 is merged; HF-02 is in progress on
+`feat/19-hf-architecture-and-tokenizer`; HF-03–HF-08 remain planned. IDs
+HF-01–HF-08 identify outcomes, not Git branch sequence numbers. Deliver each
+outcome in a focused PR with meaningful
 implementation/regression/docs commits. Start each new branch after the
 preceding PR merges and `main` is verified. Keep the requested co-author
 trailer and use rebase-and-merge first, merge commits second; squash only on an
 explicit request. The planning PR changes documentation only.
 
-### HF-01 — Independent model and tokenizer sources (P0, in progress)
+### HF-01 — Independent model and tokenizer sources (P0, complete)
 
-**Progress:** `run_finetuning` loads and records model and tokenizer IDs and
+**Progress:** PR #137 and PR #138 are merged to `main` at
+`9591d8b9823c9a8757630d1b79e724e3590d7028`. `run_finetuning` loads and records model and tokenizer IDs and
 requested/resolved revisions independently. A separate tokenizer commit no
 longer selects the model snapshot or causes a false SHA mismatch. The
 same-source, same-revision path still pins both loads to one immutable commit.
@@ -186,10 +190,23 @@ rebuilding their configs or making the repositories share a commit.
   repositories with different SHAs work; incompatible/unknown token semantics
   receive an explicit compatibility policy; no token enters logs or reports.
 
-Proposed first commit subject:
-`fix(hf): resolve model and tokenizer sources independently`.
+The implementation commits are `aee61b6` (independent source resolution) and
+`31a581d` (resume source identity).
 
-### HF-02 — HF architecture and tokenizer reuse for scratch (P0)
+### HF-02 — HF architecture, tokenizer reuse, and CPT initialization (P0, in progress)
+
+**Progress:** the current feature branch extends
+`TrainLMPretrainingConfig` with a Hub/local HF model source, separate source
+revisions, `random` or `pretrained` initialization, tokenizer reuse and an
+explicit `train_bpe` option. Random initialization loads the HF config and
+calls the provider's `from_config` path; pretrained initialization pins model
+weights to the config's resolved Hub commit. Existing source tokenizers are
+cached by a tokenizer-mapping fingerprint and requested/resolved provenance.
+TrainLM derives the packed vocabulary capacity from the highest token ID,
+including sparse and added tokens. Pretrained embeddings are not resized; an
+out-of-range tokenizer fails before training. Known context limits are checked.
+Focused offline CPU tests cover both initialization paths and uint32 storage;
+real Hub and TPU execution are still unverified.
 
 **User outcome:** name an HF model architecture and train new weights with an
 existing HF tokenizer, using one ordinary TrainLM workflow.

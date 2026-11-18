@@ -1,17 +1,18 @@
 # TrainLM Roadmap
 
-**Current product delivery plan (2026-11-17):**
+**Current product delivery plan (2026-11-18):**
 [Hugging Face user workflows, HF-01–HF-08](HF_USER_WORKFLOWS.md).
 The owner's priority is reusable HF models/tokenizers/datasets through
 scratch or continued pretraining, save, optional Hub publication and standard
-inference. The plan audits `main` at `68e0493`; HF-01 is in progress and
-HF-02–HF-08 remain planned. Fine-tuning now resolves independent
-model/tokenizer IDs and revisions, preserves same-source snapshot pinning,
-checks known tokenizer ID bounds and static context limits, and reports
-unknown checks. Resume pins to resolved source commits; source-less tokenizer
-objects must be supplied again and are checked against their recorded commit
-when available. Token meanings are not verifiable by TrainLM and remain the
-user's responsibility. Notebook presets do not complete that workflow.
+inference. Verified `main` is `9591d8b`; HF-01 is complete and HF-02 is in
+progress on `feat/19-hf-architecture-and-tokenizer`. HF-01 resolves independent
+fine-tuning model/tokenizer IDs and revisions, preserves same-source snapshot
+pinning, checks known token-ID bounds and static context limits, and pins
+resume to resolved source commits. HF-02 connects scratch pretraining to an HF
+model config and tokenizer: random initialization or pretrained CPT, with an
+explicit BPE option and uint32 token IDs. Independent tokenizer meaning remains
+the user's responsibility. HF-03–HF-08 remain planned; notebook presets do
+not complete those workflows.
 T0–T11 remains the runtime architecture/evidence plan; the M0–M17
 specification below remains historical.
 
