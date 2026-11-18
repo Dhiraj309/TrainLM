@@ -220,15 +220,16 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         self.assertIn("divisible by attention heads", result.stderr)
         self.assertNotIn("No module named 'torch_tpu'", result.stderr)
 
-    def test_scratch_dataset_requires_immutable_revision_before_torch_import(self):
+    def test_scratch_dataset_requires_revision_before_torch_import(self):
         result = subprocess.run(
             [sys.executable, str(SCRIPT), "--output-dir", "/tmp/unused",
-             "--from-scratch", "--dataset-revision", "main"],
+             "--from-scratch", "--dataset-revision", ""],
             capture_output=True, text=True,
         )
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("immutable 40-character commit SHA", result.stderr)
+        self.assertIn("non-empty Hub revision", result.stderr)
         self.assertNotIn("No module named 'torch_tpu'", result.stderr)
+        self.assertNotIn("No module named 'datasets'", result.stderr)
 
     def test_invalid_optimizer_settings_fail_before_torch_import(self):
         cases = (
@@ -320,7 +321,7 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         validate = runpy.run_path(str(SCRIPT))["_validate_scratch_dataset_source"]
         validate(
             dataset_id="org/custom-corpus",
-            dataset_revision="a" * 40,
+            dataset_revision="main",
             train_split="train",
             validation_split="validation",
             text_field="content",
@@ -375,7 +376,8 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         self.assertNotIn("TrainLMTrainer.from_scratch", source)
         self.assertIn("accelerator=\"native_tpu\"", source)
         self.assertNotIn("torchtpu_native_trainer_smoke.py", source)
-        self.assertIn("max_tokens=10_000", source)
+        self.assertIn('"smoke": (10_000, 2_000, 10)', source)
+        self.assertIn("max_tokens=FRESH_MAX_TOKENS", source)
         self.assertIn("files.download", source)
         self.assertIn("workflow smoke test", markdown)
         self.assertIn("does not produce a useful model", markdown)
