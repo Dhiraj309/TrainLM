@@ -16,9 +16,11 @@ is in progress on `feat/20-hf-dataset-sources`: streamed raw Hub data now
 supports configs, friendly revisions, and non-overlapping split slices. The
 pretrained fine-tuning helper also accepts prepared HF Dataset rows through
 `data_format="tokens"`, preserving causal labels/masks and padding ragged
-batches. Direct tokenized Dataset input to scratch/CPT and unified provenance
-remain incomplete. HF-04–HF-08 remain planned; notebook presets do not
-complete those workflows.
+batches. The current HF-03 branch also accepts raw-text HF Dataset objects
+directly in `run_pretraining` / `TrainLMTrainer.from_scratch`, fingerprinting
+both splits for preparation-cache and resume safety. Direct tokenized Dataset
+input to scratch/CPT and unified provenance remain incomplete. HF-04–HF-08
+remain planned; notebook presets do not complete those workflows.
 The latest PR #140 CI run failed three pretraining smoke-contract tests that
 still encoded the previous revision, error-message, and notebook-budget
 contracts. The follow-up updates those expectations; local focused tests pass,

@@ -893,16 +893,21 @@ class TrainLMTrainer:
         cls,
         config: TrainLMPretrainingConfig,
         *,
+        train_dataset: Any | None = None,
+        eval_dataset: Any | None = None,
         callbacks: Sequence[TrainerCallback] | None = None,
         extend_training_budget: bool = False,
     ) -> "TrainLMTrainer":
-        """Prepare a tokenizer/model from pinned HF text and return a trainer.
+        """Prepare a tokenizer/model from Hub text or supplied HF Datasets.
 
         The method keeps the familiar ``trainer.train()``, ``evaluate()``, and
         ``save_model()`` lifecycle while owning streaming tokenization and
-        packed-data preparation. Matching inputs reuse integrity-checked
-        tokenizer and packed-shard artifacts in ``config.output_dir``. Native
-        TorchTPU must be explicitly selected and remains experimental. Set
+        packed-data preparation. Set ``dataset_source="provided"`` and pass
+        raw-text ``train_dataset`` and ``eval_dataset`` objects to prepare HF
+        Dataset splits without loading them again. Matching inputs reuse
+        integrity-checked tokenizer and packed-shard artifacts in
+        ``config.output_dir``. Native TorchTPU must be explicitly selected and
+        remains experimental. Set
         ``extend_training_budget=True`` only when resuming an existing scratch
         run with a larger ``max_tokens``; model and optimizer state are kept,
         then a new cosine schedule starts at the configured learning rate.
@@ -913,7 +918,7 @@ class TrainLMTrainer:
             raise TypeError("extend_training_budget must be a boolean.")
         _preflight_scratch_backend(config)
         model, tokenizer, train_dataset, eval_dataset = _prepare_scratch_training(
-            config
+            config, train_dataset=train_dataset, eval_dataset=eval_dataset
         )
         tokens_per_update = (
             (config.sequence_length - 1)
@@ -1657,6 +1662,9 @@ class TrainLMTrainer:
 
         pretraining = asdict(config)
         pretraining.pop("output_dir", None)
+        if config.dataset_source == "hub":
+            # Keep old Hub/local checkpoint configuration fingerprints stable.
+            pretraining.pop("dataset_source", None)
         dataset_source = getattr(
             train_dataset, "_trainlm_dataset_source_metadata", None
         )

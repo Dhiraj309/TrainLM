@@ -53,7 +53,7 @@ remain separate scopes. Unsupported cases need an actionable early error.
 | Start from pretrained weights for CPT | `TrainLMPretrainingConfig.model_initialization="pretrained"` loads the HF checkpoint; the same pretraining lifecycle accepts raw text | HF-02 is merged; prepared-token dataset input and public upload remain later work |
 | Reuse an HF tokenizer | Scratch defaults to the model repository's tokenizer or accepts independent `tokenizer_name_or_path` and `tokenizer_revision`; `tokenizer_mode="train_bpe"` retains corpus training for random initialization | HF-02 fingerprints tokenizer mapping and resolved source; independently hosted token meaning remains the user's responsibility |
 | Independently hosted tokenizer | `run_finetuning` accepts separate model/tokenizer IDs and revisions, resolves them independently, and checks known token-ID bounds and static context limits | Token meanings cannot be proven from Hub IDs or vocabulary sizes; the report marks them unverified and an explicit user policy remains |
-| Raw HF datasets | Scratch streams Hub text with a dataset config, named revision, selected split or non-overlapping train/eval slices; fine-tuning accepts HF `Dataset` splits and row formatters | Scratch pretraining still needs direct `Dataset` inputs, arbitrary data files, and a shared text formatter contract |
+| Raw HF datasets | Scratch streams pinned Hub text and accepts supplied raw-text HF `Dataset` splits with fingerprinted cache identity; fine-tuning accepts HF `Dataset` splits and row formatters | Scratch still needs pretokenized `Dataset` inputs, arbitrary data files, and a shared text formatter contract |
 | Pretokenized HF datasets | `run_finetuning(..., data_format="tokens")` accepts HF token rows with `input_ids` and optional labels/masks, validates shapes and token ranges, and pads ragged batches | Apply the same source and token contract to random-init/CPT pretraining; record tokenizer provenance and data identity consistently across workflows |
 | Modern HF vocabularies | Packed writer and scratch config support uint32 IDs; scratch derives required capacity from the largest tokenizer ID, including sparse/added IDs | HF-02 removed the 65,536 ceiling; a CPU round-trip covers token ID 70,000 |
 | Train/evaluate/save/resume | Public trainer and helper lifecycles exist; scratch has strong prepared-data identity checks | Share contracts across HF data paths; include tokenizer/data identity and declare which streams can resume exactly |
@@ -248,8 +248,12 @@ prepared HF `Dataset` splits with `data_format="tokens"`: it validates aligned
 token columns, checks known model embedding bounds, preserves unshifted labels
 and masks, and pads ragged batches. Tokenized dataset input to random-init/CPT
 pretraining, arbitrary local data files, and unified source/resume fingerprints
-remain outstanding. This branch has CPU evidence only; it does not establish
-live-Hub or TPU execution.
+remain outstanding. Raw text HF `Dataset` splits now enter scratch/CPT through
+`run_pretraining(..., train_dataset=..., eval_dataset=...)` or
+`TrainLMTrainer.from_scratch`, using `dataset_source="provided"`. Their stable
+HF fingerprints and row counts enter the prepared-data cache and run report;
+resume requires the same splits again. This branch has CPU evidence only; it
+does not establish live-Hub or TPU execution.
 
 Runnable example: [examples/pretrain_from_scratch.py](../examples/pretrain_from_scratch.py).
 Its 10,000-token budget is only a workflow smoke test, not a useful training
@@ -278,6 +282,27 @@ print(result.summary())
 
 The report records the requested ref and resolved SHA. A later resume uses the
 resolved SHA so a moved branch cannot silently change the corpus.
+
+To reuse an HF text dataset already loaded in Python, pass its split objects
+directly. They must expose the configured text column and a stable HF
+fingerprint. For resume, load the same dataset revision and splits again.
+
+```python
+from datasets import load_dataset
+from trainlm import TrainLMPretrainingConfig, run_pretraining
+
+data = load_dataset("roneneldan/TinyStories", revision="main")
+config = TrainLMPretrainingConfig(
+    dataset_source="provided",
+    output_dir="trainlm-cpt",
+)
+result = run_pretraining(
+    config,
+    train_dataset=data["train"],
+    eval_dataset=data["validation"],
+)
+print(result.summary())
+```
 
 For an already-tokenized Hub dataset, the pretrained fine-tuning API accepts
 the `Dataset` splits directly. Use the same tokenizer that produced the token
