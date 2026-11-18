@@ -7,12 +7,12 @@ workflow is selected.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 import hashlib
 import json
 import math
-from numbers import Real
+from numbers import Integral, Real
 import os
 from pathlib import Path
 import re
@@ -115,6 +115,9 @@ class TrainLMPretrainingConfig:
     initializes random weights. Set ``model_initialization="pretrained"`` to
     continue training its weights without resizing embeddings. Existing HF
     tokenizers can be selected independently with ``tokenizer_name_or_path``.
+    Set ``data_format="tokens"`` with ``dataset_source="provided"`` to pack
+    tokenized Dataset rows. TrainLM creates causal targets from ``input_ids``;
+    the dataset must have been tokenized by the selected tokenizer source.
     Set ``tokenizer_mode="train_bpe"`` to explicitly train a corpus tokenizer
     for random initialization. Prepared tokenizers and packed shards are
     integrity-checked and reused when their source identities match.
@@ -133,6 +136,7 @@ class TrainLMPretrainingConfig:
 
     output_dir: str | Path = Path("runs/pretraining")
     dataset_source: Literal["hub", "provided"] = "hub"
+    data_format: Literal["text", "tokens"] = "text"
     dataset_id: str | None = None
     dataset_revision: str | None = None
     train_file: str | Path | None = None
@@ -223,11 +227,33 @@ class TrainLMPretrainingConfig:
             "auto", "train_bpe"
         }:
             raise ValueError("tokenizer_mode must be 'auto' or 'train_bpe'.")
+        if not isinstance(self.data_format, str) or self.data_format not in {
+            "text", "tokens"
+        }:
+            raise ValueError("data_format must be 'text' or 'tokens'.")
         if self.tokenizer_mode == "train_bpe" and self.tokenizer_name_or_path is not None:
             raise ValueError(
                 "tokenizer_mode='train_bpe' cannot be combined with "
                 "tokenizer_name_or_path."
             )
+        if self.data_format == "tokens":
+            if self.dataset_source != "provided":
+                raise ValueError(
+                    "data_format='tokens' requires dataset_source='provided'."
+                )
+            if self.tokenizer_mode == "train_bpe":
+                raise ValueError(
+                    "Tokenized datasets need the tokenizer that produced their "
+                    "input_ids; tokenizer_mode='train_bpe' cannot be used."
+                )
+            if (
+                self.tokenizer_name_or_path is None
+                and self.model_name_or_path is None
+            ):
+                raise ValueError(
+                    "data_format='tokens' requires tokenizer_name_or_path or "
+                    "model_name_or_path so token IDs have a recorded tokenizer."
+                )
         if (
             self.tokenizer_mode == "train_bpe"
             and self.model_initialization == "pretrained"
@@ -599,6 +625,126 @@ def _token_documents(
         yield from encode(pending)
     if seen == 0:
         raise ValueError("The selected dataset split contains no text examples.")
+
+
+def _token_id_documents(
+    dataset: Iterable[Mapping[str, Any]],
+    tokenizer: Any,
+    *,
+    max_examples: int,
+):
+    """Yield supplied token rows as EOS-separated documents.
+
+    TrainLM owns causal labels: the packed reader mirrors ``input_ids`` into
+    ``labels`` and the causal task applies exactly one next-token shift.
+    Caller-provided labels and loss masks are intentionally unsupported here.
+    """
+    eos_token_id = getattr(tokenizer, "eos_token_id", None)
+    if isinstance(eos_token_id, bool) or not isinstance(eos_token_id, int):
+        raise RuntimeError("The selected tokenizer must define an integer EOS token.")
+    if max_examples < 1:
+        raise ValueError("Tokenized dataset example limits must be positive.")
+
+    seen = 0
+    for row in dataset:
+        if seen >= max_examples:
+            break
+        if not isinstance(row, Mapping) or "input_ids" not in row:
+            raise ValueError("Tokenized rows must contain an 'input_ids' sequence.")
+        unsupported = sorted(
+            {
+                "labels",
+                "loss_mask",
+                "position_ids",
+                "token_type_ids",
+                "special_tokens_mask",
+            }.intersection(row)
+        )
+        if unsupported:
+            raise ValueError(
+                "Tokenized scratch/CPT consumes only input_ids and optional "
+                "attention_mask; TrainLM generates next-token targets from "
+                f"input_ids. Remove unsupported fields: {', '.join(unsupported)}."
+            )
+
+        raw_ids = row["input_ids"]
+        if hasattr(raw_ids, "tolist") and callable(raw_ids.tolist):
+            raw_ids = raw_ids.tolist()
+        if (
+            not isinstance(raw_ids, Sequence)
+            or isinstance(raw_ids, (str, bytes, bytearray))
+            or not raw_ids
+        ):
+            raise ValueError("Tokenized 'input_ids' values must be non-empty sequences.")
+        token_ids: list[int] = []
+        for token_id in raw_ids:
+            if isinstance(token_id, bool) or not isinstance(token_id, Integral):
+                raise ValueError("Tokenized input_ids values must be integer IDs.")
+            token_id = int(token_id)
+            if token_id < 0:
+                raise ValueError("Tokenized input_ids values must be non-negative.")
+            token_ids.append(token_id)
+
+        raw_mask = row.get("attention_mask")
+        if raw_mask is not None:
+            if hasattr(raw_mask, "tolist") and callable(raw_mask.tolist):
+                raw_mask = raw_mask.tolist()
+            if (
+                not isinstance(raw_mask, Sequence)
+                or isinstance(raw_mask, (str, bytes, bytearray))
+                or len(raw_mask) != len(token_ids)
+            ):
+                raise ValueError(
+                    "Tokenized attention_mask rows must match input_ids length."
+                )
+            mask: list[int] = []
+            for value in raw_mask:
+                if not isinstance(value, Integral) or int(value) not in {0, 1}:
+                    raise ValueError("Tokenized attention_mask values must be 0 or 1.")
+                mask.append(int(value))
+            active_positions = [index for index, value in enumerate(mask) if value]
+            if not active_positions:
+                raise ValueError("Tokenized attention_mask cannot mask every input ID.")
+            start, stop = active_positions[0], active_positions[-1] + 1
+            if any(value == 0 for value in mask[start:stop]):
+                raise ValueError(
+                    "Tokenized attention_mask cannot contain interior padding holes."
+                )
+            token_ids = token_ids[start:stop]
+
+        if not token_ids:
+            raise ValueError("Tokenized rows must contain at least one unmasked token.")
+        if token_ids[-1] != eos_token_id:
+            token_ids.append(eos_token_id)
+        seen += 1
+        yield token_ids
+    if seen == 0:
+        raise ValueError("The selected tokenized dataset split contains no rows.")
+
+
+def _scratch_dataset_documents(
+    dataset: Iterable[Mapping[str, Any]],
+    tokenizer: Any,
+    config: TrainLMPretrainingConfig,
+    *,
+    split: Literal["train", "validation"],
+):
+    """Select text tokenization or validated prepared-token row ingestion."""
+    if config.data_format == "tokens":
+        max_examples = (
+            config.max_train_examples if split == "train" else config.max_eval_examples
+        )
+        return _token_id_documents(
+            dataset, tokenizer, max_examples=max_examples
+        )
+    return _token_documents(
+        dataset,
+        tokenizer,
+        max_examples=(
+            config.max_train_examples if split == "train" else config.max_eval_examples
+        ),
+        text_field=config.text_field,
+    )
 
 
 def _train_byte_level_tokenizer(
@@ -1079,9 +1225,13 @@ def _preparation_cache_inputs(
     """Return the settings that define tokenizer and packed-shard contents."""
     inputs = {
         "algorithm": (
-            "huggingface_tokenizer"
-            if tokenizer_source is not None
-            else _PREPARATION_ALGORITHM
+            "prepared_hf_token_ids_v1"
+            if config.data_format == "tokens"
+            else (
+                "huggingface_tokenizer"
+                if tokenizer_source is not None
+                else _PREPARATION_ALGORITHM
+            )
         ),
         "dataset_id": config.dataset_id,
         "dataset_revision": resolved_dataset_revision or config.dataset_revision,
@@ -1104,6 +1254,8 @@ def _preparation_cache_inputs(
                 "Provided Dataset inputs need stable train and validation identities."
             )
         inputs["provided_datasets"] = dict(provided_datasets)
+        if config.data_format == "tokens":
+            inputs["data_format"] = "tokens"
     elif provided_datasets is not None:
         raise ValueError(
             "Pass Dataset objects only when dataset_source='provided'."
@@ -1200,7 +1352,7 @@ def _scratch_dataset_object_identity(
     train_dataset: Any | None,
     eval_dataset: Any | None,
 ) -> dict[str, dict[str, Any]] | None:
-    """Validate direct HF text Dataset inputs and return cache-safe identities."""
+    """Validate direct HF Dataset inputs and return cache-safe identities."""
     if config.dataset_source != "provided":
         if train_dataset is not None or eval_dataset is not None:
             raise ValueError(
@@ -1219,10 +1371,32 @@ def _scratch_dataset_object_identity(
     for split, dataset in (("train", train_dataset), ("validation", eval_dataset)):
         columns = getattr(dataset, "column_names", None)
         fingerprint = getattr(dataset, "_fingerprint", None)
-        if (
-            not isinstance(columns, (list, tuple))
-            or config.text_field not in columns
-        ):
+        if not isinstance(columns, (list, tuple)):
+            raise ValueError(
+                f"The {split} Dataset must expose Hugging Face column_names."
+            )
+        if config.data_format == "tokens":
+            if "input_ids" not in columns:
+                raise ValueError(
+                    f"The {split} token Dataset must contain an 'input_ids' column."
+                )
+            unsupported = sorted(
+                {
+                    "labels",
+                    "loss_mask",
+                    "position_ids",
+                    "token_type_ids",
+                    "special_tokens_mask",
+                }
+                .intersection(columns)
+            )
+            if unsupported:
+                raise ValueError(
+                    "Tokenized scratch/CPT currently consumes only input_ids and "
+                    "optional attention_mask; TrainLM generates its own causal "
+                    f"targets. Remove unsupported columns: {', '.join(unsupported)}."
+                )
+        elif config.text_field not in columns:
             raise ValueError(
                 f"The {split} Dataset must expose the configured text column "
                 f"{config.text_field!r}."
@@ -1542,6 +1716,10 @@ def _prepare_scratch_training(
                 ) from exc
 
         if tokenizer is None:
+            if config.data_format == "tokens":
+                raise RuntimeError(
+                    "Tokenized Dataset inputs require their matching tokenizer."
+                )
             train_source = _load_scratch_text_source(
                 load_dataset,
                 config,
@@ -1557,7 +1735,7 @@ def _prepare_scratch_training(
             )
         tokenizer.save_pretrained(root / "tokenizer")
 
-        # Reopen the immutable stream after fitting the tokenizer on training text.
+        # Re-read each source before packing its documents into fixed sequences.
         train_source = _load_scratch_text_source(
             load_dataset,
             config,
@@ -1573,22 +1751,22 @@ def _prepare_scratch_training(
             provided_datasets=dataset_objects,
         )
         write_packed_binary_shard(
-            _token_documents(
+            _scratch_dataset_documents(
                 train_source,
                 tokenizer,
-                max_examples=config.max_train_examples,
-                text_field=config.text_field,
+                config,
+                split="train",
             ),
             data_root / "train",
             shard_id="train",
             vocab_size=_tokenizer_vocab_capacity(tokenizer),
         )
         write_packed_binary_shard(
-            _token_documents(
+            _scratch_dataset_documents(
                 validation_source,
                 tokenizer,
-                max_examples=config.max_eval_examples,
-                text_field=config.text_field,
+                config,
+                split="validation",
             ),
             data_root / "validation",
             shard_id="validation",
@@ -1653,6 +1831,7 @@ def _prepare_scratch_training(
         "train_split": config.train_split,
         "validation_split": config.validation_split,
         "text_field": config.text_field,
+        "data_format": config.data_format,
     }
     if provided_datasets is not None:
         dataset_source_metadata["provided_datasets"] = provided_datasets

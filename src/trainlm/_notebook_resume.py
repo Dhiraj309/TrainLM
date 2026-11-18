@@ -1,4 +1,4 @@
-"""Private resume examples for the raw-text pretraining notebook report."""
+"""Private resume examples for the pretraining notebook report."""
 
 from __future__ import annotations
 
@@ -43,9 +43,17 @@ def build_resume_report(
         else None
     )
     needs_provided_datasets = settings.get("dataset_source") == "provided"
-    for name in ("train_file", "validation_file"):
+    for name in (
+        "train_file",
+        "validation_file",
+        "model_name_or_path",
+        "tokenizer_name_or_path",
+        "cache_dir",
+    ):
         if settings[name] is not None:
-            settings[name] = str(Path(settings[name]).resolve())
+            local_path = Path(settings[name]).expanduser()
+            if local_path.exists() or name in {"train_file", "validation_file"}:
+                settings[name] = str(local_path.resolve())
     result = {
         "status": "unavailable",
         "reason": (
@@ -89,7 +97,7 @@ def build_resume_report(
     )
     if needs_provided_datasets:
         code += (
-            "# Reload the same raw-text HF Dataset splits used for the original run.\n"
+            "# Reload the same HF Dataset splits used for the original run.\n"
             "# Expected fingerprints (train/evaluation): "
             f"{pformat(provided_dataset_identity, sort_dicts=False, width=10000)}\n"
             "if 'train_dataset' not in globals() or 'eval_dataset' not in globals():\n"

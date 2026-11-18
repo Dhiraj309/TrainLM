@@ -130,6 +130,105 @@ def test_run_pretraining_accepts_raw_hf_dataset_objects_and_records_identity(
     assert restored.config.dataset_source == "provided"
 
 
+def test_run_pretraining_accepts_tokenized_hf_dataset_and_records_label_policy(
+    tmp_path,
+):
+    from trainlm.pretraining import (
+        _token_id_documents,
+        _train_byte_level_tokenizer,
+    )
+
+    corpus_rows = [
+        {"text": f"A compact language modeling document number {index}. " * 4}
+        for index in range(16)
+    ]
+    tokenizer, _ = _train_byte_level_tokenizer(
+        corpus_rows,
+        max_examples=16,
+        vocab_size=260,
+    )
+    tokenizer_dir = tmp_path / "selected-tokenizer"
+    tokenizer.save_pretrained(tokenizer_dir)
+
+    class TokenDataset:
+        column_names = ["input_ids", "attention_mask"]
+
+        def __init__(self, label):
+            self._fingerprint = f"{label}-token-fingerprint"
+            self.rows = []
+            self.expected_token_count = 0
+            for index in range(16):
+                ids = tokenizer.encode(
+                    f"{label} language modeling document {index}. " * 4,
+                    add_special_tokens=False,
+                )
+                if index % 2:
+                    ids.append(tokenizer.eos_token_id)
+                self.expected_token_count += (
+                    len(ids) if ids[-1] == tokenizer.eos_token_id else len(ids) + 1
+                )
+                padding = max(0, 96 - len(ids))
+                self.rows.append({
+                    "input_ids": ids + [tokenizer.pad_token_id] * padding,
+                    "attention_mask": [1] * len(ids) + [0] * padding,
+                })
+
+        def __iter__(self):
+            return iter(self.rows)
+
+        def __len__(self):
+            return len(self.rows)
+
+    train_data = TokenDataset("train")
+    eval_data = TokenDataset("validation")
+    config = replace(
+        _config(tmp_path / "token-artifacts"),
+        dataset_source="provided",
+        data_format="tokens",
+        dataset_id=None,
+        dataset_revision=None,
+        tokenizer_name_or_path=str(tokenizer_dir),
+        max_train_examples=16,
+        max_eval_examples=16,
+    )
+    result = run_pretraining(
+        config, train_dataset=train_data, eval_dataset=eval_data
+    )
+
+    assert result.status == "passed"
+    assert result.report["data"]["data_format"] == "tokens"
+    assert result.report["data"]["causal_target_policy"] == (
+        "TrainLM copies input_ids to labels and applies one next-token shift."
+    )
+    assert result.report["data"]["tokenizer_dataset_match"] == (
+        "not_verified_by_trainlm"
+    )
+    assert result.report["data"]["tokenizer_provenance"]["mapping_sha256"]
+    assert result.report["data"]["provided_datasets"]["train"]["fingerprint"] == (
+        "train-token-fingerprint"
+    )
+    cache = json.loads(
+        (config.output_dir / "preparation_cache.json").read_text(encoding="utf-8")
+    )
+    assert cache["inputs"]["algorithm"] == "prepared_hf_token_ids_v1"
+    assert cache["inputs"]["data_format"] == "tokens"
+    train_manifest = json.loads(
+        (config.output_dir / "data/train/train.manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert train_manifest["token_count"] == train_data.expected_token_count
+    assert "dataset_tokenizer_match" not in result.report["tokenizer"]
+    compile(result.report["resume"]["code"], "resume.py", "exec")
+
+    with pytest.raises(ValueError, match="TrainLM generates next-token targets"):
+        list(_token_id_documents(
+            [{"input_ids": [1, 2], "labels": [1, 2]}],
+            tokenizer,
+            max_examples=1,
+        ))
+
+
 def test_run_pretraining_reports_and_restores_local_text_files(tmp_path, monkeypatch):
     rows = [
         {"text": f"Local corpus document about lakes and mountains {index}. " * 4}

@@ -29,18 +29,20 @@ preparation cache, appear in reports, and are required again when resuming.
 For pretrained fine-tuning, the same branch accepts supplied HF Dataset splits
 with already-tokenized causal-LM columns, validates them, preserves labels and
 masks, checks known embedding bounds, and pads ragged rows. Direct tokenized
-Dataset input to scratch/CPT, custom raw-text formatters for scratch, and
-unified cross-workflow source identity remain incomplete. Independently hosted
-tokenizer semantics remain the user's responsibility. These changes add no
-live-Hub or TPU execution evidence.
+Dataset input to scratch/CPT now uses an explicit generated next-token label
+policy: TrainLM adds EOS when absent, applies one internal shift, and rejects
+caller labels/loss masks. The configured HF tokenizer source and mapping are
+recorded with the dataset fingerprints; token-to-tokenizer compatibility is
+still unverified and remains the user's responsibility. Custom raw-text
+formatters for scratch and unified cross-workflow source identity remain
+incomplete. These changes add no live-Hub or TPU execution evidence.
 
-**HF-03 CI follow-up (2026-11-18):** GitHub Actions at the previous PR head
-failed three legacy smoke-contract tests: one still rejected friendly revisions,
-one expected the older split-error wording, and one expected the notebook's
-former literal token-budget setting. The implementation wording and tests now
-match the current contracts. The local smoke/pretraining/roadmap suites pass 50
-tests plus 14 subtests; hosted CI for the follow-up commit is pending. No TPU
-run was performed.
+**HF-03 CI follow-up (2026-11-18):** GitHub Actions for commit
+`0b765601fea2ea3416415b23af9c73970bf53d5f` passed both `core-minimum` and
+`core-current`. The earlier failures were three legacy smoke-contract tests:
+one still rejected friendly revisions, one expected older split-error wording,
+and one expected the notebook's former literal token-budget setting. No TPU run
+was performed.
 
 The merged `main` branch exposes two task-focused, Hugging Face-style entry
 points: `run_pretraining(TrainLMPretrainingConfig(...))` for random-weight
@@ -232,10 +234,17 @@ For pretrained fine-tuning, `TrainLMFineTuningConfig.data_format="tokens"`
 accepts supplied HF Dataset splits with `input_ids` and optional labels/masks;
 the default collator pads variable-length rows without retokenizing or shifting
 labels twice. Its report records source Dataset fingerprints and maximum token
-ID, and resume restores the selected data format. Focused CPU tests cover this
-route. Scratch/CPT still does not accept pretokenized HF Dataset objects or
-arbitrary local data files, and there is no unified cross-workflow source or
-resume identity yet. These changes do not establish live-Hub or TPU execution.
+ID, and resume restores the selected data format. Scratch/CPT now accepts
+provided tokenized Dataset splits using `data_format="tokens"`, requires a
+model or tokenizer source, strips masked padding, and appends EOS only when a
+row does not already end with it. TrainLM creates labels from `input_ids` and
+applies one next-token shift; caller `labels`, `loss_mask`, special-token masks,
+positional IDs, and token-type IDs are rejected. The tokenizer source and
+mapping hash are fingerprinted and recorded, but whether it produced the IDs remains
+unverified by TrainLM. The focused CPU suite passes 54 tests plus 14 subtests;
+hosted CI for this follow-up is pending. Arbitrary local data files and unified
+cross-workflow source/resume identity remain open. No live-Hub or TPU execution
+was performed.
 
 The entries below preserve the API and validation history. Branch names,
 intermediate notebook controls, and test counts in those entries describe past
