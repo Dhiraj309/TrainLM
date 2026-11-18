@@ -43,8 +43,27 @@ def test_pretraining_config_requires_immutable_revision_and_disjoint_splits(tmp_
         _config(tmp_path, validation_split="train")
     with pytest.raises(ValueError, match="divisible"):
         _config(tmp_path, model_embedding_size=15)
-    with pytest.raises(ValueError, match="packed uint16"):
-        _config(tmp_path, tokenizer_vocab_size=65_537)
+    assert _config(tmp_path, tokenizer_vocab_size=65_537).tokenizer_vocab_size == 65_537
+    with pytest.raises(ValueError, match="packed uint32"):
+        _config(tmp_path, tokenizer_vocab_size=(1 << 32) + 1)
+    assert _config(
+        tmp_path,
+        model_name_or_path="org/model",
+        tokenizer_mode="train_bpe",
+        model_embedding_size=768,
+        model_layers=6,
+        model_attention_heads=12,
+    ).tokenizer_mode == "train_bpe"
+    with pytest.raises(ValueError, match="cannot use a newly trained tokenizer"):
+        _config(
+            tmp_path,
+            model_name_or_path="org/model",
+            model_initialization="pretrained",
+            tokenizer_mode="train_bpe",
+            model_embedding_size=768,
+            model_layers=6,
+            model_attention_heads=12,
+        )
     with pytest.raises(ValueError, match="requires accelerator='native_tpu'"):
         _config(tmp_path, torch_compile=True)
     with pytest.raises(ValueError, match="gradient_checkpointing must be booleans"):
@@ -97,6 +116,24 @@ def test_pretraining_config_accepts_paired_local_text_files(tmp_path):
             train_file=train_file,
             validation_file=train_file,
         )
+
+
+def test_tokenizer_capacity_uses_sparse_and_added_token_ids():
+    from trainlm.pretraining import _tokenizer_vocab_capacity
+
+    class SparseTokenizer:
+        unk_token_id = 0
+        pad_token_id = 1
+        bos_token_id = 2
+        eos_token_id = 70_000
+
+        def __len__(self):
+            return 4
+
+        def get_vocab(self):
+            return {"base": 0, "added": 70_000}
+
+    assert _tokenizer_vocab_capacity(SparseTokenizer()) == 70_001
 
 
 def test_from_scratch_builds_and_trains_a_small_cpu_model(tmp_path, monkeypatch):
@@ -595,6 +632,166 @@ def test_from_scratch_builds_a_configured_huggingface_causal_model(
     state = trainer.train()
     assert state.step == 1
     assert torch.isfinite(torch.tensor(trainer.evaluate()["eval_loss"]))
+
+
+def _local_hf_tokenizer(path: Path, rows: list[dict[str, str]]):
+    from trainlm.pretraining import _train_byte_level_tokenizer
+
+    tokenizer, _ = _train_byte_level_tokenizer(
+        rows, max_examples=len(rows), vocab_size=260
+    )
+    tokenizer.save_pretrained(path)
+    return tokenizer
+
+
+def _install_streaming_rows(monkeypatch, rows):
+    class StreamingRows:
+        def __iter__(self):
+            return iter(rows)
+
+    datasets_module = ModuleType("datasets")
+    datasets_module.load_dataset = lambda *args, **kwargs: StreamingRows()
+    monkeypatch.setitem(sys.modules, "datasets", datasets_module)
+
+
+def test_from_scratch_reuses_hf_tokenizer_and_random_hf_config_without_weights(
+    tmp_path, monkeypatch
+):
+    from transformers import AutoModelForCausalLM, GPT2Config
+
+    rows = [
+        {"text": f"A small corpus for tokenizer reuse, row {index}. " * 5}
+        for index in range(12)
+    ]
+    model_source = tmp_path / "model-config"
+    tokenizer_source = tmp_path / "tokenizer"
+    model_source.mkdir()
+    tokenizer = _local_hf_tokenizer(tokenizer_source, rows)
+    GPT2Config(
+        vocab_size=len(tokenizer), n_positions=8, n_ctx=8,
+        n_embd=16, n_layer=1, n_head=2,
+        pad_token_id=tokenizer.pad_token_id,
+        bos_token_id=tokenizer.bos_token_id,
+        eos_token_id=tokenizer.eos_token_id,
+    ).save_pretrained(model_source)
+    _install_streaming_rows(monkeypatch, rows)
+
+    def refuse_pretrained_weights(*args, **kwargs):
+        raise AssertionError("random initialization must not load model weights")
+
+    monkeypatch.setattr(
+        AutoModelForCausalLM, "from_pretrained", refuse_pretrained_weights
+    )
+    monkeypatch.setattr(
+        "trainlm.pretraining._train_byte_level_tokenizer",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("an HF tokenizer must not be trained again")
+        ),
+    )
+
+    config = _config(
+        tmp_path / "run",
+        model_name_or_path=str(model_source),
+        tokenizer_name_or_path=str(tokenizer_source),
+        local_files_only=True,
+        sequence_length=4,
+        model_embedding_size=768,
+        model_layers=6,
+        model_attention_heads=12,
+    )
+    trainer = TrainLMTrainer.from_scratch(config)
+    assert trainer.model.config.n_embd == 16
+    assert trainer.model.config.n_layer == 1
+    assert trainer.model.config.vocab_size == len(tokenizer)
+    assert type(trainer.processing_class).__name__ == type(tokenizer).__name__
+    manifest = json.loads((tmp_path / "run" / "run_config.json").read_text())
+    assert manifest["configuration"]["model"]["source"]["initialization"] == "config"
+    assert manifest["configuration"]["tokenizer"]["source"]["source_relation"] == (
+        "independent_source_semantics_unverified"
+    )
+    cached_trainer = TrainLMTrainer.from_scratch(config)
+    assert cached_trainer.model.config.vocab_size == len(tokenizer)
+
+
+def test_from_scratch_continues_pretrained_hf_model_with_its_tokenizer(
+    tmp_path, monkeypatch
+):
+    from transformers import AutoModelForCausalLM, GPT2Config
+
+    rows = [
+        {"text": f"A local checkpoint corpus, row {index}. " * 5}
+        for index in range(12)
+    ]
+    model_source = tmp_path / "pretrained-model"
+    tokenizer = _local_hf_tokenizer(model_source, rows)
+    hf_config = GPT2Config(
+        vocab_size=len(tokenizer), n_positions=8, n_ctx=8,
+        n_embd=16, n_layer=1, n_head=2,
+        pad_token_id=tokenizer.pad_token_id,
+        bos_token_id=tokenizer.bos_token_id,
+        eos_token_id=tokenizer.eos_token_id,
+    )
+    expected_model = AutoModelForCausalLM.from_config(hf_config)
+    expected_weight = next(expected_model.parameters()).detach().clone()
+    expected_model.save_pretrained(model_source)
+    _install_streaming_rows(monkeypatch, rows)
+    monkeypatch.setattr(
+        "trainlm.pretraining._train_byte_level_tokenizer",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("continued pretraining must reuse the model tokenizer")
+        ),
+    )
+
+    trainer = TrainLMTrainer.from_scratch(
+        _config(
+            tmp_path / "run",
+            model_name_or_path=str(model_source),
+            model_initialization="pretrained",
+            local_files_only=True,
+            sequence_length=4,
+            model_embedding_size=768,
+            model_layers=6,
+            model_attention_heads=12,
+        )
+    )
+    assert torch.equal(next(trainer.model.parameters()), expected_weight)
+    assert len(trainer.processing_class) == trainer.model.config.vocab_size
+
+
+def test_from_scratch_rejects_tokenizer_ids_outside_pretrained_embeddings(
+    tmp_path, monkeypatch
+):
+    from transformers import AutoModelForCausalLM, GPT2Config
+
+    rows = [
+        {"text": f"A local checkpoint corpus, row {index}. " * 5}
+        for index in range(12)
+    ]
+    model_source = tmp_path / "pretrained-model"
+    tokenizer_source = tmp_path / "tokenizer"
+    model_source.mkdir()
+    tokenizer = _local_hf_tokenizer(tokenizer_source, rows)
+    hf_config = GPT2Config(
+        vocab_size=len(tokenizer) - 1, n_positions=8, n_ctx=8,
+        n_embd=16, n_layer=1, n_head=2,
+    )
+    AutoModelForCausalLM.from_config(hf_config).save_pretrained(model_source)
+    _install_streaming_rows(monkeypatch, rows)
+
+    with pytest.raises(ValueError, match="will not resize pretrained embeddings"):
+        TrainLMTrainer.from_scratch(
+            _config(
+                tmp_path / "run",
+                model_name_or_path=str(model_source),
+                model_initialization="pretrained",
+                tokenizer_name_or_path=str(tokenizer_source),
+                local_files_only=True,
+                sequence_length=4,
+                model_embedding_size=768,
+                model_layers=6,
+                model_attention_heads=12,
+            )
+        )
 
 
 def test_auto_refuses_detected_tpu_before_loading_the_corpus(tmp_path, monkeypatch):

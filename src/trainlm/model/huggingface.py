@@ -100,10 +100,21 @@ class HuggingFaceCausalLMProvider:
 
         if source.use_safetensors is not None:
             model_kwargs["use_safetensors"] = source.use_safetensors
+        hub_kwargs = self._hub_kwargs(source)
+        resolved_revision = getattr(config, "_commit_hash", None)
+        if (
+            source.name_or_path is not None
+            and not Path(source.name_or_path).expanduser().exists()
+            and isinstance(resolved_revision, str)
+            and resolved_revision
+        ):
+            # Keep checkpoint weights on the exact snapshot that supplied the
+            # config even when the user selected a movable branch or tag.
+            hub_kwargs["revision"] = resolved_revision
         return AutoModelForCausalLM.from_pretrained(
             source.name_or_path,
             config=config,
-            **self._hub_kwargs(source),
+            **hub_kwargs,
             **model_kwargs,
         )
 

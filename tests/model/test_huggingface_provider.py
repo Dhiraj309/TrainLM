@@ -37,10 +37,7 @@ def test_generic_provider_builds_tiny_hf_causal_lm_from_model_type():
     assert type(loaded.model).__module__.startswith("transformers.models.gpt2")
 
 
-def test_generic_provider_forwards_local_pretrained_acquisition_controls(
-    monkeypatch,
-    tmp_path,
-):
+def test_generic_provider_pins_weights_to_resolved_config_revision(monkeypatch):
     from trainlm.model import huggingface as provider_module
 
     calls = {}
@@ -72,7 +69,7 @@ def test_generic_provider_forwards_local_pretrained_acquisition_controls(
         ModelSourceConfig(
             provider="huggingface",
             initialization="pretrained",
-            name_or_path=str(tmp_path),
+            name_or_path="org/model",
             revision="requested-commit",
             dtype="bfloat16",
             cache_dir="cache/models",
@@ -85,7 +82,7 @@ def test_generic_provider_forwards_local_pretrained_acquisition_controls(
 
     config_name, config_kwargs = calls["config"]
     model_name, model_kwargs = calls["model"]
-    assert config_name == model_name == str(tmp_path)
+    assert config_name == model_name == "org/model"
     assert config_kwargs == {
         "trust_remote_code": False,
         "local_files_only": True,
@@ -96,10 +93,10 @@ def test_generic_provider_forwards_local_pretrained_acquisition_controls(
         "use_cache": False,
     }
     assert model_kwargs["config"] is loaded.config
-    assert model_kwargs["revision"] == "requested-commit"
+    assert model_kwargs["revision"] == "resolved-commit"
     assert model_kwargs["dtype"] == "bfloat16"
     assert model_kwargs["use_safetensors"] is True
-    assert loaded.metadata.local_source is True
+    assert loaded.metadata.local_source is False
     assert loaded.metadata.requested_revision == "requested-commit"
     assert loaded.metadata.resolved_revision == "resolved-commit"
 

@@ -31,13 +31,17 @@ _PREPARATION_ALGORITHM = "byte-level-bpe-v1"
 
 @dataclass(frozen=True, slots=True)
 class TrainLMPretrainingConfig:
-    """Settings for starting a GPT-2 causal LM from random weights on HF text.
+    """Settings for causal pretraining from a Hub or local text source.
 
-    The starter path uses either a revision-pinned streaming dataset or a pair
-    of local UTF-8 text files. It learns a byte-level BPE tokenizer from the
-    training split and writes validated packed shards under ``output_dir``
-    before constructing a trainer. Matching preparation inputs reuse
-    integrity-checked tokenizer and shard artifacts from that directory.
+    The default path preserves the original GPT-2 plus corpus-trained BPE
+    workflow. Set ``model_name_or_path`` to use a registered Transformers
+    config; TrainLM then reuses that repository's tokenizer by default and
+    initializes random weights. Set ``model_initialization="pretrained"`` to
+    continue training its weights without resizing embeddings. Existing HF
+    tokenizers can be selected independently with ``tokenizer_name_or_path``.
+    Set ``tokenizer_mode="train_bpe"`` to explicitly train a corpus tokenizer
+    for random initialization. Prepared tokenizers and packed shards are
+    integrity-checked and reused when their source identities match.
     The learning-rate schedule defaults to cosine. If neither warmup option is
     set, the run uses the derived floor-of-10%-of-steps warmup (capped at 100).
     ``warmup_ratio`` follows Transformers semantics and rounds the requested
@@ -64,6 +68,9 @@ class TrainLMPretrainingConfig:
     max_train_examples: int = 2_000
     max_eval_examples: int = 200
     tokenizer_vocab_size: int = 16_000
+    tokenizer_mode: Literal["auto", "train_bpe"] = "auto"
+    tokenizer_name_or_path: str | Path | None = None
+    tokenizer_revision: str | None = None
     model_embedding_size: int = 768
     model_layers: int = 6
     model_attention_heads: int = 12
@@ -80,6 +87,12 @@ class TrainLMPretrainingConfig:
     max_eval_batches: int = 20
     seed: int = 42
     model_type: str = "gpt2"
+    model_name_or_path: str | Path | None = None
+    model_revision: str | None = None
+    model_initialization: Literal["random", "pretrained"] = "random"
+    trust_remote_code: bool = False
+    cache_dir: str | Path | None = None
+    local_files_only: bool = False
     model_config_overrides: Mapping[str, Any] | None = None
     save_total_limit: int | None = None
     lr_scheduler_type: Literal["constant", "linear", "cosine", "wsd"] = "cosine"
@@ -96,6 +109,70 @@ class TrainLMPretrainingConfig:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "output_dir", Path(self.output_dir).expanduser())
+        for name in ("model_name_or_path", "tokenizer_name_or_path"):
+            source = getattr(self, name)
+            if source is not None:
+                if not isinstance(source, (str, Path)) or not str(source).strip():
+                    raise ValueError(f"{name} must be a non-empty Hub ID or local path.")
+                object.__setattr__(self, name, str(source))
+        if self.cache_dir is not None:
+            if not isinstance(self.cache_dir, (str, Path)) or not str(self.cache_dir).strip():
+                raise ValueError("cache_dir must be a non-empty path when configured.")
+            object.__setattr__(self, "cache_dir", str(Path(self.cache_dir).expanduser()))
+        for name in ("model_revision", "tokenizer_revision"):
+            revision = getattr(self, name)
+            if revision is not None and (
+                not isinstance(revision, str) or not revision.strip()
+            ):
+                raise ValueError(f"{name} must be a non-empty revision when configured.")
+        if not isinstance(self.model_initialization, str) or self.model_initialization not in {
+            "random", "pretrained"
+        }:
+            raise ValueError("model_initialization must be 'random' or 'pretrained'.")
+        if self.model_revision is not None and self.model_name_or_path is None:
+            raise ValueError("model_revision requires model_name_or_path.")
+        if self.tokenizer_revision is not None and (
+            self.tokenizer_name_or_path is None and self.model_name_or_path is None
+        ):
+            raise ValueError(
+                "tokenizer_revision requires tokenizer_name_or_path or model_name_or_path."
+            )
+        if self.model_initialization == "pretrained" and self.model_name_or_path is None:
+            raise ValueError(
+                "model_initialization='pretrained' requires model_name_or_path."
+            )
+        if not isinstance(self.tokenizer_mode, str) or self.tokenizer_mode not in {
+            "auto", "train_bpe"
+        }:
+            raise ValueError("tokenizer_mode must be 'auto' or 'train_bpe'.")
+        if self.tokenizer_mode == "train_bpe" and self.tokenizer_name_or_path is not None:
+            raise ValueError(
+                "tokenizer_mode='train_bpe' cannot be combined with "
+                "tokenizer_name_or_path."
+            )
+        if (
+            self.tokenizer_mode == "train_bpe"
+            and self.model_initialization == "pretrained"
+        ):
+            raise ValueError(
+                "A pretrained model cannot use a newly trained tokenizer. "
+                "Select a tokenizer compatible with its existing embeddings."
+            )
+        if not isinstance(self.trust_remote_code, bool):
+            raise ValueError("trust_remote_code must be boolean.")
+        if not isinstance(self.local_files_only, bool):
+            raise ValueError("local_files_only must be boolean.")
+        if self.local_files_only and not (
+            self.model_name_or_path or self.tokenizer_name_or_path
+        ):
+            raise ValueError(
+                "local_files_only requires a model or tokenizer source."
+            )
+        if self.model_initialization == "pretrained" and self.model_config_overrides:
+            raise ValueError(
+                "model_config_overrides are only supported for random initialization; "
+                "continued pretraining preserves the selected checkpoint config."
+            )
         if isinstance(self.betas, list):
             object.__setattr__(self, "betas", tuple(self.betas))
         local_files = self.train_file is not None or self.validation_file is not None
@@ -165,12 +242,16 @@ class TrainLMPretrainingConfig:
             or self.save_total_limit < 1
         ):
             raise ValueError("save_total_limit must be positive when configured.")
-        if self.tokenizer_vocab_size < 260:
+        external_tokenizer = self.tokenizer_mode == "auto" and (
+            self.tokenizer_name_or_path is not None
+            or self.model_name_or_path is not None
+        )
+        if not external_tokenizer and self.tokenizer_vocab_size < 260:
             raise ValueError("Byte-level BPE needs tokenizer_vocab_size >= 260.")
-        if self.tokenizer_vocab_size > 65_536:
+        if not external_tokenizer and self.tokenizer_vocab_size > 1 << 32:
             raise ValueError(
-                "tokenizer_vocab_size must fit the packed uint16 token format "
-                "(at most 65536)."
+                "tokenizer_vocab_size must fit the packed uint32 token format "
+                "(at most 2**32)."
             )
         if (not isinstance(self.model_type, str)
                 or not re.fullmatch(r"[a-z][a-z0-9_-]{0,63}", self.model_type)):
@@ -201,7 +282,17 @@ class TrainLMPretrainingConfig:
             object.__setattr__(self, "model_config_overrides", overrides)
         else:
             object.__setattr__(self, "model_config_overrides", {})
-        if self.model_type != "gpt2" and (
+        if self.model_name_or_path is not None and (
+            self.model_embedding_size != 768
+            or self.model_layers != 6
+            or self.model_attention_heads != 12
+        ):
+            raise ValueError(
+                "model_embedding_size, model_layers, and model_attention_heads "
+                "are for the built-in GPT-2 config; use model_config_overrides "
+                "to adjust a Hub architecture."
+            )
+        if self.model_name_or_path is None and self.model_type != "gpt2" and (
             self.model_embedding_size != 768
             or self.model_layers != 6
             or self.model_attention_heads != 12
@@ -531,6 +622,218 @@ def _scratch_huggingface_config(
     return model_config
 
 
+def _load_existing_scratch_tokenizer(
+    config: TrainLMPretrainingConfig,
+) -> tuple[Any | None, dict[str, Any] | None]:
+    """Load an explicitly selected tokenizer, or the model repo's tokenizer."""
+    if config.tokenizer_mode == "train_bpe":
+        return None, None
+    source = config.tokenizer_name_or_path or config.model_name_or_path
+    if source is None:
+        return None, None
+    revision = config.tokenizer_revision
+    if config.tokenizer_name_or_path is None and revision is None:
+        revision = config.model_revision
+
+    from transformers import AutoTokenizer
+
+    kwargs: dict[str, Any] = {
+        "trust_remote_code": config.trust_remote_code,
+        "local_files_only": config.local_files_only,
+        "use_fast": True,
+    }
+    if revision is not None:
+        kwargs["revision"] = revision
+    if config.cache_dir is not None:
+        kwargs["cache_dir"] = config.cache_dir
+    tokenizer = AutoTokenizer.from_pretrained(source, **kwargs)
+    eos_token_id = getattr(tokenizer, "eos_token_id", None)
+    if isinstance(eos_token_id, bool) or not isinstance(eos_token_id, int):
+        raise ValueError(
+            "The selected tokenizer must define eos_token_id for document-packed "
+            "causal pretraining. Choose a tokenizer with an EOS token."
+        )
+    if getattr(tokenizer, "pad_token_id", None) is None:
+        eos_token = getattr(tokenizer, "eos_token", None)
+        if eos_token is None:
+            raise ValueError(
+                "The selected tokenizer has no pad token or EOS token to use as "
+                "padding. Configure a compatible tokenizer before training."
+            )
+        tokenizer.pad_token = eos_token
+    resolved_revision = (
+        getattr(tokenizer, "_commit_hash", None)
+        or getattr(tokenizer, "init_kwargs", {}).get("_commit_hash")
+    )
+    local_source = Path(source).expanduser().exists()
+    same_model_snapshot_contract = (
+        config.model_name_or_path is not None
+        and source == config.model_name_or_path
+        and revision == config.model_revision
+    )
+    source_relation = (
+        "same_model_source_pending_resolution"
+        if config.tokenizer_name_or_path is None or same_model_snapshot_contract
+        else "independent_source_semantics_unverified"
+    )
+    metadata = {
+        "requested_source": str(source),
+        "requested_revision": revision,
+        "resolved_revision": resolved_revision,
+        "local_source": local_source,
+        "source_relation": source_relation,
+        "mapping_sha256": _tokenizer_mapping_sha256(tokenizer),
+    }
+    tokenizer._trainlm_source_metadata = metadata
+    return tokenizer, metadata
+
+
+def _tokenizer_vocab_capacity(tokenizer: Any) -> int:
+    """Return one past the largest token ID, including sparse/added IDs."""
+    get_vocab = getattr(tokenizer, "get_vocab", None)
+    vocab = get_vocab() if callable(get_vocab) else None
+    if not isinstance(vocab, Mapping) or not vocab:
+        capacity = len(tokenizer)
+    else:
+        token_ids = list(vocab.values())
+        if any(
+            isinstance(token_id, bool)
+            or not isinstance(token_id, int)
+            or token_id < 0
+            for token_id in token_ids
+        ):
+            raise ValueError("Tokenizer vocabulary IDs must be non-negative integers.")
+        capacity = max(len(tokenizer), max(token_ids) + 1)
+    special_ids = [
+        getattr(tokenizer, f"{name}_token_id", None)
+        for name in ("unk", "pad", "bos", "eos")
+    ]
+    for token_id in special_ids:
+        if token_id is None:
+            continue
+        if isinstance(token_id, bool) or not isinstance(token_id, int) or token_id < 0:
+            raise ValueError("Tokenizer special-token IDs must be non-negative integers.")
+        capacity = max(capacity, token_id + 1)
+    if not 1 <= capacity <= 1 << 32:
+        raise ValueError(
+            "The tokenizer's highest token ID must fit the packed uint32 format."
+        )
+    return capacity
+
+
+def _load_scratch_model(
+    config: TrainLMPretrainingConfig,
+    *,
+    tokenizer: Any,
+):
+    """Build random HF weights or load pretrained weights without resizing."""
+    from trainlm.config import ModelSourceConfig
+    from trainlm.model import load_huggingface_causal_lm
+
+    vocab_size = _tokenizer_vocab_capacity(tokenizer)
+    overrides = dict(config.model_config_overrides or {})
+    if config.model_initialization == "random":
+        if config.model_name_or_path is None and config.model_type == "gpt2":
+            overrides = {
+                "n_positions": config.sequence_length,
+                "n_ctx": config.sequence_length,
+                "n_embd": config.model_embedding_size,
+                "n_layer": config.model_layers,
+                "n_head": config.model_attention_heads,
+                **overrides,
+            }
+        overrides.update(
+            vocab_size=vocab_size,
+            pad_token_id=tokenizer.pad_token_id,
+            bos_token_id=tokenizer.bos_token_id,
+            eos_token_id=tokenizer.eos_token_id,
+        )
+
+    source = ModelSourceConfig(
+        provider="huggingface",
+        initialization=(
+            "pretrained"
+            if config.model_initialization == "pretrained"
+            else "config"
+        ),
+        name_or_path=(
+            str(config.model_name_or_path)
+            if config.model_name_or_path is not None
+            else None
+        ),
+        model_type=(config.model_type if config.model_name_or_path is None else None),
+        revision=config.model_revision,
+        trust_remote_code=config.trust_remote_code,
+        cache_dir=str(config.cache_dir) if config.cache_dir is not None else None,
+        local_files_only=config.local_files_only,
+        config_overrides=overrides,
+    )
+    loaded = load_huggingface_causal_lm(source)
+    model = loaded.model
+    if config.model_name_or_path is not None:
+        model_source_metadata = loaded.metadata.to_dict()
+        if config.model_initialization == "random":
+            model_source_metadata["effective_vocab_size"] = vocab_size
+        model._trainlm_model_source_metadata = model_source_metadata
+    tokenizer_source_metadata = getattr(tokenizer, "_trainlm_source_metadata", None)
+    if isinstance(tokenizer_source_metadata, Mapping):
+        if tokenizer_source_metadata.get("source_relation") == (
+            "same_model_source_pending_resolution"
+        ):
+            tokenizer_revision = tokenizer_source_metadata.get("resolved_revision")
+            model_revision = loaded.metadata.resolved_revision
+            if (
+                isinstance(tokenizer_revision, str)
+                and isinstance(model_revision, str)
+                and tokenizer_revision != model_revision
+            ):
+                raise ValueError(
+                    "The selected model config and tokenizer resolved to different "
+                    "Hub commits. Pin matching model_revision and tokenizer_revision "
+                    "values or choose a compatible tokenizer source."
+                )
+            tokenizer_source_metadata["source_relation"] = (
+                "same_model_snapshot"
+                if isinstance(tokenizer_revision, str)
+                and isinstance(model_revision, str)
+                else "same_model_source_revision_unresolved"
+            )
+        model._trainlm_tokenizer_source_metadata = tokenizer_source_metadata
+
+    model_config = model.config
+    context_limit = getattr(model_config, "max_position_embeddings", None)
+    if not isinstance(context_limit, int):
+        context_limit = getattr(model_config, "n_positions", None)
+    if isinstance(context_limit, int) and config.sequence_length > context_limit:
+        raise ValueError(
+            f"sequence_length={config.sequence_length} exceeds the selected "
+            f"{model_config.model_type} context limit ({context_limit})."
+        )
+
+    if config.model_initialization == "pretrained":
+        embedding_sizes = []
+        input_embeddings = model.get_input_embeddings()
+        if input_embeddings is not None:
+            rows = getattr(input_embeddings, "num_embeddings", None)
+            if isinstance(rows, int):
+                embedding_sizes.append(rows)
+        output_embeddings = model.get_output_embeddings()
+        if output_embeddings is not None:
+            rows = getattr(output_embeddings, "out_features", None)
+            if isinstance(rows, int):
+                embedding_sizes.append(rows)
+        max_embedding_rows = min(embedding_sizes) if embedding_sizes else int(
+            model.config.vocab_size
+        )
+        if vocab_size > max_embedding_rows:
+            raise ValueError(
+                "The selected tokenizer contains token IDs outside the pretrained "
+                f"model's {max_embedding_rows} embedding rows. TrainLM will not "
+                "resize pretrained embeddings or remap token IDs."
+            )
+    return model
+
+
 def _validate_scratch_dataset_source(
     *,
     dataset_id: str,
@@ -645,10 +948,18 @@ def _preflight_scratch_backend(config: TrainLMPretrainingConfig) -> None:
     select_auto_backend(report, cuda_available=torch.cuda.is_available())
 
 
-def _preparation_cache_inputs(config: TrainLMPretrainingConfig) -> dict[str, Any]:
+def _preparation_cache_inputs(
+    config: TrainLMPretrainingConfig,
+    *,
+    tokenizer_source: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     """Return the settings that define tokenizer and packed-shard contents."""
     inputs = {
-        "algorithm": _PREPARATION_ALGORITHM,
+        "algorithm": (
+            "huggingface_tokenizer"
+            if tokenizer_source is not None
+            else _PREPARATION_ALGORITHM
+        ),
         "dataset_id": config.dataset_id,
         "dataset_revision": config.dataset_revision,
         "train_split": config.train_split,
@@ -656,8 +967,16 @@ def _preparation_cache_inputs(config: TrainLMPretrainingConfig) -> dict[str, Any
         "text_field": config.text_field,
         "max_train_examples": config.max_train_examples,
         "max_eval_examples": config.max_eval_examples,
-        "tokenizer_vocab_size": config.tokenizer_vocab_size,
+        "tokenizer_vocab_size": (
+            None if tokenizer_source is not None else config.tokenizer_vocab_size
+        ),
     }
+    if tokenizer_source is not None:
+        inputs["tokenizer_source"] = {
+            key: value
+            for key, value in tokenizer_source.items()
+            if key != "source_relation"
+        }
     if config.train_file is not None and config.validation_file is not None:
         inputs["local_text_files"] = {
             "train": {
@@ -724,13 +1043,41 @@ def _tokenizer_cache_hashes(tokenizer_dir: Path) -> dict[str, str]:
 
 
 def _scratch_tokenizer_identity(tokenizer: Any) -> dict[str, Any]:
-    return {
+    identity = {
         "vocab_size": len(tokenizer),
         "special_token_ids": {
             name: getattr(tokenizer, f"{name}_token_id")
             for name in ("unk", "pad", "bos", "eos")
         },
     }
+    if isinstance(getattr(tokenizer, "_trainlm_source_metadata", None), Mapping):
+        identity["mapping_sha256"] = _tokenizer_mapping_sha256(tokenizer)
+    return identity
+
+
+def _tokenizer_mapping_sha256(tokenizer: Any) -> str:
+    """Fingerprint tokenizer behavior without recording authentication data."""
+    backend = getattr(tokenizer, "backend_tokenizer", None)
+    serialize = getattr(backend, "to_str", None)
+    if callable(serialize):
+        payload = serialize()
+    else:
+        get_vocab = getattr(tokenizer, "get_vocab", None)
+        vocab = get_vocab() if callable(get_vocab) else {}
+        payload = json.dumps(
+            {
+                "class": f"{type(tokenizer).__module__}.{type(tokenizer).__qualname__}",
+                "vocab": sorted(
+                    (str(token), int(token_id))
+                    for token, token_id in vocab.items()
+                ),
+                "special_tokens_map": getattr(tokenizer, "special_tokens_map", {}),
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def _check_scratch_dataset_sizes(
@@ -762,6 +1109,7 @@ def _load_scratch_preparation_cache(
     root: Path,
     packed_dataset_type: Any,
     inputs: Mapping[str, Any] | None = None,
+    candidate_tokenizer: Any | None = None,
 ) -> tuple[Any, Any, Any] | None:
     """Load only a matching cache whose tokenizer and packed shards validate."""
     cache_path = root / "preparation_cache.json"
@@ -828,11 +1176,14 @@ def _load_scratch_preparation_cache(
 
     train_dataset = None
     try:
-        from transformers import PreTrainedTokenizerFast
+        if candidate_tokenizer is None:
+            from transformers import PreTrainedTokenizerFast
 
-        tokenizer = PreTrainedTokenizerFast.from_pretrained(
-            tokenizer_dir, local_files_only=True
-        )
+            tokenizer = PreTrainedTokenizerFast.from_pretrained(
+                tokenizer_dir, local_files_only=True
+            )
+        else:
+            tokenizer = candidate_tokenizer
         if _scratch_tokenizer_identity(tokenizer) != payload.get("tokenizer"):
             raise ValueError("Cached tokenizer identity does not match its metadata.")
         train_dataset = packed_dataset_type.from_directory(
@@ -917,7 +1268,6 @@ def _enable_scratch_gradient_checkpointing(model: Any) -> None:
 def _prepare_scratch_training(config: TrainLMPretrainingConfig):
     """Build the model and reuse integrity-checked prepared data when possible."""
     import torch
-    from transformers import AutoModelForCausalLM
 
     from trainlm.data import PackedBinDataset
     from trainlm.data.writer import write_packed_binary_shard
@@ -925,12 +1275,16 @@ def _prepare_scratch_training(config: TrainLMPretrainingConfig):
     root = Path(config.output_dir)
     data_root = root / "data"
     root.mkdir(parents=True, exist_ok=True)
-    preparation_inputs = _preparation_cache_inputs(config)
+    tokenizer, tokenizer_source = _load_existing_scratch_tokenizer(config)
+    preparation_inputs = _preparation_cache_inputs(
+        config, tokenizer_source=tokenizer_source
+    )
     cached = _load_scratch_preparation_cache(
         config,
         root=root,
         packed_dataset_type=PackedBinDataset,
         inputs=preparation_inputs,
+        candidate_tokenizer=tokenizer,
     )
     if cached is not None:
         tokenizer, train_dataset, eval_dataset = cached
@@ -943,15 +1297,16 @@ def _prepare_scratch_training(config: TrainLMPretrainingConfig):
                 "Install datasets, then restart the Python runtime."
             ) from exc
 
-        train_source = _load_scratch_text_source(
-            load_dataset, config, split="train"
-        )
-        tokenizer, _ = _train_byte_level_tokenizer(
-            train_source,
-            max_examples=config.max_train_examples,
-            vocab_size=config.tokenizer_vocab_size,
-            text_field=config.text_field,
-        )
+        if tokenizer is None:
+            train_source = _load_scratch_text_source(
+                load_dataset, config, split="train"
+            )
+            tokenizer, _ = _train_byte_level_tokenizer(
+                train_source,
+                max_examples=config.max_train_examples,
+                vocab_size=config.tokenizer_vocab_size,
+                text_field=config.text_field,
+            )
         tokenizer.save_pretrained(root / "tokenizer")
 
         # Reopen the immutable stream after fitting the tokenizer on training text.
@@ -970,7 +1325,7 @@ def _prepare_scratch_training(config: TrainLMPretrainingConfig):
             ),
             data_root / "train",
             shard_id="train",
-            vocab_size=len(tokenizer),
+            vocab_size=_tokenizer_vocab_capacity(tokenizer),
         )
         write_packed_binary_shard(
             _token_documents(
@@ -981,7 +1336,7 @@ def _prepare_scratch_training(config: TrainLMPretrainingConfig):
             ),
             data_root / "validation",
             shard_id="validation",
-            vocab_size=len(tokenizer),
+            vocab_size=_tokenizer_vocab_capacity(tokenizer),
         )
 
         train_dataset = PackedBinDataset.from_directory(
@@ -999,7 +1354,9 @@ def _prepare_scratch_training(config: TrainLMPretrainingConfig):
         except Exception:
             train_dataset.close()
             raise
-        if _preparation_cache_inputs(config) != preparation_inputs:
+        if _preparation_cache_inputs(
+            config, tokenizer_source=tokenizer_source
+        ) != preparation_inputs:
             train_dataset.close()
             eval_dataset.close()
             raise RuntimeError(
@@ -1014,15 +1371,8 @@ def _prepare_scratch_training(config: TrainLMPretrainingConfig):
             inputs=preparation_inputs,
         )
 
-    model_config = _scratch_huggingface_config(
-        config,
-        vocab_size=len(tokenizer),
-        pad_token_id=tokenizer.pad_token_id,
-        bos_token_id=tokenizer.bos_token_id,
-        eos_token_id=tokenizer.eos_token_id,
-    )
     torch.manual_seed(config.seed)
-    model = AutoModelForCausalLM.from_config(model_config)
+    model = _load_scratch_model(config, tokenizer=tokenizer)
     if config.gradient_checkpointing:
         _enable_scratch_gradient_checkpointing(model)
     return model, tokenizer, train_dataset, eval_dataset

@@ -49,6 +49,22 @@ def test_writer_creates_valid_uint32_shard_and_document_index(tmp_path):
         dataset.close()
 
 
+def test_writer_round_trips_token_ids_above_uint16_range(tmp_path):
+    write_packed_binary_shard(
+        [[70_000, 1, 2, 3]],
+        tmp_path,
+        shard_id="large-vocabulary",
+        vocab_size=70_001,
+    )
+    dataset = PackedBinDataset.from_directory(
+        tmp_path, sequence_length=2, split="train"
+    )
+    try:
+        assert next(iter(dataset))["input_ids"].tolist() == [70_000, 1]
+    finally:
+        dataset.close()
+
+
 @pytest.mark.parametrize(
     ("documents", "message"),
     [

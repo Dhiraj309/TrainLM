@@ -1657,6 +1657,25 @@ class TrainLMTrainer:
 
         pretraining = asdict(config)
         pretraining.pop("output_dir", None)
+        # Keep fingerprints of older default BPE runs stable after optional HF
+        # source/initialization fields were added to the public config.
+        for name in (
+            "model_name_or_path",
+            "model_revision",
+            "tokenizer_name_or_path",
+            "tokenizer_revision",
+            "cache_dir",
+        ):
+            if getattr(config, name) is None:
+                pretraining.pop(name, None)
+        if config.model_initialization == "random":
+            pretraining.pop("model_initialization", None)
+        if config.tokenizer_mode == "auto":
+            pretraining.pop("tokenizer_mode", None)
+        if not config.trust_remote_code:
+            pretraining.pop("trust_remote_code", None)
+        if not config.local_files_only:
+            pretraining.pop("local_files_only", None)
         if config.train_file is None:
             # Keep legacy Hub-backed run fingerprints stable when the new
             # local-file source fields are unused.
@@ -1750,34 +1769,46 @@ class TrainLMTrainer:
                 "shards": [shard.manifest.to_dict() for shard in shards],
             }
 
+        model_identity = {
+            "type": _checkpoint_component_type(self.model),
+            "config": model_config_dict,
+            "parameter_count": sum(
+                parameter.numel() for parameter in self.model.parameters()
+            ),
+            "trainable_parameter_count": sum(
+                parameter.numel()
+                for parameter in self.model.parameters()
+                if parameter.requires_grad
+            ),
+        }
+        model_source_metadata = getattr(
+            self.model, "_trainlm_model_source_metadata", None
+        )
+        if isinstance(model_source_metadata, Mapping):
+            model_identity["source"] = dict(model_source_metadata)
+        tokenizer_identity = {
+            "type": _checkpoint_component_type(tokenizer),
+            "vocab_size": len(tokenizer),
+            "special_token_ids": {
+                name: getattr(tokenizer, f"{name}_token_id", None)
+                for name in ("unk", "pad", "bos", "eos")
+            },
+            "files": _tokenizer_cache_hashes(
+                Path(config.output_dir) / "tokenizer"
+            ),
+        }
+        tokenizer_source_metadata = getattr(
+            self.model, "_trainlm_tokenizer_source_metadata", None
+        )
+        if isinstance(tokenizer_source_metadata, Mapping):
+            tokenizer_identity["source"] = dict(tokenizer_source_metadata)
         configuration = _normalize_run_config_value({
             "schema_version": 1,
             "kind": "from_scratch",
             "pretraining": pretraining,
             "training_args": training_args,
-            "model": {
-                "type": _checkpoint_component_type(self.model),
-                "config": model_config_dict,
-                "parameter_count": sum(
-                    parameter.numel() for parameter in self.model.parameters()
-                ),
-                "trainable_parameter_count": sum(
-                    parameter.numel()
-                    for parameter in self.model.parameters()
-                    if parameter.requires_grad
-                ),
-            },
-            "tokenizer": {
-                "type": _checkpoint_component_type(tokenizer),
-                "vocab_size": len(tokenizer),
-                "special_token_ids": {
-                    name: getattr(tokenizer, f"{name}_token_id", None)
-                    for name in ("unk", "pad", "bos", "eos")
-                },
-                "files": _tokenizer_cache_hashes(
-                    Path(config.output_dir) / "tokenizer"
-                ),
-            },
+            "model": model_identity,
+            "tokenizer": tokenizer_identity,
             "datasets": {
                 "train": dataset_identity(train_dataset),
                 "evaluation": dataset_identity(eval_dataset),
