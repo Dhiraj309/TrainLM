@@ -31,6 +31,14 @@ unified cross-workflow source identity remain incomplete. Independently hosted
 tokenizer semantics remain the user's responsibility. These CPU changes add
 no live-Hub or TPU execution evidence.
 
+**HF-03 CI follow-up (2026-11-18):** GitHub Actions at the previous PR head
+failed three legacy smoke-contract tests: one still rejected friendly revisions,
+one expected the older split-error wording, and one expected the notebook's
+former literal token-budget setting. The implementation wording and tests now
+match the current contracts. The local smoke/pretraining/roadmap suites pass 50
+tests plus 14 subtests; hosted CI for the follow-up commit is pending. No TPU
+run was performed.
+
 The merged `main` branch exposes two task-focused, Hugging Face-style entry
 points: `run_pretraining(TrainLMPretrainingConfig(...))` for random-weight
 pretraining from pinned text, and

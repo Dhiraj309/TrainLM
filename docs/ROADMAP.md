@@ -19,6 +19,10 @@ pretrained fine-tuning helper also accepts prepared HF Dataset rows through
 batches. Direct tokenized Dataset input to scratch/CPT and unified provenance
 remain incomplete. HF-04–HF-08 remain planned; notebook presets do not
 complete those workflows.
+The latest PR #140 CI run failed three pretraining smoke-contract tests that
+still encoded the previous revision, error-message, and notebook-budget
+contracts. The follow-up updates those expectations; local focused tests pass,
+and hosted CI is pending.
 T0–T11 remains the runtime architecture/evidence plan; the M0–M17
 specification below remains historical.
 
