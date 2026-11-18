@@ -68,8 +68,9 @@ name changes preparation-cache and checkpoint-resume identity and is recorded
 in the run report and generated resume example. When TrainLM trains a corpus
 tokenizer, the formatter supplies its training text; it also supplies the
 training/evaluation rows that are packed. The affected CPU suite passes 99
-tests plus 14 subtests; hosted CI for this change is pending. No TPU or live
-Hub run was performed.
+tests plus 14 subtests; both hosted core profiles pass on
+`594ec2d75bd8c721847f6350be611642a5debe4d`. No TPU or live Hub run was
+performed.
 
 The merged `main` branch exposes two task-focused, Hugging Face-style entry
 points: `run_pretraining(TrainLMPretrainingConfig(...))` for random-weight

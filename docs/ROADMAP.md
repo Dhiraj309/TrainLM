@@ -35,8 +35,8 @@ sidecar fields. The schema now covers both forms, with sidecars remaining
 optional for legacy manifests; the affected CPU suite passed 82 tests plus 14
 subtests, and both hosted CI profiles passed on correction commit
 `c4822048162d84b01348ebdd2c61bf9770070357`. The multi-column row formatter
-now passes 99 focused CPU tests plus 14 subtests; hosted CI for that change is
-pending.
+passes 99 focused CPU tests plus 14 subtests, and both hosted core profiles
+pass on `594ec2d75bd8c721847f6350be611642a5debe4d`.
 T0–T11 remains the runtime architecture/evidence plan; the M0–M17
 specification below remains historical.
 
