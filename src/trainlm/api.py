@@ -317,7 +317,26 @@ def _validate_scratch_budget_extension(
         ):
             raise ValueError("Budget extension has invalid training geometry.")
         tokens_per_update = (sequence_length - 1) * batch_size * accumulation
-        expected_steps = math.ceil(tokens / tokens_per_update)
+        budget_rate = training_args.get("budget_supervised_tokens_per_update")
+        if budget_rate is None:
+            rate_numerator = tokens_per_update
+            rate_denominator = 1
+        else:
+            if (
+                not isinstance(budget_rate, Mapping)
+                or type(budget_rate.get("numerator")) is not int
+                or budget_rate["numerator"] < 1
+                or type(budget_rate.get("denominator")) is not int
+                or budget_rate["denominator"] < 1
+            ):
+                raise ValueError(
+                    "Budget extension has an invalid supervised-token rate."
+                )
+            rate_numerator = budget_rate["numerator"]
+            rate_denominator = budget_rate["denominator"]
+        expected_steps = (
+            tokens * rate_denominator + rate_numerator - 1
+        ) // rate_numerator
         cadence = max(1, expected_steps // 10)
         expected_warmup = min(expected_steps // 10, 100)
         if (
@@ -933,7 +952,44 @@ class TrainLMTrainer:
             * config.per_device_train_batch_size
             * config.gradient_accumulation_steps
         )
-        max_steps = math.ceil(config.max_tokens / tokens_per_update)
+        budget_token_rate = None
+        count_supervised = getattr(
+            train_dataset, "_count_supervised_tokens_per_epoch", None
+        )
+        if callable(count_supervised):
+            try:
+                supervised_per_epoch = count_supervised()
+            except Exception:
+                train_dataset.close()
+                eval_dataset.close()
+                raise
+            if supervised_per_epoch < 1:
+                train_dataset.close()
+                eval_dataset.close()
+                raise ValueError(
+                    "The packed training dataset contains no supervised next-token "
+                    "targets after applying labels and loss masks."
+                )
+            nominal_per_epoch = len(train_dataset) * (config.sequence_length - 1)
+            if supervised_per_epoch != nominal_per_epoch:
+                loader_batches_per_epoch = math.ceil(
+                    len(train_dataset) / config.per_device_train_batch_size
+                )
+                budget_token_rate = {
+                    "numerator": (
+                        supervised_per_epoch
+                        * config.gradient_accumulation_steps
+                    ),
+                    "denominator": loader_batches_per_epoch,
+                }
+                max_steps = (
+                    config.max_tokens * budget_token_rate["denominator"]
+                    + budget_token_rate["numerator"] - 1
+                ) // budget_token_rate["numerator"]
+            else:
+                max_steps = math.ceil(config.max_tokens / tokens_per_update)
+        else:
+            max_steps = math.ceil(config.max_tokens / tokens_per_update)
         cadence = max(1, max_steps // 10)
         args = TrainLMTrainingArguments(
             output_dir=Path(config.output_dir) / "checkpoints",
@@ -989,6 +1045,7 @@ class TrainLMTrainer:
             eval_dataset.close()
             raise
         trainer.pretraining_config = config
+        trainer._scratch_budget_token_rate = budget_token_rate
         try:
             trainer._initialize_scratch_run_configuration(
                 config,
@@ -1114,6 +1171,7 @@ class TrainLMTrainer:
         self._run_configuration_manifest: dict[str, Any] | None = None
         self._pending_scratch_run_configuration: dict[str, Any] | None = None
         self._scratch_budget_extension_checkpoint = False
+        self._scratch_budget_token_rate: dict[str, int] | None = None
         self._train_loader_generator: torch.Generator | None = None
         self._train_loader_generator_initial_state: torch.Tensor | None = None
         self._tpu_coordinator = None
@@ -1719,6 +1777,10 @@ class TrainLMTrainer:
             pretraining.pop("validation_file", None)
         training_args = asdict(self.args)
         training_args.pop("output_dir", None)
+        if self._scratch_budget_token_rate is not None:
+            training_args["budget_supervised_tokens_per_update"] = dict(
+                self._scratch_budget_token_rate
+            )
         # Retention controls disk usage, not training semantics. Excluding it
         # also preserves fingerprints of checkpoints saved before this option.
         pretraining.pop("save_total_limit", None)
