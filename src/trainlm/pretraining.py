@@ -107,7 +107,7 @@ def _validate_disjoint_split_selectors(
 
 @dataclass(frozen=True, slots=True)
 class TrainLMPretrainingConfig:
-    """Settings for causal pretraining from a Hub or local text source.
+    """Settings for causal pretraining from a Hub, Dataset, or local text source.
 
     The default path preserves the original GPT-2 plus corpus-trained BPE
     workflow. Set ``model_name_or_path`` to use a registered Transformers
@@ -132,6 +132,7 @@ class TrainLMPretrainingConfig:
     """
 
     output_dir: str | Path = Path("runs/pretraining")
+    dataset_source: Literal["hub", "provided"] = "hub"
     dataset_id: str | None = None
     dataset_revision: str | None = None
     train_file: str | Path | None = None
@@ -252,6 +253,10 @@ class TrainLMPretrainingConfig:
             )
         if isinstance(self.betas, list):
             object.__setattr__(self, "betas", tuple(self.betas))
+        if not isinstance(self.dataset_source, str) or self.dataset_source not in {
+            "hub", "provided"
+        }:
+            raise ValueError("dataset_source must be 'hub' or 'provided'.")
         local_files = self.train_file is not None or self.validation_file is not None
         if local_files:
             if self.train_file is None or self.validation_file is None:
@@ -262,9 +267,11 @@ class TrainLMPretrainingConfig:
                 self.dataset_id is not None
                 or self.dataset_config_name is not None
                 or self.dataset_revision is not None
+                or self.dataset_source != "hub"
             ):
                 raise ValueError(
-                    "Choose either local text files or a Hugging Face dataset, not both."
+                    "Choose either local text files or a Hugging Face dataset, "
+                    "not both; provided Dataset objects are another exclusive source."
                 )
             if self.text_field != "text":
                 raise ValueError(
@@ -283,28 +290,39 @@ class TrainLMPretrainingConfig:
             if paths[0] == paths[1]:
                 raise ValueError("Training and validation files must be distinct.")
         else:
-            if self.dataset_config_name is not None and self.dataset_id is None:
-                raise ValueError(
-                    "dataset_config_name requires dataset_id."
-                )
-            if self.dataset_id is None and self.dataset_revision is None:
-                object.__setattr__(self, "dataset_id", DEFAULT_DATASET_ID)
-                object.__setattr__(self, "dataset_revision", DEFAULT_DATASET_REVISION)
-            if not isinstance(self.dataset_id, str) or not _DATASET_ID.fullmatch(
-                self.dataset_id
-            ):
-                raise ValueError("dataset_id must be a Hugging Face owner/name ID.")
-            if self.dataset_revision is None:
-                object.__setattr__(self, "dataset_revision", "main")
-            if (
-                not isinstance(self.dataset_revision, str)
-                or not self.dataset_revision.strip()
-                or len(self.dataset_revision) > 256
-                or "\x00" in self.dataset_revision
-            ):
-                raise ValueError(
-                    "dataset_revision must be a non-empty Hub revision."
-                )
+            if self.dataset_source == "provided":
+                if any(value is not None for value in (
+                    self.dataset_id, self.dataset_revision, self.dataset_config_name
+                )):
+                    raise ValueError(
+                        "dataset_source='provided' cannot be combined with "
+                        "dataset_id, dataset_revision, or dataset_config_name."
+                    )
+            else:
+                if self.dataset_config_name is not None and self.dataset_id is None:
+                    raise ValueError(
+                        "dataset_config_name requires dataset_id."
+                    )
+                if self.dataset_id is None and self.dataset_revision is None:
+                    object.__setattr__(self, "dataset_id", DEFAULT_DATASET_ID)
+                    object.__setattr__(
+                        self, "dataset_revision", DEFAULT_DATASET_REVISION
+                    )
+                if not isinstance(self.dataset_id, str) or not _DATASET_ID.fullmatch(
+                    self.dataset_id
+                ):
+                    raise ValueError("dataset_id must be a Hugging Face owner/name ID.")
+                if self.dataset_revision is None:
+                    object.__setattr__(self, "dataset_revision", "main")
+                if (
+                    not isinstance(self.dataset_revision, str)
+                    or not self.dataset_revision.strip()
+                    or len(self.dataset_revision) > 256
+                    or "\x00" in self.dataset_revision
+                ):
+                    raise ValueError(
+                        "dataset_revision must be a non-empty Hub revision."
+                    )
         if self.dataset_config_name is not None and (
             not isinstance(self.dataset_config_name, str)
             or not self.dataset_config_name.strip()
@@ -1056,6 +1074,7 @@ def _preparation_cache_inputs(
     *,
     tokenizer_source: Mapping[str, Any] | None = None,
     resolved_dataset_revision: str | None = None,
+    provided_datasets: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Return the settings that define tokenizer and packed-shard contents."""
     inputs = {
@@ -1077,6 +1096,18 @@ def _preparation_cache_inputs(
     }
     if config.dataset_config_name is not None:
         inputs["dataset_config_name"] = config.dataset_config_name
+    if config.dataset_source == "provided":
+        if not isinstance(provided_datasets, Mapping) or set(provided_datasets) != {
+            "train", "validation"
+        }:
+            raise ValueError(
+                "Provided Dataset inputs need stable train and validation identities."
+            )
+        inputs["provided_datasets"] = dict(provided_datasets)
+    elif provided_datasets is not None:
+        raise ValueError(
+            "Pass Dataset objects only when dataset_source='provided'."
+        )
     if tokenizer_source is not None:
         inputs["tokenizer_source"] = {
             key: value
@@ -1108,10 +1139,17 @@ def _load_scratch_text_source(
     *,
     split: Literal["train", "validation"],
     resolved_dataset_revision: str | None = None,
+    provided_datasets: Mapping[str, Any] | None = None,
 ):
     """Open one pinned Hub split or one local UTF-8 text file as a stream."""
     split_name = config.train_split if split == "train" else config.validation_split
     local_file = config.train_file if split == "train" else config.validation_file
+    if config.dataset_source == "provided":
+        if not isinstance(provided_datasets, Mapping):
+            raise ValueError(
+                "dataset_source='provided' requires train_dataset and eval_dataset."
+            )
+        return provided_datasets[split]
     if local_file is not None:
         return load_dataset(
             "text",
@@ -1155,6 +1193,56 @@ def _resolve_scratch_dataset_revision(
             "40-character commit SHA."
         )
     return resolved
+
+
+def _scratch_dataset_object_identity(
+    config: TrainLMPretrainingConfig,
+    train_dataset: Any | None,
+    eval_dataset: Any | None,
+) -> dict[str, dict[str, Any]] | None:
+    """Validate direct HF text Dataset inputs and return cache-safe identities."""
+    if config.dataset_source != "provided":
+        if train_dataset is not None or eval_dataset is not None:
+            raise ValueError(
+                "Pass train_dataset and eval_dataset only with "
+                "dataset_source='provided'."
+            )
+        return None
+    if train_dataset is None or eval_dataset is None:
+        raise ValueError(
+            "dataset_source='provided' requires both train_dataset and eval_dataset."
+        )
+    if train_dataset is eval_dataset:
+        raise ValueError("Training and evaluation Dataset objects must be distinct.")
+
+    identities: dict[str, dict[str, Any]] = {}
+    for split, dataset in (("train", train_dataset), ("validation", eval_dataset)):
+        columns = getattr(dataset, "column_names", None)
+        fingerprint = getattr(dataset, "_fingerprint", None)
+        if (
+            not isinstance(columns, (list, tuple))
+            or config.text_field not in columns
+        ):
+            raise ValueError(
+                f"The {split} Dataset must expose the configured text column "
+                f"{config.text_field!r}."
+            )
+        if not isinstance(fingerprint, str) or not fingerprint.strip():
+            raise ValueError(
+                f"The {split} Dataset must expose a stable Hugging Face "
+                "fingerprint for cache and resume safety."
+            )
+        try:
+            rows = len(dataset)
+            iter(dataset)
+        except (TypeError, AttributeError) as exc:
+            raise TypeError(
+                f"The {split} source must be a map-style Hugging Face Dataset."
+            ) from exc
+        if isinstance(rows, bool) or not isinstance(rows, int) or rows < 1:
+            raise ValueError(f"The {split} Dataset must contain at least one row.")
+        identities[split] = {"fingerprint": fingerprint, "rows": rows}
+    return identities
 
 
 def _sha256_file(path: Path) -> str:
@@ -1402,7 +1490,12 @@ def _enable_scratch_gradient_checkpointing(model: Any) -> None:
         model._trainlm_original_use_cache = original_use_cache
 
 
-def _prepare_scratch_training(config: TrainLMPretrainingConfig):
+def _prepare_scratch_training(
+    config: TrainLMPretrainingConfig,
+    *,
+    train_dataset: Any | None = None,
+    eval_dataset: Any | None = None,
+):
     """Build the model and reuse integrity-checked prepared data when possible."""
     import torch
 
@@ -1412,12 +1505,21 @@ def _prepare_scratch_training(config: TrainLMPretrainingConfig):
     root = Path(config.output_dir)
     data_root = root / "data"
     root.mkdir(parents=True, exist_ok=True)
+    provided_datasets = _scratch_dataset_object_identity(
+        config, train_dataset, eval_dataset
+    )
+    dataset_objects = (
+        {"train": train_dataset, "validation": eval_dataset}
+        if provided_datasets is not None
+        else None
+    )
     resolved_dataset_revision = _resolve_scratch_dataset_revision(config)
     tokenizer, tokenizer_source = _load_existing_scratch_tokenizer(config)
     preparation_inputs = _preparation_cache_inputs(
         config,
         tokenizer_source=tokenizer_source,
         resolved_dataset_revision=resolved_dataset_revision,
+        provided_datasets=provided_datasets,
     )
     cached = _load_scratch_preparation_cache(
         config,
@@ -1429,13 +1531,15 @@ def _prepare_scratch_training(config: TrainLMPretrainingConfig):
     if cached is not None:
         tokenizer, train_dataset, eval_dataset = cached
     else:
-        try:
-            from datasets import load_dataset
-        except ImportError as exc:
-            raise ImportError(
-                "Raw-text pretraining needs the optional 'datasets' package. "
-                "Install datasets, then restart the Python runtime."
-            ) from exc
+        load_dataset = None
+        if dataset_objects is None:
+            try:
+                from datasets import load_dataset
+            except ImportError as exc:
+                raise ImportError(
+                    "Raw-text pretraining needs the optional 'datasets' package. "
+                    "Install datasets, then restart the Python runtime."
+                ) from exc
 
         if tokenizer is None:
             train_source = _load_scratch_text_source(
@@ -1443,6 +1547,7 @@ def _prepare_scratch_training(config: TrainLMPretrainingConfig):
                 config,
                 split="train",
                 resolved_dataset_revision=resolved_dataset_revision,
+                provided_datasets=dataset_objects,
             )
             tokenizer, _ = _train_byte_level_tokenizer(
                 train_source,
@@ -1458,12 +1563,14 @@ def _prepare_scratch_training(config: TrainLMPretrainingConfig):
             config,
             split="train",
             resolved_dataset_revision=resolved_dataset_revision,
+            provided_datasets=dataset_objects,
         )
         validation_source = _load_scratch_text_source(
             load_dataset,
             config,
             split="validation",
             resolved_dataset_revision=resolved_dataset_revision,
+            provided_datasets=dataset_objects,
         )
         write_packed_binary_shard(
             _token_documents(
@@ -1507,6 +1614,13 @@ def _prepare_scratch_training(config: TrainLMPretrainingConfig):
             config,
             tokenizer_source=tokenizer_source,
             resolved_dataset_revision=resolved_dataset_revision,
+            provided_datasets=(
+                _scratch_dataset_object_identity(
+                    config, dataset_objects["train"], dataset_objects["validation"]
+                )
+                if dataset_objects is not None
+                else None
+            ),
         ) != preparation_inputs:
             train_dataset.close()
             eval_dataset.close()
@@ -1524,7 +1638,13 @@ def _prepare_scratch_training(config: TrainLMPretrainingConfig):
 
     dataset_source_metadata = {
         "source_type": (
-            "huggingface_hub" if config.dataset_id is not None else "local_text_files"
+            "huggingface_dataset_objects"
+            if provided_datasets is not None
+            else (
+                "huggingface_hub"
+                if config.dataset_id is not None
+                else "local_text_files"
+            )
         ),
         "dataset_id": config.dataset_id,
         "dataset_config_name": config.dataset_config_name,
@@ -1534,6 +1654,8 @@ def _prepare_scratch_training(config: TrainLMPretrainingConfig):
         "validation_split": config.validation_split,
         "text_field": config.text_field,
     }
+    if provided_datasets is not None:
+        dataset_source_metadata["provided_datasets"] = provided_datasets
     train_dataset._trainlm_dataset_source_metadata = dataset_source_metadata
     eval_dataset._trainlm_dataset_source_metadata = dataset_source_metadata
 

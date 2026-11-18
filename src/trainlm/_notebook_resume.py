@@ -37,6 +37,12 @@ def build_resume_report(
         resolved_revision = dataset_source.get("resolved_revision")
         if isinstance(resolved_revision, str):
             settings["dataset_revision"] = resolved_revision
+    provided_dataset_identity = (
+        dataset_source.get("provided_datasets")
+        if isinstance(dataset_source, Mapping)
+        else None
+    )
+    needs_provided_datasets = settings.get("dataset_source") == "provided"
     for name in ("train_file", "validation_file"):
         if settings[name] is not None:
             settings[name] = str(Path(settings[name]).resolve())
@@ -80,8 +86,26 @@ def build_resume_report(
         "    raise FileNotFoundError(\n"
         "        'Restore the full original run directory at its recorded path.'\n"
         "    )\n"
+    )
+    if needs_provided_datasets:
+        code += (
+            "# Reload the same raw-text HF Dataset splits used for the original run.\n"
+            "# Expected fingerprints (train/evaluation): "
+            f"{pformat(provided_dataset_identity, sort_dicts=False, width=10000)}\n"
+            "if 'train_dataset' not in globals() or 'eval_dataset' not in globals():\n"
+            "    raise RuntimeError(\n"
+            "        'Load the original fingerprint-matching HF Dataset splits into '\n"
+            "        'train_dataset and eval_dataset before resuming.'\n"
+            "    )\n"
+        )
+    code += (
         "trainer = TrainLMTrainer.from_scratch(\n"
-        f"    config, extend_training_budget={extension_pending!r},\n"
+        + (
+            "    config, train_dataset=train_dataset, eval_dataset=eval_dataset,\n"
+            if needs_provided_datasets
+            else "    config,\n"
+        )
+        + f"    extend_training_budget={extension_pending!r},\n"
         ")\n"
         "state = trainer.train(resume_from_checkpoint=checkpoint)\n"
         "print(f'resumed_step={state.step} supervised_tokens={state.tokens_seen}')\n"
@@ -94,4 +118,6 @@ def build_resume_report(
         "script": "resume.py",
         "code": code,
     })
+    if needs_provided_datasets:
+        result["required_dataset_fingerprints"] = provided_dataset_identity
     return result

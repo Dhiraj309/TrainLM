@@ -19,17 +19,20 @@ resolved source identity participate in prepared-data and checkpoint identity.
 The packed path accepts uint32 token IDs and validates pretrained embedding
 bounds and known context limits without resizing or remapping.
 
-The current branch `feat/20-hf-dataset-sources` begins HF-03. It adds dataset
+The current branch `feat/20-hf-dataset-sources` continues HF-03. It adds dataset
 config names, friendly Hub revisions that resolve to immutable commits, and
 non-overlapping split slices to the streamed raw-text scratch path. The
-resolved source enters the data fingerprint and resume configuration. For
-pretrained fine-tuning, the same branch accepts supplied HF Dataset splits
+resolved source enters the data fingerprint and resume configuration. Scratch
+pretraining now also accepts raw-text Hugging Face `Dataset` train/evaluation
+objects with stable dataset fingerprints; those fingerprints protect its
+preparation cache, appear in reports, and are required again when resuming.
+For pretrained fine-tuning, the same branch accepts supplied HF Dataset splits
 with already-tokenized causal-LM columns, validates them, preserves labels and
 masks, checks known embedding bounds, and pads ragged rows. Direct tokenized
 Dataset input to scratch/CPT, custom raw-text formatters for scratch, and
 unified cross-workflow source identity remain incomplete. Independently hosted
-tokenizer semantics remain the user's responsibility. These CPU changes add
-no live-Hub or TPU execution evidence.
+tokenizer semantics remain the user's responsibility. These changes add no
+live-Hub or TPU execution evidence.
 
 **HF-03 CI follow-up (2026-11-18):** GitHub Actions at the previous PR head
 failed three legacy smoke-contract tests: one still rejected friendly revisions,
@@ -219,7 +222,12 @@ loading; both streamed splits use the resulting SHA. Train/evaluation slices
 from one underlying split must be disjoint. The resolved commit is part of the
 preparation cache identity, the saved run configuration, and generated resume
 settings, so a resumed branch selection stays pinned to the original data.
-Local paired text files and the existing text-column tokenizer path still work.
+`run_pretraining` and `TrainLMTrainer.from_scratch` also accept raw-text HF
+`Dataset` objects when configured with `dataset_source="provided"`; the API
+records each split's fingerprint and row count and refuses cache reuse when
+those identities differ. Resume requires the caller to reload the same splits
+and provide them again. Local paired text files and the existing text-column
+tokenizer path still work.
 For pretrained fine-tuning, `TrainLMFineTuningConfig.data_format="tokens"`
 accepts supplied HF Dataset splits with `input_ids` and optional labels/masks;
 the default collator pads variable-length rows without retokenizing or shifting

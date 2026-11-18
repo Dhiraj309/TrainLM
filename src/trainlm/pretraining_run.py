@@ -159,6 +159,8 @@ class TrainLMPretrainingResult:
 def run_pretraining(
     config: TrainLMPretrainingConfig,
     *,
+    train_dataset: Any | None = None,
+    eval_dataset: Any | None = None,
     resume_from_checkpoint: str | Path | None = None,
     extend_training_budget: bool = False,
     show_progress: bool = False,
@@ -170,7 +172,8 @@ def run_pretraining(
 
     This is the convenient end-to-end path. Users who need a custom lifecycle
     can continue to construct :class:`TrainLMTrainer` directly and call its
-    ``train``, ``evaluate``, and ``save_model`` methods.
+    ``train``, ``evaluate``, and ``save_model`` methods. For raw HF Dataset
+    objects, set ``dataset_source="provided"`` and pass both splits here.
 
     The report is written even when model preparation, training, evaluation,
     or export fails. In that case :class:`TrainLMPretrainingError` identifies
@@ -205,7 +208,9 @@ def run_pretraining(
         from .api import TrainLMTrainer
 
         trainer_options: dict[str, Any] = {
-            "extend_training_budget": extend_training_budget
+            "extend_training_budget": extend_training_budget,
+            "train_dataset": train_dataset,
+            "eval_dataset": eval_dataset,
         }
         if show_progress:
             trainer_options["callbacks"] = [_make_training_progress_callback(config)]
@@ -353,9 +358,18 @@ def _initial_report(
         },
         "data": {
             "source_type": (
-                "local_text_files"
+                "huggingface_dataset_objects"
+                if config.dataset_source == "provided"
+                else (
+                    "local_text_files"
+                    if config.train_file is not None
+                    else "huggingface_hub"
+                )
+            ),
+            "dataset_source": (
+                "local_files"
                 if config.train_file is not None
-                else "huggingface_hub"
+                else config.dataset_source
             ),
             "dataset_id": config.dataset_id,
             "dataset_revision": config.dataset_revision,
@@ -470,6 +484,15 @@ def _capture_local_text_sources(
         report["data"]["dataset_config_name"] = inputs.get(
             "dataset_config_name", config.dataset_config_name
         )
+    if config.dataset_source == "provided":
+        datasets = inputs.get("provided_datasets")
+        if not isinstance(datasets, Mapping) or set(datasets) != {
+            "train", "validation"
+        }:
+            raise RuntimeError(
+                "The prepared-data cache does not record both provided Dataset inputs."
+            )
+        report["data"]["provided_datasets"] = datasets
     if config.train_file is not None and config.validation_file is not None:
         files = inputs.get("local_text_files")
         if not isinstance(files, Mapping) or set(files) != {"train", "validation"}:

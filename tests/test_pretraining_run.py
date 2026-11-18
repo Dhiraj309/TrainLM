@@ -85,6 +85,51 @@ def test_run_pretraining_completes_report_export_bundle_and_restore(
     assert any(name.startswith("model/") and name.endswith(".safetensors") for name in names)
 
 
+def test_run_pretraining_accepts_raw_hf_dataset_objects_and_records_identity(
+    tmp_path,
+):
+    class TextDataset:
+        column_names = ["text"]
+
+        def __init__(self, fingerprint, label):
+            self._fingerprint = fingerprint
+            self.rows = [
+                {"text": f"{label} corpus sample about stars and trees {index}. " * 5}
+                for index in range(16)
+            ]
+
+        def __iter__(self):
+            return iter(self.rows)
+
+        def __len__(self):
+            return len(self.rows)
+
+    config = replace(
+        _config(tmp_path / "provided-artifacts"),
+        dataset_source="provided",
+        dataset_id=None,
+        dataset_revision=None,
+    )
+    result = run_pretraining(
+        config,
+        train_dataset=TextDataset("train-source-123", "train"),
+        eval_dataset=TextDataset("eval-source-456", "validation"),
+    )
+
+    assert result.status == "passed"
+    assert result.report["data"]["source_type"] == "huggingface_dataset_objects"
+    assert result.report["data"]["provided_datasets"]["train"]["fingerprint"] == (
+        "train-source-123"
+    )
+    assert result.report["resume"]["required_dataset_fingerprints"]["validation"][
+        "fingerprint"
+    ] == "eval-source-456"
+    assert "train_dataset=train_dataset" in result.report["resume"]["code"]
+    compile(result.report["resume"]["code"], "resume.py", "exec")
+    restored = restore_pretraining_report(result.report_path)
+    assert restored.config.dataset_source == "provided"
+
+
 def test_run_pretraining_reports_and_restores_local_text_files(tmp_path, monkeypatch):
     rows = [
         {"text": f"Local corpus document about lakes and mountains {index}. " * 4}

@@ -134,6 +134,73 @@ def test_pretraining_config_accepts_paired_local_text_files(tmp_path):
         )
 
 
+def test_from_scratch_accepts_fingerprinted_raw_hf_dataset_objects(
+    tmp_path, monkeypatch
+):
+    class TextDataset:
+        column_names = ["text"]
+
+        def __init__(self, fingerprint, label):
+            self._fingerprint = fingerprint
+            self.rows = [
+                {"text": f"{label} document about language models {index}. " * 5}
+                for index in range(16)
+            ]
+
+        def __iter__(self):
+            return iter(self.rows)
+
+        def __len__(self):
+            return len(self.rows)
+
+    datasets = ModuleType("datasets")
+
+    def unexpected_hub_load(*args, **kwargs):
+        raise AssertionError("provided Dataset objects must not reload Hub data")
+
+    datasets.load_dataset = unexpected_hub_load
+    monkeypatch.setitem(sys.modules, "datasets", datasets)
+    config = _config(
+        tmp_path / "provided-run",
+        dataset_source="provided",
+        dataset_id=None,
+        dataset_revision=None,
+        dataset_config_name=None,
+    )
+    train_data = TextDataset("train-fingerprint-1", "training")
+    eval_data = TextDataset("eval-fingerprint-1", "evaluation")
+
+    trainer = TrainLMTrainer.from_scratch(
+        config, train_dataset=train_data, eval_dataset=eval_data
+    )
+    metadata = trainer.train_dataset._trainlm_dataset_source_metadata
+    assert metadata["source_type"] == "huggingface_dataset_objects"
+    assert metadata["provided_datasets"]["train"]["fingerprint"] == (
+        "train-fingerprint-1"
+    )
+    cache = json.loads(
+        (config.output_dir / "preparation_cache.json").read_text(encoding="utf-8")
+    )
+    assert cache["inputs"]["provided_datasets"]["validation"]["fingerprint"] == (
+        "eval-fingerprint-1"
+    )
+    run_config = json.loads(
+        (config.output_dir / "run_config.json").read_text(encoding="utf-8")
+    )
+    assert run_config["configuration"]["pretraining"]["dataset_source"] == (
+        "provided"
+    )
+
+    trainer.train_dataset.close()
+    trainer.eval_dataset.close()
+    with pytest.raises(ValueError, match="different dataset/tokenizer settings"):
+        TrainLMTrainer.from_scratch(
+            config,
+            train_dataset=TextDataset("train-fingerprint-2", "changed"),
+            eval_dataset=eval_data,
+        )
+
+
 def test_tokenizer_capacity_uses_sparse_and_added_token_ids():
     from trainlm.pretraining import _tokenizer_vocab_capacity
 
