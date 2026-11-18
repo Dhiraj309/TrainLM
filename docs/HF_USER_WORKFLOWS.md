@@ -57,9 +57,9 @@ remain separate scopes. Unsupported cases need an actionable early error.
 | Pretokenized HF datasets | Fine-tuning and scratch/CPT accept `input_ids` with optional aligned labels and masks; scratch/CPT preserves them in checksummed sidecars, derives labels only when absent, and shifts once | Verify tokenizer-to-dataset semantics and unify provenance and resume identity across workflows |
 | Modern HF vocabularies | Packed writer and scratch config support uint32 IDs; scratch derives required capacity from the largest tokenizer ID, including sparse/added IDs | HF-02 removed the 65,536 ceiling; a CPU round-trip covers token ID 70,000 |
 | Train/evaluate/save/resume | Public trainer and helper lifecycles exist; scratch has strong prepared-data identity checks | Share contracts across HF data paths; include tokenizer/data identity and declare which streams can resume exactly |
-| Standard HF model export | `save_model` uses `save_pretrained` and saves the processing class when supplied | Verify a complete export independently of TrainLM, including tokenizer and applicable generation configuration |
+| Standard HF model export | `save_model` uses `save_pretrained` and saves the processing class when supplied | A CPU fresh-process check reloads model and tokenizer and generates from the export; accelerator export remains owner-validated |
 | Publish to HF Hub | Users can use HF tools themselves; TrainLM has no public `push_to_hub` operation | Add explicit publication of the selected export, model card/provenance, and a returned immutable revision |
-| Inference | Scratch notebook reloads an export using Transformers | Provide a short local/Hub inference recipe and a fresh-process round trip; other engines require their own compatibility evidence |
+| Inference | `examples/infer_local_export.py` and the scratch notebook load the export in a clean Python process using Transformers | Other inference engines require their own compatibility evidence; Hub-hosted inference remains a user-managed Transformers workflow |
 
 Evidence paths:
 

@@ -726,6 +726,33 @@ def test_scratch_gradient_checkpointing_trains_and_exports_with_cache(
     exported_model = AutoModelForCausalLM.from_pretrained(export)
     assert exported_model.config.use_cache is True
 
+    import subprocess
+
+    inference_code = """
+import sys
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+export = sys.argv[1]
+tokenizer = AutoTokenizer.from_pretrained(export, local_files_only=True)
+model = AutoModelForCausalLM.from_pretrained(export, local_files_only=True)
+model.eval()
+inputs = tokenizer("A", return_tensors="pt")
+with torch.inference_mode():
+    generated = model.generate(**inputs, max_new_tokens=2, do_sample=False)
+assert generated.shape[1] > inputs["input_ids"].shape[1]
+print(tokenizer.decode(generated[0], skip_special_tokens=True))
+"""
+    process = subprocess.run(
+        [sys.executable, "-I", "-c", inference_code, str(export.resolve())],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=60,
+    )
+    assert process.stdout.strip()
+
 
 def test_scratch_resume_rejects_changed_run_settings_before_state_restore(
     tmp_path, monkeypatch

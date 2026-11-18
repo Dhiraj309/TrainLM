@@ -57,6 +57,9 @@ Scratch runs with packed labels or loss masks derive the step/scheduler horizon
 from observed supervised-token density, while the live counter still stops on
 actual supervised targets and may pass the requested budget by a final
 microbatch.
+The local model export now has a separate-process CPU inference example and a
+regression check that loads both tokenizer and model and generates text; no
+accelerator export claim is made.
 T0–T11 remains the runtime architecture/evidence plan; the M0–M17
 specification below remains historical.
 

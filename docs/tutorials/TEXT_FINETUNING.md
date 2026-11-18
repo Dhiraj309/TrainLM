@@ -46,6 +46,11 @@ result = run_finetuning(config)
 print(result.summary())
 ```
 
+The export is an ordinary Transformers model directory. Start a fresh Python
+process and load both model and tokenizer from the printed `result.model_path`;
+see the [short inference example](../../examples/infer_local_export.py).
+Nothing is uploaded automatically.
+
 ## Train for a number of dataset epochs
 
 Use `num_train_epochs` when you want the training budget tied to a finite

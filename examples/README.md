@@ -9,6 +9,9 @@
 - [Fine-tune text](finetune_text.py): one public API call using a tiny model,
   bounded dataset slices, and three steps; increase the sample and step budgets
   and choose a model for a real run.
+- [Run inference](infer_local_export.py): load a saved local export with
+  Transformers in a separate Python process; set `MODEL_PATH` to the printed
+  export directory.
 
 ## Runtime diagnostics
 
