@@ -47,6 +47,9 @@ parser choices are retained. Its focused CPU regression passes.
 The fine-tuning quickstart now bounds its Hub train/validation slices before
 tokenization and avoids duplicate scheduled-plus-final evaluation for its
 three-step smoke run; larger workflows can widen the slices.
+Fine-tuning config accepts Hugging Face split-slice selectors, and tokenized
+train/evaluation rows are checked after mapping in bounded batches so cached
+`.map()` output cannot skip structural or model-embedding-bound validation.
 T0–T11 remains the runtime architecture/evidence plan; the M0–M17
 specification below remains historical.
 

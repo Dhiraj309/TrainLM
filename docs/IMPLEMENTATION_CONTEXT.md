@@ -99,6 +99,14 @@ are disabled in the smoke config; the public workflow still performs its one
 final evaluation. Larger runs should deliberately widen or remove the split
 slices. This is a user-example improvement; no runtime behavior changed.
 
+**Fine-tuning Hub split and cached-token validation (2026-11-18):** split
+selectors accept Hugging Face Datasets slice expressions such as
+`train[:1000]`. For `data_format="tokens"`, the mapped train and validation
+datasets are scanned in bounded batches after `.map()` so structural and
+embedding-bound validation still runs when Datasets reuses cached map output.
+The report's maximum token ID now comes from that scan. This adds one pass over
+already-prepared token rows; no live Hub or accelerator run was performed.
+
 The merged `main` branch exposes two task-focused, Hugging Face-style entry
 points: `run_pretraining(TrainLMPretrainingConfig(...))` for random-weight
 pretraining from pinned text, and
