@@ -352,7 +352,9 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
     assert report["last_known_state"]["latest_checkpoint"] == str(checkpoint_path)
     restored = restore_finetuning_config(result.summary_path, max_steps=8)
     assert restored.model_name_or_path == config.model_name_or_path
-    assert restored.model_revision == config.model_revision
+    assert restored.model_revision == "c" * 40
+    assert restored.tokenizer_name_or_path == "org/model"
+    assert restored.tokenizer_revision == "c" * 40
     assert restored.dataset_id == config.dataset_id
     assert restored.dataset_revision == config.dataset_revision
     assert restored.text_field == config.text_field
@@ -505,6 +507,8 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
     assert provided_result.model_tokenizer_revision_match is None
     assert provided_report["tokenizer_name_or_path"] is None
     assert provided_report["tokenizer_revision"] is None
+    assert provided_result.tokenizer_object_required is True
+    assert provided_report["tokenizer_object_required"] is True
     provided_checkpoint = provided_result.summary_path.parent / "checkpoint-4"
     provided_checkpoint.mkdir()
     torch.save({"schema_version": 1}, provided_checkpoint / "trainer_state.pt")
@@ -514,6 +518,28 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
     )
     assert restored_provided_config.dataset_id is None
     assert restored_provided_config.dataset_revision is None
+    with pytest.raises(ValueError, match="Pass that tokenizer object again"):
+        run_finetuning(
+            restored_provided_config,
+            train_dataset=FakeDataset([{"text": "train"}]),
+            eval_dataset=FakeDataset([{"text": "eval"}]),
+        )
+
+    different_tokenizer = FakeTokenizer()
+    different_tokenizer.init_kwargs = {
+        "tokenizer_file": (
+            "/cache/models--org--other/snapshots/"
+            + "d" * 40
+            + "/tokenizer.json"
+        )
+    }
+    with pytest.raises(ValueError, match="does not match the immutable revision"):
+        run_finetuning(
+            restored_provided_config,
+            train_dataset=FakeDataset([{"text": "train"}]),
+            eval_dataset=FakeDataset([{"text": "eval"}]),
+            tokenizer=different_tokenizer,
+        )
 
     # Model and tokenizer repositories resolve different commit SHAs. The
     # tokenizer revision must never be used to select the model snapshot or

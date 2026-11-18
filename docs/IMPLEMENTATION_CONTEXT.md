@@ -21,7 +21,9 @@ progress: `run_finetuning` accepts separate tokenizer IDs and revisions,
 records each source independently, and preserves same-source snapshot pinning.
 Known token-ID bounds and static context limits are checked before training;
 unknown structural checks are reported. Token meanings remain unverified and
-are the user's responsibility. This work adds no TPU evidence.
+are the user's responsibility. Resume restores resolved immutable model and
+tokenizer commits; an unidentifiable supplied tokenizer must be passed again.
+This work adds no TPU evidence.
 
 The merged `main` branch exposes two task-focused, Hugging Face-style entry
 points: `run_pretraining(TrainLMPretrainingConfig(...))` for random-weight
@@ -173,8 +175,11 @@ weights. Before training, the report records token-ID/embedding and known
 context-length checks; incompatible IDs or a sequence longer than a known
 static context limit fail early. Token semantic compatibility is explicitly
 `not_verified_by_trainlm` and remains the user's responsibility. Regression
-coverage passes under the established CPU environment; no TPU or live-Hub
-validation is implied.
+coverage passes under the established CPU environment. Resume now pins
+resolved model/tokenizer commits instead of movable branch names, requires a
+source-less tokenizer object again, and checks that object's recorded commit
+when available. This does not verify arbitrary dataset-stream identity or
+provide TPU/live-Hub validation.
 
 The entries below preserve the API and validation history. Branch names,
 intermediate notebook controls, and test counts in those entries describe past
