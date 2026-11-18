@@ -175,7 +175,8 @@ def run_pretraining(
     ``train``, ``evaluate``, and ``save_model`` methods. For raw HF Dataset
     objects, set ``dataset_source="provided"`` and pass both splits here. Set
     ``data_format="tokens"`` for ``input_ids`` plus an optional
-    ``attention_mask``; TrainLM generates causal labels from the IDs.
+    ``attention_mask``, ``labels`` and ``loss_mask``; supplied labels and masks
+    are preserved, while missing labels are generated from ``input_ids``.
 
     The report is written even when model preparation, training, evaluation,
     or export fails. In that case :class:`TrainLMPretrainingError` identifies
@@ -379,7 +380,8 @@ def _initial_report(
             ),
             "data_format": config.data_format,
             "causal_target_policy": (
-                "TrainLM copies input_ids to labels and applies one next-token shift."
+                "TrainLM preserves aligned labels/loss masks, generates labels "
+                "from input_ids when absent, and applies one next-token shift."
             ),
             "tokenizer_dataset_match": (
                 "not_verified_by_trainlm"

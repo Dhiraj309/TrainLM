@@ -905,7 +905,8 @@ class TrainLMTrainer:
         packed-data preparation. Set ``dataset_source="provided"`` and pass
         ``train_dataset`` and ``eval_dataset`` objects to prepare HF Dataset
         splits without loading them again. Use ``data_format="tokens"`` for
-        pretokenized ``input_ids``; TrainLM generates labels and shifts once.
+        pretokenized ``input_ids`` with optional aligned labels and loss masks;
+        TrainLM preserves them and applies the next-token shift once.
         Matching inputs reuse integrity-checked tokenizer and packed-shard artifacts in
         ``config.output_dir``. Native TorchTPU must be explicitly selected and
         remains experimental. Set

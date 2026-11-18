@@ -19,13 +19,14 @@ pretrained fine-tuning helper also accepts prepared HF Dataset rows through
 batches. The current HF-03 branch also accepts raw-text and tokenized HF
 Dataset objects in `run_pretraining` / `TrainLMTrainer.from_scratch`, with
 fingerprinted preparation inputs and resume checks. For token inputs, TrainLM
-adds EOS when absent, builds labels from `input_ids`, and applies one causal
-shift; caller labels and loss masks are rejected, and selected tokenizer
-provenance is recorded while compatibility remains caller responsibility. Unified
-provenance remains incomplete. HF-04–HF-08 remain planned; notebook presets do
-not complete those workflows. CI for PR #140 commit
-`0b765601fea2ea3416415b23af9c73970bf53d5f` passed both core profiles. The new
-token-input slice passes 54 local tests plus 14 subtests; hosted CI is pending.
+adds EOS when absent, preserves optional aligned labels and loss masks in
+checksummed sidecars, derives labels from `input_ids` when absent, and applies
+one causal shift. Selected tokenizer provenance is recorded while compatibility
+remains caller responsibility. Unified provenance remains incomplete. HF-04–
+HF-08 remain planned; notebook presets do not complete those workflows. The
+previous token-input slice passed 54 local tests plus 14 subtests, and CI for
+`e4e1c9f621148a76cf10efb6d00ceb5769d4e5ce` passed both core profiles. This
+follow-up passes 78 focused local tests plus 14 subtests; hosted CI is pending.
 T0–T11 remains the runtime architecture/evidence plan; the M0–M17
 specification below remains historical.
 

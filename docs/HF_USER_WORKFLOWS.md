@@ -54,7 +54,7 @@ remain separate scopes. Unsupported cases need an actionable early error.
 | Reuse an HF tokenizer | Scratch defaults to the model repository's tokenizer or accepts independent `tokenizer_name_or_path` and `tokenizer_revision`; `tokenizer_mode="train_bpe"` retains corpus training for random initialization | HF-02 fingerprints tokenizer mapping and resolved source; independently hosted token meaning remains the user's responsibility |
 | Independently hosted tokenizer | `run_finetuning` accepts separate model/tokenizer IDs and revisions, resolves them independently, and checks known token-ID bounds and static context limits | Token meanings cannot be proven from Hub IDs or vocabulary sizes; the report marks them unverified and an explicit user policy remains |
 | Raw HF datasets | Scratch streams pinned Hub text and accepts supplied raw-text or tokenized HF `Dataset` splits with fingerprinted cache identity; fine-tuning accepts HF `Dataset` splits and row formatters | Scratch still needs arbitrary data files and a shared text formatter contract |
-| Pretokenized HF datasets | Fine-tuning accepts `input_ids` with optional labels/masks; scratch/CPT accepts `input_ids` and optional attention masks, generates labels and shifts once, and records the selected tokenizer source plus Dataset fingerprints | Verify tokenizer-to-dataset semantics and unify provenance and resume identity across workflows |
+| Pretokenized HF datasets | Fine-tuning and scratch/CPT accept `input_ids` with optional aligned labels and masks; scratch/CPT preserves them in checksummed sidecars, derives labels only when absent, and shifts once | Verify tokenizer-to-dataset semantics and unify provenance and resume identity across workflows |
 | Modern HF vocabularies | Packed writer and scratch config support uint32 IDs; scratch derives required capacity from the largest tokenizer ID, including sparse/added IDs | HF-02 removed the 65,536 ceiling; a CPU round-trip covers token ID 70,000 |
 | Train/evaluate/save/resume | Public trainer and helper lifecycles exist; scratch has strong prepared-data identity checks | Share contracts across HF data paths; include tokenizer/data identity and declare which streams can resume exactly |
 | Standard HF model export | `save_model` uses `save_pretrained` and saves the processing class when supplied | Verify a complete export independently of TrainLM, including tokenizer and applicable generation configuration |
@@ -246,13 +246,14 @@ non-overlapping slices. Raw local text files and text-column tokenization
 remain supported. The pretrained `run_finetuning` helper also accepts
 prepared HF `Dataset` splits with `data_format="tokens"`: it validates aligned
 token columns, checks known model embedding bounds, preserves unshifted labels
-and masks, and pads ragged batches. Tokenized scratch/CPT input uses a separate
-contract: TrainLM makes targets from `input_ids`, applies one next-token shift,
-and rejects caller labels, loss masks, special-token masks, position IDs, and
-token-type IDs. It
-records the selected HF tokenizer source and mapping, but cannot verify that
-the dataset token IDs were produced by that tokenizer. Arbitrary local data
-files and unified source/resume fingerprints remain outstanding.
+and masks, and pads ragged batches. Tokenized scratch/CPT accepts optional
+aligned labels and loss masks. It packs caller labels and masks in
+checksummed sidecars, derives labels from `input_ids` only when labels are
+absent, and applies one next-token shift. Special-token masks, position IDs,
+and token-type IDs remain unsupported. TrainLM records the selected HF
+tokenizer source and mapping, but cannot verify that the dataset token IDs were
+produced by that tokenizer. Arbitrary local data files and unified
+source/resume fingerprints remain outstanding.
 Raw text HF `Dataset` splits now enter scratch/CPT through
 `run_pretraining(..., train_dataset=..., eval_dataset=...)` or
 `TrainLMTrainer.from_scratch`, using `dataset_source="provided"`. Their stable
@@ -342,11 +343,15 @@ print(result.summary())
 ```
 
 Scratch/CPT token input is also available with `data_format="tokens"`. The
-dataset must contain `input_ids` and may contain `attention_mask`; remove
-`labels`, `loss_mask`, `special_tokens_mask`, positional IDs, and token-type
-IDs. TrainLM strips masked padding, adds EOS to rows that do not end with EOS,
-builds next-token labels from the resulting token stream, and applies the shift
-once internally.
+dataset must contain `input_ids` and may contain aligned `attention_mask`,
+`labels`, and `loss_mask`. Labels use token IDs or `-100`; loss masks use zero
+or one. TrainLM strips left/right attention padding, adds EOS when a row lacks
+it, and applies the causal shift once. Caller labels and loss masks are
+preserved through packed data. When labels are omitted, TrainLM uses
+`input_ids`; when it appends EOS to labeled rows, it appends an EOS target
+unless the previous target was ignored. An explicit loss mask's final value
+is carried onto that appended EOS. Remove `special_tokens_mask`, positional
+IDs, and token-type IDs because those fields are not yet supported here.
 Choose the same model or tokenizer source used to create the IDs. TrainLM
 records that source and its token mapping, but cannot prove the token meaning
 matches the dataset's producer. Put the matching tokenizer source and immutable

@@ -14,6 +14,7 @@ TokenDType = Literal["uint16", "uint32", "int32", "int64"]
 ByteOrder = Literal["little", "big"]
 CompatibilityProfile = Literal["explicit_v1", "legacy_1024_uint16"]
 DocumentIndexStorage = Literal["unavailable", "uint64_offsets"]
+SidecarDType = Literal["uint8", "int64"]
 
 _DTYPE_FORMATS: dict[str, tuple[str, int]] = {
     "uint16": ("H", 2),
@@ -87,6 +88,27 @@ class DocumentIndex:
 
 
 @dataclass(frozen=True, slots=True)
+class TokenSidecar:
+    """Checksummed token-aligned labels or a byte loss mask."""
+
+    path: str
+    dtype: SidecarDType
+    sha256: str
+    size_bytes: int
+
+    def __post_init__(self) -> None:
+        _require_relative_path("sidecar path", self.path)
+        if self.dtype not in {"uint8", "int64"}:
+            raise ValueError("sidecar dtype must be 'uint8' or 'int64'.")
+        _require_sha256("sidecar sha256", self.sha256)
+        _require_integer("sidecar size_bytes", self.size_bytes, minimum=1)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> "TokenSidecar":
+        return cls(**data)
+
+
+@dataclass(frozen=True, slots=True)
 class PackedBinaryShardManifest:
     """Complete interpretation and integrity contract for one token shard."""
 
@@ -105,6 +127,8 @@ class PackedBinaryShardManifest:
     sha256: str
     documents: DocumentIndex = field(default_factory=DocumentIndex)
     manifest_type: Literal["packed_binary_shard"] = "packed_binary_shard"
+    target_ids: TokenSidecar | None = None
+    loss_mask: TokenSidecar | None = None
 
     def __post_init__(self) -> None:
         if self.schema_version != 1:
@@ -138,6 +162,29 @@ class PackedBinaryShardManifest:
         _require_sha256("sha256", self.sha256)
         if not isinstance(self.documents, DocumentIndex):
             raise ValueError("documents must be a DocumentIndex.")
+        for name, sidecar, dtype, item_size in (
+            ("target_ids", self.target_ids, "int64", 8),
+            ("loss_mask", self.loss_mask, "uint8", 1),
+        ):
+            if sidecar is None:
+                continue
+            if not isinstance(sidecar, TokenSidecar):
+                raise ValueError(f"{name} must be a TokenSidecar when provided.")
+            if sidecar.dtype != dtype:
+                raise ValueError(f"{name} sidecar dtype must be {dtype!r}.")
+            if sidecar.size_bytes != self.token_count * item_size:
+                raise ValueError(
+                    f"{name} sidecar size must match the token count and dtype."
+                )
+        payload_paths = [self.data_path]
+        if self.documents.path is not None:
+            payload_paths.append(self.documents.path)
+        if self.target_ids is not None:
+            payload_paths.append(self.target_ids.path)
+        if self.loss_mask is not None:
+            payload_paths.append(self.loss_mask.path)
+        if len(payload_paths) != len(set(payload_paths)):
+            raise ValueError("Packed shard payload paths must be unique.")
 
         item_size = _DTYPE_FORMATS[self.token_dtype][1]
         expected_size = self.header_bytes + self.token_count * item_size
@@ -175,6 +222,10 @@ class PackedBinaryShardManifest:
         values["documents"] = DocumentIndex.from_dict(
             values.get("documents", {})
         )
+        for name in ("target_ids", "loss_mask"):
+            sidecar = values.get(name)
+            if sidecar is not None and not isinstance(sidecar, TokenSidecar):
+                values[name] = TokenSidecar.from_dict(sidecar)
         return cls(**values)
 
     @classmethod
@@ -294,11 +345,58 @@ def _validate_document_index(
     return documents.document_count
 
 
+def _validate_token_sidecar(
+    manifest: PackedBinaryShardManifest,
+    sidecar: TokenSidecar | None,
+    path: Path | None,
+    *,
+    name: str,
+    chunk_bytes: int,
+) -> None:
+    if sidecar is None:
+        if path is not None:
+            raise ValueError(f"Manifest declares no {name} sidecar.")
+        return
+    if path is None:
+        raise ValueError(f"{name} sidecar file is required by the manifest.")
+    if not path.is_file():
+        raise FileNotFoundError(f"{name} sidecar does not exist: {path}")
+    if path.stat().st_size != sidecar.size_bytes:
+        raise ValueError(f"{name} sidecar size does not match the manifest.")
+    if _file_sha256(path, chunk_bytes=chunk_bytes) != sidecar.sha256:
+        raise ValueError(f"{name} sidecar checksum does not match the manifest.")
+
+    item_size = {"int64": 8, "uint8": 1}[sidecar.dtype]
+    format_code = {"int64": "q", "uint8": "B"}[sidecar.dtype]
+    unpack = struct.Struct(f"<{format_code}")
+    read_size = max(1, chunk_bytes // item_size) * item_size
+    observed_count = 0
+    with path.open("rb") as handle:
+        while chunk := handle.read(read_size):
+            if len(chunk) % item_size:
+                raise ValueError(f"{name} sidecar ends with an incomplete value.")
+            for (value,) in struct.iter_unpack(unpack.format, chunk):
+                if sidecar.dtype == "int64" and value != -100 and not (
+                    0 <= value < manifest.vocab_size
+                ):
+                    raise ValueError(
+                        f"{name} token id {value} is outside "
+                        f"[-100, {manifest.vocab_size})."
+                    )
+                if sidecar.dtype == "uint8" and value not in {0, 1}:
+                    raise ValueError(f"{name} values must be 0 or 1.")
+                observed_count += 1
+    if observed_count != manifest.token_count:
+        raise ValueError(f"{name} sidecar count does not match the token count.")
+
+
 def validate_packed_binary_shard(
     manifest: PackedBinaryShardManifest,
     data_file: str | Path,
     *,
     document_index_file: str | Path | None = None,
+    target_ids_file: str | Path | None = None,
+    loss_mask_file: str | Path | None = None,
     chunk_bytes: int = 8 * 1024 * 1024,
     chunk_tokens: int = 1_048_576,
 ) -> ValidatedPackedBinaryShard:
@@ -338,6 +436,20 @@ def validate_packed_binary_shard(
     document_count = _validate_document_index(
         manifest,
         None if document_index_file is None else Path(document_index_file),
+        chunk_bytes=chunk_bytes,
+    )
+    _validate_token_sidecar(
+        manifest,
+        manifest.target_ids,
+        None if target_ids_file is None else Path(target_ids_file),
+        name="target_ids",
+        chunk_bytes=chunk_bytes,
+    )
+    _validate_token_sidecar(
+        manifest,
+        manifest.loss_mask,
+        None if loss_mask_file is None else Path(loss_mask_file),
+        name="loss_mask",
         chunk_bytes=chunk_bytes,
     )
     return ValidatedPackedBinaryShard(

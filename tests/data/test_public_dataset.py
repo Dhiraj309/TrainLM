@@ -4,12 +4,18 @@ from __future__ import annotations
 
 import hashlib
 import struct
+from dataclasses import replace
 
 import pytest
 import torch
 
 from trainlm import PackedBinDataset
-from trainlm.data import HuggingFaceShardSourceConfig, HuggingFaceShardSpec
+from trainlm.data import (
+    HuggingFaceShardSourceConfig,
+    HuggingFaceShardSpec,
+    TokenSidecar,
+    validate_packed_binary_shard,
+)
 from trainlm.data.huggingface import HuggingFacePackedShardSource
 
 from .test_contiguous_reader import _local_shard
@@ -80,6 +86,70 @@ def test_hub_dataset_uses_revision_pinned_validated_source(tmp_path, monkeypatch
     assert tuple(staged.glob("*.manifest.json"))
     assert (staged / shard.manifest.data_path).is_file()
     dataset.close()
+
+
+def test_supervision_sidecars_are_staged_for_coordinator_worker(tmp_path, monkeypatch):
+    shard = _local_shard(
+        tmp_path,
+        shard_id="supervised",
+        tokens=(1, 2, 3, 4, 5, 6, 7, 8),
+    )
+    targets = (9, 10, -100, 12, 13, 14, 15, 16)
+    target_path = tmp_path / "supervised.target_ids.i64"
+    target_path.write_bytes(struct.pack("<8q", *targets))
+    masks = bytes((1, 1, 1, 0, 1, 1, 1, 1))
+    mask_path = tmp_path / "supervised.loss_mask.u8"
+    mask_path.write_bytes(masks)
+    manifest = replace(
+        shard.manifest,
+        target_ids=TokenSidecar(
+            path=target_path.name,
+            dtype="int64",
+            sha256=hashlib.sha256(target_path.read_bytes()).hexdigest(),
+            size_bytes=target_path.stat().st_size,
+        ),
+        loss_mask=TokenSidecar(
+            path=mask_path.name,
+            dtype="uint8",
+            sha256=hashlib.sha256(masks).hexdigest(),
+            size_bytes=len(masks),
+        ),
+    )
+    shard = replace(
+        shard,
+        manifest=manifest,
+        validation=validate_packed_binary_shard(
+            manifest,
+            shard.data_file,
+            target_ids_file=target_path,
+            loss_mask_file=mask_path,
+        ),
+        target_ids_file=target_path,
+        loss_mask_file=mask_path,
+    )
+    monkeypatch.setattr(
+        HuggingFacePackedShardSource,
+        "resolve",
+        lambda self: (shard,),
+    )
+    source = HuggingFaceShardSourceConfig(
+        repo_id="owner/supervised",
+        revision="a" * 40,
+        shards=(HuggingFaceShardSpec("supervised", "supervised.manifest.json"),),
+    )
+    dataset = PackedBinDataset.from_hub(source, sequence_length=4)
+
+    staged = dataset.coordinator_manifest_dir(tmp_path / "coordinator")
+    assert (staged / target_path.name).is_file()
+    assert (staged / mask_path.name).is_file()
+    worker_dataset = PackedBinDataset.from_directory(staged, sequence_length=4)
+    try:
+        first_batch = next(iter(worker_dataset))
+    finally:
+        dataset.close()
+        worker_dataset.close()
+    assert first_batch["labels"].tolist() == list(targets[:4])
+    assert first_batch["loss_mask"].tolist() == [True, True, True, False]
 
 
 def test_hub_bin_range_downloads_and_validates_end_to_end(tmp_path, monkeypatch):

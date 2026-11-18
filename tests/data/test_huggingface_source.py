@@ -14,6 +14,7 @@ from trainlm.data import (
     HuggingFaceShardSourceConfig,
     HuggingFaceShardSpec,
     PackedBinaryShardManifest,
+    TokenSidecar,
 )
 
 
@@ -144,6 +145,66 @@ def test_offline_resolution_reuses_only_cached_files(tmp_path):
     )
 
     assert source.resolve()[0].shard_id == "validation-00000"
+
+
+def test_source_downloads_and_validates_label_and_mask_sidecars(tmp_path):
+    spec, files = _add_legacy_shard(
+        tmp_path,
+        shard_id="train-supervised",
+        tokens=(1, 2, 3, 4),
+    )
+    target_path = "fineweb-edu/train-supervised.target_ids.i64"
+    mask_path = "fineweb-edu/train-supervised.loss_mask.u8"
+    targets = struct.pack("<4q", 1, -100, 3, 4)
+    masks = bytes((1, 1, 0, 1))
+    target_file = tmp_path / target_path
+    mask_file = tmp_path / mask_path
+    target_file.parent.mkdir(parents=True, exist_ok=True)
+    target_file.write_bytes(targets)
+    mask_file.write_bytes(masks)
+    manifest_file = files[spec.manifest_path]
+    manifest = PackedBinaryShardManifest.from_json(
+        manifest_file.read_text(encoding="utf-8")
+    )
+    manifest_file.write_text(
+        replace(
+            manifest,
+            target_ids=TokenSidecar(
+                path=target_path,
+                dtype="int64",
+                sha256=hashlib.sha256(targets).hexdigest(),
+                size_bytes=len(targets),
+            ),
+            loss_mask=TokenSidecar(
+                path=mask_path,
+                dtype="uint8",
+                sha256=hashlib.sha256(masks).hexdigest(),
+                size_bytes=len(masks),
+            ),
+        ).to_json(),
+        encoding="utf-8",
+    )
+    files[target_path] = target_file
+    files[mask_path] = mask_file
+    downloader = FakeHubDownload(files)
+    config = HuggingFaceShardSourceConfig(
+        repo_id="owner/supervised",
+        revision=REVISION,
+        shards=(spec,),
+    )
+
+    resolved = HuggingFacePackedShardSource(
+        config, download_file=downloader
+    ).resolve()[0]
+
+    assert resolved.target_ids_file == target_file
+    assert resolved.loss_mask_file == mask_file
+    assert [call["filename"] for call in downloader.calls] == [
+        spec.manifest_path,
+        manifest.data_path,
+        target_path,
+        mask_path,
+    ]
 
 
 def test_source_rejects_identity_mismatch_and_corrupt_payload(tmp_path):
