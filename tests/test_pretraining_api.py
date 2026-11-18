@@ -134,6 +134,70 @@ def test_pretraining_config_accepts_paired_local_text_files(tmp_path):
         )
 
 
+@pytest.mark.parametrize(
+    ("suffix", "expected_format"),
+    [(".csv", "csv"), (".jsonl", "json"), (".parquet", "parquet")],
+)
+def test_pretraining_config_infers_paired_structured_local_formats(
+    tmp_path, suffix, expected_format
+):
+    train_file = tmp_path / f"train{suffix}"
+    validation_file = tmp_path / f"validation{suffix}"
+    train_file.write_bytes(b"train")
+    validation_file.write_bytes(b"validation")
+
+    config = _config(
+        tmp_path / "run",
+        dataset_id=None,
+        dataset_revision=None,
+        train_file=train_file,
+        validation_file=validation_file,
+        text_field="body",
+    )
+
+    from trainlm.pretraining import _configured_local_data_format
+
+    assert _configured_local_data_format(config) == expected_format
+    assert config.text_field == "body"
+
+
+def test_pretraining_config_rejects_mixed_local_file_formats(tmp_path):
+    train_file = tmp_path / "train.csv"
+    validation_file = tmp_path / "validation.jsonl"
+    train_file.write_text("text\ntrain\n", encoding="utf-8")
+    validation_file.write_text('{"text":"validation"}\n', encoding="utf-8")
+
+    with pytest.raises(ValueError, match="same data format"):
+        _config(
+            tmp_path / "run",
+            dataset_id=None,
+            dataset_revision=None,
+            train_file=train_file,
+            validation_file=validation_file,
+        )
+
+
+def test_pretraining_config_accepts_explicit_local_format_for_extensionless_files(
+    tmp_path,
+):
+    train_file = tmp_path / "train"
+    validation_file = tmp_path / "validation"
+    train_file.write_bytes(b"train")
+    validation_file.write_bytes(b"validation")
+    config = _config(
+        tmp_path / "run",
+        dataset_id=None,
+        dataset_revision=None,
+        train_file=train_file,
+        validation_file=validation_file,
+        local_data_format="json",
+    )
+
+    from trainlm.pretraining import _configured_local_data_format
+
+    assert _configured_local_data_format(config) == "json"
+
+
 def test_tokenized_pretraining_requires_a_selected_hf_tokenizer(tmp_path):
     source = {
         "dataset_source": "provided",
@@ -573,6 +637,59 @@ def test_from_scratch_streams_local_text_files_and_checks_content_hashes(
     train_file.write_text("changed corpus\n", encoding="utf-8")
     with pytest.raises(ValueError, match="different dataset/tokenizer settings"):
         TrainLMTrainer.from_scratch(config)
+
+
+@pytest.mark.parametrize(
+    ("suffix", "expected_builder"), [(".csv", "csv"), (".jsonl", "json")]
+)
+def test_from_scratch_streams_structured_local_files_and_fingerprints_format(
+    tmp_path, monkeypatch, suffix, expected_builder
+):
+    train_file = tmp_path / f"train{suffix}"
+    validation_file = tmp_path / f"validation{suffix}"
+    train_file.write_text("source fixture\n", encoding="utf-8")
+    validation_file.write_text("validation fixture\n", encoding="utf-8")
+    rows = [
+        {"body": f"A structured local sample about trees and rivers {index}. " * 4}
+        for index in range(16)
+    ]
+    calls = []
+
+    class StreamingRows:
+        def __iter__(self):
+            return iter(rows)
+
+    def load_dataset(builder, *, data_files, split, streaming):
+        calls.append((builder, data_files[split], split, streaming))
+        return StreamingRows()
+
+    datasets_module = ModuleType("datasets")
+    datasets_module.load_dataset = load_dataset
+    monkeypatch.setitem(sys.modules, "datasets", datasets_module)
+    config = _config(
+        tmp_path / "structured-run",
+        dataset_id=None,
+        dataset_revision=None,
+        train_file=train_file,
+        validation_file=validation_file,
+        text_field="body",
+    )
+
+    trainer = TrainLMTrainer.from_scratch(config)
+
+    assert trainer.model.config.model_type == "gpt2"
+    assert [call[0] for call in calls] == [
+        expected_builder,
+        expected_builder,
+        expected_builder,
+    ]
+    cache = json.loads(
+        (config.output_dir / "preparation_cache.json").read_text(encoding="utf-8")
+    )
+    structured = cache["inputs"]["local_structured_files"]
+    assert structured["format"] == expected_builder
+    assert structured["train"]["path"] == str(train_file.resolve())
+    assert len(structured["train"]["sha256"]) == 64
 
 
 def test_scratch_gradient_checkpointing_trains_and_exports_with_cache(

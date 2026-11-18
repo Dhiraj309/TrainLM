@@ -327,31 +327,45 @@ def test_run_pretraining_accepts_tokenized_hf_dataset_and_records_label_policy(
     ]
 
 
-def test_run_pretraining_reports_and_restores_local_text_files(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    ("suffix", "expected_format", "field"),
+    [(".txt", "text", "text"), (".csv", "csv", "body")],
+)
+def test_run_pretraining_reports_and_restores_local_files(
+    tmp_path, monkeypatch, suffix, expected_format, field
+):
     rows = [
-        {"text": f"Local corpus document about lakes and mountains {index}. " * 4}
+        {field: f"Local corpus document about lakes and mountains {index}. " * 4}
         for index in range(16)
     ]
     datasets = ModuleType("datasets")
     datasets.load_dataset = lambda *args, **kwargs: iter(rows)
     monkeypatch.setitem(sys.modules, "datasets", datasets)
 
-    train_file = tmp_path / "train.txt"
-    validation_file = tmp_path / "validation.txt"
-    train_file.write_text("training data\n", encoding="utf-8")
-    validation_file.write_text("validation data\n", encoding="utf-8")
+    train_file = tmp_path / f"train{suffix}"
+    validation_file = tmp_path / f"validation{suffix}"
+    train_file.write_text("local training data\n", encoding="utf-8")
+    validation_file.write_text("local validation data\n", encoding="utf-8")
     config = replace(
         _config(tmp_path / "local-artifacts"),
         dataset_id=None,
         dataset_revision=None,
         train_file=train_file,
         validation_file=validation_file,
+        text_field=field,
     )
 
     result = run_pretraining(config)
 
     assert result.status == "passed"
-    assert result.report["data"]["source_type"] == "local_text_files"
+    assert result.report["data"]["source_type"] == (
+        "local_text_files" if expected_format == "text" else "local_structured_files"
+    )
+    assert result.report["data"]["local_data_format"] == expected_format
+    if expected_format == "text":
+        assert "format" not in result.report["data"]["local_files"]
+    else:
+        assert result.report["data"]["local_files"]["format"] == expected_format
     assert result.report["data"]["local_files"]["train"]["path"] == str(
         train_file.resolve()
     )
