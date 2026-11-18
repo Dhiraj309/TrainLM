@@ -44,6 +44,9 @@ follow-up passes 43 focused CPU tests; it adds no live Hub or TPU evidence.
 The checkpoint-compatibility fix omits the default `local_data_format="auto"`
 from new resume fingerprints so pre-field manifests remain compatible; explicit
 parser choices are retained. Its focused CPU regression passes.
+The fine-tuning quickstart now bounds its Hub train/validation slices before
+tokenization and avoids duplicate scheduled-plus-final evaluation for its
+three-step smoke run; larger workflows can widen the slices.
 T0–T11 remains the runtime architecture/evidence plan; the M0–M17
 specification below remains historical.
 

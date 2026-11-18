@@ -10,9 +10,11 @@ which initializes random weights and learns a tokenizer.
 local model export. When it loads a dataset from the Hub, give it an immutable
 dataset revision and a distinct validation split:
 
-The notebook is the quick path: it uses a tiny model and three training steps
-to verify the workflow. Use CPU or GPU; native TorchTPU fine-tuning is not yet
-validated. The code below is a fuller example for a larger model and budget.
+The notebook is the quick path: it uses a tiny model, three training steps,
+and bounded Hub split slices (1,000 training rows and 100 validation rows),
+so data preprocessing stays small too. It performs one final evaluation.
+Use CPU or GPU; native TorchTPU fine-tuning is not yet validated. The code
+below is a fuller example for a larger model and budget.
 
 ```python
 from trainlm import (
