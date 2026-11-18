@@ -335,7 +335,51 @@ result = run_finetuning(config, resume_from_checkpoint="latest")
   selection is not enabled. The legacy PyTorch/XLA coordinator is not supported
   by this one-call export path.
 
-For already-tokenized datasets, datasets without Hugging Face Dataset's
-`map`/`column_names` interface, or direct control of the training lifecycle,
-use [`TrainLMTrainer.from_pretrained`](../../src/trainlm/api.py) with `train()`,
-`evaluate()`, and `save_model()`.
+## Fine-tune from an already-tokenized HF dataset
+
+If your HF dataset already contains `input_ids`, pass its train and validation
+splits directly with `data_format="tokens"`. Use the tokenizer that created
+those IDs. TrainLM validates the rows, preserves unshifted causal-LM labels and
+masks, and pads variable-length examples; it does not decode or tokenize them
+again.
+TrainLM uses the model's tokenizer by default; for a separate tokenizer,
+configure `tokenizer_name_or_path` and `tokenizer_revision` to match the token
+IDs.
+
+```python
+from datasets import load_dataset
+from trainlm import (
+    TrainLMFineTuningConfig,
+    TrainLMTrainingArguments,
+    run_finetuning,
+)
+
+MODEL_ID = "your-org/your-causal-lm"
+MODEL_REVISION = "<model-commit-sha>"
+DATASET_ID = "your-org/your-tokenized-dataset"
+DATASET_REVISION = "<dataset-commit-sha>"
+
+dataset = load_dataset(DATASET_ID, revision=DATASET_REVISION)
+config = TrainLMFineTuningConfig(
+    model_name_or_path=MODEL_ID,
+    model_revision=MODEL_REVISION,
+    data_format="tokens",
+    args=TrainLMTrainingArguments(
+        output_dir="runs/tokenized-finetune",
+        max_steps=100,
+        sequence_length=512,
+    ),
+)
+result = run_finetuning(
+    config,
+    train_dataset=dataset["train"],
+    eval_dataset=dataset["validation"],
+)
+print(result.summary())
+```
+
+Replace the IDs, immutable dataset revision, and split names for your dataset.
+TrainLM checks structural compatibility and known token-ID bounds, but the
+dataset's token meanings must match the tokenizer. For datasets without
+Hugging Face Dataset's `map`/`column_names` interface or direct lifecycle
+control, use [`TrainLMTrainer.from_pretrained`](../../src/trainlm/api.py).
