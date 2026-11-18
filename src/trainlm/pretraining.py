@@ -86,8 +86,9 @@ def _validate_disjoint_split_selectors(
         return
     if not train[4] or not validation[4] or train[3] != validation[3]:
         raise ValueError(
-            "Training and validation cannot select the same source split unless "
-            "both use disjoint slices in the same units."
+            "Training and validation splits must be distinct; selecting the same "
+            "source split requires both selectors to use disjoint slices in the "
+            "same units."
         )
     unit = train[3]
     default_stop = 100 if unit == "%" else math.inf
