@@ -224,6 +224,99 @@ def test_from_scratch_accepts_fingerprinted_raw_hf_dataset_objects(
         )
 
 
+def test_from_scratch_formats_multicolumn_text_datasets_and_fingerprints_name(
+    tmp_path,
+):
+    class PromptDataset:
+        column_names = ["prompt", "completion"]
+
+        def __init__(self, fingerprint, label):
+            self._fingerprint = fingerprint
+            self.rows = [
+                {
+                    "prompt": f"Question about language model systems {index}",
+                    "completion": (
+                        f"{label} response about training data {index}. " * 4
+                    ),
+                }
+                for index in range(16)
+            ]
+
+        def __iter__(self):
+            return iter(self.rows)
+
+        def __len__(self):
+            return len(self.rows)
+
+    config = _config(
+        tmp_path / "formatted-run",
+        dataset_source="provided",
+        dataset_id=None,
+        dataset_revision=None,
+        dataset_config_name=None,
+        text_formatter_name="prompt-completion-v1",
+    )
+    train_data = PromptDataset("train-prompt-v1", "train")
+    eval_data = PromptDataset("eval-prompt-v1", "eval")
+    formatted_rows = []
+
+    def format_prompt(row):
+        formatted = f"Question: {row['prompt']}\nAnswer: {row['completion']}"
+        formatted_rows.append(formatted)
+        return formatted
+
+    trainer = TrainLMTrainer.from_scratch(
+        config,
+        train_dataset=train_data,
+        eval_dataset=eval_data,
+        formatting_func=format_prompt,
+    )
+
+    assert len(formatted_rows) == 32
+    metadata = trainer.train_dataset._trainlm_dataset_source_metadata
+    assert metadata["text_formatter_name"] == "prompt-completion-v1"
+    cache = json.loads(
+        (config.output_dir / "preparation_cache.json").read_text(encoding="utf-8")
+    )
+    assert cache["inputs"]["text_formatter_name"] == "prompt-completion-v1"
+    run_config = json.loads(
+        (config.output_dir / "run_config.json").read_text(encoding="utf-8")
+    )
+    assert (
+        run_config["configuration"]["pretraining"]["text_formatter_name"]
+        == "prompt-completion-v1"
+    )
+
+    previous_call_count = len(formatted_rows)
+    trainer.train_dataset.close()
+    trainer.eval_dataset.close()
+    cached_trainer = TrainLMTrainer.from_scratch(
+        config,
+        train_dataset=train_data,
+        eval_dataset=eval_data,
+        formatting_func=format_prompt,
+    )
+    assert len(formatted_rows) == previous_call_count
+    cached_trainer.train_dataset.close()
+    cached_trainer.eval_dataset.close()
+
+    changed_config = _config(
+        config.output_dir,
+        dataset_source="provided",
+        dataset_id=None,
+        dataset_revision=None,
+        dataset_config_name=None,
+        text_formatter_name="prompt-completion-v2",
+    )
+    with pytest.raises(ValueError, match="different dataset/tokenizer settings"):
+        TrainLMTrainer.from_scratch(
+            changed_config,
+            train_dataset=train_data,
+            eval_dataset=eval_data,
+            formatting_func=format_prompt,
+        )
+
+
 def test_tokenizer_capacity_uses_sparse_and_added_token_ids():
     from trainlm.pretraining import _tokenizer_vocab_capacity
 

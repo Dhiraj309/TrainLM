@@ -895,6 +895,7 @@ class TrainLMTrainer:
         *,
         train_dataset: Any | None = None,
         eval_dataset: Any | None = None,
+        formatting_func: Callable[[Mapping[str, Any]], str] | None = None,
         callbacks: Sequence[TrainerCallback] | None = None,
         extend_training_budget: bool = False,
     ) -> "TrainLMTrainer":
@@ -906,7 +907,9 @@ class TrainLMTrainer:
         ``train_dataset`` and ``eval_dataset`` objects to prepare HF Dataset
         splits without loading them again. Use ``data_format="tokens"`` for
         pretokenized ``input_ids`` with optional aligned labels and loss masks;
-        TrainLM preserves them and applies the next-token shift once.
+        TrainLM preserves them and applies the next-token shift once. For raw
+        rows with multiple columns, pass ``formatting_func`` and set its stable
+        ``text_formatter_name`` in the config; pass the same pair on resume.
         Matching inputs reuse integrity-checked tokenizer and packed-shard artifacts in
         ``config.output_dir``. Native TorchTPU must be explicitly selected and
         remains experimental. Set
@@ -920,7 +923,10 @@ class TrainLMTrainer:
             raise TypeError("extend_training_budget must be a boolean.")
         _preflight_scratch_backend(config)
         model, tokenizer, train_dataset, eval_dataset = _prepare_scratch_training(
-            config, train_dataset=train_dataset, eval_dataset=eval_dataset
+            config,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            formatting_func=formatting_func,
         )
         tokens_per_update = (
             (config.sequence_length - 1)
@@ -1680,6 +1686,8 @@ class TrainLMTrainer:
                 pretraining["dataset_revision"] = resolved_dataset_revision
         if config.dataset_config_name is None:
             pretraining.pop("dataset_config_name", None)
+        if config.text_formatter_name is None:
+            pretraining.pop("text_formatter_name", None)
         # Keep fingerprints of older default BPE runs stable after optional HF
         # source/initialization fields were added to the public config.
         for name in (

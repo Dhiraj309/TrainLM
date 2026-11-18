@@ -131,6 +131,56 @@ def test_run_pretraining_accepts_raw_hf_dataset_objects_and_records_identity(
     assert restored.config.dataset_source == "provided"
 
 
+def test_run_pretraining_accepts_named_multicolumn_text_formatter(tmp_path):
+    class PromptDataset:
+        column_names = ["prompt", "completion"]
+
+        def __init__(self, fingerprint, label):
+            self._fingerprint = fingerprint
+            self.rows = [
+                {
+                    "prompt": f"Explain language model training {index}",
+                    "completion": (
+                        f"{label} response with enough text to tokenize {index}. " * 5
+                    ),
+                }
+                for index in range(16)
+            ]
+
+        def __iter__(self):
+            return iter(self.rows)
+
+        def __len__(self):
+            return len(self.rows)
+
+    config = replace(
+        _config(tmp_path / "formatted-artifacts"),
+        dataset_source="provided",
+        dataset_id=None,
+        dataset_revision=None,
+        dataset_config_name=None,
+        text_formatter_name="prompt-completion-v1",
+    )
+    result = run_pretraining(
+        config,
+        train_dataset=PromptDataset("train-prompt-v1", "train"),
+        eval_dataset=PromptDataset("eval-prompt-v1", "validation"),
+        formatting_func=lambda row: (
+            f"Question: {row['prompt']}\nAnswer: {row['completion']}"
+        ),
+    )
+
+    assert result.status == "passed"
+    assert result.report["data"]["text_formatter_name"] == "prompt-completion-v1"
+    assert result.report["data"]["provided_datasets"]["train"]["fingerprint"] == (
+        "train-prompt-v1"
+    )
+    resume_code = result.report["resume"]["code"]
+    assert "formatting_func=formatting_func" in resume_code
+    assert "prompt-completion-v1" in resume_code
+    compile(resume_code, "resume.py", "exec")
+
+
 def test_run_pretraining_accepts_tokenized_hf_dataset_and_records_label_policy(
     tmp_path,
 ):

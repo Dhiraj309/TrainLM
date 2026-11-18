@@ -8,7 +8,7 @@ workflow is selected.
 from __future__ import annotations
 
 from array import array
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import ExitStack
 from dataclasses import dataclass, replace
 import hashlib
@@ -29,6 +29,7 @@ DEFAULT_DATASET_REVISION = "f54c09fd23315a6f9c86f9dc80f725de7d8f9c64"
 _DATASET_ID = re.compile(r"[A-Za-z0-9._-]{1,96}/[A-Za-z0-9._-]{1,96}\Z")
 _COMMIT_SHA = re.compile(r"[0-9a-f]{40}\Z")
 _FIELD_NAME = re.compile(r"[A-Za-z0-9._+-]{1,96}\Z")
+_FORMATTER_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}\Z")
 _SPLIT_SELECTOR = re.compile(
     r"(?P<name>[A-Za-z0-9._+-]{1,96})"
     r"(?:\[(?P<start>[0-9]+%?)?:(?P<stop>[0-9]+%?)?\])?\Z"
@@ -122,6 +123,9 @@ class TrainLMPretrainingConfig:
     Set ``data_format="tokens"`` with ``dataset_source="provided"`` to pack
     tokenized Dataset rows. TrainLM preserves optional caller labels and loss
     masks, creates labels from ``input_ids`` when absent, and shifts once.
+    For raw rows with multiple columns, set ``text_formatter_name`` here and
+    pass the matching ``formatting_func`` to ``run_pretraining`` or
+    ``TrainLMTrainer.from_scratch``.
     Set ``tokenizer_mode="train_bpe"`` to explicitly train a corpus tokenizer
     for random initialization. Prepared tokenizers and packed shards are
     integrity-checked and reused when their source identities match.
@@ -192,6 +196,7 @@ class TrainLMPretrainingConfig:
     eps: float = 1e-8
     max_grad_norm: float = 1.0
     dataset_config_name: str | None = None
+    text_formatter_name: str | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "output_dir", Path(self.output_dir).expanduser())
@@ -366,6 +371,17 @@ class TrainLMPretrainingConfig:
             self.text_field
         ):
             raise ValueError("text_field must be a simple field name.")
+        if self.text_formatter_name is not None and (
+            not isinstance(self.text_formatter_name, str)
+            or not _FORMATTER_NAME.fullmatch(self.text_formatter_name)
+        ):
+            raise ValueError(
+                "text_formatter_name must be a short, non-empty stable identifier."
+            )
+        if self.data_format == "tokens" and self.text_formatter_name is not None:
+            raise ValueError(
+                "text_formatter_name applies only to raw text datasets."
+            )
         train_selector = _parse_split_selector(self.train_split)
         validation_selector = _parse_split_selector(self.validation_split)
         _validate_disjoint_split_selectors(train_selector, validation_selector)
@@ -600,6 +616,7 @@ def _token_documents(
     *,
     max_examples: int,
     text_field: str = "text",
+    formatting_func: Callable[[Mapping[str, Any]], str] | None = None,
     batch_size: int = 64,
 ):
     """Yield EOS-separated token documents without materializing the split."""
@@ -617,9 +634,9 @@ def _token_documents(
     for row in dataset:
         if seen >= max_examples:
             break
-        text = row.get(text_field) if isinstance(row, Mapping) else None
-        if not isinstance(text, str):
-            raise ValueError(f"Training rows must contain a string {text_field!r} field.")
+        text = _format_scratch_text(
+            row, text_field=text_field, formatting_func=formatting_func
+        )
         pending.append(text)
         seen += 1
         if len(pending) == batch_size:
@@ -629,6 +646,48 @@ def _token_documents(
         yield from encode(pending)
     if seen == 0:
         raise ValueError("The selected dataset split contains no text examples.")
+
+
+def _format_scratch_text(
+    row: Any,
+    *,
+    text_field: str,
+    formatting_func: Callable[[Mapping[str, Any]], str] | None,
+) -> str:
+    if not isinstance(row, Mapping):
+        raise ValueError("Raw pretraining rows must be mappings.")
+    text = (
+        formatting_func(row)
+        if formatting_func is not None
+        else row.get(text_field)
+    )
+    if not isinstance(text, str):
+        if formatting_func is None:
+            raise ValueError(
+                f"Raw pretraining rows must contain a string {text_field!r} field."
+            )
+        raise ValueError(
+            "Raw pretraining formatting_func must return a string per row."
+        )
+    return text
+
+
+def _validate_scratch_text_formatter(
+    config: TrainLMPretrainingConfig,
+    formatting_func: Callable[[Mapping[str, Any]], str] | None,
+) -> None:
+    if formatting_func is not None and not callable(formatting_func):
+        raise TypeError("formatting_func must be callable when provided.")
+    if config.data_format == "tokens" and formatting_func is not None:
+        raise ValueError(
+            "formatting_func is only used with data_format='text'; tokenized "
+            "rows are passed through without decoding or retokenizing."
+        )
+    if (formatting_func is None) != (config.text_formatter_name is None):
+        raise ValueError(
+            "Set text_formatter_name in the config and pass formatting_func "
+            "together so preparation caches and resumes use the same formatter."
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -778,6 +837,7 @@ def _scratch_dataset_documents(
     config: TrainLMPretrainingConfig,
     *,
     split: Literal["train", "validation"],
+    formatting_func: Callable[[Mapping[str, Any]], str] | None = None,
 ):
     """Select text tokenization or validated prepared-token row ingestion."""
     if config.data_format == "tokens":
@@ -794,6 +854,7 @@ def _scratch_dataset_documents(
             config.max_train_examples if split == "train" else config.max_eval_examples
         ),
         text_field=config.text_field,
+        formatting_func=formatting_func,
     )
 
 
@@ -942,6 +1003,7 @@ def _train_byte_level_tokenizer(
     max_examples: int,
     vocab_size: int,
     text_field: str = "text",
+    formatting_func: Callable[[Mapping[str, Any]], str] | None = None,
 ):
     """Learn a compact tokenizer from bounded text in the training split."""
     if max_examples < 1:
@@ -964,11 +1026,9 @@ def _train_byte_level_tokenizer(
         for row in dataset:
             if seen >= max_examples:
                 break
-            text = row.get(text_field) if isinstance(row, Mapping) else None
-            if not isinstance(text, str):
-                raise ValueError(
-                    f"Tokenizer rows must contain a string {text_field!r} field."
-                )
+            text = _format_scratch_text(
+                row, text_field=text_field, formatting_func=formatting_func
+            )
             seen += 1
             yield text
         if seen == 0:
@@ -1435,6 +1495,8 @@ def _preparation_cache_inputs(
     }
     if config.dataset_config_name is not None:
         inputs["dataset_config_name"] = config.dataset_config_name
+    if config.text_formatter_name is not None:
+        inputs["text_formatter_name"] = config.text_formatter_name
     if config.dataset_source == "provided":
         if not isinstance(provided_datasets, Mapping) or set(provided_datasets) != {
             "train", "validation"
@@ -1586,7 +1648,10 @@ def _scratch_dataset_object_identity(
                     "attention_mask, labels, and loss_mask. Remove unsupported "
                     f"columns: {', '.join(unsupported)}."
                 )
-        elif config.text_field not in columns:
+        elif (
+            config.text_formatter_name is None
+            and config.text_field not in columns
+        ):
             raise ValueError(
                 f"The {split} Dataset must expose the configured text column "
                 f"{config.text_field!r}."
@@ -1890,9 +1955,12 @@ def _prepare_scratch_training(
     *,
     train_dataset: Any | None = None,
     eval_dataset: Any | None = None,
+    formatting_func: Callable[[Mapping[str, Any]], str] | None = None,
 ):
     """Build the model and reuse integrity-checked prepared data when possible."""
     import torch
+
+    _validate_scratch_text_formatter(config, formatting_func)
 
     from trainlm.data import PackedBinDataset
     from trainlm.data.writer import write_packed_binary_shard
@@ -1953,6 +2021,7 @@ def _prepare_scratch_training(
                 max_examples=config.max_train_examples,
                 vocab_size=config.tokenizer_vocab_size,
                 text_field=config.text_field,
+                formatting_func=formatting_func,
             )
         tokenizer.save_pretrained(root / "tokenizer")
 
@@ -1982,6 +2051,7 @@ def _prepare_scratch_training(
                 tokenizer,
                 config,
                 split="train",
+                formatting_func=formatting_func,
             ),
             data_root / "train",
             shard_id="train",
@@ -1993,6 +2063,7 @@ def _prepare_scratch_training(
                 tokenizer,
                 config,
                 split="validation",
+                formatting_func=formatting_func,
             ),
             data_root / "validation",
             shard_id="validation",
@@ -2057,6 +2128,7 @@ def _prepare_scratch_training(
         "train_split": config.train_split,
         "validation_split": config.validation_split,
         "text_field": config.text_field,
+        "text_formatter_name": config.text_formatter_name,
         "data_format": config.data_format,
     }
     if provided_datasets is not None:

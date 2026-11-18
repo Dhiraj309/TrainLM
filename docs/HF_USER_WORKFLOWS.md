@@ -53,7 +53,7 @@ remain separate scopes. Unsupported cases need an actionable early error.
 | Start from pretrained weights for CPT | `TrainLMPretrainingConfig.model_initialization="pretrained"` loads the HF checkpoint; the same pretraining lifecycle accepts raw text or tokenized HF Dataset rows | HF-02 is merged; public Hub upload remains later work |
 | Reuse an HF tokenizer | Scratch defaults to the model repository's tokenizer or accepts independent `tokenizer_name_or_path` and `tokenizer_revision`; `tokenizer_mode="train_bpe"` retains corpus training for random initialization | HF-02 fingerprints tokenizer mapping and resolved source; independently hosted token meaning remains the user's responsibility |
 | Independently hosted tokenizer | `run_finetuning` accepts separate model/tokenizer IDs and revisions, resolves them independently, and checks known token-ID bounds and static context limits | Token meanings cannot be proven from Hub IDs or vocabulary sizes; the report marks them unverified and an explicit user policy remains |
-| Raw HF datasets | Scratch streams pinned Hub text and accepts supplied raw-text or tokenized HF `Dataset` splits with fingerprinted cache identity; fine-tuning accepts HF `Dataset` splits and row formatters | Scratch still needs arbitrary data files and a shared text formatter contract |
+| Raw HF datasets | Scratch streams pinned Hub text and accepts supplied raw-text or tokenized HF `Dataset` splits with fingerprinted cache identity; scratch/CPT and fine-tuning accept row formatters | Arbitrary structured local data file loading and unified provenance remain |
 | Pretokenized HF datasets | Fine-tuning and scratch/CPT accept `input_ids` with optional aligned labels and masks; scratch/CPT preserves them in checksummed sidecars, derives labels only when absent, and shifts once | Verify tokenizer-to-dataset semantics and unify provenance and resume identity across workflows |
 | Modern HF vocabularies | Packed writer and scratch config support uint32 IDs; scratch derives required capacity from the largest tokenizer ID, including sparse/added IDs | HF-02 removed the 65,536 ceiling; a CPU round-trip covers token ID 70,000 |
 | Train/evaluate/save/resume | Public trainer and helper lifecycles exist; scratch has strong prepared-data identity checks | Share contracts across HF data paths; include tokenizer/data identity and declare which streams can resume exactly |
@@ -252,8 +252,11 @@ checksummed sidecars, derives labels from `input_ids` only when labels are
 absent, and applies one next-token shift. Special-token masks, position IDs,
 and token-type IDs remain unsupported. TrainLM records the selected HF
 tokenizer source and mapping, but cannot verify that the dataset token IDs were
-produced by that tokenizer. Arbitrary local data files and unified
-source/resume fingerprints remain outstanding.
+produced by that tokenizer. Raw text datasets with multiple columns accept a
+`formatting_func(row) -> str`; its stable `text_formatter_name` is included in
+the preparation cache and checkpoint identity, and the caller supplies the
+same formatter again on resume. Arbitrary local data files and unified
+cross-workflow source/resume fingerprints remain outstanding.
 Raw text HF `Dataset` splits now enter scratch/CPT through
 `run_pretraining(..., train_dataset=..., eval_dataset=...)` or
 `TrainLMTrainer.from_scratch`, using `dataset_source="provided"`. Their stable
@@ -309,6 +312,33 @@ result = run_pretraining(
 )
 print(result.summary())
 ```
+
+If a raw dataset stores the text across several columns, provide one row
+formatter and a stable name. TrainLM uses it for packed training/evaluation
+data, and also for corpus-tokenizer training when using the default BPE path:
+
+```python
+def format_example(row):
+    return f"Question: {row['question']}\nAnswer: {row['answer']}"
+
+config = TrainLMPretrainingConfig(
+    dataset_source="provided",
+    text_formatter_name="question-answer-v1",
+    output_dir="trainlm-cpt",
+)
+result = run_pretraining(
+    config,
+    train_dataset=data["train"],
+    eval_dataset=data["validation"],
+    formatting_func=format_example,
+)
+```
+
+Pass the same formatter and name when resuming. Changing the name invalidates
+the prepared-data cache rather than silently reusing data formatted another
+way. The generated resume example asks for the formatter to be redefined and
+passes it back into TrainLM. Treat the name like a formatter version and
+change it whenever formatting behavior changes.
 
 For an already-tokenized Hub dataset, the pretrained fine-tuning API accepts
 the `Dataset` splits directly. Use the same tokenizer that produced the token

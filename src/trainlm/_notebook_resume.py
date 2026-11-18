@@ -43,6 +43,7 @@ def build_resume_report(
         else None
     )
     needs_provided_datasets = settings.get("dataset_source") == "provided"
+    needs_text_formatter = settings.get("text_formatter_name") is not None
     for name in (
         "train_file",
         "validation_file",
@@ -106,12 +107,27 @@ def build_resume_report(
             "        'train_dataset and eval_dataset before resuming.'\n"
             "    )\n"
         )
+    if needs_text_formatter:
+        code += (
+            "# Define the original row formatter again; its stable name is "
+            f"{settings['text_formatter_name']!r}.\n"
+            "if 'formatting_func' not in globals() or not callable(formatting_func):\n"
+            "    raise RuntimeError(\n"
+            "        'Define formatting_func(row) -> str using the same behavior "
+            "before resuming.'\n"
+            "    )\n"
+        )
     code += (
         "trainer = TrainLMTrainer.from_scratch(\n"
         + (
             "    config, train_dataset=train_dataset, eval_dataset=eval_dataset,\n"
             if needs_provided_datasets
             else "    config,\n"
+        )
+        + (
+            "    formatting_func=formatting_func,\n"
+            if needs_text_formatter
+            else ""
         )
         + f"    extend_training_budget={extension_pending!r},\n"
         ")\n"
