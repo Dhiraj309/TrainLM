@@ -41,6 +41,9 @@ subtests, and both hosted CI profiles passed on correction commit
 passes 99 focused CPU tests plus 14 subtests, and both hosted core profiles
 pass on `594ec2d75bd8c721847f6350be611642a5debe4d`. The local structured-file
 follow-up passes 43 focused CPU tests; it adds no live Hub or TPU evidence.
+The checkpoint-compatibility fix omits the default `local_data_format="auto"`
+from new resume fingerprints so pre-field manifests remain compatible; explicit
+parser choices are retained. Its focused CPU regression passes.
 T0–T11 remains the runtime architecture/evidence plan; the M0–M17
 specification below remains historical.
 
