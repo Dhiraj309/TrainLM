@@ -12,14 +12,16 @@ config = TrainLMFineTuningConfig(
     dataset_id="roneneldan/TinyStories",
     dataset_revision="f54c09fd23315a6f9c86f9dc80f725de7d8f9c64",
     text_field="text",
+    # Bound preprocessing as well as training for this workflow smoke test.
+    train_split="train[:1000]",
+    validation_split="validation[:100]",
     args=TrainLMTrainingArguments(
         output_dir="runs/tinystories-finetune",
         max_steps=3,  # Workflow smoke only; increase for real training.
         sequence_length=128,
-        eval_strategy="steps",
-        eval_steps=3,
-        save_strategy="steps",
-        save_steps=3,
+        # run_finetuning performs one final evaluation automatically.
+        eval_strategy="no",
+        save_strategy="no",
         accelerator="auto",
     ),
 )

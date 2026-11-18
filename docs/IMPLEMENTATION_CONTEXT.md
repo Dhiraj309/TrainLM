@@ -91,6 +91,14 @@ written before the field existed; explicit parser choices remain fingerprinted.
 The local text-source regression checks the legacy manifest shape and accepts
 it during checkpoint preflight. CPU tests only; no TPU execution was performed.
 
+**Fine-tuning quickstart preprocessing scope (2026-11-18):** the short CPU/GPU
+fine-tuning example and notebook now load bounded TinyStories train and
+validation slices (1,000 and 100 rows) before tokenization, rather than mapping
+the full Hub split for a three-step smoke run. Scheduled evaluation and saving
+are disabled in the smoke config; the public workflow still performs its one
+final evaluation. Larger runs should deliberately widen or remove the split
+slices. This is a user-example improvement; no runtime behavior changed.
+
 The merged `main` branch exposes two task-focused, Hugging Face-style entry
 points: `run_pretraining(TrainLMPretrainingConfig(...))` for random-weight
 pretraining from pinned text, and

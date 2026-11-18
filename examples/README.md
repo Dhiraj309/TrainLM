@@ -6,8 +6,9 @@
   uses a Hugging Face GPT-2 config and tokenizer with random weights, streams
   raw TinyStories text, and takes a non-overlapping validation slice. The
   10,000-token setting is a workflow smoke test.
-- [Fine-tune text](finetune_text.py): one public API call using a tiny model and
-  three steps; increase the budget and choose a model for a real run.
+- [Fine-tune text](finetune_text.py): one public API call using a tiny model,
+  bounded dataset slices, and three steps; increase the sample and step budgets
+  and choose a model for a real run.
 
 ## Runtime diagnostics
 
