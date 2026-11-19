@@ -50,7 +50,7 @@ remain separate scopes. Unsupported cases need an actionable early error.
 | --- | --- | --- |
 | Bring an HF model object and tokenizer | `TrainLMTrainer(model=..., processing_class=..., ...)` accepts them | Make this a first-class documented route, including prepared datasets and custom collators |
 | Random initialization from a Hub config | `TrainLMPretrainingConfig.model_name_or_path` loads an HF config and initializes random weights through `from_config`; model weights are not fetched | HF-02 is merged; live Hub and TPU execution remain unverified |
-| Start from pretrained weights for CPT | `TrainLMPretrainingConfig.model_initialization="pretrained"` loads the HF checkpoint; the same pretraining lifecycle accepts raw text or tokenized HF Dataset rows | HF-02 is merged; public Hub upload remains later work |
+| Start from pretrained weights for CPT | `TrainLMPretrainingConfig.continued_pretraining(model_id, ...)` selects the HF checkpoint and reuses the scratch/CPT lifecycle for raw text or tokenized HF Dataset rows | HF-02 is merged; model loading begins only when the run starts |
 | Reuse an HF tokenizer | Scratch defaults to the model repository's tokenizer or accepts independent `tokenizer_name_or_path` and `tokenizer_revision`; `tokenizer_mode="train_bpe"` retains corpus training for random initialization | HF-02 fingerprints tokenizer mapping and resolved source; independently hosted token meaning remains the user's responsibility |
 | Independently hosted tokenizer | `run_finetuning` accepts separate model/tokenizer IDs and revisions, resolves them independently, and checks known token-ID bounds and static context limits | Token meanings cannot be proven from Hub IDs or vocabulary sizes; the report marks them unverified and an explicit user policy remains |
 | Raw HF datasets | Scratch streams pinned Hub text and accepts supplied raw-text or tokenized HF `Dataset` splits with fingerprinted cache identity; scratch/CPT and fine-tuning accept row formatters | Arbitrary structured local data file loading and unified provenance remain |
@@ -504,6 +504,9 @@ Both plans also show learning-rate settings, batch and accumulation values,
 precision, logging, save/evaluation cadence, and best-model/early-stopping
 settings. Scratch pretraining labels its derived default cadence as an
 estimate; fine-tuning reports resolved strategies and configured intervals.
+For an explicitly named CPT entry point, use
+`TrainLMPretrainingConfig.continued_pretraining(model_id, ...)`; it selects
+pretrained initialization without downloading weights during config creation.
 This estimate does not claim parameter count, memory, runtime selection, or
 wall time; those require model and runtime initialization.
 CPU tests validate the plan contracts; they do not certify TPU execution.
