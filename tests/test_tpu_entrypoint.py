@@ -64,6 +64,20 @@ def test_training_worker_accepts_token_only_budget(monkeypatch):
     assert args.max_tokens == 1000
 
 
+def test_training_worker_accepts_epoch_only_budget(monkeypatch):
+    module = load_script("trainlm_tpu_worker")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["worker", "--num-train-epochs", "2.5"],
+    )
+
+    args = module.parse_args()
+
+    assert args.max_steps is None
+    assert args.num_train_epochs == 2.5
+
+
 def raw_args(path, **changes):
     values = dict(bin_path=[str(path)], token_dtype="uint16", byte_order="little",
                   header_bytes=4, token_vocab_size=8, expected_token_count=4)

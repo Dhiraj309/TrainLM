@@ -455,8 +455,9 @@ class TrainLMTrainingArguments:
     Set ``max_steps=None`` with ``max_tokens`` for a supervised-token
     budget, or with ``num_train_epochs`` to train on a finite map-style
     dataset for a dataset-relative budget. On the legacy XLA coordinator,
-    token budgets use exact global supervised-token counts and epoch budgets
-    remain unsupported. ``eval_strategy`` and
+    token budgets use exact global supervised-token counts, and epoch budgets
+    repeat finite rank-local packed data. Epoch-based save/evaluation strategies
+    remain unsupported there. ``eval_strategy`` and
     ``save_strategy`` accept ``"no"``, ``"steps"``, or ``"epoch"``; omitted
     strategies preserve interval-based behavior. ``load_best_model_at_end``
     selects and restores the best evaluation checkpoint.
@@ -1138,7 +1139,10 @@ class TrainLMTrainer:
         self._train_batches_per_epoch: int | None = None
         self._max_train_batches: int | None = None
         self._effective_max_steps = self.args.max_steps
-        if self.args.num_train_epochs is not None:
+        if (
+            self.args.num_train_epochs is not None
+            and self.args.accelerator != "tpu"
+        ):
             (
                 self._train_batches_per_epoch,
                 self._max_train_batches,
@@ -1188,11 +1192,6 @@ class TrainLMTrainer:
                 raise NotImplementedError(
                     "Epoch-based evaluation and saving are not supported by the "
                     "legacy PyTorch/XLA coordinator; use step strategies there."
-                )
-            if self.args.num_train_epochs is not None:
-                raise NotImplementedError(
-                    "num_train_epochs is not supported by the legacy PyTorch/XLA "
-                    "coordinator; use a finite step budget there."
                 )
             if any(value is not None for value in (optimizer, scheduler, runtime)):
                 raise ValueError(
@@ -2768,6 +2767,7 @@ class TrainLMTrainer:
             output_dir=Path(self.args.output_dir),
             max_steps=self.args.max_steps,
             max_tokens=self.args.max_tokens,
+            num_train_epochs=self.args.num_train_epochs,
             gradient_accumulation_steps=self.args.gradient_accumulation_steps,
             micro_batch_per_device=self.args.per_device_train_batch_size,
             sequence_length=self.args.sequence_length,

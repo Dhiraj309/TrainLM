@@ -11,6 +11,7 @@ from trainlm._tpu_coordinator import (
     TPUCoordinatorError,
     _TPUCoordinator,
     _TPURunRequest,
+    _resolve_tpu_epoch_budget,
     _resolve_tpu_max_steps,
     _resolve_tpu_microbatch_budget,
     _format_worker_detail,
@@ -110,6 +111,42 @@ def test_tpu_facade_forwards_token_only_budget(tmp_path):
     request = coordinator.requests[0]
     assert request.max_steps is None
     assert request.max_tokens == 1_000
+
+
+def test_tpu_facade_forwards_epoch_budget(tmp_path):
+    coordinator = RecordingCoordinator()
+    trainer = TrainLMTrainer(
+        model=pinned_model(),
+        train_dataset=tmp_path / "manifests",
+        args=TrainLMTrainingArguments(
+            output_dir=tmp_path / "run",
+            accelerator="tpu",
+            max_steps=None,
+            num_train_epochs=2,
+            sequence_length=16,
+        ),
+    )
+    trainer._tpu_coordinator = coordinator
+
+    trainer.train()
+
+    request = coordinator.requests[0]
+    assert request.max_steps is None
+    assert request.num_train_epochs == 2
+
+
+def test_tpu_epoch_budget_resolves_finite_batches_and_partial_accumulation():
+    assert _resolve_tpu_epoch_budget(
+        num_train_epochs=2.5,
+        batches_per_epoch=5,
+        gradient_accumulation_steps=2,
+    ) == (13, 8)
+
+    assert _resolve_tpu_epoch_budget(
+        num_train_epochs=2,
+        batches_per_epoch=4,
+        gradient_accumulation_steps=2,
+    ) == (8, 4)
 
 
 def test_tpu_token_budget_resolves_rank_global_step_and_data_limits():
@@ -357,6 +394,26 @@ def test_tpu_token_budget_is_serialized_and_forwarded(tmp_path):
     assert "--max-steps" not in command
     assert command[command.index("--max-tokens") + 1] == "123456"
     assert request.to_dict()["max_tokens"] == 123_456
+
+
+def test_tpu_epoch_budget_is_serialized_and_forwarded(tmp_path):
+    base = _request(tmp_path)
+    request = _TPURunRequest(
+        **{
+            **base.to_dict(),
+            "model": base.model,
+            "manifest_dir": tmp_path / "manifests",
+            "output_dir": tmp_path / "run",
+            "max_steps": None,
+            "num_train_epochs": 2.5,
+        }
+    )
+
+    command = _TPUCoordinator(tmp_path / "worker.py")._command(request)
+
+    assert "--max-steps" not in command
+    assert command[command.index("--num-train-epochs") + 1] == "2.5"
+    assert request.to_dict()["num_train_epochs"] == 2.5
 
 
 def test_tpu_request_does_not_expose_or_assume_world_size(tmp_path):
