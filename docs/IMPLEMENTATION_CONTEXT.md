@@ -84,14 +84,19 @@ boundaries flush partial gradient accumulation. The established first-epoch
 order is preserved for checkpoint compatibility; later epochs deterministically
 reshuffle shards and batches from the seed, including after checkpoint resume.
 The XLA coordinator now schedules evaluation and checkpoint saving at dataset
-epoch boundaries and flushes partial accumulation before each action. TPU
-execution remains unverified. Token-step estimates assume one device and dense
-targets.
+epoch boundaries and flushes partial accumulation before each action. The new
+Colab notebook `notebooks/TrainLM_TPU_Epoch_Eval_Save_V5e1.ipynb` exercises the
+CPU contracts, combined and independent evaluation/checkpoint schedules, and
+resume from the first epoch checkpoint using a local tiny model and packed
+data. It requires a Colab frontend connected to a v5e-1 Cloud TPU VM with
+PyTorch/XLA; Codex has not run that hardware check. Token-step estimates assume
+one device and dense targets.
 Exact parameter count, memory, wall time, and final runtime selection remain
 unresolved. The focused coordinator, worker CLI, fine-tuning, lifecycle,
-roadmap, and trainer suites pass (137 tests, CPU-only). A trainer regression
-verifies that epoch boundaries flush partial accumulation, evaluate before
-saving, and publish one checkpoint. No TPU execution was performed.
+roadmap, trainer, and notebook-contract suites pass (140 tests, CPU-only).
+Trainer regressions verify that epoch boundaries flush partial accumulation,
+evaluation precedes saving, and evaluation-only/checkpoint-only schedules stay
+independent. No TPU execution was performed.
 The current from-scratch notebook exposes random-init versus pretrained CPT
 and exact resume versus budget extension, printing each no-download plan before
 the training call. It remains a single-device TorchTPU recipe; no new TPU

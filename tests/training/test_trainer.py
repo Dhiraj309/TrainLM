@@ -510,6 +510,62 @@ def test_epoch_actions_flush_partial_accumulation_and_evaluate_before_save():
     assert events == ["evaluate", "save"]
 
 
+@pytest.mark.parametrize(
+    ("eval_at_epoch_end", "save_at_epoch_end", "expected_events"),
+    [
+        (True, False, ["evaluate"]),
+        (False, True, ["save"]),
+    ],
+)
+def test_epoch_evaluation_and_checkpoint_schedules_are_independent(
+    eval_at_epoch_end, save_at_epoch_end, expected_events
+):
+    from trainlm.config import (
+        CheckpointConfig,
+        EvaluationConfig,
+        LoggingConfig,
+        TrainerConfig,
+    )
+
+    events = []
+
+    class EpochConfig:
+        trainer = TrainerConfig(
+            max_steps=2,
+            gradient_accumulation_steps=3,
+            stop_at_epoch_end=True,
+        )
+        checkpoint = CheckpointConfig(
+            save_training_at_epoch_end=save_at_epoch_end
+        )
+        evaluation = EvaluationConfig(eval_at_epoch_end=eval_at_epoch_end)
+        logging = LoggingConfig(log_every_steps=100)
+
+    class EventRecorder(TrainerCallback):
+        def on_evaluate(self, state, control):
+            del state, control
+            events.append("evaluate")
+
+    model = DummyModel()
+    optimizer = SGD(model.parameters(), lr=0.1)
+    trainer = Trainer(
+        config=EpochConfig(),
+        model=model,
+        runtime=Runtime(),
+        optimizer=optimizer,
+        scheduler=LambdaLR(optimizer, lr_lambda=lambda _: 1.0),
+        task=CountingTask(),
+        train_dataloader=DataLoader(DummyDataset(), batch_size=2),
+        eval_dataloader=DataLoader(DummyDataset(), batch_size=2),
+        callbacks=(EventRecorder(),),
+        checkpoint_saver=lambda trainer, path: events.append("save"),
+    )
+
+    trainer.train()
+
+    assert events == expected_events
+
+
 def test_training_saves_final_step_after_configured_cadence():
     events = []
     trainer = create_trainer(
