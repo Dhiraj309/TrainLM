@@ -19,6 +19,7 @@ from .api import (
     TrainLMTrainingArguments,
     _latest_training_checkpoint,
 )
+from .hub import HubPublishResult, _publish_model_export
 from .training import TrainerCallback
 
 
@@ -144,6 +145,36 @@ class TrainLMFineTuningResult:
     tokenizer_revision: str | None = None
     tokenizer_compatibility: Mapping[str, Any] | None = None
     tokenizer_object_required: bool = False
+
+    def push_to_hub(
+        self,
+        repo_id: str,
+        *,
+        private: bool = True,
+        commit_message: str | None = None,
+    ) -> HubPublishResult:
+        """Explicitly publish this fine-tuned model export to the Hub.
+
+        New repositories are private by default. Existing repository visibility
+        must match ``private`` and is never changed by this method. Authentication
+        uses the standard Hugging Face login or ``HF_TOKEN`` configuration.
+        Only model/tokenizer artifacts and a model card are uploaded; run reports,
+        datasets, and resumable checkpoints are excluded.
+        """
+        base_model: str | None = self.model_name_or_path
+        if Path(base_model).expanduser().exists():
+            base_model = None
+        return _publish_model_export(
+            self.model_path,
+            repo_id,
+            private=private,
+            commit_message=commit_message,
+            metadata={
+                "workflow": "fine-tuning",
+                "base_model": base_model,
+                "base_model_revision": self.resolved_model_revision,
+            },
+        )
 
     def summary(self) -> dict[str, Any]:
         """Return a compact, JSON-compatible run summary."""

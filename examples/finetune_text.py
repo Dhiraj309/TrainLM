@@ -5,8 +5,6 @@ from trainlm import (
     TrainLMTrainingArguments,
     run_finetuning,
 )
-
-
 config = TrainLMFineTuningConfig(
     model_name_or_path="sshleifer/tiny-gpt2",
     dataset_id="roneneldan/TinyStories",
@@ -27,3 +25,4 @@ config = TrainLMFineTuningConfig(
 )
 result = run_finetuning(config)
 print(result.summary())
+# Optional after `hf auth login`: result.push_to_hub("you/tinystories-model")

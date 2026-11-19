@@ -26,11 +26,13 @@ from .finetuning import (
     restore_finetuning_config,
     run_finetuning,
 )
+from .hub import HubPublishResult
 
 __all__ = [
     "DEPRECATED_CONFIG_KEYS",
     "HuggingFaceShardSourceConfig",
     "HuggingFaceShardSpec",
+    "HubPublishResult",
     "PUBLIC_API_VERSION",
     "PackedBinDataset",
     "TrainLMPretrainingConfig",

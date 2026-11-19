@@ -58,7 +58,7 @@ remain separate scopes. Unsupported cases need an actionable early error.
 | Modern HF vocabularies | Packed writer and scratch config support uint32 IDs; scratch derives required capacity from the largest tokenizer ID, including sparse/added IDs | HF-02 removed the 65,536 ceiling; a CPU round-trip covers token ID 70,000 |
 | Train/evaluate/save/resume | Public trainer and helper lifecycles exist; scratch has strong prepared-data identity checks | Share contracts across HF data paths; include tokenizer/data identity and declare which streams can resume exactly |
 | Standard HF model export | `save_model` uses `save_pretrained` and saves the processing class when supplied | A CPU fresh-process check reloads model and tokenizer and generates from the export; accelerator export remains owner-validated |
-| Publish to HF Hub | Users can use HF tools themselves; TrainLM has no public `push_to_hub` operation | Add explicit publication of the selected export, model card/provenance, and a returned immutable revision |
+| Publish to HF Hub | Completed pretraining and fine-tuning results expose `push_to_hub`; only model/tokenizer artifacts and a model card are published | Review license and provenance before public release; live Hub upload remains user-run |
 | Inference | `examples/infer_local_export.py` and the scratch notebook load the export in a clean Python process using Transformers | Other inference engines require their own compatibility evidence; Hub-hosted inference remains a user-managed Transformers workflow |
 
 Evidence paths:
@@ -71,6 +71,12 @@ Evidence paths:
   tokenizer fitting, config construction, packing and vocabulary validation.
 - [Fine-tuning workflow](../src/trainlm/finetuning.py): `run_finetuning`,
   `_CausalLMCollator`, raw-text mapping and model/tokenizer revision coupling.
+- [Hub publishing](../src/trainlm/hub.py): private-by-default repository
+  creation, visibility checks for existing repos, model artifact allowlist,
+  generated model card and immutable commit result; see the optional calls in
+  [fine-tuning](../examples/finetune_text.py) and
+  [pretraining](../examples/pretrain_from_scratch.py), and the
+  [publisher contract tests](../tests/test_hub_publish.py).
 - [Packed writer](../src/trainlm/data/writer.py) and
   [run reports/recovery](../src/trainlm/pretraining_run.py).
 - Existing [provider tests](../tests/model/test_huggingface_provider.py),
@@ -113,8 +119,8 @@ CPT. An alternative tokenizer must preserve token semantics; equal vocabulary
 length or equal commit strings do not establish compatibility.
 
 **Unifying API target sketch:** the current specialized fine-tuning helper
-supports `data_format="tokens"`; a single model-object trainer interface and
-publication method remain future work. HF loading supplies `model`,
+supports `data_format="tokens"`; a single model-object trainer interface
+remains future work. HF loading supplies `model`,
 `tokenizer`, and dataset splits.
 
 ```python
@@ -129,9 +135,28 @@ trainer = TrainLMTrainer(
 )
 trainer.train()
 trainer.save_model("my-model")
-# Optional, explicitly requested publication:
-trainer.push_to_hub("my-account/my-model", private=True)
 ```
+
+After a high-level `run_pretraining(config)` or `run_finetuning(config)` call,
+publish explicitly:
+
+```python
+result = run_finetuning(config)  # or run_pretraining(config)
+published = result.push_to_hub("my-account/my-model")  # private by default
+print(published.repo_url, published.revision)
+```
+
+Authenticate first with `hf auth login` or `HF_TOKEN`. Set `private=False` only
+when you intend to create or use a public repository. An existing repository's
+visibility must match the requested setting and is never changed implicitly.
+TrainLM uploads the selected model export and a basic model card; it excludes
+run reports, corpus files, and resumable checkpoints. It preserves an existing
+README. Review the model and data licenses before making a repository public;
+TrainLM's Apache-2.0 software license does not grant a license to model weights
+or training data. Dataset identifiers are not copied into the model card
+automatically; add provenance to the README when you have confirmed it is safe
+to disclose. A successful call returns the repository URL and full commit SHA
+as `HubPublishResult`.
 
 For current fine-tuning, use `run_finetuning` with `data_format="tokens"` for
 prepared HF Dataset rows; token IDs pass through without decoding or
@@ -147,9 +172,11 @@ silently reinterpret it as a Transformers `PretrainedConfig` factory.
 
 ## Delivery order and acceptance criteria
 
-HF-01 and HF-02 are merged through PR #139 at
-`c9ece9a2e9057260586636a428dfd7679c42e8fa`. HF-03 is in progress on
-`feat/20-hf-dataset-sources`; HF-04–HF-08 remain planned. IDs
+HF-01–HF-03 are merged through PR #140 at
+`242f418f4bd89a814709db5801e4f393963d86e4`. HF-05's opt-in result publishing
+is in progress on `feat/21-hf-hub-publishing`; mocked CPU coverage passes, and
+live Hub round-trip evidence remains outstanding. HF-04 and HF-06–HF-08 remain
+planned. IDs
 HF-01–HF-08 identify outcomes, not Git branch sequence numbers. Deliver each
 outcome in a focused PR with meaningful
 implementation/regression/docs commits. Start each new branch after the

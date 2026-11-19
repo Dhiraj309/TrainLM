@@ -1,18 +1,18 @@
 # TrainLM Roadmap
 
-**Current product delivery plan (2026-11-18):**
+**Current product delivery plan (2026-11-19):**
 [Hugging Face user workflows, HF-01–HF-08](HF_USER_WORKFLOWS.md).
 The owner's priority is reusable HF models/tokenizers/datasets through
 scratch or continued pretraining, save, optional Hub publication and standard
 inference. Verified merged `main` is
-`c9ece9a2e9057260586636a428dfd7679c42e8fa`; HF-01 and HF-02 are complete
-through PR #139. HF-01 resolves independent fine-tuning model/tokenizer IDs and
+`242f418f4bd89a814709db5801e4f393963d86e4`; HF-01–HF-03 are complete through
+PR #140. HF-01 resolves independent fine-tuning model/tokenizer IDs and
 revisions, preserves same-source snapshot pinning, checks known token-ID bounds
 and static context limits, and pins resume to resolved source commits. HF-02
 connects scratch pretraining to an HF model config and tokenizer: random
 initialization or pretrained CPT, with an explicit BPE option and uint32 token
 IDs. Independent tokenizer meaning remains the user's responsibility. HF-03
-is in progress on `feat/20-hf-dataset-sources`: streamed raw Hub data now
+merged on `feat/20-hf-dataset-sources` through PR #140: streamed raw Hub data
 supports configs, friendly revisions, and non-overlapping split slices. The
 pretrained fine-tuning helper also accepts prepared HF Dataset rows through
 `data_format="tokens"`, preserving causal labels/masks and padding ragged
@@ -27,8 +27,15 @@ remains caller responsibility. Raw multi-column datasets support a named
 resume. Local raw inputs support paired text, CSV, JSON/JSONL, and Parquet
 files; extension-based or explicit parser selection, source-column selection,
 and named row formatting are recorded in cache identity and reports. Unified
-cross-workflow provenance remains incomplete. HF-04–HF-08 remain planned;
-notebook presets do not complete those workflows. The
+cross-workflow provenance remains incomplete. HF-04 and HF-06–HF-08 remain
+planned; notebook presets do not complete those workflows. HF-05's opt-in
+`push_to_hub()` implementation is in progress on
+`feat/21-hf-hub-publishing`: successful pretraining and fine-tuning results
+publish only allowlisted model and tokenizer artifacts with a model card,
+default new repos to private, check existing visibility, and return the
+immutable Hub commit. Mocked CPU coverage passes; live Hub round-trip
+validation remains unverified. PR #140 passed both hosted CPU profiles at
+`0200e0f19069611b95bc2daebabfe57f26837e3a`. The
 previous token-input slice passed 54 local tests plus 14 subtests, and CI for
 `e4e1c9f621148a76cf10efb6d00ceb5769d4e5ce` passed both core profiles. This
 follow-up passed 78 focused local tests plus 14 subtests. PR #140's hosted

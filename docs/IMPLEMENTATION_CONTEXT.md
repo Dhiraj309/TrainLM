@@ -10,8 +10,8 @@
 
 **Owner priority reset (2026-11-17):** the active product backlog is
 [HF user workflows](HF_USER_WORKFLOWS.md). The latest verified merged `main`
-is `c9ece9a2e9057260586636a428dfd7679c42e8fa`, with HF-01 and HF-02 merged
-through PR #139. HF-02 connects scratch/CPT to the existing HF provider: load
+is `242f418f4bd89a814709db5801e4f393963d86e4`; HF-01 through HF-03 are merged
+through PR #140. HF-02 connects scratch/CPT to the existing HF provider: load
 a Hub/local config, choose random or pretrained initialization, reuse the
 matching HF tokenizer by default or select one independently, and retain
 corpus-trained BPE as an explicit random-init option. Tokenizer mapping and
@@ -19,7 +19,7 @@ resolved source identity participate in prepared-data and checkpoint identity.
 The packed path accepts uint32 token IDs and validates pretrained embedding
 bounds and known context limits without resizing or remapping.
 
-The current branch `feat/20-hf-dataset-sources` continues HF-03. It adds dataset
+HF-03 is merged through PR #140. It adds dataset
 config names, friendly Hub revisions that resolve to immutable commits, and
 non-overlapping split slices to the streamed raw-text scratch path. The
 resolved source enters the data fingerprint and resume configuration. Scratch
@@ -43,7 +43,31 @@ selection inferred from paired file extensions or selected explicitly. A
 structured source can select one `text_field` or use the named row formatter;
 its parser and source hashes are recorded in preparation cache identity and
 the run report. More local formats and unified cross-workflow source identity
-remain incomplete. These changes add no live-Hub or TPU execution evidence.
+remain incomplete. PR #140 passed both hosted CPU profiles on commit
+`0200e0f19069611b95bc2daebabfe57f26837e3a`; no live-Hub or TPU execution was
+performed for that PR.
+
+The current branch `feat/21-hf-hub-publishing` implements HF-05: successful
+pretraining and fine-tuning results expose explicit, private-by-default
+`push_to_hub()` methods. The allowlisted upload includes model/tokenizer files
+and a model card, while excluding reports, corpora, checkpoints and unsupported
+custom remote code. Existing repository visibility must match the requested
+setting. The result includes the Hub commit SHA and URLs. Focused mocked CPU
+tests pass; a live Hub round trip remains unverified.
+
+**HF-05 publishing implementation (2026-11-19):** completed
+`TrainLMPretrainingResult` and `TrainLMFineTuningResult` now expose an explicit
+`push_to_hub(repo_id)` method. New repositories default to private; existing
+repositories must match the caller's visibility setting and are never changed
+implicitly. The upload allowlist contains model weights, model/tokenizer
+configuration and vocabulary assets, plus a generated model card; existing
+README files are preserved. Run reports, corpora, checkpoints, credentials,
+dataset identifiers, and unsupported custom remote model code are excluded.
+The model card records the workflow and safe model-source details; users can
+add dataset provenance after reviewing disclosure and licensing. The return value
+contains the repository URL, full Hub commit SHA, commit URL, and visibility.
+Authentication uses Hugging Face's standard login or `HF_TOKEN`. CPU tests
+cover the upload contract; no live Hub upload or TPU execution was performed.
 
 **HF-03 CI follow-up (2026-11-18):** GitHub Actions for commit
 `0b765601fea2ea3416415b23af9c73970bf53d5f` passed both `core-minimum` and

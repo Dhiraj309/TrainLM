@@ -17,6 +17,7 @@ from typing import Any
 import zipfile
 
 from ._notebook_resume import build_resume_report
+from .hub import HubPublishResult, _publish_model_export
 from .pretraining import TrainLMPretrainingConfig, _configured_local_data_format
 
 
@@ -153,6 +154,54 @@ class TrainLMPretrainingResult:
             f"accelerator={accelerator.get('backend', accelerator.get('requested', 'unknown'))}"
             f"{best_summary}"
             f"{stop_summary}"
+        )
+
+    def push_to_hub(
+        self,
+        repo_id: str,
+        *,
+        private: bool = True,
+        commit_message: str | None = None,
+    ) -> HubPublishResult:
+        """Explicitly publish this run's model export to the Hugging Face Hub.
+
+        New repositories are private by default. Existing repository visibility
+        must match ``private`` and is never changed by this method. Authentication
+        uses the standard Hugging Face login or ``HF_TOKEN`` configuration.
+        Only model/tokenizer artifacts and a model card are uploaded; run reports,
+        datasets, and resumable checkpoints are excluded.
+        """
+        if self.status != "passed":
+            raise RuntimeError("Only a successfully completed run can be published.")
+        if self.export_path is None:
+            raise RuntimeError("This run has no model export to publish.")
+        model = self.report.get("model", {})
+        model = model if isinstance(model, dict) else {}
+        initialization = model.get("initialization") or model.get(
+            "requested_initialization"
+        )
+        requested_source = model.get("requested_source")
+        source = model.get("source")
+        base_model_revision = None
+        if isinstance(source, dict):
+            requested_source = source.get("requested_source") or requested_source
+            base_model_revision = source.get("resolved_revision")
+            if source.get("local_source") is True:
+                requested_source = None
+        metadata = {
+            "workflow": "from-scratch pretraining",
+            "model_type": model.get("model_type") or model.get("requested_model_type"),
+            "model_class": model.get("model_class"),
+            "initialization": initialization,
+            "base_model": requested_source if initialization == "pretrained" else None,
+            "base_model_revision": base_model_revision,
+        }
+        return _publish_model_export(
+            self.export_path,
+            repo_id,
+            private=private,
+            commit_message=commit_message,
+            metadata=metadata,
         )
 
 
