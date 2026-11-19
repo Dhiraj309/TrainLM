@@ -11,6 +11,8 @@ from trainlm._tpu_coordinator import (
     TPUCoordinatorError,
     _TPUCoordinator,
     _TPURunRequest,
+    _resolve_tpu_max_steps,
+    _resolve_tpu_microbatch_budget,
     _format_worker_detail,
 )
 from trainlm.config import ModelSourceConfig
@@ -84,6 +86,58 @@ def test_tpu_facade_defers_model_and_runtime_construction(tmp_path):
     assert request.sequence_length == 128
     assert request.precision == "bf16"
     assert trainer.explain()["selected_path"] == "tpu_coordinator"
+
+
+def test_tpu_facade_forwards_token_only_budget(tmp_path):
+    coordinator = RecordingCoordinator()
+    trainer = TrainLMTrainer(
+        model=pinned_model(),
+        train_dataset=tmp_path / "manifests",
+        args=TrainLMTrainingArguments(
+            output_dir=tmp_path / "run",
+            accelerator="tpu",
+            max_steps=None,
+            max_tokens=1_000,
+            sequence_length=16,
+            per_device_train_batch_size=2,
+            gradient_accumulation_steps=4,
+        ),
+    )
+    trainer._tpu_coordinator = coordinator
+
+    trainer.train()
+
+    request = coordinator.requests[0]
+    assert request.max_steps is None
+    assert request.max_tokens == 1_000
+
+
+def test_tpu_token_budget_resolves_rank_global_step_and_data_limits():
+    effective_steps = _resolve_tpu_max_steps(
+        max_steps=None,
+        max_tokens=10_001,
+        sequence_length=11,
+        micro_batch_per_device=2,
+        gradient_accumulation_steps=2,
+        world_size=8,
+    )
+    assert effective_steps == 32
+    assert _resolve_tpu_microbatch_budget(
+        max_steps=effective_steps,
+        max_tokens=10_001,
+        sequence_length=11,
+        micro_batch_per_device=2,
+        gradient_accumulation_steps=2,
+        world_size=8,
+    ) == 63
+    assert _resolve_tpu_max_steps(
+        max_steps=2,
+        max_tokens=100_001,
+        sequence_length=11,
+        micro_batch_per_device=2,
+        gradient_accumulation_steps=2,
+        world_size=8,
+    ) == 2
 
 
 def test_tpu_facade_forwards_verbose_logging_and_global_batch_state(tmp_path):
@@ -283,6 +337,26 @@ def test_tpu_evaluation_batch_limit_is_forwarded(tmp_path):
     command = _TPUCoordinator(tmp_path / "worker.py")._command(request)
 
     assert command[command.index("--max-eval-batches") + 1] == "1"
+
+
+def test_tpu_token_budget_is_serialized_and_forwarded(tmp_path):
+    base = _request(tmp_path)
+    request = _TPURunRequest(
+        **{
+            **base.to_dict(),
+            "model": base.model,
+            "manifest_dir": tmp_path / "manifests",
+            "output_dir": tmp_path / "run",
+            "max_steps": None,
+            "max_tokens": 123_456,
+        }
+    )
+
+    command = _TPUCoordinator(tmp_path / "worker.py")._command(request)
+
+    assert "--max-steps" not in command
+    assert command[command.index("--max-tokens") + 1] == "123456"
+    assert request.to_dict()["max_tokens"] == 123_456
 
 
 def test_tpu_request_does_not_expose_or_assume_world_size(tmp_path):

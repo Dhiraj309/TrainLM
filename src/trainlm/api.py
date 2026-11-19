@@ -452,8 +452,11 @@ class TrainLMTrainingArguments:
     Advanced TrainLM configuration remains available through ``TrainConfig``
     and the lower-level engine. Defaults favor a portable first run; backend
     implementations may select more efficient values automatically later.
-    Set ``max_steps=None`` with ``num_train_epochs`` to train on a finite
-    map-style dataset for a dataset-relative budget. ``eval_strategy`` and
+    Set ``max_steps=None`` with ``max_tokens`` for a supervised-token
+    budget, or with ``num_train_epochs`` to train on a finite map-style
+    dataset for a dataset-relative budget. On the legacy XLA coordinator,
+    token budgets use exact global supervised-token counts and epoch budgets
+    remain unsupported. ``eval_strategy`` and
     ``save_strategy`` accept ``"no"``, ``"steps"``, or ``"epoch"``; omitted
     strategies preserve interval-based behavior. ``load_best_model_at_end``
     selects and restores the best evaluation checkpoint.
@@ -1197,15 +1200,6 @@ class TrainLMTrainer:
                     "each worker; do not pass local instances."
                 )
             self._model_source = self._coerce_model_source(model)
-            if self.args.max_steps is None:
-                raise NotImplementedError(
-                    "The TPU coordinator currently requires max_steps; max_tokens-only "
-                    "execution will be added with lifecycle parity."
-                )
-            if self.args.max_tokens is not None:
-                raise NotImplementedError(
-                    "TPU max_tokens stopping will be added with lifecycle parity."
-                )
             if self.args.fp16:
                 raise ValueError("TPU execution supports fp32 or bf16, not fp16.")
             from trainlm._tpu_coordinator import _TPUCoordinator
@@ -2726,7 +2720,7 @@ class TrainLMTrainer:
         from trainlm._tpu_coordinator import _TPURunRequest
         from trainlm.data import PackedBinDataset
 
-        if self._model_source is None or self.args.max_steps is None:
+        if self._model_source is None:
             raise RuntimeError("TPU request prerequisites were not initialized.")
         model_path = self._model_source.name_or_path
         is_local_model = model_path is not None and Path(model_path).exists()
@@ -2773,6 +2767,7 @@ class TrainLMTrainer:
             manifest_dir=manifest_dir,
             output_dir=Path(self.args.output_dir),
             max_steps=self.args.max_steps,
+            max_tokens=self.args.max_tokens,
             gradient_accumulation_steps=self.args.gradient_accumulation_steps,
             micro_batch_per_device=self.args.per_device_train_batch_size,
             sequence_length=self.args.sequence_length,

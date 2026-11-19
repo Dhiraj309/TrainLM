@@ -76,12 +76,13 @@ fresh scratch/CPT, exact resume and the restricted larger-token-budget
 extension; the preview does not inspect checkpoint files. Neither plan loads
 external resources. `TrainLMPretrainingConfig.continued_pretraining(...)`
 provides an explicit CPT constructor without loading weights until run time.
-Fine-tuning plans report all configured stopping limits and identify token or
-epoch budgets as unsupported for the legacy PyTorch/XLA coordinator; estimated
-token steps assume one device and dense targets.
+Fine-tuning plans report all configured stopping limits. The TPU coordinator
+now implements step and exact global supervised-token stopping; epoch budgets
+remain unsupported. Token-step estimates assume one device and dense targets,
+and TPU execution remains unverified.
 Exact parameter count, memory, wall time, and final runtime selection remain
 unresolved. The latest focused fine-tuning, lifecycle, and roadmap suites pass
-(76 tests, CPU-only).
+(107 tests, CPU-only); no TPU execution was performed.
 The current from-scratch notebook exposes random-init versus pretrained CPT
 and exact resume versus budget extension, printing each no-download plan before
 the training call. It remains a single-device TorchTPU recipe; no new TPU

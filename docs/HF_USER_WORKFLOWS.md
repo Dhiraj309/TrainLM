@@ -506,9 +506,10 @@ settings. Scratch pretraining labels its derived default cadence as an
 estimate; fine-tuning reports every configured stop limit. If several limits
 are set, the first reached stops the run. Fine-tuning's token-to-step estimate
 assumes one device and dense targets; masks, padding, or distributed world size
-can change it. A plan requested with `accelerator="tpu"` marks token or epoch
-budgets unsupported because the legacy PyTorch/XLA coordinator accepts only
-optimizer-step budgets.
+can change it. A plan requested with `accelerator="tpu"` marks token budgets
+implemented-but-unverified and epoch budgets unsupported for the legacy
+PyTorch/XLA coordinator. Token stopping uses exact global supervised-token
+counts and may pass the target by the final microbatch.
 For an explicitly named CPT entry point, use
 `TrainLMPretrainingConfig.continued_pretraining(model_id, ...)`; it selects
 pretrained initialization without downloading weights during config creation.

@@ -191,16 +191,20 @@ class TrainLMFineTuningConfig:
                     "estimated_train_batches": max_batches,
                     "estimated_optimizer_steps": steps,
                 })
-        if args.accelerator == "tpu" and (
-            args.max_tokens is not None
-            or args.num_train_epochs is not None
-            or args.max_steps is None
-        ):
+        if args.accelerator == "tpu" and args.num_train_epochs is not None:
             budget_support = {
                 "status": "unsupported_by_requested_backend",
                 "reason": (
                     "The legacy PyTorch/XLA coordinator supports optimizer-step "
-                    "budgets only; max_tokens and num_train_epochs cannot be used."
+                    "and supervised-token budgets, but not num_train_epochs."
+                ),
+            }
+        elif args.accelerator == "tpu":
+            budget_support = {
+                "status": "implemented_unverified",
+                "reason": (
+                    "The TPU coordinator implements optimizer-step and global "
+                    "supervised-token limits; this plan does not verify hardware execution."
                 ),
             }
         else:
