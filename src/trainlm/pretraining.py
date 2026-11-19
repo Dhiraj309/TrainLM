@@ -658,15 +658,44 @@ class TrainLMPretrainingConfig:
                 "torch_compile currently requires accelerator='native_tpu'."
             )
 
-    def training_plan(self) -> dict[str, Any]:
-        """Return a lightweight pre-run budget and configuration estimate.
+    def training_plan(
+        self,
+        *,
+        resume_from_checkpoint: str | Path | None = None,
+        extend_training_budget: bool = False,
+    ) -> dict[str, Any]:
+        """Return a lightweight budget estimate and explicit run lifecycle.
 
         This method performs no model, dataset, or accelerator loading. The
         optimizer-step count is estimated from the configured sequence length,
         batch size, and accumulation. Actual supervised-token density and the
         final microbatch can change the observed count; wall time and parameter
-        count are deliberately left unresolved.
+        count are deliberately left unresolved. Resume and budget-extension
+        arguments mirror :func:`run_pretraining` and do not inspect files.
         """
+        if resume_from_checkpoint is not None and (
+            not isinstance(resume_from_checkpoint, (str, Path))
+            or not str(resume_from_checkpoint).strip()
+        ):
+            raise TypeError(
+                "resume_from_checkpoint must be a non-empty path, 'latest', or None."
+            )
+        if not isinstance(extend_training_budget, bool):
+            raise TypeError("extend_training_budget must be a boolean.")
+        if extend_training_budget and resume_from_checkpoint is None:
+            raise ValueError(
+                "Budget extension requires resume_from_checkpoint='latest' "
+                "or an explicit checkpoint path."
+            )
+        if extend_training_budget:
+            lifecycle_action = "extend_budget"
+        elif resume_from_checkpoint is not None:
+            lifecycle_action = "resume"
+        elif self.model_initialization == "pretrained":
+            lifecycle_action = "start_new_cpt_run"
+        else:
+            lifecycle_action = "start_new_scratch_run"
+
         tokens_per_update = (
             (self.sequence_length - 1)
             * self.per_device_train_batch_size
@@ -704,6 +733,40 @@ class TrainLMPretrainingConfig:
                 "target": self.max_tokens,
                 "estimated_tokens_per_optimizer_update": tokens_per_update,
                 "estimated_optimizer_steps": estimated_steps,
+            },
+            "lifecycle": {
+                "action": lifecycle_action,
+                "checkpoint": (
+                    str(resume_from_checkpoint)
+                    if resume_from_checkpoint is not None
+                    else None
+                ),
+                "model_weights": (
+                    "load_configured_pretrained_weights"
+                    if self.model_initialization == "pretrained"
+                    else "initialize_random_weights"
+                ),
+                "resume_contract": (
+                    "Restore training state using the same model, data, tokenizer, "
+                    "and run settings."
+                    if lifecycle_action == "resume"
+                    else None
+                ),
+                "extension_contract": (
+                    "Requires a larger max_tokens budget with model, data, "
+                    "optimizer, precision, and runtime unchanged."
+                    if lifecycle_action == "extend_budget"
+                    else None
+                ),
+                "fresh_run_requirement": (
+                    "Use a fresh output_dir unless you are resuming an existing "
+                    "run."
+                    if lifecycle_action in {
+                        "start_new_scratch_run",
+                        "start_new_cpt_run",
+                    }
+                    else None
+                ),
             },
             "training": {
                 "per_device_train_batch_size": self.per_device_train_batch_size,

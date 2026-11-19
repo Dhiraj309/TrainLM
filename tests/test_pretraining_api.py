@@ -61,11 +61,50 @@ def test_training_plan_estimates_token_budget_without_loading_resources(tmp_path
     assert plan["training"]["save_cadence_source"] == "estimated_default"
     assert plan["training"]["logging_steps"] == config.logging_steps
     assert plan["training"]["load_best_model_at_end"] is False
+    assert plan["lifecycle"]["action"] == "start_new_scratch_run"
+    assert plan["lifecycle"]["model_weights"] == "initialize_random_weights"
+    assert plan["lifecycle"]["checkpoint"] is None
     assert plan["runtime"] == {
         "requested": "cpu",
         "selected": "resolved_during_runtime_initialization",
     }
     assert "no wall time or memory estimate" in plan["estimate_scope"]
+
+
+def test_training_plan_distinguishes_resume_new_cpt_and_budget_extension(tmp_path):
+    config = _config(
+        tmp_path,
+        model_initialization="pretrained",
+        model_name_or_path="gpt2",
+        model_embedding_size=768,
+        model_layers=6,
+        model_attention_heads=12,
+    )
+
+    new_cpt = config.training_plan()
+    resume = config.training_plan(resume_from_checkpoint="latest")
+    extension = config.training_plan(
+        resume_from_checkpoint="latest",
+        extend_training_budget=True,
+    )
+
+    assert new_cpt["workflow"] == "continued_pretraining"
+    assert new_cpt["lifecycle"]["action"] == "start_new_cpt_run"
+    assert (
+        new_cpt["lifecycle"]["model_weights"]
+        == "load_configured_pretrained_weights"
+    )
+    assert resume["lifecycle"]["action"] == "resume"
+    assert resume["lifecycle"]["checkpoint"] == "latest"
+    assert "same model, data" in resume["lifecycle"]["resume_contract"]
+    assert extension["lifecycle"]["action"] == "extend_budget"
+    assert "larger max_tokens" in extension["lifecycle"]["extension_contract"]
+
+
+def test_training_plan_requires_checkpoint_for_budget_extension(tmp_path):
+    config = _config(tmp_path)
+    with pytest.raises(ValueError, match="requires resume_from_checkpoint"):
+        config.training_plan(extend_training_budget=True)
 
 
 def test_pretraining_config_accepts_hub_revisions_and_disjoint_splits(tmp_path):

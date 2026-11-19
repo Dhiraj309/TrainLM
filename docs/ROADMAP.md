@@ -32,12 +32,14 @@ files; extension-based or explicit parser selection, source-column selection,
 and named row formatting are recorded in cache identity and reports. Unified
 cross-workflow provenance remains incomplete. HF-04 is now in progress on
 `feat/22-hf-scratch-cpt-lifecycle`; HF-06–HF-08 remain planned; notebook
-presets do not complete those workflows. HF-04 adds offline
-`training_plan()` methods that report the budget and user-visible training
-controls, including optimizer settings, logging, save/evaluation cadence and
-best-model behavior. Epoch-based fine-tuning estimates require a
-caller-supplied finite dataset. Parameter count, memory, runtime selection and
-wall time remain unresolved. HF-05's opt-in
+presets do not complete those workflows. HF-04 adds offline `training_plan()`
+methods that report the budget and user-visible training controls, including
+optimizer settings, logging, save/evaluation cadence and best-model behavior.
+Pretraining plans now distinguish fresh scratch/CPT runs, exact checkpoint
+resume, and strict token budget extension; they never inspect checkpoint files.
+Epoch-based fine-tuning estimates require a caller-supplied finite dataset.
+Parameter count, memory, runtime selection and wall time remain unresolved.
+HF-05's opt-in
 `push_to_hub()` is
 merged: successful pretraining and fine-tuning results publish allowlisted
 model/tokenizer artifacts and a model card, default new repos to private,
