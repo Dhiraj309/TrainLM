@@ -658,6 +658,60 @@ class TrainLMPretrainingConfig:
                 "torch_compile currently requires accelerator='native_tpu'."
             )
 
+    def training_plan(self) -> dict[str, Any]:
+        """Return a lightweight pre-run budget and configuration estimate.
+
+        This method performs no model, dataset, or accelerator loading. The
+        optimizer-step count is estimated from the configured sequence length,
+        batch size, and accumulation. Actual supervised-token density and the
+        final microbatch can change the observed count; wall time and parameter
+        count are deliberately left unresolved.
+        """
+        tokens_per_update = (
+            (self.sequence_length - 1)
+            * self.per_device_train_batch_size
+            * self.gradient_accumulation_steps
+        )
+        return {
+            "workflow": "continued_pretraining"
+            if self.model_initialization == "pretrained"
+            else "scratch_pretraining",
+            "model": {
+                "source": str(self.model_name_or_path)
+                if self.model_name_or_path is not None
+                else None,
+                "model_type": self.model_type,
+                "initialization": self.model_initialization,
+                "parameter_count": "resolved_during_model_loading",
+            },
+            "data": {
+                "source": (
+                    "local_files"
+                    if self.train_file is not None
+                    else self.dataset_id
+                    if self.dataset_source == "hub"
+                    else "provided_dataset"
+                ),
+                "format": self.data_format,
+                "sequence_length": self.sequence_length,
+                "max_train_examples": self.max_train_examples,
+                "max_eval_examples": self.max_eval_examples,
+            },
+            "budget": {
+                "unit": "supervised_tokens",
+                "target": self.max_tokens,
+                "estimated_tokens_per_optimizer_update": tokens_per_update,
+                "estimated_optimizer_steps": math.ceil(
+                    self.max_tokens / tokens_per_update
+                ),
+            },
+            "runtime": {
+                "requested": self.accelerator,
+                "selected": "resolved_during_runtime_initialization",
+            },
+            "estimate_scope": "configuration_only; no wall time or memory estimate",
+        }
+
 
 def _token_documents(
     dataset: Iterable[Mapping[str, Any]],

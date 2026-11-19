@@ -493,6 +493,17 @@ check dimensions and known ID bounds, but cannot prove what each ID means.
 
 ### HF-04 — Clear scratch/CPT lifecycle and budgets (P0)
 
+**Progress on `feat/22-hf-scratch-cpt-lifecycle`:**
+`TrainLMPretrainingConfig.training_plan()` provides a no-download pre-run
+summary of the selected initialization, model/data settings, requested
+accelerator, supervised-token target, and estimated optimizer-step count.
+This estimate does not claim parameter count, memory, runtime selection, or
+wall time; those require model and runtime initialization.
+
+```python
+print(config.training_plan())  # inspect estimated budget before run_pretraining(config)
+```
+
 **User outcome:** switch between new weights and an existing model while
 keeping the same data, arguments and train/evaluate/save workflow.
 

@@ -10,8 +10,11 @@
 
 **Owner priority reset (2026-11-17):** the active product backlog is
 [HF user workflows](HF_USER_WORKFLOWS.md). The latest verified merged `main`
-is `242f418f4bd89a814709db5801e4f393963d86e4`; HF-01 through HF-03 are merged
-through PR #140. HF-02 connects scratch/CPT to the existing HF provider: load
+is `cfeea34209f3a561224e9889c2d62d6339e1d13b`; HF-01 through HF-03 are merged
+through PR #140 and HF-05 through PR #141. Live Hub upload remains unverified:
+the connector can create and inspect repositories but does not expose file
+upload, and remote HF Jobs returned 402. HF-02 connects scratch/CPT to the
+existing HF provider: load
 a Hub/local config, choose random or pretrained initialization, reuse the
 matching HF tokenizer by default or select one independently, and retain
 corpus-trained BPE as an explicit random-init option. Tokenizer mapping and
@@ -47,9 +50,9 @@ remain incomplete. PR #140 passed both hosted CPU profiles on commit
 `0200e0f19069611b95bc2daebabfe57f26837e3a`; no live-Hub or TPU execution was
 performed for that PR.
 
-The current branch `feat/21-hf-hub-publishing` implements HF-05: successful
-pretraining and fine-tuning results expose explicit, private-by-default
-`push_to_hub()` methods. The allowlisted upload includes model/tokenizer files
+The merged HF-05 implementation exposes explicit, private-by-default
+`push_to_hub()` methods on successful pretraining and fine-tuning results. The
+allowlisted upload includes model/tokenizer files
 and a model card, while excluding reports, corpora, checkpoints and unsupported
 custom remote code. Existing repository visibility must match the requested
 setting. The result includes the Hub commit SHA and URLs. Focused mocked CPU
@@ -59,7 +62,15 @@ test; `HubPublishResult` is now included. Seven focused tests pass locally and
 a locally built wheel imports the public symbol. The full wheel contract
 requires hosted CI because local build isolation cannot fetch its build
 dependency. The corrected `core-minimum` and `core-current` hosted profiles
-both pass on `59e17f87eedc637d34b299c75efe152aaf27c1d5`.
+both passed on `bf53959c8fcb3a0aa9ebf10566816e473f6338e6` before PR #141's
+rebase merge.
+
+The current branch `feat/22-hf-scratch-cpt-lifecycle` begins HF-04 with an
+offline `TrainLMPretrainingConfig.training_plan()` estimate for supervised
+token budgets and approximate optimizer steps. It reports configured model,
+data and runtime choices without loading resources; exact parameter count,
+memory, wall time, and final runtime selection remain unresolved. Validation:
+31 pretraining API tests and 3 roadmap contract tests pass on CPU.
 
 **HF-05 publishing implementation (2026-11-19):** completed
 `TrainLMPretrainingResult` and `TrainLMFineTuningResult` now expose an explicit

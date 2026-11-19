@@ -36,6 +36,33 @@ def _config(output_dir: Path, **overrides) -> TrainLMPretrainingConfig:
     return TrainLMPretrainingConfig(**values)
 
 
+def test_training_plan_estimates_token_budget_without_loading_resources(tmp_path):
+    config = _config(
+        tmp_path,
+        max_tokens=50,
+        sequence_length=8,
+        per_device_train_batch_size=2,
+        gradient_accumulation_steps=3,
+    )
+
+    plan = config.training_plan()
+
+    assert plan["workflow"] == "scratch_pretraining"
+    assert plan["model"]["parameter_count"] == "resolved_during_model_loading"
+    assert plan["data"]["sequence_length"] == 8
+    assert plan["budget"] == {
+        "unit": "supervised_tokens",
+        "target": 50,
+        "estimated_tokens_per_optimizer_update": 42,
+        "estimated_optimizer_steps": 2,
+    }
+    assert plan["runtime"] == {
+        "requested": "cpu",
+        "selected": "resolved_during_runtime_initialization",
+    }
+    assert "no wall time or memory estimate" in plan["estimate_scope"]
+
+
 def test_pretraining_config_accepts_hub_revisions_and_disjoint_splits(tmp_path):
     assert _config(tmp_path, dataset_revision="main").dataset_revision == "main"
     assert _config(tmp_path, dataset_revision=None).dataset_revision == "main"
