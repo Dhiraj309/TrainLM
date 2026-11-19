@@ -78,6 +78,29 @@ def test_training_worker_accepts_epoch_only_budget(monkeypatch):
     assert args.num_train_epochs == 2.5
 
 
+def test_training_worker_accepts_epoch_evaluation_and_checkpointing(monkeypatch):
+    module = load_script("trainlm_tpu_worker")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "worker",
+            "--max-steps",
+            "4",
+            "--eval-manifest-dir",
+            "eval",
+            "--eval-at-epoch-end",
+            "--save-at-epoch-end",
+        ],
+    )
+
+    args = module.parse_args()
+
+    assert args.eval_at_epoch_end is True
+    assert args.save_at_epoch_end is True
+    assert args.eval_every_steps is None
+
+
 def raw_args(path, **changes):
     values = dict(bin_path=[str(path)], token_dtype="uint16", byte_order="little",
                   header_bytes=4, token_vocab_size=8, expected_token_count=4)

@@ -704,7 +704,11 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
             max_steps=args.max_steps,
             max_tokens=args.max_tokens,
             max_train_batches=args.max_train_batches,
-            stop_at_epoch_end=requested_num_train_epochs is not None,
+            stop_at_epoch_end=(
+                requested_num_train_epochs is not None
+                or args.save_at_epoch_end
+                or args.eval_at_epoch_end
+            ),
             gradient_accumulation_steps=args.gradient_accumulation_steps,
             materialize_loss_every_steps=args.log_every_steps,
             max_grad_norm=args.max_grad_norm,
@@ -713,6 +717,7 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
         checkpoint=CheckpointConfig(
             output_dir=Path(args.output_dir),
             save_training_every_steps=args.save_every_steps,
+            save_training_at_epoch_end=args.save_at_epoch_end,
         ),
         logging=LoggingConfig(log_every_steps=args.log_every_steps),
         monitoring=MonitoringConfig(
@@ -724,6 +729,7 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
         evaluation=EvaluationConfig(
             enabled=eval_loader is not None,
             eval_every_steps=args.eval_every_steps,
+            eval_at_epoch_end=args.eval_at_epoch_end,
             max_batches=args.max_eval_batches,
         ),
     )
@@ -844,6 +850,8 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
         "effective_max_steps": args.max_steps,
         "num_train_epochs": requested_num_train_epochs,
         "max_train_batches": args.max_train_batches,
+        "save_at_epoch_end": args.save_at_epoch_end,
+        "eval_at_epoch_end": args.eval_at_epoch_end,
         "target_supervised_tokens": args.max_tokens,
         "micro_steps": state.micro_step,
         "tokens_seen_rank0": state.tokens_seen,

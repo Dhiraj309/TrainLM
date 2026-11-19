@@ -284,6 +284,34 @@ def test_tpu_facade_stages_evaluation_dataset_and_cadence(tmp_path):
     assert request.max_eval_batches == 1
 
 
+def test_tpu_facade_forwards_epoch_evaluation_and_checkpointing(tmp_path):
+    coordinator = RecordingCoordinator()
+    trainer = TrainLMTrainer(
+        model=pinned_model(),
+        train_dataset=tmp_path / "train",
+        eval_dataset=tmp_path / "eval",
+        args=TrainLMTrainingArguments(
+            accelerator="tpu",
+            output_dir=tmp_path / "run",
+            max_steps=4,
+            eval_strategy="epoch",
+            save_strategy="epoch",
+            max_eval_batches=2,
+        ),
+    )
+    trainer._tpu_coordinator = coordinator
+
+    trainer.train()
+
+    request = coordinator.requests[0]
+    assert request.eval_manifest_dir == tmp_path / "eval"
+    assert request.eval_every_steps is None
+    assert request.eval_at_epoch_end is True
+    assert request.save_every_steps is None
+    assert request.save_at_epoch_end is True
+    assert request.max_eval_batches == 2
+
+
 def test_tpu_facade_resolves_mutable_hugging_face_model_revision(
     tmp_path, monkeypatch
 ):
@@ -374,6 +402,30 @@ def test_tpu_evaluation_batch_limit_is_forwarded(tmp_path):
     command = _TPUCoordinator(tmp_path / "worker.py")._command(request)
 
     assert command[command.index("--max-eval-batches") + 1] == "1"
+
+
+def test_tpu_epoch_evaluation_and_checkpointing_are_forwarded(tmp_path):
+    base = _request(tmp_path)
+    request = _TPURunRequest(
+        **{
+            **base.to_dict(),
+            "model": base.model,
+            "manifest_dir": tmp_path / "manifests",
+            "output_dir": tmp_path / "run",
+            "save_at_epoch_end": True,
+            "eval_manifest_dir": tmp_path / "eval",
+            "eval_at_epoch_end": True,
+        }
+    )
+
+    command = _TPUCoordinator(tmp_path / "worker.py")._command(request)
+
+    assert "--save-at-epoch-end" in command
+    assert "--eval-at-epoch-end" in command
+    assert command[command.index("--eval-manifest-dir") + 1] == str(
+        (tmp_path / "eval").resolve()
+    )
+    assert "--eval-every-steps" not in command
 
 
 def test_tpu_token_budget_is_serialized_and_forwarded(tmp_path):
