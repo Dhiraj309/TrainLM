@@ -74,9 +74,11 @@ checkpoint/evaluation cadence and best-model behavior. The scratch plan labels
 its derived default cadence as an estimate. Its lifecycle preview separates
 fresh scratch/CPT, exact resume and the restricted larger-token-budget
 extension; the preview does not inspect checkpoint files. Neither plan loads
-external resources. Exact parameter count, memory, wall time, and final runtime
-selection remain unresolved. Focused pretraining, fine-tuning, and roadmap
-contracts pass (44 tests, CPU-only).
+external resources. `TrainLMPretrainingConfig.continued_pretraining(...)`
+provides an explicit CPT constructor without loading weights until run time.
+Exact parameter count, memory, wall time, and final runtime selection remain
+unresolved. Focused pretraining, fine-tuning, and roadmap contracts pass
+(45 tests, CPU-only).
 The current from-scratch notebook exposes random-init versus pretrained CPT
 and exact resume versus budget extension, printing each no-download plan before
 the training call. It remains a single-device TorchTPU recipe; no new TPU

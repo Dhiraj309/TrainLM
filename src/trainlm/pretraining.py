@@ -658,6 +658,30 @@ class TrainLMPretrainingConfig:
                 "torch_compile currently requires accelerator='native_tpu'."
             )
 
+    @classmethod
+    def continued_pretraining(
+        cls,
+        model_name_or_path: str | Path,
+        **kwargs: Any,
+    ) -> "TrainLMPretrainingConfig":
+        """Build a CPT config that starts from an existing model's weights.
+
+        This selects the pretrained initialization path for the existing
+        pretraining lifecycle; it does not load weights until the run starts.
+        Pass the same data and training settings used by
+        :class:`TrainLMPretrainingConfig`.
+        """
+        if "model_initialization" in kwargs:
+            raise TypeError(
+                "continued_pretraining() sets model_initialization='pretrained'; "
+                "omit that argument."
+            )
+        return cls(
+            model_name_or_path=model_name_or_path,
+            model_initialization="pretrained",
+            **kwargs,
+        )
+
     def training_plan(
         self,
         *,

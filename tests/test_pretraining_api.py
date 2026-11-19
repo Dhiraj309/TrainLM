@@ -107,6 +107,26 @@ def test_training_plan_requires_checkpoint_for_budget_extension(tmp_path):
         config.training_plan(extend_training_budget=True)
 
 
+def test_named_continued_pretraining_config_selects_pretrained_weights(tmp_path):
+    config = TrainLMPretrainingConfig.continued_pretraining(
+        "org/model",
+        output_dir=tmp_path / "cpt",
+        model_revision="a" * 40,
+        accelerator="cpu",
+    )
+
+    assert config.model_name_or_path == "org/model"
+    assert config.model_revision == "a" * 40
+    assert config.model_initialization == "pretrained"
+    assert config.training_plan()["workflow"] == "continued_pretraining"
+    assert not (tmp_path / "cpt").exists()
+    with pytest.raises(TypeError, match="sets model_initialization='pretrained'"):
+        TrainLMPretrainingConfig.continued_pretraining(
+            "org/model",
+            model_initialization="random",
+        )
+
+
 def test_pretraining_config_accepts_hub_revisions_and_disjoint_splits(tmp_path):
     assert _config(tmp_path, dataset_revision="main").dataset_revision == "main"
     assert _config(tmp_path, dataset_revision=None).dataset_revision == "main"

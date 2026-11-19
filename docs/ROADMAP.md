@@ -35,6 +35,8 @@ cross-workflow provenance remains incomplete. HF-04 is now in progress on
 presets do not complete those workflows. HF-04 adds offline `training_plan()`
 methods that report the budget and user-visible training controls, including
 optimizer settings, logging, save/evaluation cadence and best-model behavior.
+The named `TrainLMPretrainingConfig.continued_pretraining(...)` factory makes
+CPT selection explicit while reusing the same run lifecycle.
 Pretraining plans now distinguish fresh scratch/CPT runs, exact checkpoint
 resume, and strict token budget extension; they never inspect checkpoint files.
 The from-scratch notebook now previews both fresh-run settings and the selected
