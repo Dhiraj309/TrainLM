@@ -50,9 +50,13 @@ epoch order for checkpoint compatibility, then deterministically reshuffles
 shards and batches from the run seed and reconstructs that order when resuming.
 This branch adds epoch-based evaluation and checkpoint saving, flushing partial
 accumulation at each boundary. The focused coordinator, worker CLI, lifecycle,
-roadmap, and trainer suites pass 137 CPU tests. A regression verifies partial
-accumulation flush and evaluation-before-checkpoint ordering at the epoch
-boundary. TPU execution remains owner-validated.
+roadmap, trainer, and notebook-contract suites pass 140 CPU tests. Regressions
+verify partial accumulation flush, evaluation-before-checkpoint ordering, and
+independent evaluation-only/checkpoint-only schedules. The new v5e-1 Colab
+validation notebook runs those CPU contracts plus combined and independent
+XLA epoch schedules and checkpoint resume using local model/data fixtures. It
+requires Colab connected to a v5e-1 Cloud TPU VM with PyTorch/XLA; no TPU run
+has been performed for this branch.
 The from-scratch notebook now previews both fresh-run settings and the selected
 resume/extension mode in short cells, including an exact-resume option.
 Epoch-based fine-tuning estimates require a caller-supplied finite dataset.
