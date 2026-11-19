@@ -21,11 +21,11 @@
 - [Native single-device trainer smoke](TrainLM_Native_TorchTPU_Single_Device_Training.ipynb)
   checks TrainLM's experimental trainer using a pretrained DistilGPT-2
   checkpoint. It complements the standalone probe and the scratch workflow.
-- [Legacy XLA epoch evaluation and checkpoint validation](TrainLM_TPU_Epoch_Eval_Save_V5e1.ipynb)
+- [v5e-1 epoch evaluation and checkpoint validation](TrainLM_TPU_Epoch_Eval_Save_V5e1.ipynb)
   runs the focused CPU contracts, then a tiny single-device v5e-1 training,
-  epoch evaluation/checkpoint, and checkpoint-resume check. Use a Colab
-  frontend connected to a v5e-1 Cloud TPU VM with PyTorch/XLA installed; this
-  does not validate native TorchTPU.
+  epoch evaluation/checkpoint, and checkpoint-resume check. It prefers native
+  TorchTPU when available and can select legacy PyTorch/XLA explicitly. The
+  report labels which backend ran; a native run does not validate the XLA path.
 
 These notebooks collect evidence for their stated scope; CPU runs and
 standalone probes do not certify end-to-end TPU training or performance.

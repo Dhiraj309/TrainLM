@@ -4,9 +4,12 @@
 product delivery plan. T0–T11 remains the architecture and accelerator evidence
 plan. Story labels below distinguish merged work, the current implementation
 branch, and work that remains planned.
-The baseline audit is merged `main` at
-`9591d8b9823c9a8757630d1b79e724e3590d7028` (PR #138). The latest merged
-`main` includes HF-02 at `c9ece9a2e9057260586636a428dfd7679c42e8fa` (PR #139).
+Verified merged `main` is `7138cc04b26a0eab48e12fc86c6787cb38741e5d`.
+PR #143 adds epoch-based evaluation/checkpointing to the legacy XLA coordinator;
+that path remains hardware-unverified.
+The baseline audit started from
+`9591d8b9823c9a8757630d1b79e724e3590d7028` (PR #138); HF-02 then merged at
+`c9ece9a2e9057260586636a428dfd7679c42e8fa` (PR #139).
 
 ## The experience we are building
 

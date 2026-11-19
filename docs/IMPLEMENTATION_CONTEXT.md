@@ -9,10 +9,13 @@
 ## Current project snapshot
 
 **Owner priority reset (2026-11-17):** the active product backlog is
-[HF user workflows](HF_USER_WORKFLOWS.md). The latest verified merged `main`
-is `a8dd725c9ae6e123820d40609c14a3f3d7c99ddd`; HF-01 through HF-03 are merged
-through PR #140, HF-05 through PR #141, and the previous HF-04 slice through
-PR #142. Live Hub upload remains unverified:
+[HF user workflows](HF_USER_WORKFLOWS.md). PR #143 rebase-merged on
+2026-11-19; verified `origin/main` is
+`7138cc04b26a0eab48e12fc86c6787cb38741e5d`. HF-01 through HF-03 are merged
+through PR #140, HF-05 through PR #141, and HF-04 lifecycle plans through
+PR #142. PR #143 adds epoch evaluation/checkpointing to the legacy XLA
+coordinator, with 140 focused CPU tests and no TPU run. Live Hub upload
+remains unverified:
 the connector can create and inspect repositories but does not expose file
 upload, and remote HF Jobs returned 402. HF-02 connects scratch/CPT to the
 existing HF provider: load
@@ -66,7 +69,7 @@ dependency. The corrected `core-minimum` and `core-current` hosted profiles
 both passed on `bf53959c8fcb3a0aa9ebf10566816e473f6338e6` before PR #141's
 rebase merge.
 
-The current branch `feat/23-tpu-epoch-eval-save` continues HF-04 with
+The merged branch `feat/23-tpu-epoch-eval-save` continued HF-04 with
 offline `training_plan()` methods for pretraining and fine-tuning. The
 pretraining plan estimates supervised-token steps; the fine-tuning plan
 resolves epoch batches only when the caller supplies an already-loaded finite
@@ -88,9 +91,10 @@ epoch boundaries and flushes partial accumulation before each action. The new
 Colab notebook `notebooks/TrainLM_TPU_Epoch_Eval_Save_V5e1.ipynb` exercises the
 CPU contracts, combined and independent evaluation/checkpoint schedules, and
 resume from the first epoch checkpoint using a local tiny model and packed
-data. It requires a Colab frontend connected to a v5e-1 Cloud TPU VM with
-PyTorch/XLA; Codex has not run that hardware check. Token-step estimates assume
-one device and dense targets.
+data. It prefers native TorchTPU when available and can select the legacy
+PyTorch/XLA path; its report labels which backend ran. It requires a Colab
+frontend connected to the owner's v5e-1 Cloud TPU VM. Codex has not run that
+hardware check. Token-step estimates assume one device and dense targets.
 Exact parameter count, memory, wall time, and final runtime selection remain
 unresolved. The focused coordinator, worker CLI, fine-tuning, lifecycle,
 roadmap, trainer, and notebook-contract suites pass (140 tests, CPU-only).

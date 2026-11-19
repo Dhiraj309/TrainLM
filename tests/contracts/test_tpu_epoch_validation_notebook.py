@@ -21,7 +21,10 @@ def test_v5e1_epoch_validation_notebook_is_runnable_and_scoped():
     for required in (
         "TrainLM_TPU_Epoch_Eval_Save_V5e1.ipynb",
         "ct5lp-hightpu-1t",
-        "accelerator=\"tpu\"",
+        "accelerator=BACKEND",
+        'BACKEND = "auto"',
+        'BACKEND == "native_tpu"',
+        'BACKEND == "tpu"',
         'eval_strategy="epoch"',
         'save_strategy="epoch"',
         '"evaluation-only", eval_strategy="epoch", save_strategy="no"',
@@ -30,8 +33,9 @@ def test_v5e1_epoch_validation_notebook_is_runnable_and_scoped():
         "tests/training/test_trainer.py",
         "checkpoint-3",
         "evaluation_completed",
+        "legacy_xla_path_hardware_validated",
         '"performance_certified": False',
     ):
         assert required in source
     assert "pip install" not in source
-    assert "torch_tpu" not in source
+    assert "torch_tpu" in source
