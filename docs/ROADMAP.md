@@ -5,7 +5,7 @@
 The owner's priority is reusable HF models/tokenizers/datasets through
 scratch or continued pretraining, save, optional Hub publication and standard
 inference. Verified merged `main` is
-`a8dd725c9ae6e123820d40609c14a3f3d7c99ddd`; HF-01–HF-03 are complete through
+`7138cc04b26a0eab48e12fc86c6787cb38741e5d`; HF-01–HF-03 are complete through
 PR #140, HF-05's publishing API is merged by PR #141, and PR #142 merged the
 HF-04 training-plan lifecycle and finite TPU epoch budgets. Live Hub upload
 remains unverified; the connector could create and inspect repos but provided
@@ -31,7 +31,8 @@ remains caller responsibility. Raw multi-column datasets support a named
 resume. Local raw inputs support paired text, CSV, JSON/JSONL, and Parquet
 files; extension-based or explicit parser selection, source-column selection,
 and named row formatting are recorded in cache identity and reports. Unified
-cross-workflow provenance remains incomplete. HF-04 continues on
+cross-workflow provenance remains incomplete. HF-04 epoch evaluation and
+checkpoint scheduling merged through PR #143 on
 `feat/23-tpu-epoch-eval-save`; HF-06–HF-08 remain planned; notebook
 presets do not complete those workflows. HF-04 adds offline `training_plan()`
 methods that report the budget and user-visible training controls, including
@@ -48,15 +49,16 @@ worker resolves epochs from each rank's finite partition and flushes partial
 gradient accumulation at epoch boundaries; it preserves the established first
 epoch order for checkpoint compatibility, then deterministically reshuffles
 shards and batches from the run seed and reconstructs that order when resuming.
-This branch adds epoch-based evaluation and checkpoint saving, flushing partial
+PR #143 added epoch-based evaluation and checkpoint saving, flushing partial
 accumulation at each boundary. The focused coordinator, worker CLI, lifecycle,
 roadmap, trainer, and notebook-contract suites pass 140 CPU tests. Regressions
 verify partial accumulation flush, evaluation-before-checkpoint ordering, and
 independent evaluation-only/checkpoint-only schedules. The new v5e-1 Colab
 validation notebook runs those CPU contracts plus combined and independent
-XLA epoch schedules and checkpoint resume using local model/data fixtures. It
-requires Colab connected to a v5e-1 Cloud TPU VM with PyTorch/XLA; no TPU run
-has been performed for this branch.
+epoch schedules and checkpoint resume using local model/data fixtures. It
+prefers native TorchTPU when available and can explicitly run the legacy XLA
+coordinator; its report distinguishes the two. It requires Colab connected to
+the owner's v5e-1 Cloud TPU VM; no TPU run has been performed for this branch.
 The from-scratch notebook now previews both fresh-run settings and the selected
 resume/extension mode in short cells, including an exact-resume option.
 Epoch-based fine-tuning estimates require a caller-supplied finite dataset.

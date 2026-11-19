@@ -99,8 +99,9 @@ last batch in each finite map-style dataset pass. At an epoch boundary, TrainLM
 flushes any partial gradient-accumulation group before evaluating or saving.
 The legacy PyTorch/XLA coordinator also supports epoch schedules when given
 finite packed train/evaluation data; that path remains hardware-unverified.
-See the [v5e-1 epoch schedule validation notebook](../../notebooks/TrainLM_TPU_Epoch_Eval_Save_V5e1.ipynb)
-for an owner-run check. Omit the strategy to preserve the existing behavior:
+The [v5e-1 epoch schedule validation notebook](../../notebooks/TrainLM_TPU_Epoch_Eval_Save_V5e1.ipynb)
+selects the installed backend and labels whether it exercised native TorchTPU
+or the legacy XLA coordinator. Omit the strategy to preserve the existing behavior:
 a configured step interval schedules that action, while no interval disables
 scheduled actions. `run_finetuning` still evaluates once at the end when a
 validation split is configured. When saving is enabled, the last successful
