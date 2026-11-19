@@ -39,6 +39,9 @@ The named `TrainLMPretrainingConfig.continued_pretraining(...)` factory makes
 CPT selection explicit while reusing the same run lifecycle.
 Pretraining plans now distinguish fresh scratch/CPT runs, exact checkpoint
 resume, and strict token budget extension; they never inspect checkpoint files.
+Fine-tuning plans now show all configured step/token/epoch stop conditions,
+the first-limit stopping rule, and the legacy XLA route's unsupported token
+and epoch budgets. Token-step counts are one-device dense-target estimates.
 The from-scratch notebook now previews both fresh-run settings and the selected
 resume/extension mode in short cells, including an exact-resume option.
 Epoch-based fine-tuning estimates require a caller-supplied finite dataset.

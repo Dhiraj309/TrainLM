@@ -131,6 +131,35 @@ class TrainLMFineTuningConfig:
         datasets, or accelerator runtimes.
         """
         args = self.args
+        stop_conditions: list[dict[str, Any]] = []
+        if args.max_steps is not None:
+            stop_conditions.append({
+                "unit": "optimizer_steps",
+                "target": args.max_steps,
+            })
+        if args.max_tokens is not None:
+            tokens_per_update = (
+                (args.sequence_length - 1)
+                * args.per_device_train_batch_size
+                * args.gradient_accumulation_steps
+            )
+            stop_conditions.append({
+                "unit": "supervised_tokens",
+                "target": args.max_tokens,
+                "estimated_tokens_per_optimizer_update": tokens_per_update,
+                "estimated_optimizer_steps": math.ceil(
+                    args.max_tokens / tokens_per_update
+                ),
+                "estimate_note": (
+                    "Assumes one device and dense targets; world size, labels, "
+                    "masks, or padding can change the steps needed."
+                ),
+            })
+        if args.num_train_epochs is not None:
+            stop_conditions.append({
+                "unit": "epochs",
+                "target": args.num_train_epochs,
+            })
         budget: dict[str, Any]
         if args.max_steps is not None:
             budget = {
@@ -162,6 +191,23 @@ class TrainLMFineTuningConfig:
                     "estimated_train_batches": max_batches,
                     "estimated_optimizer_steps": steps,
                 })
+        if args.accelerator == "tpu" and (
+            args.max_tokens is not None
+            or args.num_train_epochs is not None
+            or args.max_steps is None
+        ):
+            budget_support = {
+                "status": "unsupported_by_requested_backend",
+                "reason": (
+                    "The legacy PyTorch/XLA coordinator supports optimizer-step "
+                    "budgets only; max_tokens and num_train_epochs cannot be used."
+                ),
+            }
+        else:
+            budget_support = {
+                "status": "not_preflighted",
+                "reason": None,
+            }
         return {
             "workflow": "fine_tuning",
             "model": {
@@ -177,6 +223,10 @@ class TrainLMFineTuningConfig:
                 "sequence_length": args.sequence_length,
             },
             "budget": budget,
+            "stop_conditions": stop_conditions,
+            "stop_rule": (
+                "Training stops when the first configured limit is reached."
+            ),
             "training": {
                 "per_device_train_batch_size": args.per_device_train_batch_size,
                 "gradient_accumulation_steps": args.gradient_accumulation_steps,
@@ -198,6 +248,7 @@ class TrainLMFineTuningConfig:
             "runtime": {
                 "requested": args.accelerator,
                 "selected": "resolved_during_runtime_initialization",
+                "budget_support": budget_support,
             },
             "estimate_scope": "no wall time or memory estimate",
         }
