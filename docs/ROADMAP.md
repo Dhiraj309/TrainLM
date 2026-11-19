@@ -39,12 +39,14 @@ The named `TrainLMPretrainingConfig.continued_pretraining(...)` factory makes
 CPT selection explicit while reusing the same run lifecycle.
 Pretraining plans now distinguish fresh scratch/CPT runs, exact checkpoint
 resume, and strict token budget extension; they never inspect checkpoint files.
-Fine-tuning plans now show all configured step/token/epoch stop conditions,
-the first-limit stopping rule, and the legacy XLA route's unsupported epoch
-budget. Token-step counts are one-device dense-target estimates. The XLA
-coordinator now forwards global supervised-token targets to the worker and
-stops after the first token/step limit, with microbatch-level overshoot
-reported. CPU request/limit tests pass; TPU execution remains owner-validated.
+Fine-tuning plans now show all configured step/token/epoch stop conditions
+and the first-limit stopping rule. Token-step counts are one-device
+dense-target estimates. The legacy XLA coordinator forwards global
+supervised-token targets and supports finite packed-data epoch budgets. The
+worker resolves epochs from each rank's finite partition and flushes partial
+gradient accumulation at epoch boundaries; the deterministic partition order
+repeats each epoch. Epoch-based evaluation and saving remain unsupported.
+CPU request/limit tests pass; TPU execution remains owner-validated.
 The from-scratch notebook now previews both fresh-run settings and the selected
 resume/extension mode in short cells, including an exact-resume option.
 Epoch-based fine-tuning estimates require a caller-supplied finite dataset.

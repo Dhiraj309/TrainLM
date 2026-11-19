@@ -179,7 +179,7 @@ class TrainLMFineTuningConfig:
                 "target": args.num_train_epochs,
                 "estimated_optimizer_steps": None,
             }
-            if train_dataset is not None:
+            if train_dataset is not None and args.accelerator != "tpu":
                 batches, max_batches, steps = _resolve_epoch_budget(
                     train_dataset,
                     batch_size=args.per_device_train_batch_size,
@@ -191,20 +191,13 @@ class TrainLMFineTuningConfig:
                     "estimated_train_batches": max_batches,
                     "estimated_optimizer_steps": steps,
                 })
-        if args.accelerator == "tpu" and args.num_train_epochs is not None:
-            budget_support = {
-                "status": "unsupported_by_requested_backend",
-                "reason": (
-                    "The legacy PyTorch/XLA coordinator supports optimizer-step "
-                    "and supervised-token budgets, but not num_train_epochs."
-                ),
-            }
-        elif args.accelerator == "tpu":
+        if args.accelerator == "tpu":
             budget_support = {
                 "status": "implemented_unverified",
                 "reason": (
-                    "The TPU coordinator implements optimizer-step and global "
-                    "supervised-token limits; this plan does not verify hardware execution."
+                    "The TPU coordinator implements optimizer-step, global "
+                    "supervised-token, and finite packed-data epoch limits; this "
+                    "plan does not verify hardware execution."
                 ),
             }
         else:

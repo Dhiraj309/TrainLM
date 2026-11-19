@@ -134,6 +134,51 @@ def _resolve_tpu_microbatch_budget(
     return min(step_batches, token_batches)
 
 
+def _resolve_tpu_epoch_budget(
+    *,
+    num_train_epochs: float,
+    batches_per_epoch: int,
+    gradient_accumulation_steps: int,
+) -> tuple[int, int]:
+    """Resolve finite rank-local epochs to consumed batches and optimizer steps."""
+    if (
+        isinstance(num_train_epochs, bool)
+        or not isinstance(num_train_epochs, Real)
+        or not math.isfinite(float(num_train_epochs))
+        or num_train_epochs <= 0
+    ):
+        raise ValueError("num_train_epochs must be positive and finite.")
+    if (
+        isinstance(batches_per_epoch, bool)
+        or not isinstance(batches_per_epoch, int)
+        or batches_per_epoch < 1
+    ):
+        raise ValueError("batches_per_epoch must be a positive integer.")
+    if (
+        isinstance(gradient_accumulation_steps, bool)
+        or not isinstance(gradient_accumulation_steps, int)
+        or gradient_accumulation_steps < 1
+    ):
+        raise ValueError("gradient_accumulation_steps must be positive.")
+
+    epoch_count = float(num_train_epochs)
+    total_batch_budget = batches_per_epoch * epoch_count
+    if not math.isfinite(total_batch_budget):
+        raise ValueError("num_train_epochs produces an unrepresentable batch budget.")
+    max_train_batches = math.ceil(total_batch_budget)
+    full_epochs = int(epoch_count)
+    partial_epoch_batches = max_train_batches - full_epochs * batches_per_epoch
+    updates_per_epoch = math.ceil(
+        batches_per_epoch / gradient_accumulation_steps
+    )
+    max_steps = full_epochs * updates_per_epoch
+    if partial_epoch_batches:
+        max_steps += math.ceil(
+            partial_epoch_batches / gradient_accumulation_steps
+        )
+    return max_train_batches, max_steps
+
+
 @dataclass(frozen=True, slots=True)
 class _TPURunRequest:
     model: ModelSourceConfig
@@ -153,6 +198,7 @@ class _TPURunRequest:
     warmup_steps: int
     precision: str
     max_tokens: int | None = None
+    num_train_epochs: float | None = None
     logging_verbosity: str = "normal"
     loss_implementation: str = "causal_lm"
     logits_chunk_size: int | None = None
@@ -170,8 +216,23 @@ class _TPURunRequest:
                 isinstance(value, bool) or not isinstance(value, int) or value < 1
             ):
                 raise ValueError(f"{name} must be a positive integer when configured.")
-        if self.max_steps is None and self.max_tokens is None:
-            raise ValueError("Set max_steps or max_tokens for TPU training.")
+        if self.num_train_epochs is not None and (
+            isinstance(self.num_train_epochs, bool)
+            or not isinstance(self.num_train_epochs, Real)
+            or not math.isfinite(float(self.num_train_epochs))
+            or self.num_train_epochs <= 0
+        ):
+            raise ValueError("num_train_epochs must be positive and finite.")
+        if self.num_train_epochs is not None and self.max_steps is not None:
+            raise ValueError("Set max_steps=None when using num_train_epochs.")
+        if (
+            self.max_steps is None
+            and self.max_tokens is None
+            and self.num_train_epochs is None
+        ):
+            raise ValueError(
+                "Set max_steps, max_tokens, or num_train_epochs for TPU training."
+            )
         if (
             not isinstance(self.logging_verbosity, str)
             or self.logging_verbosity not in {"quiet", "normal", "verbose"}
@@ -536,6 +597,10 @@ class _TPUCoordinator:
             command.extend(("--max-steps", str(request.max_steps)))
         if request.max_tokens is not None:
             command.extend(("--max-tokens", str(request.max_tokens)))
+        if request.num_train_epochs is not None:
+            command.extend(
+                ("--num-train-epochs", str(request.num_train_epochs))
+            )
         if request.logits_chunk_size is not None:
             command.extend(("--logits-chunk-size", str(request.logits_chunk_size)))
         if request.save_every_steps is not None:

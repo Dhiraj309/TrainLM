@@ -70,6 +70,7 @@ def parse_args():
     parser.add_argument("--model-preflight", action="store_true")
     parser.add_argument("--max-steps", type=int)
     parser.add_argument("--max-tokens", type=int)
+    parser.add_argument("--num-train-epochs", type=float)
     parser.add_argument("--warmup-steps", type=int, default=5)
     parser.add_argument("--gradient-accumulation-steps", type=int, default=32)
     parser.add_argument("--micro-batch-per-device", type=int, default=2)
@@ -136,12 +137,21 @@ def parse_args():
         parser.error("--max-steps must be positive")
     if args.max_tokens is not None and args.max_tokens < 1:
         parser.error("--max-tokens must be positive")
+    if args.num_train_epochs is not None and (
+        not math.isfinite(args.num_train_epochs) or args.num_train_epochs <= 0
+    ):
+        parser.error("--num-train-epochs must be positive and finite")
+    if args.num_train_epochs is not None and args.max_steps is not None:
+        parser.error("--max-steps must be omitted with --num-train-epochs")
     if (
         args.max_steps is None
         and args.max_tokens is None
+        and args.num_train_epochs is None
         and not (args.probe_only or args.model_preflight)
     ):
-        parser.error("training requires --max-steps or --max-tokens")
+        parser.error(
+            "training requires --max-steps, --max-tokens, or --num-train-epochs"
+        )
     if args.save_every_steps is not None and args.save_every_steps < 1:
         parser.error("--save-every-steps must be positive")
     if args.resume_from_checkpoint is not None and not Path(

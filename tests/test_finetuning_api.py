@@ -113,10 +113,10 @@ def test_training_plan_marks_tpu_token_budget_implemented_but_unverified(tmp_pat
     support = config.training_plan()["runtime"]["budget_support"]
 
     assert support["status"] == "implemented_unverified"
-    assert "supervised-token limits" in support["reason"]
+    assert "supervised-token" in support["reason"]
 
 
-def test_training_plan_marks_epoch_budget_unsupported_by_legacy_tpu(tmp_path):
+def test_training_plan_marks_epoch_budget_implemented_but_unverified(tmp_path):
     config = _config(
         tmp_path,
         args=TrainLMTrainingArguments(
@@ -129,8 +129,8 @@ def test_training_plan_marks_epoch_budget_unsupported_by_legacy_tpu(tmp_path):
 
     support = config.training_plan()["runtime"]["budget_support"]
 
-    assert support["status"] == "unsupported_by_requested_backend"
-    assert "not num_train_epochs" in support["reason"]
+    assert support["status"] == "implemented_unverified"
+    assert "finite packed-data epoch limits" in support["reason"]
 
 
 def test_finetuning_config_validates_optional_dataset_metadata_and_splits(tmp_path):

@@ -468,22 +468,7 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
     rank = int(xr.global_ordinal())
     world_size = int(xr.world_size())
     requested_max_steps = args.max_steps
-    from trainlm._tpu_coordinator import (
-        _resolve_tpu_max_steps,
-        _resolve_tpu_microbatch_budget,
-    )
-    args.max_steps = _resolve_tpu_max_steps(
-        max_steps=requested_max_steps,
-        max_tokens=args.max_tokens,
-        sequence_length=args.sequence_length,
-        micro_batch_per_device=args.micro_batch_per_device,
-        gradient_accumulation_steps=args.gradient_accumulation_steps,
-        world_size=world_size,
-    )
-    if args.warmup_steps > args.max_steps:
-        raise ValueError(
-            "warmup_steps must not exceed the effective TPU optimizer-step budget."
-        )
+    requested_num_train_epochs = args.num_train_epochs
 
     torch.manual_seed(args.seed)
     device = torch_xla.device()
@@ -515,6 +500,33 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
         host_remainder="drop",
     )
     partitioned = PartitionedPackedBatchReader(reader, partition)
+    from trainlm._tpu_coordinator import (
+        _resolve_tpu_epoch_budget,
+        _resolve_tpu_max_steps,
+        _resolve_tpu_microbatch_budget,
+    )
+    if requested_num_train_epochs is not None:
+        args.max_train_batches, epoch_max_steps = _resolve_tpu_epoch_budget(
+            num_train_epochs=requested_num_train_epochs,
+            batches_per_epoch=len(partitioned),
+            gradient_accumulation_steps=args.gradient_accumulation_steps,
+        )
+        step_limit = epoch_max_steps
+    else:
+        args.max_train_batches = None
+        step_limit = requested_max_steps
+    args.max_steps = _resolve_tpu_max_steps(
+        max_steps=step_limit,
+        max_tokens=args.max_tokens,
+        sequence_length=args.sequence_length,
+        micro_batch_per_device=args.micro_batch_per_device,
+        gradient_accumulation_steps=args.gradient_accumulation_steps,
+        world_size=world_size,
+    )
+    if args.warmup_steps > args.max_steps:
+        raise ValueError(
+            "warmup_steps must not exceed the effective TPU optimizer-step budget."
+        )
     required_microbatches = _resolve_tpu_microbatch_budget(
         max_steps=args.max_steps,
         max_tokens=args.max_tokens,
@@ -523,7 +535,12 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         world_size=world_size,
     )
-    if len(partitioned) < required_microbatches:
+    if args.max_train_batches is not None:
+        required_microbatches = min(required_microbatches, args.max_train_batches)
+    if (
+        requested_num_train_epochs is None
+        and len(partitioned) < required_microbatches
+    ):
         reader.close()
         raise ValueError(
             "Not enough complete rank-local batches for this run; add shards or "
@@ -671,6 +688,8 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
         trainer=TrainerConfig(
             max_steps=args.max_steps,
             max_tokens=args.max_tokens,
+            max_train_batches=args.max_train_batches,
+            stop_at_epoch_end=requested_num_train_epochs is not None,
             gradient_accumulation_steps=args.gradient_accumulation_steps,
             materialize_loss_every_steps=args.log_every_steps,
             max_grad_norm=args.max_grad_norm,
@@ -771,6 +790,8 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
              "batches_per_execution": min(args.gradient_accumulation_steps, 8),
              "requested_max_steps": requested_max_steps,
              "effective_max_steps": args.max_steps,
+             "num_train_epochs": requested_num_train_epochs,
+             "max_train_batches": args.max_train_batches,
              "max_tokens": args.max_tokens},
             sort_keys=True,
         ),
@@ -796,6 +817,8 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
         "steps": state.step,
         "requested_max_steps": requested_max_steps,
         "effective_max_steps": args.max_steps,
+        "num_train_epochs": requested_num_train_epochs,
+        "max_train_batches": args.max_train_batches,
         "target_supervised_tokens": args.max_tokens,
         "micro_steps": state.micro_step,
         "tokens_seen_rank0": state.tokens_seen,
