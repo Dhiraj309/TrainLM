@@ -5,9 +5,12 @@
 The owner's priority is reusable HF models/tokenizers/datasets through
 scratch or continued pretraining, save, optional Hub publication and standard
 inference. Verified merged `main` is
-`242f418f4bd89a814709db5801e4f393963d86e4`; HF-01–HF-03 are complete through
-PR #140. HF-01 resolves independent fine-tuning model/tokenizer IDs and
-revisions, preserves same-source snapshot pinning, checks known token-ID bounds
+`cfeea34209f3a561224e9889c2d62d6339e1d13b`; HF-01–HF-03 are complete through
+PR #140, and HF-05's publishing API is merged by PR #141. Live Hub upload
+remains unverified; the connector could create and inspect repos but provided
+no upload operation, and remote HF Jobs returned 402. HF-01 resolves independent
+fine-tuning model/tokenizer IDs and revisions, preserves same-source snapshot
+pinning, checks known token-ID bounds
 and static context limits, and pins resume to resolved source commits. HF-02
 connects scratch pretraining to an HF model config and tokenizer: random
 initialization or pretrained CPT, with an explicit BPE option and uint32 token
@@ -27,14 +30,17 @@ remains caller responsibility. Raw multi-column datasets support a named
 resume. Local raw inputs support paired text, CSV, JSON/JSONL, and Parquet
 files; extension-based or explicit parser selection, source-column selection,
 and named row formatting are recorded in cache identity and reports. Unified
-cross-workflow provenance remains incomplete. HF-04 and HF-06–HF-08 remain
-planned; notebook presets do not complete those workflows. HF-05's opt-in
-`push_to_hub()` implementation is in progress on
-`feat/21-hf-hub-publishing`: successful pretraining and fine-tuning results
-publish only allowlisted model and tokenizer artifacts with a model card,
-default new repos to private, check existing visibility, and return the
-immutable Hub commit. Mocked CPU coverage passes; live Hub round-trip
-validation remains unverified. PR #141's first hosted run found that the
+cross-workflow provenance remains incomplete. HF-04 is now in progress on
+`feat/22-hf-scratch-cpt-lifecycle`; HF-06–HF-08 remain planned; notebook
+presets do not complete those workflows. Its first slice adds an offline
+`TrainLMPretrainingConfig.training_plan()` estimate for token budgets and
+optimizer steps; 31 pretraining API tests and 3 roadmap contract tests pass
+on CPU. HF-05's opt-in `push_to_hub()` is
+merged: successful pretraining and fine-tuning results publish allowlisted
+model/tokenizer artifacts and a model card, default new repos to private,
+check existing visibility, and return the immutable Hub commit. Mocked CPU
+coverage and hosted CPU CI pass; live Hub round-trip validation remains
+unverified. PR #141's first hosted run found that the
 installed-wheel smoke test's explicit `__all__` allowlist omitted the new
 `HubPublishResult`; the contract now includes it. Seven focused tests pass
 locally, and a locally built wheel imports the public symbol; the full wheel
