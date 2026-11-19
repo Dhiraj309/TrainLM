@@ -39,8 +39,10 @@ installed-wheel smoke test's explicit `__all__` allowlist omitted the new
 `HubPublishResult`; the contract now includes it. Seven focused tests pass
 locally, and a locally built wheel imports the public symbol; the full wheel
 contract requires hosted CI because local build isolation cannot fetch its
-build dependency. The hosted rerun is pending. PR #140 passed both hosted CPU
-profiles at `0200e0f19069611b95bc2daebabfe57f26837e3a`. The previous
+build dependency. The corrected `core-minimum` and `core-current` hosted
+profiles both pass on `59e17f87eedc637d34b299c75efe152aaf27c1d5`. PR #140
+passed both hosted CPU profiles at `0200e0f19069611b95bc2daebabfe57f26837e3a`.
+The previous
 token-input slice passed 54 local tests plus 14 subtests, and CI for
 `e4e1c9f621148a76cf10efb6d00ceb5769d4e5ce` passed both core profiles. This
 follow-up passed 78 focused local tests plus 14 subtests. PR #140's hosted

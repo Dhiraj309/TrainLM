@@ -58,7 +58,8 @@ run caught a stale exact `__all__` allowlist in the installed-wheel smoke
 test; `HubPublishResult` is now included. Seven focused tests pass locally and
 a locally built wheel imports the public symbol. The full wheel contract
 requires hosted CI because local build isolation cannot fetch its build
-dependency; the hosted rerun is pending.
+dependency. The corrected `core-minimum` and `core-current` hosted profiles
+both pass on `59e17f87eedc637d34b299c75efe152aaf27c1d5`.
 
 **HF-05 publishing implementation (2026-11-19):** completed
 `TrainLMPretrainingResult` and `TrainLMFineTuningResult` now expose an explicit
