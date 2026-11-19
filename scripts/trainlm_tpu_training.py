@@ -61,11 +61,23 @@ from trainlm.training import Trainer, TrainerCallback, create_scheduler
 
 
 class BatchIterable(IterableDataset):
-    def __init__(self, reader: PartitionedPackedBatchReader) -> None:
+    def __init__(
+        self,
+        reader: PartitionedPackedBatchReader,
+        *,
+        reshuffle_each_epoch: bool = False,
+    ) -> None:
         self.reader = reader
+        self.reshuffle_each_epoch = reshuffle_each_epoch
+        self._next_epoch = reader.plan.epoch
 
     def __iter__(self):
-        for batch in self.reader:
+        epoch_reader = self.reader
+        if self.reshuffle_each_epoch:
+            if self._next_epoch != self.reader.plan.epoch:
+                epoch_reader = self.reader.for_epoch(self._next_epoch)
+            self._next_epoch += 1
+        for batch in epoch_reader:
             # Packed streams contain no padding or document loss mask. Keep
             # this payload flat so MpDeviceLoader can transfer it directly.
             yield {"input_ids": batch["input_ids"], "labels": batch["labels"]}
@@ -547,7 +559,10 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
             "reduce the token/step budget."
         )
     loader = DataLoader(
-        BatchIterable(partitioned),
+        BatchIterable(
+            partitioned,
+            reshuffle_each_epoch=requested_num_train_epochs is not None,
+        ),
         batch_size=None,
         num_workers=0,
         pin_memory=False,
@@ -769,9 +784,19 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
             try:
                 next(trainer._train_iterator)
             except StopIteration as exc:
-                raise ValueError(
-                    "TPU checkpoint data position exceeds the available rank schedule."
-                ) from exc
+                if requested_num_train_epochs is None:
+                    raise ValueError(
+                        "TPU checkpoint data position exceeds the available "
+                        "rank schedule."
+                    ) from exc
+                trainer._train_iterator = iter(trainer.train_dataloader)
+                try:
+                    next(trainer._train_iterator)
+                except StopIteration as empty_exc:
+                    raise ValueError(
+                        "TPU checkpoint data position exceeds the available "
+                        "rank schedule."
+                    ) from empty_exc
     print(
         json.dumps(
             {"stage": "train_start", "rank": rank,

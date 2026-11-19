@@ -79,13 +79,14 @@ provides an explicit CPT constructor without loading weights until run time.
 Fine-tuning plans report all configured stopping limits. The legacy XLA
 coordinator implements step and exact global supervised-token stopping, plus
 finite packed-data epoch budgets resolved from each rank's partition. Epoch
-boundaries flush partial gradient accumulation; the same deterministic
-partition order repeats each epoch. Epoch-based evaluation and saving remain
-unsupported, and TPU execution remains unverified. Token-step estimates assume
-one device and dense targets.
+boundaries flush partial gradient accumulation. The established first-epoch
+order is preserved for checkpoint compatibility; later epochs deterministically
+reshuffle shards and batches from the seed, including after checkpoint resume.
+Epoch-based evaluation and saving remain unsupported, and TPU execution remains
+unverified. Token-step estimates assume one device and dense targets.
 Exact parameter count, memory, wall time, and final runtime selection remain
 unresolved. The latest focused fine-tuning, lifecycle, and roadmap suites pass
-(111 tests, CPU-only); no TPU execution was performed.
+(121 tests, CPU-only); no TPU execution was performed.
 The current from-scratch notebook exposes random-init versus pretrained CPT
 and exact resume versus budget extension, printing each no-download plan before
 the training call. It remains a single-device TorchTPU recipe; no new TPU

@@ -509,7 +509,9 @@ assumes one device and dense targets; masks, padding, or distributed world size
 can change it. A plan requested with `accelerator="tpu"` marks step, token,
 and finite packed-data epoch budgets implemented-but-unverified for the legacy
 PyTorch/XLA coordinator. Epoch counts are resolved from each rank's finite
-packed-data partition; that deterministic partition order repeats each epoch.
+packed-data partition. The first epoch keeps the established order for resume
+compatibility; later epochs deterministically reshuffle shards and batches from
+the configured seed, and that order can be reconstructed after a checkpoint.
 Epoch-based evaluation and saving remain unsupported there. Token stopping
 uses exact global supervised-token counts and may pass the target by the final
 microbatch.
