@@ -56,6 +56,11 @@ def test_training_plan_estimates_token_budget_without_loading_resources(tmp_path
         "estimated_tokens_per_optimizer_update": 42,
         "estimated_optimizer_steps": 2,
     }
+    assert plan["training"]["save_steps"] == 1
+    assert plan["training"]["eval_steps"] == 1
+    assert plan["training"]["save_cadence_source"] == "estimated_default"
+    assert plan["training"]["logging_steps"] == config.logging_steps
+    assert plan["training"]["load_best_model_at_end"] is False
     assert plan["runtime"] == {
         "requested": "cpu",
         "selected": "resolved_during_runtime_initialization",

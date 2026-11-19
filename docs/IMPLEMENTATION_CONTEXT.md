@@ -69,9 +69,11 @@ The current branch `feat/22-hf-scratch-cpt-lifecycle` begins HF-04 with
 offline `training_plan()` methods for pretraining and fine-tuning. The
 pretraining plan estimates supervised-token steps; the fine-tuning plan
 resolves epoch batches only when the caller supplies an already-loaded finite
-dataset. Neither loads external resources. Exact parameter count, memory,
-wall time, and final runtime selection remain unresolved. The focused
-pretraining, fine-tuning, and roadmap tests pass (42 total, CPU-only).
+dataset. Both plans expose optimizer settings, precision, logging,
+checkpoint/evaluation cadence and best-model behavior. The scratch plan labels
+its derived default cadence as an estimate. Neither loads external resources.
+Exact parameter count, memory, wall time, and final runtime selection remain
+unresolved. CPU validation for the latest plan update is pending.
 
 **HF-05 publishing implementation (2026-11-19):** completed
 `TrainLMPretrainingResult` and `TrainLMFineTuningResult` now expose an explicit

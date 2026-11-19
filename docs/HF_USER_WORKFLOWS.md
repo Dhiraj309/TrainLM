@@ -500,9 +500,13 @@ accelerator, supervised-token target, and estimated optimizer-step count.
 `TrainLMFineTuningConfig.training_plan()` summarizes step- and token-based
 batches directly; for epoch budgets, pass an already-loaded finite dataset to
 estimate batches and updates without loading another resource.
+Both plans also show learning-rate settings, batch and accumulation values,
+precision, logging, save/evaluation cadence, and best-model/early-stopping
+settings. Scratch pretraining labels its derived default cadence as an
+estimate; fine-tuning reports resolved strategies and configured intervals.
 This estimate does not claim parameter count, memory, runtime selection, or
 wall time; those require model and runtime initialization.
-Focused pretraining, fine-tuning, and roadmap tests pass (42 total, CPU-only).
+CPU tests validate the plan contracts; they do not certify TPU execution.
 
 ```python
 print(config.training_plan())  # inspect estimated budget before run_pretraining(config)
