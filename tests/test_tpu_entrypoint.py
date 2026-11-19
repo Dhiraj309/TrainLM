@@ -54,6 +54,16 @@ def test_raw_cli_requires_explicit_layout(monkeypatch):
     assert module.parse_args().probe_only
 
 
+def test_training_worker_accepts_token_only_budget(monkeypatch):
+    module = load_script("trainlm_tpu_worker")
+    monkeypatch.setattr(sys, "argv", ["worker", "--max-tokens", "1000"])
+
+    args = module.parse_args()
+
+    assert args.max_steps is None
+    assert args.max_tokens == 1000
+
+
 def raw_args(path, **changes):
     values = dict(bin_path=[str(path)], token_dtype="uint16", byte_order="little",
                   header_bytes=4, token_vocab_size=8, expected_token_count=4)

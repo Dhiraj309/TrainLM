@@ -68,12 +68,78 @@ class TPUCoordinatorError(RuntimeError):
     """Raised when a TPU worker stage cannot produce a successful run."""
 
 
+def _resolve_tpu_max_steps(
+    *,
+    max_steps: int | None,
+    max_tokens: int | None,
+    sequence_length: int,
+    micro_batch_per_device: int,
+    gradient_accumulation_steps: int,
+    world_size: int,
+) -> int:
+    """Resolve a scheduler/data safety horizon for a global token target."""
+    if any(
+        isinstance(value, bool) or not isinstance(value, int) or value < minimum
+        for value, minimum in (
+            (sequence_length, 2),
+            (micro_batch_per_device, 1),
+            (gradient_accumulation_steps, 1),
+            (world_size, 1),
+        )
+    ):
+        raise ValueError("TPU token-budget geometry values must be positive.")
+    if max_tokens is not None and (
+        isinstance(max_tokens, bool)
+        or not isinstance(max_tokens, int)
+        or max_tokens < 1
+    ):
+        raise ValueError("max_tokens must be a positive integer when configured.")
+    if max_steps is not None and (
+        isinstance(max_steps, bool)
+        or not isinstance(max_steps, int)
+        or max_steps < 1
+    ):
+        raise ValueError("max_steps must be a positive integer when configured.")
+    if max_tokens is None:
+        if max_steps is None:
+            raise ValueError("Set max_steps or max_tokens for TPU training.")
+        return max_steps
+    tokens_per_update = (
+        (sequence_length - 1)
+        * micro_batch_per_device
+        * gradient_accumulation_steps
+        * world_size
+    )
+    token_step_limit = math.ceil(max_tokens / tokens_per_update)
+    return token_step_limit if max_steps is None else min(max_steps, token_step_limit)
+
+
+def _resolve_tpu_microbatch_budget(
+    *,
+    max_steps: int,
+    max_tokens: int | None,
+    sequence_length: int,
+    micro_batch_per_device: int,
+    gradient_accumulation_steps: int,
+    world_size: int,
+) -> int:
+    """Return the number of rank-local batches needed before the first limit."""
+    step_batches = max_steps * gradient_accumulation_steps
+    if max_tokens is None:
+        return step_batches
+    tokens_per_microbatch = (
+        (sequence_length - 1) * micro_batch_per_device * world_size
+    )
+    token_batches = math.ceil(max_tokens / tokens_per_microbatch)
+    return min(step_batches, token_batches)
+
+
 @dataclass(frozen=True, slots=True)
 class _TPURunRequest:
     model: ModelSourceConfig
     manifest_dir: Path
     output_dir: Path
-    max_steps: int
+    max_steps: int | None
     gradient_accumulation_steps: int
     micro_batch_per_device: int
     sequence_length: int
@@ -86,6 +152,7 @@ class _TPURunRequest:
     scheduler: str
     warmup_steps: int
     precision: str
+    max_tokens: int | None = None
     logging_verbosity: str = "normal"
     loss_implementation: str = "causal_lm"
     logits_chunk_size: int | None = None
@@ -97,6 +164,14 @@ class _TPURunRequest:
     max_grad_norm: float = 1.0
 
     def __post_init__(self) -> None:
+        for name in ("max_steps", "max_tokens"):
+            value = getattr(self, name)
+            if value is not None and (
+                isinstance(value, bool) or not isinstance(value, int) or value < 1
+            ):
+                raise ValueError(f"{name} must be a positive integer when configured.")
+        if self.max_steps is None and self.max_tokens is None:
+            raise ValueError("Set max_steps or max_tokens for TPU training.")
         if (
             not isinstance(self.logging_verbosity, str)
             or self.logging_verbosity not in {"quiet", "normal", "verbose"}
@@ -434,7 +509,6 @@ class _TPUCoordinator:
         command = [
             sys.executable,
             str(self.worker_script),
-            "--max-steps", str(request.max_steps),
             "--gradient-accumulation-steps", str(request.gradient_accumulation_steps),
             "--micro-batch-per-device", str(request.micro_batch_per_device),
             "--sequence-length", str(request.sequence_length),
@@ -458,6 +532,10 @@ class _TPUCoordinator:
             "--logging-verbosity", request.logging_verbosity,
             "--loss-implementation", request.loss_implementation,
         ]
+        if request.max_steps is not None:
+            command.extend(("--max-steps", str(request.max_steps)))
+        if request.max_tokens is not None:
+            command.extend(("--max-tokens", str(request.max_tokens)))
         if request.logits_chunk_size is not None:
             command.extend(("--logits-chunk-size", str(request.logits_chunk_size)))
         if request.save_every_steps is not None:

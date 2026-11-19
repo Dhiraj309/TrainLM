@@ -68,7 +68,8 @@ def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--probe-only", action="store_true")
     parser.add_argument("--model-preflight", action="store_true")
-    parser.add_argument("--max-steps", type=int, default=2)
+    parser.add_argument("--max-steps", type=int)
+    parser.add_argument("--max-tokens", type=int)
     parser.add_argument("--warmup-steps", type=int, default=5)
     parser.add_argument("--gradient-accumulation-steps", type=int, default=32)
     parser.add_argument("--micro-batch-per-device", type=int, default=2)
@@ -127,10 +128,20 @@ def parse_args():
     parser.add_argument("--model-source-json", default="")
     parser.add_argument("--export-hf", action="store_true")
     args = parser.parse_args()
-    for name in ("max_steps", "gradient_accumulation_steps", "micro_batch_per_device",
+    for name in ("gradient_accumulation_steps", "micro_batch_per_device",
                  "sequence_length", "log_every_steps", "shard_count", "token_vocab_size"):
         if getattr(args, name) < 1:
             parser.error(f"--{name.replace('_', '-')} must be positive")
+    if args.max_steps is not None and args.max_steps < 1:
+        parser.error("--max-steps must be positive")
+    if args.max_tokens is not None and args.max_tokens < 1:
+        parser.error("--max-tokens must be positive")
+    if (
+        args.max_steps is None
+        and args.max_tokens is None
+        and not (args.probe_only or args.model_preflight)
+    ):
+        parser.error("training requires --max-steps or --max-tokens")
     if args.save_every_steps is not None and args.save_every_steps < 1:
         parser.error("--save-every-steps must be positive")
     if args.resume_from_checkpoint is not None and not Path(

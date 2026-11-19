@@ -94,7 +94,9 @@ class PrintMetrics(TrainerCallback):
         self._lines_since_header = 0
         self._header_every = 50
         self._total_tokens = (
-            args.max_steps
+            args.max_tokens
+            if args.max_tokens is not None
+            else args.max_steps
             * args.sequence_length
             * args.micro_batch_per_device
             * args.gradient_accumulation_steps
@@ -465,6 +467,23 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
     del index
     rank = int(xr.global_ordinal())
     world_size = int(xr.world_size())
+    requested_max_steps = args.max_steps
+    from trainlm._tpu_coordinator import (
+        _resolve_tpu_max_steps,
+        _resolve_tpu_microbatch_budget,
+    )
+    args.max_steps = _resolve_tpu_max_steps(
+        max_steps=requested_max_steps,
+        max_tokens=args.max_tokens,
+        sequence_length=args.sequence_length,
+        micro_batch_per_device=args.micro_batch_per_device,
+        gradient_accumulation_steps=args.gradient_accumulation_steps,
+        world_size=world_size,
+    )
+    if args.warmup_steps > args.max_steps:
+        raise ValueError(
+            "warmup_steps must not exceed the effective TPU optimizer-step budget."
+        )
 
     torch.manual_seed(args.seed)
     device = torch_xla.device()
@@ -496,9 +515,20 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
         host_remainder="drop",
     )
     partitioned = PartitionedPackedBatchReader(reader, partition)
-    if len(partitioned) < args.max_steps * args.gradient_accumulation_steps:
+    required_microbatches = _resolve_tpu_microbatch_budget(
+        max_steps=args.max_steps,
+        max_tokens=args.max_tokens,
+        sequence_length=args.sequence_length,
+        micro_batch_per_device=args.micro_batch_per_device,
+        gradient_accumulation_steps=args.gradient_accumulation_steps,
+        world_size=world_size,
+    )
+    if len(partitioned) < required_microbatches:
         reader.close()
-        raise ValueError("Not enough complete rank-local batches for this run; add shards or reduce steps.")
+        raise ValueError(
+            "Not enough complete rank-local batches for this run; add shards or "
+            "reduce the token/step budget."
+        )
     loader = DataLoader(
         BatchIterable(partitioned),
         batch_size=None,
@@ -640,6 +670,7 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
         ),
         trainer=TrainerConfig(
             max_steps=args.max_steps,
+            max_tokens=args.max_tokens,
             gradient_accumulation_steps=args.gradient_accumulation_steps,
             materialize_loss_every_steps=args.log_every_steps,
             max_grad_norm=args.max_grad_norm,
@@ -738,7 +769,9 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
              ),
              "materialize_loss_every_steps": args.log_every_steps,
              "batches_per_execution": min(args.gradient_accumulation_steps, 8),
-             "max_steps": args.max_steps},
+             "requested_max_steps": requested_max_steps,
+             "effective_max_steps": args.max_steps,
+             "max_tokens": args.max_tokens},
             sort_keys=True,
         ),
         flush=True,
@@ -761,6 +794,9 @@ def train_fn(index: int, args: argparse.Namespace, shards, eval_shards=None) -> 
     summary = {
         "phase": state.phase.value,
         "steps": state.step,
+        "requested_max_steps": requested_max_steps,
+        "effective_max_steps": args.max_steps,
+        "target_supervised_tokens": args.max_tokens,
         "micro_steps": state.micro_step,
         "tokens_seen_rank0": state.tokens_seen,
         "samples_seen_rank0": state.samples_seen,
