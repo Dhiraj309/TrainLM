@@ -71,9 +71,12 @@ pretraining plan estimates supervised-token steps; the fine-tuning plan
 resolves epoch batches only when the caller supplies an already-loaded finite
 dataset. Both plans expose optimizer settings, precision, logging,
 checkpoint/evaluation cadence and best-model behavior. The scratch plan labels
-its derived default cadence as an estimate. Neither loads external resources.
-Exact parameter count, memory, wall time, and final runtime selection remain
-unresolved. CPU validation for the latest plan update is pending.
+its derived default cadence as an estimate. Its lifecycle preview separates
+fresh scratch/CPT, exact resume and the restricted larger-token-budget
+extension; the preview does not inspect checkpoint files. Neither plan loads
+external resources. Exact parameter count, memory, wall time, and final runtime
+selection remain unresolved. Focused pretraining, fine-tuning, and roadmap
+contracts pass (44 tests, CPU-only).
 
 **HF-05 publishing implementation (2026-11-19):** completed
 `TrainLMPretrainingResult` and `TrainLMFineTuningResult` now expose an explicit

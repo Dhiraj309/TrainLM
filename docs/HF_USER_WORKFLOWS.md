@@ -512,6 +512,25 @@ CPU tests validate the plan contracts; they do not certify TPU execution.
 print(config.training_plan())  # inspect estimated budget before run_pretraining(config)
 ```
 
+Pretraining plans can preview the three run choices without touching files:
+
+```python
+# A new scratch run, or a new CPT run that loads the configured pretrained weights.
+print(config.training_plan())
+# Exact checkpoint resume with the same run configuration.
+print(config.training_plan(resume_from_checkpoint="latest"))
+# Continue the same run with a larger max_tokens budget.
+print(config.training_plan(
+    resume_from_checkpoint="latest", extend_training_budget=True
+))
+```
+
+Pass the same lifecycle arguments to `run_pretraining()`. A new run needs a
+fresh `output_dir`; exact resume restores the saved training state, while a
+budget extension permits only a larger token target under the existing strict
+compatibility checks. The plan describes the requested choice but does not
+inspect the checkpoint or validate its saved configuration.
+
 **User outcome:** switch between new weights and an existing model while
 keeping the same data, arguments and train/evaluate/save workflow.
 
