@@ -37,6 +37,8 @@ methods that report the budget and user-visible training controls, including
 optimizer settings, logging, save/evaluation cadence and best-model behavior.
 Pretraining plans now distinguish fresh scratch/CPT runs, exact checkpoint
 resume, and strict token budget extension; they never inspect checkpoint files.
+The from-scratch notebook now previews both fresh-run settings and the selected
+resume/extension mode in short cells, including an exact-resume option.
 Epoch-based fine-tuning estimates require a caller-supplied finite dataset.
 Parameter count, memory, runtime selection and wall time remain unresolved.
 HF-05's opt-in
