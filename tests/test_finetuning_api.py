@@ -33,6 +33,33 @@ def _config(output_dir: Path, **overrides) -> TrainLMFineTuningConfig:
     return TrainLMFineTuningConfig(**values)
 
 
+def test_finetuning_training_plan_resolves_epoch_budget_from_loaded_data(tmp_path):
+    config = _config(
+        tmp_path,
+        args=TrainLMTrainingArguments(
+            output_dir=tmp_path,
+            max_steps=None,
+            num_train_epochs=2,
+            per_device_train_batch_size=2,
+            gradient_accumulation_steps=2,
+            sequence_length=8,
+            accelerator="cpu",
+        ),
+    )
+
+    plan = config.training_plan(train_dataset=[{}, {}, {}, {}, {}])
+
+    assert plan["workflow"] == "fine_tuning"
+    assert plan["budget"] == {
+        "unit": "epochs",
+        "target": 2,
+        "estimated_optimizer_steps": 4,
+        "batches_per_epoch": 3,
+        "estimated_train_batches": 6,
+    }
+    assert plan["runtime"]["selected"] == "resolved_during_runtime_initialization"
+
+
 def test_finetuning_config_validates_optional_dataset_metadata_and_splits(tmp_path):
     with pytest.raises(ValueError, match="immutable 40-character"):
         _config(tmp_path, dataset_revision="main")

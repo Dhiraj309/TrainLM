@@ -497,8 +497,12 @@ check dimensions and known ID bounds, but cannot prove what each ID means.
 `TrainLMPretrainingConfig.training_plan()` provides a no-download pre-run
 summary of the selected initialization, model/data settings, requested
 accelerator, supervised-token target, and estimated optimizer-step count.
+`TrainLMFineTuningConfig.training_plan()` summarizes step- and token-based
+batches directly; for epoch budgets, pass an already-loaded finite dataset to
+estimate batches and updates without loading another resource.
 This estimate does not claim parameter count, memory, runtime selection, or
 wall time; those require model and runtime initialization.
+Focused pretraining, fine-tuning, and roadmap tests pass (42 total, CPU-only).
 
 ```python
 print(config.training_plan())  # inspect estimated budget before run_pretraining(config)

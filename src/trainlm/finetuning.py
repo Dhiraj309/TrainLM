@@ -17,6 +17,7 @@ from typing import Any, Literal
 from .api import (
     TrainLMTrainer,
     TrainLMTrainingArguments,
+    _resolve_epoch_budget,
     _latest_training_checkpoint,
 )
 from .hub import HubPublishResult, _publish_model_export
@@ -121,6 +122,75 @@ class TrainLMFineTuningConfig:
             raise ValueError("data_format must be 'text' or 'tokens'.")
         if not isinstance(self.args, TrainLMTrainingArguments):
             raise TypeError("args must be a TrainLMTrainingArguments instance.")
+
+    def training_plan(self, train_dataset: Any | None = None) -> dict[str, Any]:
+        """Describe the configured fine-tuning budget before starting a run.
+
+        Pass an already-loaded finite map-style dataset to resolve an epoch
+        budget to batches and optimizer steps. This method never loads models,
+        datasets, or accelerator runtimes.
+        """
+        args = self.args
+        budget: dict[str, Any]
+        if args.max_steps is not None:
+            budget = {
+                "unit": "optimizer_steps",
+                "target": args.max_steps,
+                "estimated_optimizer_steps": args.max_steps,
+            }
+        elif args.max_tokens is not None:
+            budget = {
+                "unit": "supervised_tokens",
+                "target": args.max_tokens,
+                "estimated_optimizer_steps": None,
+            }
+        else:
+            budget = {
+                "unit": "epochs",
+                "target": args.num_train_epochs,
+                "estimated_optimizer_steps": None,
+            }
+            if train_dataset is not None:
+                batches, max_batches, steps = _resolve_epoch_budget(
+                    train_dataset,
+                    batch_size=args.per_device_train_batch_size,
+                    gradient_accumulation_steps=args.gradient_accumulation_steps,
+                    num_train_epochs=args.num_train_epochs,
+                )
+                budget.update({
+                    "batches_per_epoch": batches,
+                    "estimated_train_batches": max_batches,
+                    "estimated_optimizer_steps": steps,
+                })
+        return {
+            "workflow": "fine_tuning",
+            "model": {
+                "source": self.model_name_or_path,
+                "revision": self.model_revision,
+                "parameter_count": "resolved_during_model_loading",
+            },
+            "data": {
+                "source": self.dataset_id or "provided_dataset",
+                "format": self.data_format,
+                "train_split": self.train_split,
+                "validation_split": self.validation_split,
+                "sequence_length": args.sequence_length,
+            },
+            "budget": budget,
+            "training": {
+                "per_device_train_batch_size": args.per_device_train_batch_size,
+                "gradient_accumulation_steps": args.gradient_accumulation_steps,
+                "learning_rate": args.learning_rate,
+                "lr_scheduler_type": args.lr_scheduler_type,
+                "bf16": args.bf16,
+                "fp16": args.fp16,
+            },
+            "runtime": {
+                "requested": args.accelerator,
+                "selected": "resolved_during_runtime_initialization",
+            },
+            "estimate_scope": "no wall time or memory estimate",
+        }
 
 
 @dataclass(frozen=True, slots=True)
