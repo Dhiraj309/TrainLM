@@ -672,6 +672,8 @@ class TrainLMPretrainingConfig:
             * self.per_device_train_batch_size
             * self.gradient_accumulation_steps
         )
+        estimated_steps = math.ceil(self.max_tokens / tokens_per_update)
+        default_cadence = max(1, estimated_steps // 10)
         return {
             "workflow": "continued_pretraining"
             if self.model_initialization == "pretrained"
@@ -701,9 +703,28 @@ class TrainLMPretrainingConfig:
                 "unit": "supervised_tokens",
                 "target": self.max_tokens,
                 "estimated_tokens_per_optimizer_update": tokens_per_update,
-                "estimated_optimizer_steps": math.ceil(
-                    self.max_tokens / tokens_per_update
+                "estimated_optimizer_steps": estimated_steps,
+            },
+            "training": {
+                "per_device_train_batch_size": self.per_device_train_batch_size,
+                "gradient_accumulation_steps": self.gradient_accumulation_steps,
+                "learning_rate": self.learning_rate,
+                "lr_scheduler_type": self.lr_scheduler_type,
+                "warmup_steps": self.warmup_steps,
+                "warmup_ratio": self.warmup_ratio,
+                "bf16": self.bf16,
+                "gradient_checkpointing": self.gradient_checkpointing,
+                "logging_steps": self.logging_steps,
+                "save_steps": self.save_steps or default_cadence,
+                "eval_steps": self.eval_steps or default_cadence,
+                "save_cadence_source": (
+                    "configured" if self.save_steps is not None else "estimated_default"
                 ),
+                "eval_cadence_source": (
+                    "configured" if self.eval_steps is not None else "estimated_default"
+                ),
+                "load_best_model_at_end": self.load_best_model_at_end,
+                "early_stopping_patience": self.early_stopping_patience,
             },
             "runtime": {
                 "requested": self.accelerator,

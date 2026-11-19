@@ -58,6 +58,10 @@ def test_finetuning_training_plan_resolves_epoch_budget_from_loaded_data(tmp_pat
         "estimated_train_batches": 6,
     }
     assert plan["runtime"]["selected"] == "resolved_during_runtime_initialization"
+    assert plan["training"]["save_strategy"] == "no"
+    assert plan["training"]["eval_strategy"] == "no"
+    assert plan["training"]["logging_steps"] == config.args.logging_steps
+    assert plan["training"]["load_best_model_at_end"] is False
 
 
 def test_finetuning_config_validates_optional_dataset_metadata_and_splits(tmp_path):
