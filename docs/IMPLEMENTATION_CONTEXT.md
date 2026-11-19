@@ -65,12 +65,13 @@ dependency. The corrected `core-minimum` and `core-current` hosted profiles
 both passed on `bf53959c8fcb3a0aa9ebf10566816e473f6338e6` before PR #141's
 rebase merge.
 
-The current branch `feat/22-hf-scratch-cpt-lifecycle` begins HF-04 with an
-offline `TrainLMPretrainingConfig.training_plan()` estimate for supervised
-token budgets and approximate optimizer steps. It reports configured model,
-data and runtime choices without loading resources; exact parameter count,
-memory, wall time, and final runtime selection remain unresolved. Validation:
-31 pretraining API tests and 3 roadmap contract tests pass on CPU.
+The current branch `feat/22-hf-scratch-cpt-lifecycle` begins HF-04 with
+offline `training_plan()` methods for pretraining and fine-tuning. The
+pretraining plan estimates supervised-token steps; the fine-tuning plan
+resolves epoch batches only when the caller supplies an already-loaded finite
+dataset. Neither loads external resources. Exact parameter count, memory,
+wall time, and final runtime selection remain unresolved. The focused
+pretraining, fine-tuning, and roadmap tests pass (42 total, CPU-only).
 
 **HF-05 publishing implementation (2026-11-19):** completed
 `TrainLMPretrainingResult` and `TrainLMFineTuningResult` now expose an explicit

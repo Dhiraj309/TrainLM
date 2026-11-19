@@ -33,9 +33,10 @@ and named row formatting are recorded in cache identity and reports. Unified
 cross-workflow provenance remains incomplete. HF-04 is now in progress on
 `feat/22-hf-scratch-cpt-lifecycle`; HF-06–HF-08 remain planned; notebook
 presets do not complete those workflows. Its first slice adds an offline
-`TrainLMPretrainingConfig.training_plan()` estimate for token budgets and
-optimizer steps; 31 pretraining API tests and 3 roadmap contract tests pass
-on CPU. HF-05's opt-in `push_to_hub()` is
+`training_plan()` to the pretraining and fine-tuning configs; epoch-based
+fine-tuning estimates require a caller-supplied finite dataset. The focused
+API and roadmap tests pass (42 total, CPU-only). HF-05's opt-in
+`push_to_hub()` is
 merged: successful pretraining and fine-tuning results publish allowlisted
 model/tokenizer artifacts and a model card, default new repos to private,
 check existing visibility, and return the immutable Hub commit. Mocked CPU
