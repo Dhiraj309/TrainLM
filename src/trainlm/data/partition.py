@@ -203,7 +203,13 @@ def _ordered_shard_indices(
 def _global_batch_order(
     reader: ContiguousPackedBatchReader,
     shard_indices: tuple[int, ...],
+    *,
+    seed: int,
+    epoch: int,
+    split: DataSplit,
 ) -> tuple[int, ...]:
+    if split == "validation":
+        return tuple(range(len(reader)))
     starts = []
     running = 0
     for count in reader.layout.batches_per_shard:
@@ -213,7 +219,22 @@ def _global_batch_order(
     for shard_index in shard_indices:
         start = starts[shard_index]
         count = reader.layout.batches_per_shard[shard_index]
-        order.extend(range(start, start + count))
+        shard_id = reader.shards[shard_index].shard_id
+        batch_indices = range(start, start + count)
+
+        def key(batch_index: int) -> tuple[bytes, int]:
+            value = (
+                f"trainlm-batch-order-v1\0{seed}\0{epoch}\0"
+                f"{shard_id}\0{batch_index}"
+            ).encode("utf-8")
+            return hashlib.sha256(value).digest(), batch_index
+
+        if epoch == 0:
+            # Keep the established first-epoch schedule so checkpoints created
+            # before epoch-aware reshuffling can still resume their data cursor.
+            order.extend(batch_indices)
+        else:
+            order.extend(sorted(batch_indices, key=key))
     return tuple(order)
 
 
@@ -270,7 +291,13 @@ def plan_packed_batch_partition(
         seed=seed,
         epoch=epoch,
     )
-    global_order = _global_batch_order(reader, shard_indices)
+    global_order = _global_batch_order(
+        reader,
+        shard_indices,
+        seed=seed,
+        epoch=epoch,
+        split=split,
+    )
     host_remainder_count = len(global_order) % world_size
     if host_remainder == "error" and host_remainder_count:
         raise ValueError("Global batch count does not divide evenly across hosts.")
@@ -368,6 +395,22 @@ class PartitionedPackedBatchReader:
             "partition_index": partition_index,
             "replica_rank": self.plan.rank,
         }
+
+    def for_epoch(self, epoch: int) -> "PartitionedPackedBatchReader":
+        """Build this rank's deterministic training order for another epoch."""
+        if self.plan.split != "train":
+            raise ValueError("Only training partitions can be planned for another epoch.")
+        plan = plan_packed_batch_partition(
+            self.reader,
+            split=self.plan.split,
+            seed=self.plan.seed,
+            epoch=epoch,
+            world_size=self.plan.world_size,
+            rank=self.plan.rank,
+            cross_shard_remainder=self.plan.cross_shard_remainder,
+            host_remainder=self.plan.host_remainder,
+        )
+        return PartitionedPackedBatchReader(self.reader, plan)
 
     def __iter__(self):
         for partition_index in range(len(self)):

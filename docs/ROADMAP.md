@@ -44,8 +44,10 @@ and the first-limit stopping rule. Token-step counts are one-device
 dense-target estimates. The legacy XLA coordinator forwards global
 supervised-token targets and supports finite packed-data epoch budgets. The
 worker resolves epochs from each rank's finite partition and flushes partial
-gradient accumulation at epoch boundaries; the deterministic partition order
-repeats each epoch. Epoch-based evaluation and saving remain unsupported.
+gradient accumulation at epoch boundaries; it preserves the established first
+epoch order for checkpoint compatibility, then deterministically reshuffles
+shards and batches from the run seed and reconstructs that order when resuming.
+Epoch-based evaluation and saving remain unsupported.
 CPU request/limit tests pass; TPU execution remains owner-validated.
 The from-scratch notebook now previews both fresh-run settings and the selected
 resume/extension mode in short cells, including an exact-resume option.

@@ -79,6 +79,31 @@ def test_all_hosts_cover_retained_training_batches_exactly_once(tmp_path):
     )
     assert repeated == plans[2]
     assert next_epoch.schedule_fingerprint != plans[2].schedule_fingerprint
+    partitioned = PartitionedPackedBatchReader(reader, plans[2])
+    shuffled = partitioned.for_epoch(5)
+    shuffled_again = partitioned.for_epoch(5)
+    assert shuffled.plan == shuffled_again.plan
+    assert shuffled.plan.shard_order != plans[2].shard_order
+    assert len(shuffled) == len(partitioned)
+    reader.close()
+
+
+def test_epoch_order_shuffles_batches_within_a_single_shard(tmp_path):
+    reader = _reader(tmp_path, (64,))
+    first_plan = plan_packed_batch_partition(
+        reader,
+        split="train",
+        seed=17,
+        epoch=0,
+        world_size=1,
+        rank=0,
+    )
+    first_epoch = PartitionedPackedBatchReader(reader, first_plan)
+    next_epoch = first_epoch.for_epoch(1)
+
+    assert len(next_epoch) == len(first_epoch)
+    assert set(next_epoch.plan.batch_indices) == set(first_plan.batch_indices)
+    assert next_epoch.plan.batch_indices != first_plan.batch_indices
     reader.close()
 
 
