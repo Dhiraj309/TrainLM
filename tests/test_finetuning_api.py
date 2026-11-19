@@ -58,10 +58,62 @@ def test_finetuning_training_plan_resolves_epoch_budget_from_loaded_data(tmp_pat
         "estimated_train_batches": 6,
     }
     assert plan["runtime"]["selected"] == "resolved_during_runtime_initialization"
+    assert plan["runtime"]["budget_support"]["status"] == "not_preflighted"
+    assert plan["stop_conditions"] == [{"unit": "epochs", "target": 2}]
     assert plan["training"]["save_strategy"] == "no"
     assert plan["training"]["eval_strategy"] == "no"
     assert plan["training"]["logging_steps"] == config.args.logging_steps
     assert plan["training"]["load_best_model_at_end"] is False
+
+
+def test_training_plan_reports_combined_step_and_token_stops(tmp_path):
+    config = _config(
+        tmp_path,
+        args=TrainLMTrainingArguments(
+            output_dir=tmp_path,
+            max_steps=20,
+            max_tokens=250,
+            sequence_length=8,
+            per_device_train_batch_size=2,
+            gradient_accumulation_steps=2,
+            accelerator="cpu",
+        ),
+    )
+
+    plan = config.training_plan()
+
+    assert plan["budget"]["unit"] == "optimizer_steps"
+    assert plan["stop_conditions"] == [
+        {"unit": "optimizer_steps", "target": 20},
+        {
+            "unit": "supervised_tokens",
+            "target": 250,
+            "estimated_tokens_per_optimizer_update": 28,
+            "estimated_optimizer_steps": 9,
+            "estimate_note": (
+                "Assumes one device and dense targets; world size, labels, masks, "
+                "or padding can change the steps needed."
+            ),
+        },
+    ]
+    assert "first configured limit" in plan["stop_rule"]
+
+
+def test_training_plan_marks_token_budget_unsupported_by_legacy_tpu(tmp_path):
+    config = _config(
+        tmp_path,
+        args=TrainLMTrainingArguments(
+            output_dir=tmp_path,
+            max_steps=20,
+            max_tokens=250,
+            accelerator="tpu",
+        ),
+    )
+
+    support = config.training_plan()["runtime"]["budget_support"]
+
+    assert support["status"] == "unsupported_by_requested_backend"
+    assert "max_tokens" in support["reason"]
 
 
 def test_finetuning_config_validates_optional_dataset_metadata_and_splits(tmp_path):
