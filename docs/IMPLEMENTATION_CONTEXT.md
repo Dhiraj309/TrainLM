@@ -77,6 +77,10 @@ extension; the preview does not inspect checkpoint files. Neither plan loads
 external resources. Exact parameter count, memory, wall time, and final runtime
 selection remain unresolved. Focused pretraining, fine-tuning, and roadmap
 contracts pass (44 tests, CPU-only).
+The current from-scratch notebook exposes random-init versus pretrained CPT
+and exact resume versus budget extension, printing each no-download plan before
+the training call. It remains a single-device TorchTPU recipe; no new TPU
+execution was performed for the notebook update.
 
 **HF-05 publishing implementation (2026-11-19):** completed
 `TrainLMPretrainingResult` and `TrainLMFineTuningResult` now expose an explicit

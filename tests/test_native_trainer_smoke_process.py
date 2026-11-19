@@ -376,8 +376,14 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
         self.assertNotIn("TrainLMTrainer.from_scratch", source)
         self.assertIn("accelerator=\"native_tpu\"", source)
         self.assertNotIn("torchtpu_native_trainer_smoke.py", source)
-        self.assertIn('"smoke": (10_000, 2_000, 10)', source)
+        self.assertIn(
+            "FRESH_MAX_TOKENS, FRESH_MAX_TRAIN_EXAMPLES, LOGGING_STEPS = 10_000, 2_000, 10",
+            source,
+        )
         self.assertIn("max_tokens=FRESH_MAX_TOKENS", source)
+        self.assertIn("config.training_plan()", source)
+        self.assertIn('RESUME_MODE in {"resume", "extend"}', source)
+        self.assertIn("resume_config.training_plan(**options)", source)
         self.assertIn("files.download", source)
         self.assertIn("workflow smoke test", markdown)
         self.assertIn("does not produce a useful model", markdown)

@@ -88,7 +88,10 @@ def test_training_notebooks_keep_the_common_path_short_and_copyable():
         in scratch
     )
     assert "MODEL_INITIALIZATION" in scratch and '"pretrained"' in scratch
-    assert 'DATASET_ID, DATASET_CONFIG_NAME = "roneneldan/TinyStories", None' in scratch
+    assert (
+        'DATASET_ID, DATASET_CONFIG_NAME, DATASET_REVISION = '
+        '"roneneldan/TinyStories", None, "main"'
+    ) in scratch
     assert 'TRAIN_SPLIT, VALIDATION_SPLIT = "train[:90%]", "train[90%:]"' in scratch
     assert "without downloading model weights" in scratch
     finetuning = _notebook_source(Path("notebooks/TrainLM_Text_Fine_Tuning.ipynb"))

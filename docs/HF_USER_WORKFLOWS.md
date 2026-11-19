@@ -174,9 +174,9 @@ silently reinterpret it as a Transformers `PretrainedConfig` factory.
 
 HF-01–HF-03 are merged through PR #140 at
 `242f418f4bd89a814709db5801e4f393963d86e4`. HF-05's opt-in result publishing
-is in progress on `feat/21-hf-hub-publishing`; mocked CPU coverage passes, and
-live Hub round-trip evidence remains outstanding. HF-04 and HF-06–HF-08 remain
-planned. IDs
+is merged through PR #141; mocked CPU coverage passes, and live Hub round-trip
+evidence remains outstanding. HF-04 is in progress on PR #142;
+HF-06–HF-08 remain planned. IDs
 HF-01–HF-08 identify outcomes, not Git branch sequence numbers. Deliver each
 outcome in a focused PR with meaningful
 implementation/regression/docs commits. Start each new branch after the
