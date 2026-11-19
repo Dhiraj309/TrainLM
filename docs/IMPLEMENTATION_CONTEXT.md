@@ -88,8 +88,10 @@ epoch boundaries and flushes partial accumulation before each action. TPU
 execution remains unverified. Token-step estimates assume one device and dense
 targets.
 Exact parameter count, memory, wall time, and final runtime selection remain
-unresolved. The latest focused coordinator, worker CLI, fine-tuning, lifecycle,
-and roadmap suites pass (114 tests, CPU-only); no TPU execution was performed.
+unresolved. The focused coordinator, worker CLI, fine-tuning, lifecycle,
+roadmap, and trainer suites pass (137 tests, CPU-only). A trainer regression
+verifies that epoch boundaries flush partial accumulation, evaluate before
+saving, and publish one checkpoint. No TPU execution was performed.
 The current from-scratch notebook exposes random-init versus pretrained CPT
 and exact resume versus budget extension, printing each no-download plan before
 the training call. It remains a single-device TorchTPU recipe; no new TPU

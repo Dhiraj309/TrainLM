@@ -50,7 +50,9 @@ epoch order for checkpoint compatibility, then deterministically reshuffles
 shards and batches from the run seed and reconstructs that order when resuming.
 This branch adds epoch-based evaluation and checkpoint saving, flushing partial
 accumulation at each boundary. The focused coordinator, worker CLI, lifecycle,
-and roadmap suites pass 114 CPU tests; TPU execution remains owner-validated.
+roadmap, and trainer suites pass 137 CPU tests. A regression verifies partial
+accumulation flush and evaluation-before-checkpoint ordering at the epoch
+boundary. TPU execution remains owner-validated.
 The from-scratch notebook now previews both fresh-run settings and the selected
 resume/extension mode in short cells, including an exact-resume option.
 Epoch-based fine-tuning estimates require a caller-supplied finite dataset.

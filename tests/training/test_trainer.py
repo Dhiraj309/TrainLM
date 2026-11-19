@@ -460,6 +460,56 @@ def test_training_honors_evaluation_and_checkpoint_cadence():
     assert events == ["checkpoint-1"]
 
 
+def test_epoch_actions_flush_partial_accumulation_and_evaluate_before_save():
+    from trainlm.config import (
+        CheckpointConfig,
+        EvaluationConfig,
+        LoggingConfig,
+        TrainerConfig,
+    )
+
+    events = []
+
+    class EpochConfig:
+        trainer = TrainerConfig(
+            max_steps=2,
+            gradient_accumulation_steps=3,
+            stop_at_epoch_end=True,
+        )
+        checkpoint = CheckpointConfig(save_training_at_epoch_end=True)
+        evaluation = EvaluationConfig(eval_at_epoch_end=True)
+        logging = LoggingConfig(log_every_steps=100)
+
+    class EventRecorder(TrainerCallback):
+        def on_evaluate(self, state, control):
+            del state, control
+            events.append("evaluate")
+
+    model = DummyModel()
+    optimizer = SGD(model.parameters(), lr=0.1)
+    trainer = Trainer(
+        config=EpochConfig(),
+        model=model,
+        runtime=Runtime(),
+        optimizer=optimizer,
+        scheduler=LambdaLR(optimizer, lr_lambda=lambda _: 1.0),
+        task=CountingTask(),
+        train_dataloader=DataLoader(DummyDataset(), batch_size=2),
+        eval_dataloader=DataLoader(DummyDataset(), batch_size=2),
+        callbacks=(EventRecorder(),),
+        checkpoint_saver=lambda trainer, path: events.append("save"),
+    )
+
+    state = trainer.train()
+
+    # Four finite batches form one epoch. The last optimizer update consumes
+    # the one-batch tail rather than carrying it into another epoch.
+    assert state.micro_step == 4
+    assert state.epoch == 1
+    assert state.step == 2
+    assert events == ["evaluate", "save"]
+
+
 def test_training_saves_final_step_after_configured_cadence():
     events = []
     trainer = create_trainer(
