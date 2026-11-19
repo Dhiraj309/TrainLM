@@ -53,7 +53,12 @@ pretraining and fine-tuning results expose explicit, private-by-default
 and a model card, while excluding reports, corpora, checkpoints and unsupported
 custom remote code. Existing repository visibility must match the requested
 setting. The result includes the Hub commit SHA and URLs. Focused mocked CPU
-tests pass; a live Hub round trip remains unverified.
+tests pass; a live Hub round trip remains unverified. PR #141's first hosted
+run caught a stale exact `__all__` allowlist in the installed-wheel smoke
+test; `HubPublishResult` is now included. Seven focused tests pass locally and
+a locally built wheel imports the public symbol. The full wheel contract
+requires hosted CI because local build isolation cannot fetch its build
+dependency; the hosted rerun is pending.
 
 **HF-05 publishing implementation (2026-11-19):** completed
 `TrainLMPretrainingResult` and `TrainLMFineTuningResult` now expose an explicit
