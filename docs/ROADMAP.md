@@ -5,8 +5,9 @@
 The owner's priority is reusable HF models/tokenizers/datasets through
 scratch or continued pretraining, save, optional Hub publication and standard
 inference. Verified merged `main` is
-`cfeea34209f3a561224e9889c2d62d6339e1d13b`; HF-01–HF-03 are complete through
-PR #140, and HF-05's publishing API is merged by PR #141. Live Hub upload
+`a8dd725c9ae6e123820d40609c14a3f3d7c99ddd`; HF-01–HF-03 are complete through
+PR #140, HF-05's publishing API is merged by PR #141, and PR #142 merged the
+HF-04 training-plan lifecycle and finite TPU epoch budgets. Live Hub upload
 remains unverified; the connector could create and inspect repos but provided
 no upload operation, and remote HF Jobs returned 402. HF-01 resolves independent
 fine-tuning model/tokenizer IDs and revisions, preserves same-source snapshot
@@ -30,8 +31,8 @@ remains caller responsibility. Raw multi-column datasets support a named
 resume. Local raw inputs support paired text, CSV, JSON/JSONL, and Parquet
 files; extension-based or explicit parser selection, source-column selection,
 and named row formatting are recorded in cache identity and reports. Unified
-cross-workflow provenance remains incomplete. HF-04 is now in progress on
-`feat/22-hf-scratch-cpt-lifecycle`; HF-06–HF-08 remain planned; notebook
+cross-workflow provenance remains incomplete. HF-04 continues on
+`feat/23-tpu-epoch-eval-save`; HF-06–HF-08 remain planned; notebook
 presets do not complete those workflows. HF-04 adds offline `training_plan()`
 methods that report the budget and user-visible training controls, including
 optimizer settings, logging, save/evaluation cadence and best-model behavior.
@@ -47,8 +48,9 @@ worker resolves epochs from each rank's finite partition and flushes partial
 gradient accumulation at epoch boundaries; it preserves the established first
 epoch order for checkpoint compatibility, then deterministically reshuffles
 shards and batches from the run seed and reconstructs that order when resuming.
-Epoch-based evaluation and saving remain unsupported.
-CPU request/limit tests pass; TPU execution remains owner-validated.
+This branch adds epoch-based evaluation and checkpoint saving, flushing partial
+accumulation at each boundary. The focused coordinator, worker CLI, lifecycle,
+and roadmap suites pass 114 CPU tests; TPU execution remains owner-validated.
 The from-scratch notebook now previews both fresh-run settings and the selected
 resume/extension mode in short cells, including an exact-resume option.
 Epoch-based fine-tuning estimates require a caller-supplied finite dataset.

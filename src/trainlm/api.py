@@ -456,8 +456,9 @@ class TrainLMTrainingArguments:
     budget, or with ``num_train_epochs`` to train on a finite map-style
     dataset for a dataset-relative budget. On the legacy XLA coordinator,
     token budgets use exact global supervised-token counts, and epoch budgets
-    repeat finite rank-local packed data. Epoch-based save/evaluation strategies
-    remain unsupported there. ``eval_strategy`` and
+    repeat finite rank-local packed data. Epoch-based evaluation and checkpoint
+    saving also use those finite dataset boundaries. These XLA paths are not
+    hardware-verified. ``eval_strategy`` and
     ``save_strategy`` accept ``"no"``, ``"steps"``, or ``"epoch"``; omitted
     strategies preserve interval-based behavior. ``load_best_model_at_end``
     selects and restores the best evaluation checkpoint.
@@ -1155,7 +1156,11 @@ class TrainLMTrainer:
                 ),
                 num_train_epochs=self.args.num_train_epochs,
             )
-        if self._uses_epoch_schedules and self._train_batches_per_epoch is None:
+        if (
+            self._uses_epoch_schedules
+            and self._train_batches_per_epoch is None
+            and self.args.accelerator != "tpu"
+        ):
             self._train_batches_per_epoch = _resolve_batches_per_epoch(
                 train_dataset,
                 batch_size=self.args.per_device_train_batch_size,
@@ -1187,11 +1192,6 @@ class TrainLMTrainer:
                 raise NotImplementedError(
                     "load_best_model_at_end is not supported by the legacy "
                     "PyTorch/XLA coordinator."
-                )
-            if self._uses_epoch_schedules:
-                raise NotImplementedError(
-                    "Epoch-based evaluation and saving are not supported by the "
-                    "legacy PyTorch/XLA coordinator; use step strategies there."
                 )
             if any(value is not None for value in (optimizer, scheduler, runtime)):
                 raise ValueError(
@@ -2747,7 +2747,10 @@ class TrainLMTrainer:
                 "TPU training requires a PackedBinDataset or local manifest directory."
             )
         eval_manifest_dir = None
-        if self.eval_dataset is not None:
+        if (
+            self.eval_dataset is not None
+            and self.args.resolved_eval_strategy != "no"
+        ):
             if isinstance(self.eval_dataset, PackedBinDataset):
                 eval_manifest_dir = self.eval_dataset.coordinator_manifest_dir(
                     Path(self.args.output_dir) / "eval_data"
@@ -2788,6 +2791,7 @@ class TrainLMTrainer:
                 if self.args.resolved_save_strategy == "steps"
                 else None
             ),
+            save_at_epoch_end=self.args.resolved_save_strategy == "epoch",
             resume_from_checkpoint=(
                 Path(resume_from_checkpoint)
                 if resume_from_checkpoint is not None
@@ -2799,6 +2803,7 @@ class TrainLMTrainer:
                 if self.args.resolved_eval_strategy == "steps"
                 else None
             ),
+            eval_at_epoch_end=self.args.resolved_eval_strategy == "epoch",
             max_eval_batches=self.args.max_eval_batches,
             max_grad_norm=self.args.max_grad_norm,
         )

@@ -512,9 +512,10 @@ PyTorch/XLA coordinator. Epoch counts are resolved from each rank's finite
 packed-data partition. The first epoch keeps the established order for resume
 compatibility; later epochs deterministically reshuffle shards and batches from
 the configured seed, and that order can be reconstructed after a checkpoint.
-Epoch-based evaluation and saving remain unsupported there. Token stopping
-uses exact global supervised-token counts and may pass the target by the final
-microbatch.
+Epoch-based evaluation and checkpoint saving now run at those same finite
+dataset boundaries. Token stopping uses exact global supervised-token counts
+and may pass the target by the final microbatch. All TPU-coordinator paths
+remain hardware-unverified.
 For an explicitly named CPT entry point, use
 `TrainLMPretrainingConfig.continued_pretraining(model_id, ...)`; it selects
 pretrained initialization without downloading weights during config creation.

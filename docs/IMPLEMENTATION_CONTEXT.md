@@ -10,8 +10,9 @@
 
 **Owner priority reset (2026-11-17):** the active product backlog is
 [HF user workflows](HF_USER_WORKFLOWS.md). The latest verified merged `main`
-is `cfeea34209f3a561224e9889c2d62d6339e1d13b`; HF-01 through HF-03 are merged
-through PR #140 and HF-05 through PR #141. Live Hub upload remains unverified:
+is `a8dd725c9ae6e123820d40609c14a3f3d7c99ddd`; HF-01 through HF-03 are merged
+through PR #140, HF-05 through PR #141, and the previous HF-04 slice through
+PR #142. Live Hub upload remains unverified:
 the connector can create and inspect repositories but does not expose file
 upload, and remote HF Jobs returned 402. HF-02 connects scratch/CPT to the
 existing HF provider: load
@@ -65,7 +66,7 @@ dependency. The corrected `core-minimum` and `core-current` hosted profiles
 both passed on `bf53959c8fcb3a0aa9ebf10566816e473f6338e6` before PR #141's
 rebase merge.
 
-The current branch `feat/22-hf-scratch-cpt-lifecycle` begins HF-04 with
+The current branch `feat/23-tpu-epoch-eval-save` continues HF-04 with
 offline `training_plan()` methods for pretraining and fine-tuning. The
 pretraining plan estimates supervised-token steps; the fine-tuning plan
 resolves epoch batches only when the caller supplies an already-loaded finite
@@ -82,11 +83,13 @@ finite packed-data epoch budgets resolved from each rank's partition. Epoch
 boundaries flush partial gradient accumulation. The established first-epoch
 order is preserved for checkpoint compatibility; later epochs deterministically
 reshuffle shards and batches from the seed, including after checkpoint resume.
-Epoch-based evaluation and saving remain unsupported, and TPU execution remains
-unverified. Token-step estimates assume one device and dense targets.
+The XLA coordinator now schedules evaluation and checkpoint saving at dataset
+epoch boundaries and flushes partial accumulation before each action. TPU
+execution remains unverified. Token-step estimates assume one device and dense
+targets.
 Exact parameter count, memory, wall time, and final runtime selection remain
-unresolved. The latest focused fine-tuning, lifecycle, and roadmap suites pass
-(121 tests, CPU-only); no TPU execution was performed.
+unresolved. The latest focused coordinator, worker CLI, fine-tuning, lifecycle,
+and roadmap suites pass (114 tests, CPU-only); no TPU execution was performed.
 The current from-scratch notebook exposes random-init versus pretrained CPT
 and exact resume versus budget extension, printing each no-download plan before
 the training call. It remains a single-device TorchTPU recipe; no new TPU

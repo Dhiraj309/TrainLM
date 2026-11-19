@@ -78,9 +78,11 @@ def parse_args():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--log-every-steps", type=int, default=10)
     parser.add_argument("--save-every-steps", type=int)
+    parser.add_argument("--save-at-epoch-end", action="store_true")
     parser.add_argument("--resume-from-checkpoint")
     parser.add_argument("--eval-manifest-dir")
     parser.add_argument("--eval-every-steps", type=int)
+    parser.add_argument("--eval-at-epoch-end", action="store_true")
     parser.add_argument("--max-eval-batches", type=int)
     parser.add_argument("--learning-rate", type=float, default=2e-4)
     parser.add_argument("--beta1", type=float, default=0.9)
@@ -154,12 +156,22 @@ def parse_args():
         )
     if args.save_every_steps is not None and args.save_every_steps < 1:
         parser.error("--save-every-steps must be positive")
+    if args.save_at_epoch_end and args.save_every_steps is not None:
+        parser.error("choose --save-every-steps or --save-at-epoch-end, not both")
     if args.resume_from_checkpoint is not None and not Path(
         args.resume_from_checkpoint
     ).is_dir():
         parser.error("--resume-from-checkpoint must be an existing directory")
-    if (args.eval_manifest_dir is None) != (args.eval_every_steps is None):
-        parser.error("--eval-manifest-dir and --eval-every-steps must be used together")
+    eval_requested = (
+        args.eval_every_steps is not None or args.eval_at_epoch_end
+    )
+    if (args.eval_manifest_dir is None) != (not eval_requested):
+        parser.error(
+            "--eval-manifest-dir is required for scheduled evaluation, and "
+            "requires --eval-every-steps or --eval-at-epoch-end"
+        )
+    if args.eval_at_epoch_end and args.eval_every_steps is not None:
+        parser.error("choose --eval-every-steps or --eval-at-epoch-end, not both")
     if args.eval_every_steps is not None and args.eval_every_steps < 1:
         parser.error("--eval-every-steps must be positive")
     if args.max_eval_batches is not None and args.max_eval_batches < 1:

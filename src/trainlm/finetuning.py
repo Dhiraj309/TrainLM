@@ -196,8 +196,9 @@ class TrainLMFineTuningConfig:
                 "status": "implemented_unverified",
                 "reason": (
                     "The TPU coordinator implements optimizer-step, global "
-                    "supervised-token, and finite packed-data epoch limits; this "
-                    "plan does not verify hardware execution."
+                    "supervised-token, and finite packed-data epoch limits, "
+                    "including epoch evaluation and saving; this plan does not "
+                    "verify hardware execution."
                 ),
             }
         else:

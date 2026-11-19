@@ -203,9 +203,11 @@ class _TPURunRequest:
     loss_implementation: str = "causal_lm"
     logits_chunk_size: int | None = None
     save_every_steps: int | None = None
+    save_at_epoch_end: bool = False
     resume_from_checkpoint: Path | None = None
     eval_manifest_dir: Path | None = None
     eval_every_steps: int | None = None
+    eval_at_epoch_end: bool = False
     max_eval_batches: int | None = None
     max_grad_norm: float = 1.0
 
@@ -256,6 +258,13 @@ class _TPURunRequest:
             or self.save_every_steps < 1
         ):
             raise ValueError("save_every_steps must be positive when configured.")
+        for name in ("save_at_epoch_end", "eval_at_epoch_end"):
+            if not isinstance(getattr(self, name), bool):
+                raise ValueError(f"{name} must be a boolean.")
+        if self.save_at_epoch_end and self.save_every_steps is not None:
+            raise ValueError("Choose step or epoch checkpoint saving, not both.")
+        if self.eval_at_epoch_end and self.eval_every_steps is not None:
+            raise ValueError("Choose step or epoch evaluation, not both.")
         if self.resume_from_checkpoint is not None:
             checkpoint = Path(self.resume_from_checkpoint)
             if not checkpoint.is_dir():
@@ -263,9 +272,13 @@ class _TPURunRequest:
                     f"TPU resume checkpoint directory does not exist: {checkpoint}"
                 )
             object.__setattr__(self, "resume_from_checkpoint", checkpoint)
-        if (self.eval_manifest_dir is None) != (self.eval_every_steps is None):
+        evaluation_requested = (
+            self.eval_every_steps is not None or self.eval_at_epoch_end
+        )
+        if (self.eval_manifest_dir is None) != (not evaluation_requested):
             raise ValueError(
-                "eval_manifest_dir and eval_every_steps must be configured together."
+                "eval_manifest_dir and a step or epoch evaluation strategy "
+                "must be configured together."
             )
         if self.eval_every_steps is not None and (
             isinstance(self.eval_every_steps, bool)
@@ -605,6 +618,8 @@ class _TPUCoordinator:
             command.extend(("--logits-chunk-size", str(request.logits_chunk_size)))
         if request.save_every_steps is not None:
             command.extend(("--save-every-steps", str(request.save_every_steps)))
+        if request.save_at_epoch_end:
+            command.append("--save-at-epoch-end")
         if request.resume_from_checkpoint is not None:
             command.extend(
                 ("--resume-from-checkpoint", str(request.resume_from_checkpoint.resolve()))
@@ -613,7 +628,10 @@ class _TPUCoordinator:
             command.extend(
                 ("--eval-manifest-dir", str(request.eval_manifest_dir.resolve()))
             )
-            command.extend(("--eval-every-steps", str(request.eval_every_steps)))
+            if request.eval_every_steps is not None:
+                command.extend(("--eval-every-steps", str(request.eval_every_steps)))
+            if request.eval_at_epoch_end:
+                command.append("--eval-at-epoch-end")
         if request.max_eval_batches is not None:
             command.extend(("--max-eval-batches", str(request.max_eval_batches)))
         return command
