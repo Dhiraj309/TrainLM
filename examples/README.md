@@ -13,6 +13,10 @@
   Transformers in a separate Python process; set `MODEL_PATH` to the printed
   export directory.
 
+Both training scripts include a commented optional `result.push_to_hub(...)`
+call. Authenticate with `hf auth login` first. New Hub repositories default to
+private; review model/data licensing before choosing public visibility.
+
 ## Runtime diagnostics
 
 The `torchtpu_t1_*.py` files and `torchtpu_native_trainer_smoke.py` collect

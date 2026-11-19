@@ -24,3 +24,4 @@ print(
 )
 print(f"report: {result.report_path}")
 print(f"model:  {result.export_path}")
+# Optional after `hf auth login`: result.push_to_hub("you/tinystories-gpt2")
