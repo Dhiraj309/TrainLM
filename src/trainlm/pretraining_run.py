@@ -457,6 +457,10 @@ def _initial_report(
                 else None
             ),
             "max_train_examples": config.max_train_examples,
+            "row_limit_note": (
+                f"Training preparation reads at most {config.max_train_examples} rows."
+                if config.max_train_examples is not None else "No configured row limit."
+            ),
             "repeat_train_data": config.repeat_train_data,
             "max_eval_examples": config.max_eval_examples,
             "local_files": (
