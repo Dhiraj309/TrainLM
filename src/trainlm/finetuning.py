@@ -26,6 +26,8 @@ from .training import TrainerCallback
 
 
 _COMMIT_SHA = re.compile(r"[0-9a-f]{40}\Z")
+_LOCAL_FORMATS = {".csv": "csv", ".json": "json", ".jsonl": "json", ".parquet": "parquet"}
+_LOCAL_DATA_FORMATS = {"auto", "csv", "json", "parquet"}
 _FIELD_NAME = re.compile(r"[A-Za-z0-9._+-]{1,96}\Z")
 _SNAPSHOT_COMMIT = re.compile(
     r"(?:^|[/\\])snapshots[/\\]([0-9a-f]{40})(?:[/\\]|\Z)"
@@ -50,6 +52,9 @@ class TrainLMFineTuningConfig:
     model_name_or_path: str
     dataset_id: str | None = None
     dataset_revision: str | None = None
+    train_file: str | Path | None = None
+    validation_file: str | Path | None = None
+    local_data_format: Literal["auto", "csv", "json", "parquet"] = "auto"
     args: TrainLMTrainingArguments = field(
         default_factory=TrainLMTrainingArguments
     )
@@ -81,12 +86,31 @@ class TrainLMFineTuningConfig:
             raise ValueError("dataset_id must be a non-empty string when provided.")
         if self.dataset_revision is not None and (
             not isinstance(self.dataset_revision, str)
-            or not _COMMIT_SHA.fullmatch(self.dataset_revision)
+            or not self.dataset_revision.strip()
+            or len(self.dataset_revision) > 256
+            or "\x00" in self.dataset_revision
         ):
-            raise ValueError(
-                "dataset_revision must be an immutable 40-character commit SHA "
-                "when provided."
-            )
+            raise ValueError("dataset_revision must be a non-empty Hub revision.")
+        if self.local_data_format not in _LOCAL_DATA_FORMATS:
+            raise ValueError("local_data_format must be auto, csv, json, or parquet.")
+        has_local_files = self.train_file is not None or self.validation_file is not None
+        if has_local_files:
+            if self.train_file is None or self.validation_file is None:
+                raise ValueError("train_file and validation_file must be configured together.")
+            if self.dataset_id is not None or self.dataset_revision is not None:
+                raise ValueError("Choose local files or a Hub dataset, not both.")
+            paths = [Path(self.train_file).expanduser(), Path(self.validation_file).expanduser()]
+            if any(not path.is_file() for path in paths):
+                raise ValueError("Fine-tuning train_file and validation_file must exist.")
+            formats = [_LOCAL_FORMATS.get(path.suffix.lower()) for path in paths]
+            if self.local_data_format == "auto":
+                if None in formats or len(set(formats)) != 1:
+                    raise ValueError("Local fine-tuning files must share a supported CSV, JSON/JSONL, or Parquet format.")
+                object.__setattr__(self, "local_data_format", formats[0])
+            for name, path in zip(("train_file", "validation_file"), paths):
+                object.__setattr__(self, name, path.resolve())
+        elif self.local_data_format != "auto":
+            raise ValueError("local_data_format requires paired local files.")
         if self.model_revision is not None and (
             not isinstance(self.model_revision, str) or not self.model_revision.strip()
         ):
@@ -807,15 +831,12 @@ def run_finetuning(
     """
     if not isinstance(config, TrainLMFineTuningConfig):
         raise TypeError("config must be a TrainLMFineTuningConfig instance.")
+    local_files = config.train_file is not None
     if (train_dataset is None) != (eval_dataset is None):
         raise ValueError("Set both train_dataset and eval_dataset, or neither.")
-    if train_dataset is None and (
-        config.dataset_id is None or config.dataset_revision is None
-    ):
-        raise ValueError(
-            "dataset_id and immutable dataset_revision are required when "
-            "run_finetuning loads splits from the Hugging Face Hub."
-        )
+    local_files = config.train_file is not None
+    if train_dataset is None and not local_files and config.dataset_id is None:
+        raise ValueError("dataset_id is required when run_finetuning loads splits from the Hub.")
     if tokenizer is not None and not callable(tokenizer):
         raise TypeError("tokenizer must be callable when provided.")
     if config._tokenizer_object_required and tokenizer is None:
@@ -843,7 +864,9 @@ def run_finetuning(
 
     summary_path = Path(config.args.output_dir) / "finetuning-summary.json"
     dataset_source = (
-        "provided_dataset" if train_dataset is not None else "huggingface_hub"
+        "provided_dataset" if train_dataset is not None
+        else "local_files" if config.train_file is not None
+        else "huggingface_hub"
     )
     report = _initial_finetuning_summary(
         config,
@@ -882,6 +905,8 @@ def run_finetuning(
         report["data"]["dataset_fingerprints"] = run_state.get(
             "dataset_fingerprints"
         )
+        report["resolved_dataset_revision"] = run_state.get("resolved_dataset_revision")
+        report["data"]["resolved_dataset_revision"] = run_state.get("resolved_dataset_revision")
         report["data"]["max_dataset_token_id"] = run_state.get(
             "max_dataset_token_id"
         )
@@ -897,6 +922,8 @@ def run_finetuning(
         report["data"]["dataset_fingerprints"] = run_state.get(
             "dataset_fingerprints"
         )
+        report["resolved_dataset_revision"] = run_state.get("resolved_dataset_revision")
+        report["data"]["resolved_dataset_revision"] = run_state.get("resolved_dataset_revision")
         report["data"]["max_dataset_token_id"] = run_state.get(
             "max_dataset_token_id"
         )
@@ -907,6 +934,7 @@ def run_finetuning(
             cause_error_type=(
                 type(exc.__cause__).__name__ if exc.__cause__ is not None else None
             ),
+            resolved_dataset_revision=run_state.get("resolved_dataset_revision"),
             resolved_model_revision=run_state.get("resolved_model_revision"),
             resolved_tokenizer_revision=run_state.get("resolved_tokenizer_revision"),
             model_tokenizer_revision_match=run_state.get(
@@ -966,6 +994,10 @@ def _initial_finetuning_summary(
         "tokenizer_object_required": config._tokenizer_object_required,
         "dataset_id": config.dataset_id,
         "dataset_revision": config.dataset_revision,
+        "resolved_dataset_revision": None,
+        "train_file": str(config.train_file) if config.train_file is not None else None,
+        "validation_file": str(config.validation_file) if config.validation_file is not None else None,
+        "local_data_format": config.local_data_format,
         "model_path": str(Path(config.args.output_dir) / "model"),
         "resume_from_checkpoint": _json_compatible(resume_from_checkpoint),
         "step": None,
@@ -981,6 +1013,10 @@ def _initial_finetuning_summary(
             "formatting_function": _callable_label(formatting_func),
             "dataset_fingerprints": None,
             "max_dataset_token_id": None,
+            "resolved_dataset_revision": None,
+            "train_file": str(config.train_file) if config.train_file is not None else None,
+            "validation_file": str(config.validation_file) if config.validation_file is not None else None,
+            "local_data_format": config.local_data_format,
         },
         "training_arguments": _json_compatible({
             item.name: getattr(config.args, item.name)
@@ -1244,6 +1280,9 @@ def restore_finetuning_config(
             ),
             dataset_id=report.get("dataset_id"),
             dataset_revision=report.get("dataset_revision"),
+            train_file=data.get("train_file"),
+            validation_file=data.get("validation_file"),
+            local_data_format=data.get("local_data_format", "auto"),
             text_field=data["text_field"],
             train_split=data["train_split"],
             validation_split=data["validation_split"],
@@ -1279,6 +1318,17 @@ def restore_finetuning_config(
     return config
 
 
+
+def _resolve_finetuning_dataset_revision(config: TrainLMFineTuningConfig) -> str:
+    revision = config.dataset_revision or "main"
+    if _COMMIT_SHA.fullmatch(revision):
+        return revision
+    from huggingface_hub import HfApi
+    resolved = getattr(HfApi().dataset_info(config.dataset_id, revision=revision), "sha", None)
+    if not isinstance(resolved, str) or not _COMMIT_SHA.fullmatch(resolved):
+        raise ValueError("Hugging Face did not resolve the dataset revision to a commit SHA.")
+    return resolved
+
 def _run_finetuning_impl(
     config: TrainLMFineTuningConfig,
     *,
@@ -1297,6 +1347,7 @@ def _run_finetuning_impl(
     data must expose the Hugging Face Dataset ``column_names`` and ``map``
     interface. The result is saved locally and never uploaded.
     """
+    local_files = config.train_file is not None
     if not isinstance(config, TrainLMFineTuningConfig):
         raise TypeError("config must be a TrainLMFineTuningConfig instance.")
     if config.args.accelerator == "tpu":
@@ -1403,17 +1454,21 @@ def _run_finetuning_impl(
 
     verify_tokenizer_vocab(tokenizer, config.expected_tokenizer_vocab_sha256)
     run_state["phase"] = "dataset_loading"
+    resolved_dataset_revision = None
     if train_dataset is None:
-        train_source = load_dataset(
-            config.dataset_id,
-            revision=config.dataset_revision,
-            split=config.train_split,
-        )
-        validation_source = load_dataset(
-            config.dataset_id,
-            revision=config.dataset_revision,
-            split=config.validation_split,
-        )
+        if local_files:
+            builder = config.local_data_format
+            train_source = load_dataset(builder, data_files={config.train_split: str(config.train_file)}, split=config.train_split)
+            validation_source = load_dataset(builder, data_files={config.validation_split: str(config.validation_file)}, split=config.validation_split)
+        else:
+            resolved_dataset_revision = _resolve_finetuning_dataset_revision(config)
+            train_source = load_dataset(
+                config.dataset_id, revision=resolved_dataset_revision, split=config.train_split,
+            )
+            validation_source = load_dataset(
+                config.dataset_id, revision=resolved_dataset_revision, split=config.validation_split,
+            )
+        run_state["resolved_dataset_revision"] = resolved_dataset_revision
     else:
         train_source = train_dataset
         validation_source = eval_dataset

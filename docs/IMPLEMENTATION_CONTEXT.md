@@ -2155,3 +2155,7 @@ dependency profiles pass this test.
 ## JSONL metric reporting
 
 `TrainLMTrainingArguments(report_to="jsonl")` writes sparse training and evaluation metric snapshots to `output_dir/metrics.jsonl`. The default `report_to="none"` remains unchanged. TensorBoard and W&B are not accepted until dedicated adapters and dependency behavior are implemented. JSONL writes use the existing host-materialized callback snapshots and therefore do not trigger extra accelerator synchronization.
+
+## Fine-tuning dataset sources
+
+Fine-tuning accepts paired local CSV, JSON/JSONL, or Parquet paths and resolves friendly Hub dataset refs to immutable commits before loading. The resolved revision and source paths are included in the run summary. Local file-content hashing and resume identity are follow-up work.
