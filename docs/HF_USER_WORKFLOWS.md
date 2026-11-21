@@ -1,5 +1,8 @@
 # TrainLM: Hugging Face user workflows and delivery backlog
 
+**Preview an HF pretraining run.** The [scratch/CPT notebook](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) calls `config.training_plan(inspect_model=True)` to show the architecture, parameter count and equivalent FP32 parameter bytes before training. It uses the HF configuration and a PyTorch meta model. The normal plan stays offline. When training a new BPE tokenizer, the estimate assumes the requested vocabulary capacity. Activations, optimizer state and allocator overhead require separate memory measurements.
+
+
 The [HF workflow support matrix](HF_SUPPORT_MATRIX.md) links the scratch, CPT and tokenized corpus recipes to CPU and TPU evidence.
 
 **Priority reset requested by the owner on 2026-11-17.** This is the active
@@ -522,8 +525,7 @@ remain hardware-unverified.
 For an explicitly named CPT entry point, use
 `TrainLMPretrainingConfig.continued_pretraining(model_id, ...)`; it selects
 pretrained initialization without downloading weights during config creation.
-This estimate does not claim parameter count, memory, runtime selection, or
-wall time; those require model and runtime initialization.
+The default plan leaves parameter count unresolved. Use the optional architecture preview above to count parameters before fetching weights.
 CPU tests validate the plan contracts; they do not certify TPU execution.
 
 ```python

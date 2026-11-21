@@ -1368,3 +1368,32 @@ def test_incompatible_package_profile_precedes_dataset_preparation(
 
     assert raised.value.profile is profile
     assert prepared == []
+
+
+def test_model_size_preview_counts_tied_parameters_without_weights_or_training(tmp_path):
+    import torch
+    from transformers import GPT2Config, GPT2LMHeadModel
+
+    source = tmp_path / "config-only"
+    hf_config = GPT2Config(vocab_size=260, n_embd=16, n_layer=1, n_head=2, n_positions=8)
+    hf_config.save_pretrained(source)
+    reference = sum(parameter.numel() for parameter in GPT2LMHeadModel(hf_config).parameters())
+    config = TrainLMPretrainingConfig.continued_pretraining(
+        source, output_dir=tmp_path / "run", sequence_length=8,
+        max_tokens=14, local_files_only=True,
+    )
+    rng_state = torch.get_rng_state()
+    model = config.training_plan(inspect_model=True)["model"]
+    assert model["parameter_count"] == reference
+    assert model["parameter_bytes_at_fp32"] == reference * 4
+    assert model["model_type"] == "gpt2"
+    assert model["parameter_count_basis"] == "configured_architecture"
+    assert torch.equal(rng_state, torch.get_rng_state())
+    assert not config.output_dir.exists()
+
+
+def test_model_size_preview_labels_corpus_trained_vocab_estimate(tmp_path):
+    config = _config(tmp_path)
+    model = config.training_plan(inspect_model=True)["model"]
+    assert model["parameter_count_basis"] == "requested_bpe_vocabulary_capacity"
+    assert model["parameter_count"] > config.tokenizer_vocab_size
