@@ -1733,6 +1733,8 @@ class TrainLMTrainer:
             )
 
         pretraining = asdict(config)
+        if not config.repeat_train_data:
+            pretraining.pop("repeat_train_data", None)
         pretraining.pop("output_dir", None)
         if config.dataset_source == "hub":
             # Keep old Hub/local checkpoint configuration fingerprints stable.

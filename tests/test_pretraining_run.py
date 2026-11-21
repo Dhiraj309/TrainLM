@@ -446,3 +446,42 @@ def test_run_pretraining_report_preserves_package_preflight_failure(
     assert (
         json.loads(report_path.read_text())["preflight"]["package_profile"] == profile
     )
+
+
+def test_streamed_token_cpt_repeats_finite_corpus_and_reloads_export(tmp_path, monkeypatch):
+    import torch
+    from transformers import AutoModelForCausalLM, GPT2Config, GPT2LMHeadModel
+    from trainlm.pretraining import _train_byte_level_tokenizer
+
+    base = tmp_path / "base"
+    tokenizer, _ = _train_byte_level_tokenizer(
+        [{"text": "A short local story."}], max_examples=1, vocab_size=260,
+    )
+    tokenizer.save_pretrained(base)
+    GPT2LMHeadModel(GPT2Config(
+        vocab_size=len(tokenizer), n_positions=8, n_embd=8, n_layer=1, n_head=2,
+    )).save_pretrained(base)
+    calls = []
+
+    def stream(repo, *, revision, split, streaming):
+        calls.append((repo, revision, split, streaming))
+        token = 4 if split == "train" else 5
+        return iter([{"input_ids": [token] * 7 + [tokenizer.eos_token_id]}])
+
+    datasets = ModuleType("datasets")
+    datasets.load_dataset = stream
+    monkeypatch.setitem(sys.modules, "datasets", datasets)
+    config = replace(
+        _config(tmp_path / "run"), model_name_or_path=base,
+        model_embedding_size=768, model_layers=6, model_attention_heads=12,
+        model_initialization="pretrained", data_format="tokens", max_tokens=21,
+        repeat_train_data=True,
+    )
+    result = run_pretraining(config)
+    assert calls == [(config.dataset_id, "a" * 40, split, True)
+                     for split in ("train", "validation")]
+    assert result.report["training"]["supervised_tokens"] == 21
+    assert result.report["data"]["tokenizer_provenance"]["mapping_sha256"]
+    assert result.report["data"]["repeat_train_data"] is True
+    model = AutoModelForCausalLM.from_pretrained(result.export_path, local_files_only=True)
+    assert model.generate(torch.tensor([[4]]), max_new_tokens=1).shape == (1, 2)

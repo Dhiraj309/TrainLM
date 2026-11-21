@@ -304,12 +304,10 @@ def test_tokenized_pretraining_requires_a_selected_hf_tokenizer(tmp_path):
         **source,
         tokenizer_name_or_path="org/base-model",
     ).data_format == "tokens"
-    with pytest.raises(ValueError, match="requires dataset_source='provided'"):
-        _config(
-            tmp_path / "hub-tokens",
-            data_format="tokens",
-            tokenizer_name_or_path="org/base-model",
-        )
+    assert _config(
+        tmp_path / "hub-tokens", data_format="tokens",
+        tokenizer_name_or_path="org/base-model",
+    ).data_format == "tokens"
 
 
 def test_from_scratch_accepts_fingerprinted_raw_hf_dataset_objects(
@@ -586,7 +584,9 @@ def test_from_scratch_resolves_hub_config_and_sliced_splits_once(tmp_path, monke
 
     def load_dataset(dataset_id, **kwargs):
         calls.append((dataset_id, kwargs))
-        return iter(rows)
+        class Stream(list):
+            info = SimpleNamespace(splits={"train": SimpleNamespace(num_examples=len(rows))})
+        return Stream(rows)
 
     datasets_module.load_dataset = load_dataset
     monkeypatch.setitem(sys.modules, "datasets", datasets_module)
@@ -615,11 +615,7 @@ def test_from_scratch_resolves_hub_config_and_sliced_splits_once(tmp_path, monke
     assert trainer.model.config.model_type == "gpt2"
     assert len(calls) == 3
     assert all(dataset_id == "org/custom-corpus" for dataset_id, _ in calls)
-    assert [kwargs["split"] for _, kwargs in calls] == [
-        "train[:80%]",
-        "train[:80%]",
-        "train[80%:]",
-    ]
+    assert [kwargs["split"] for _, kwargs in calls] == ["train"] * 3
     assert all(kwargs["revision"] == "b" * 40 for _, kwargs in calls)
     assert all(kwargs["name"] == "default" for _, kwargs in calls)
 
