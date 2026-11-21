@@ -1166,6 +1166,7 @@ class TrainLMTrainer:
         optimizer: Optimizer | None = None,
         scheduler: LRScheduler | None = None,
         runtime: Any | None = None,
+        training_view_factory: Callable[[nn.Module], Any] | None = None,
     ) -> None:
         self.args = args or TrainLMTrainingArguments()
         from trainlm.data import PackedBinDataset
@@ -1270,10 +1271,13 @@ class TrainLMTrainer:
             self.scheduler = None
             self.engine = None
             return
-        if self.args.loss_implementation == "chunked_linear":
-            raise NotImplementedError(
-                "chunked_linear loss is currently available through the TPU worker; "
-                "use the TPU accelerator or the lower-level training view on CPU/CUDA."
+        if (
+            self.args.loss_implementation == "chunked_linear"
+            and training_view_factory is None
+        ):
+            raise ValueError(
+                "chunked_linear requires training_view_factory so hidden-state "
+                "extraction is explicit for this model."
             )
         if self.args.torch_compile and runtime is not None:
             raise ValueError(
@@ -1281,6 +1285,21 @@ class TrainLMTrainer:
                 "select accelerator='native_tpu' so TrainLM can configure it."
             )
         self.model = self._resolve_model(model)
+        self.training_view = None
+        if self.args.loss_implementation == "chunked_linear":
+            if training_view_factory is None:
+                raise ValueError(
+                    "chunked_linear requires training_view_factory so hidden-state "
+                    "extraction is explicit for this model."
+                )
+            self.training_view = training_view_factory(self.model)
+            from trainlm.tasks import LinearCausalLMTrainingView
+            if not isinstance(self.training_view, LinearCausalLMTrainingView):
+                raise TypeError("training_view_factory must return LinearCausalLMTrainingView.")
+            if self.training_view.model is not self.model:
+                raise ValueError("The training view must reference the trainer's model.")
+        elif training_view_factory is not None:
+            raise ValueError("training_view_factory applies only to chunked_linear loss.")
         if self.args.gradient_checkpointing:
             _enable_model_gradient_checkpointing(self.model)
         self.runtime = runtime or self._make_runtime()
@@ -1338,7 +1357,11 @@ class TrainLMTrainer:
             runtime=self.runtime,
             optimizer=self.optimizer,
             scheduler=self.scheduler,
-            task=CausalLMTask(loss_implementation=self.args.loss_implementation),
+            task=CausalLMTask(
+                loss_implementation=self.args.loss_implementation,
+                training_view=self.training_view,
+                logits_chunk_size=self.args.logits_chunk_size or 2048,
+            ),
             train_dataloader=train_loader,
             eval_dataloader=eval_loader,
             callbacks=(

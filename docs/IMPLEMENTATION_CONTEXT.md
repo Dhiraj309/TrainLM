@@ -2163,3 +2163,7 @@ Fine-tuning accepts paired local CSV, JSON/JSONL, or Parquet paths and resolves 
 ## Fine-tuning memory and loss controls
 
 The shared training arguments can enable the model's Hugging Face gradient-checkpointing hook and turn off KV cache during training. The selected `loss_implementation` now reaches the causal-LM task instead of being overridden. Local fine-tuning run summaries fingerprint train and validation files and reject changed files when restoring a run config. Chunked loss still requires an explicit linear training view and is not exposed by the facade.
+
+## Public chunked loss adapter
+
+`TrainLMTrainer` exposes the existing chunked linear loss behind an explicit `training_view_factory(model)` argument. The returned `LinearCausalLMTrainingView` must reference that exact model and carry inspected linear-head capabilities. `logits_chunk_size` controls the operation. No model-family path is inferred. TPU coordinator behavior remains separate from CPU/CUDA facade adapter validation.
