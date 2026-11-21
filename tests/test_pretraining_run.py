@@ -498,6 +498,7 @@ def test_streamed_hf_workflow_reloads_export(tmp_path, monkeypatch, initializati
         assert "differs from the tokenized corpus" in str(mismatch.value.__cause__)
         assert result.report["data"]["tokenizer_provenance"]["mapping_sha256"]
     assert result.report["data"]["repeat_train_data"] is True
+    assert "at most 12 rows" in result.report["data"]["row_limit_note"]
     model = AutoModelForCausalLM.from_pretrained(result.export_path, local_files_only=True)
     assert model.generate(torch.tensor([[4]]), max_new_tokens=1).shape == (1, 2)
     if data_format == "tokens" and initialization == "pretrained":
