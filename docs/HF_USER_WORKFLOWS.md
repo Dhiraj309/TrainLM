@@ -1,5 +1,7 @@
 # TrainLM: Hugging Face user workflows and delivery backlog
 
+The [HF workflow support matrix](HF_SUPPORT_MATRIX.md) links the scratch, CPT and tokenized corpus recipes to CPU and TPU evidence.
+
 **Priority reset requested by the owner on 2026-11-17.** This is the active
 product delivery plan. T0–T11 remains the architecture and accelerator evidence
 plan. Story labels below distinguish merged work, the current implementation
@@ -179,7 +181,7 @@ HF-01–HF-03 are merged through PR #140 at
 `242f418f4bd89a814709db5801e4f393963d86e4`. HF-05's opt-in result publishing
 is merged through PR #141; mocked CPU coverage passes, and live Hub round-trip
 evidence remains outstanding. HF-04 is in progress on PR #142;
-HF-06–HF-08 remain planned. IDs
+HF-06–HF-08 have partial implementation and evidence. IDs
 HF-01–HF-08 identify outcomes, not Git branch sequence numbers. Deliver each
 outcome in a focused PR with meaningful
 implementation/regression/docs commits. Start each new branch after the

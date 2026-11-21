@@ -11,8 +11,8 @@ config = TrainLMPretrainingConfig(
     model_initialization="random",  # HF config and tokenizer; no model weights.
     dataset_id="roneneldan/TinyStories",
     dataset_revision="main",  # TrainLM records the resolved immutable commit.
-    train_split="train[:90%]",
-    validation_split="train[90%:]",
+    train_split="train",
+    validation_split="validation",
     text_field="text",
     accelerator="native_tpu",
 )
