@@ -485,3 +485,22 @@ def test_streamed_token_cpt_repeats_finite_corpus_and_reloads_export(tmp_path, m
     assert result.report["data"]["repeat_train_data"] is True
     model = AutoModelForCausalLM.from_pretrained(result.export_path, local_files_only=True)
     assert model.generate(torch.tensor([[4]]), max_new_tokens=1).shape == (1, 2)
+
+
+def test_moved_run_directory_resumes_to_a_larger_token_budget(tmp_path, monkeypatch):
+    datasets = ModuleType("datasets")
+    datasets.load_dataset = lambda *args, **kwargs: iter([{"text": "A short story. " * 40}] * 12)
+    monkeypatch.setitem(sys.modules, "datasets", datasets)
+    original = tmp_path / "host-a"
+    fresh = run_pretraining(_config(original))
+    target = tmp_path / "host-b"
+    original.rename(target)
+    saved = restore_pretraining_report(target / "report.json", restored_output_dir=target)
+    assert saved.checkpoint_path.parent == target / "checkpoints"
+    resumed = run_pretraining(
+        replace(saved.config, max_tokens=22),
+        resume_from_checkpoint=saved.checkpoint_path, extend_training_budget=True,
+        report_path=target / "resume-report.json",
+    )
+    assert resumed.report["training"]["step"] > fresh.report["training"]["step"]
+    assert resumed.report["training"]["supervised_tokens"] >= 22

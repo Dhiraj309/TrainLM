@@ -861,8 +861,14 @@ def restore_pretraining_report(
     report_path: str | Path,
     *,
     run_dir: str | Path | None = None,
+    restored_output_dir: str | Path | None = None,
 ) -> TrainLMPretrainingResume:
-    """Validate a saved run report and prepare a safe checkpoint resume."""
+    """Prepare checkpoint resume, optionally from a copied output directory.
+
+    Copy the complete output directory after checkpoint publication. Pass its
+    new location as restored_output_dir and the report inside it as report_path.
+    External model, tokenizer and local corpus paths must still be accessible.
+    """
     path = Path(report_path).expanduser()
     if not path.is_file():
         raise FileNotFoundError(f"Resume report is missing: {path}")
@@ -905,6 +911,22 @@ def restore_pretraining_report(
     settings = resume.get("pretraining_config")
     if not isinstance(settings, dict):
         raise ValueError("The report does not contain the saved pretraining config.")
+    if restored_output_dir is not None:
+        if run_dir is not None:
+            raise ValueError("Choose either restored_output_dir or run_dir.")
+        target = Path(restored_output_dir).expanduser().resolve()
+        if path.resolve().parent != target:
+            raise ValueError("Use the report inside the restored output directory.")
+        original = settings.get("output_dir")
+        saved_checkpoint = resume.get("checkpoint_path")
+        if not isinstance(original, str) or not isinstance(saved_checkpoint, str):
+            raise ValueError("The report lacks the original output or checkpoint path.")
+        saved = Path(saved_checkpoint)
+        if (not saved.is_absolute() or saved.parent != Path(original) / "checkpoints"
+                or not re.fullmatch(r"checkpoint-[0-9]+", saved.name)):
+            raise ValueError("Invalid checkpoint location in the original run report.")
+        settings = {**settings, "output_dir": target}
+        resume = {**resume, "checkpoint_path": str(target / "checkpoints" / saved.name)}
     config = TrainLMPretrainingConfig(**settings)
     output_dir = Path(config.output_dir).resolve()
     session_dir = (
