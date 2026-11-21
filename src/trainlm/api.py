@@ -691,6 +691,13 @@ class TrainLMTrainingArguments:
             raise ValueError("weight_decay must be non-negative.")
         if not isinstance(self.seed, int) or isinstance(self.seed, bool) or self.seed < 0:
             raise ValueError("seed must be non-negative.")
+        reporters = (self.report_to,) if isinstance(self.report_to, str) else self.report_to
+        if not isinstance(reporters, tuple) or any(
+            reporter not in {"none", "jsonl"} for reporter in reporters
+        ):
+            raise ValueError("report_to supports 'none' or 'jsonl'.")
+        if len(set(reporters)) != len(reporters):
+            raise ValueError("report_to cannot contain duplicate reporters.")
         if (
             not isinstance(self.logging_verbosity, str)
             or self.logging_verbosity not in {"quiet", "normal", "verbose"}
@@ -718,6 +725,21 @@ class TrainLMTrainingArguments:
     def resolved_eval_strategy(self) -> Literal["no", "steps", "epoch"]:
         """Return evaluation policy, inferring the legacy step policy when omitted."""
         return self.eval_strategy or ("steps" if self.eval_steps is not None else "no")
+
+
+class _JSONLMetricsCallback(TrainerCallback):
+    """Append host-materialized training and evaluation metrics as JSON Lines."""
+
+    def __init__(self, output_dir: Path) -> None:
+        self.path = output_dir / "metrics.jsonl"
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+
+    def on_metrics(self, state, control, metrics: Mapping[str, float]) -> None:
+        del control
+        row = {"step": int(state.step), "phase": state.phase.value,
+               "metrics": {name: float(value) for name, value in metrics.items()}}
+        with self.path.open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps(row, sort_keys=True, allow_nan=False) + "\n")
 
 
 class _BestModelSelectionCallback(TrainerCallback):
@@ -1301,9 +1323,12 @@ class TrainLMTrainer:
             train_dataloader=train_loader,
             eval_dataloader=eval_loader,
             callbacks=(
-                self.callbacks + (self._best_model_callback,)
-                if self._best_model_callback is not None
-                else self.callbacks
+                self.callbacks
+                + ((_JSONLMetricsCallback(Path(self.args.output_dir)),)
+                   if "jsonl" in ((self.args.report_to,) if isinstance(self.args.report_to, str)
+                                  else self.args.report_to) else ())
+                + ((self._best_model_callback,)
+                   if self._best_model_callback is not None else ())
             ),
             checkpoint_saver=self._save_training_checkpoint,
             checkpoint_loader=self._load_training_checkpoint,

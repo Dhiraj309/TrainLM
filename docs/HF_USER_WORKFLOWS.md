@@ -687,3 +687,7 @@ TrainLM restores optimizer, scheduler, RNG and packed cursor during training.
 Exact resume keeps the saved budget. The CPU regression also exercises the
 explicit budget extension after moving the directory. Physical TPU VM
 replacement still needs an owner run.
+
+### Save training curves as JSONL
+
+Pass `report_to="jsonl"` to `TrainLMTrainingArguments` to append each configured training log and evaluation snapshot to `output_dir/metrics.jsonl`. The default is `"none"`. TensorBoard and W&B integrations are not available yet.
