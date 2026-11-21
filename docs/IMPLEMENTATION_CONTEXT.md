@@ -2167,3 +2167,7 @@ The shared training arguments can enable the model's Hugging Face gradient-check
 ## Public chunked loss adapter
 
 `TrainLMTrainer` exposes the existing chunked linear loss behind an explicit `training_view_factory(model)` argument. The returned `LinearCausalLMTrainingView` must reference that exact model and carry inspected linear-head capabilities. `logits_chunk_size` controls the operation. No model-family path is inferred. TPU coordinator behavior remains separate from CPU/CUDA facade adapter validation.
+
+## Metric reporter integrations
+
+report_to supports JSONL, TensorBoard, and W&B. TensorBoard and W&B are imported only when selected and produce actionable missing-package errors. Reporter resources are closed at train end. The default remains disabled.
