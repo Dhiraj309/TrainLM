@@ -696,9 +696,12 @@ class TrainLMTrainingArguments:
             raise ValueError("seed must be non-negative.")
         reporters = (self.report_to,) if isinstance(self.report_to, str) else self.report_to
         if not isinstance(reporters, tuple) or any(
-            reporter not in {"none", "jsonl"} for reporter in reporters
+            reporter not in {"none", "jsonl", "tensorboard", "wandb"}
+            for reporter in reporters
         ):
-            raise ValueError("report_to supports 'none' or 'jsonl'.")
+            raise ValueError("report_to supports none, jsonl, tensorboard, and wandb.")
+        if len(reporters) > 1 and "none" in reporters:
+            raise ValueError("report_to='none' cannot be combined with reporters.")
         if len(set(reporters)) != len(reporters):
             raise ValueError("report_to cannot contain duplicate reporters.")
         if (
@@ -740,19 +743,56 @@ def _enable_model_gradient_checkpointing(model: nn.Module) -> None:
     enable()
 
 
-class _JSONLMetricsCallback(TrainerCallback):
-    """Append host-materialized training and evaluation metrics as JSON Lines."""
+class _MetricsReporterCallback(TrainerCallback):
+    """Write host-materialized metric snapshots to selected integrations."""
 
-    def __init__(self, output_dir: Path) -> None:
+    def __init__(self, output_dir: Path, reporters: Sequence[str]) -> None:
+        self.output_dir = output_dir
+        self.reporters = tuple(name for name in reporters if name != "none")
         self.path = output_dir / "metrics.jsonl"
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        self.tensorboard = None
+        self.wandb_run = None
+        if "tensorboard" in self.reporters:
+            try:
+                from torch.utils.tensorboard import SummaryWriter
+            except ImportError as exc:
+                raise ImportError(
+                    "report_to='tensorboard' requires tensorboard. Install it with "
+                    "'pip install tensorboard'."
+                ) from exc
+            self.tensorboard = SummaryWriter(log_dir=str(output_dir / "tensorboard"))
+        if "wandb" in self.reporters:
+            try:
+                import wandb
+            except ImportError as exc:
+                raise ImportError(
+                    "report_to='wandb' requires wandb. Install it with 'pip install wandb'."
+                ) from exc
+            self.wandb_run = wandb.init(project="trainlm", dir=str(output_dir), reinit=True)
 
     def on_metrics(self, state, control, metrics: Mapping[str, float]) -> None:
         del control
         row = {"step": int(state.step), "phase": state.phase.value,
                "metrics": {name: float(value) for name, value in metrics.items()}}
-        with self.path.open("a", encoding="utf-8") as stream:
-            stream.write(json.dumps(row, sort_keys=True, allow_nan=False) + "\n")
+        if "jsonl" in self.reporters:
+            with self.path.open("a", encoding="utf-8") as stream:
+                stream.write(json.dumps(row, sort_keys=True, allow_nan=False) + "\n")
+        if self.tensorboard is not None:
+            for name, value in row["metrics"].items():
+                self.tensorboard.add_scalar(f"{row['phase']}/{name}", value, row["step"])
+        if self.wandb_run is not None:
+            self.wandb_run.log(
+                {f"{row['phase']}/{name}": value for name, value in row["metrics"].items()},
+                step=row["step"],
+            )
+
+    def on_train_end(self, state, control) -> None:
+        del state, control
+        if self.tensorboard is not None:
+            self.tensorboard.close()
+        if self.wandb_run is not None:
+            self.wandb_run.finish()
 
 
 class _BestModelSelectionCallback(TrainerCallback):
@@ -1366,9 +1406,11 @@ class TrainLMTrainer:
             eval_dataloader=eval_loader,
             callbacks=(
                 self.callbacks
-                + ((_JSONLMetricsCallback(Path(self.args.output_dir)),)
-                   if "jsonl" in ((self.args.report_to,) if isinstance(self.args.report_to, str)
-                                  else self.args.report_to) else ())
+                + ((_MetricsReporterCallback(
+                    Path(self.args.output_dir),
+                    (self.args.report_to,) if isinstance(self.args.report_to, str)
+                    else self.args.report_to,
+                ),) if self.args.report_to != "none" else ())
                 + ((self._best_model_callback,)
                    if self._best_model_callback is not None else ())
             ),

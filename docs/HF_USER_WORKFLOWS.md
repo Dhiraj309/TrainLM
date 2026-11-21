@@ -703,3 +703,7 @@ Set `gradient_checkpointing=True` in `TrainLMTrainingArguments` to enable the se
 ### Opt into chunked vocabulary loss
 
 The trainer accepts `loss_implementation="chunked_linear"` when an explicit `training_view_factory(model)` returns a `LinearCausalLMTrainingView`. This adapter names how the selected architecture produces its final hidden states. TrainLM inspects the output projection and rejects unsupported heads; it does not guess the model's internal body path. Set `logits_chunk_size` to control the vocabulary projection chunk. CPU/CUDA use requires a matching adapter for the exact model implementation. Native TPU experimental support continues through its worker path.
+
+### Track runs in TensorBoard or Weights & Biases
+
+Set report_to="tensorboard" or report_to="wandb" in TrainLMTrainingArguments. TensorBoard writes under output_dir/tensorboard; W&B uses project trainlm and the installed W&B authentication. Install the selected optional package yourself. JSONL can be combined with either reporter using report_to=("jsonl", "tensorboard"). Reporter integrations only receive sparse host-materialized training and evaluation snapshots.

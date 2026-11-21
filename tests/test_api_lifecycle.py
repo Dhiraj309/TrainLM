@@ -1388,8 +1388,8 @@ def test_jsonl_reporter_writes_training_and_evaluation_metrics(tmp_path):
 
 
 def test_report_to_rejects_unimplemented_integrations():
-    with pytest.raises(ValueError, match="supports 'none' or 'jsonl'"):
-        TrainLMTrainingArguments(report_to="wandb")
+    with pytest.raises(ValueError, match="supports none, jsonl"):
+        TrainLMTrainingArguments(report_to="mlflow")
 
 def test_gradient_checkpointing_is_enabled_and_loss_choice_reaches_task(tmp_path):
     class CheckpointModel(TinyModel):
@@ -1466,3 +1466,55 @@ def test_chunked_linear_loss_uses_explicit_model_training_view(tmp_path):
     assert trainer.engine.task.loss_implementation == "chunked_linear"
     assert trainer.engine.task.training_view.model is model
     assert trainer.train().step == 1
+
+
+def test_wandb_reporter_logs_metrics_and_finishes_run(tmp_path, monkeypatch):
+    import sys
+    from types import ModuleType
+    from trainlm.api import _MetricsReporterCallback
+
+    calls = {"logs": [], "finished": False}
+
+    class Run:
+        def log(self, values, *, step):
+            calls["logs"].append((values, step))
+
+        def finish(self):
+            calls["finished"] = True
+
+    wandb = ModuleType("wandb")
+    wandb.init = lambda **kwargs: Run()
+    monkeypatch.setitem(sys.modules, "wandb", wandb)
+    reporter = _MetricsReporterCallback(tmp_path, ("wandb",))
+    state = SimpleNamespace(step=2, phase=TrainerPhase.TRAINING)
+    reporter.on_metrics(state, TrainerControl(), {"loss": 1.25})
+    reporter.on_train_end(state, TrainerControl())
+
+    assert calls["logs"] == [({"training/loss": 1.25}, 2)]
+    assert calls["finished"] is True
+
+
+def test_tensorboard_reporter_writes_and_closes(tmp_path, monkeypatch):
+    import sys
+    from types import ModuleType
+    from trainlm.api import _MetricsReporterCallback
+
+    calls = {"scalars": [], "closed": False}
+
+    class Writer:
+        def add_scalar(self, name, value, step):
+            calls["scalars"].append((name, value, step))
+
+        def close(self):
+            calls["closed"] = True
+
+    torch_utils = ModuleType("torch.utils.tensorboard")
+    torch_utils.SummaryWriter = lambda **kwargs: Writer()
+    monkeypatch.setitem(sys.modules, "torch.utils.tensorboard", torch_utils)
+    reporter = _MetricsReporterCallback(tmp_path, ("tensorboard",))
+    state = SimpleNamespace(step=3, phase=TrainerPhase.EVALUATING)
+    reporter.on_metrics(state, TrainerControl(), {"eval_loss": 0.75})
+    reporter.on_train_end(state, TrainerControl())
+
+    assert calls["scalars"] == [("evaluating/eval_loss", 0.75, 3)]
+    assert calls["closed"] is True

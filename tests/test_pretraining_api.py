@@ -1397,3 +1397,9 @@ def test_model_size_preview_labels_corpus_trained_vocab_estimate(tmp_path):
     model = config.training_plan(inspect_model=True)["model"]
     assert model["parameter_count_basis"] == "requested_bpe_vocabulary_capacity"
     assert model["parameter_count"] > config.tokenizer_vocab_size
+
+
+def test_training_plan_discloses_pretraining_row_limit(tmp_path):
+    plan = _config(tmp_path).training_plan()
+    assert plan["data"]["max_train_examples"] == 12
+    assert "at most 12 rows" in plan["data"]["row_limit_note"]

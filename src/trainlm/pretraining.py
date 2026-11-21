@@ -761,6 +761,11 @@ class TrainLMPretrainingConfig:
                 "sequence_length": self.sequence_length,
                 "max_train_examples": self.max_train_examples,
                 "max_eval_examples": self.max_eval_examples,
+                "row_limit_note": (
+                    f"Training preparation reads at most {self.max_train_examples} rows. "
+                    "Increase max_train_examples to include more of the selected split."
+                    if self.max_train_examples is not None else "No configured row limit."
+                ),
                 "repeat_train_data": self.repeat_train_data,
             },
             "budget": {
