@@ -381,7 +381,7 @@ class NativeTrainerSmokeProcessTests(unittest.TestCase):
             source,
         )
         self.assertIn("max_tokens=FRESH_MAX_TOKENS", source)
-        self.assertIn("config.training_plan()", source)
+        self.assertIn("config.training_plan(inspect_model=True)", source)
         self.assertIn('RESUME_MODE in {"resume", "extend"}', source)
         self.assertIn("resume_config.training_plan(**options)", source)
         self.assertIn("files.download", source)

@@ -23,3 +23,8 @@ python examples/validate_hf_pretraining.py --accelerator cpu --output-dir hf-che
 ```
 
 Each 30-token run uses one review from the training split and a different review from the test split. Raw runs stream text from the Hub. Token runs read JSONL encoded with the same model tokenizer. The public CPU run used `hf-internal-testing/tiny-random-gpt2@71034c5` and `lhoestq/demo1@87ecf16`, PyTorch 2.9.0+cpu and Transformers 5.15.0. Evaluation loss was 6.9281 for both random-weight runs and 6.9024 for both pretrained runs. Each export generated one new token in a separate CPU process. The output directory includes individual run reports and a combined `matrix.json`.
+
+
+The same CPU matrix also passed with `--model hf-internal-testing/tiny-random-LlamaForCausalLM` at revision `9fb1912`. Both raw and pretokenized inputs yielded eval loss 10.4047 from random weights and 10.3720 from pretrained weights. Transformers warned that this test checkpoint declares `pad_token_id=-1`. All four exports generated in separate CPU processes.
+
+A separate CPU process reopened a copy of the complete GPT-2 CPT run under a new path and continued from the first update. At step two, all 65 exported state tensors matched the uninterrupted reference exactly. This covers a copied filesystem on CPU. Physical TPU VM replacement remains outstanding.
