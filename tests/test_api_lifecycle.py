@@ -1417,3 +1417,52 @@ def test_gradient_checkpointing_is_enabled_and_loss_choice_reaches_task(tmp_path
     assert model.checkpointing_enabled
     assert model.config.use_cache is False
     assert trainer.engine.task.loss_implementation == "model"
+
+def test_chunked_linear_loss_uses_explicit_model_training_view(tmp_path):
+    from trainlm.optimization import inspect_dense_causal_lm
+    from trainlm.tasks import LinearCausalLMTrainingView
+
+    class LinearHeadModel(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.embedding = torch.nn.Embedding(8, 4)
+            self.body = torch.nn.Linear(4, 4)
+            self.head = torch.nn.Linear(4, 8)
+
+        def get_input_embeddings(self):
+            return self.embedding
+
+        def get_output_embeddings(self):
+            return self.head
+
+        def forward(self, input_ids, labels=None, **kwargs):
+            del labels, kwargs
+            return SimpleNamespace(logits=self.head(self.body(self.embedding(input_ids))))
+
+    def view_factory(model):
+        return LinearCausalLMTrainingView(
+            model=model,
+            capabilities=inspect_dense_causal_lm(model),
+            hidden_state_provider=lambda current, batch: current.body(
+                current.embedding(batch["input_ids"])
+            ),
+            provider_id="test.linear_body",
+        )
+
+    model = LinearHeadModel()
+    trainer = TrainLMTrainer(
+        model=model,
+        train_dataset=_dataset(),
+        args=TrainLMTrainingArguments(
+            output_dir=tmp_path,
+            max_steps=1,
+            sequence_length=4,
+            loss_implementation="chunked_linear",
+            logits_chunk_size=2,
+        ),
+        training_view_factory=view_factory,
+    )
+
+    assert trainer.engine.task.loss_implementation == "chunked_linear"
+    assert trainer.engine.task.training_view.model is model
+    assert trainer.train().step == 1

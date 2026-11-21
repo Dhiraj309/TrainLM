@@ -699,3 +699,7 @@ Set `train_file` and `validation_file` to paired files. TrainLM infers the share
 ### Reduce activation memory during fine-tuning
 
 Set `gradient_checkpointing=True` in `TrainLMTrainingArguments` to enable the selected Hugging Face model's checkpointing support. TrainLM disables KV caching while checkpointing is active. Models without the checkpointing hook fail before training. The legacy XLA coordinator currently reports this option as unsupported.
+
+### Opt into chunked vocabulary loss
+
+The trainer accepts `loss_implementation="chunked_linear"` when an explicit `training_view_factory(model)` returns a `LinearCausalLMTrainingView`. This adapter names how the selected architecture produces its final hidden states. TrainLM inspects the output projection and rejects unsupported heads; it does not guess the model's internal body path. Set `logits_chunk_size` to control the vocabulary projection chunk. CPU/CUDA use requires a matching adapter for the exact model implementation. Native TPU experimental support continues through its worker path.

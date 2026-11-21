@@ -3069,3 +3069,5 @@ ordered next stories for this PR branch.
 **Fine-tuning source parity.** Fine-tuning now accepts friendly HF dataset revisions and paired local CSV/JSONL/Parquet sources. Content fingerprints for local fine-tuning sources remain planned.
 
 **Fine-tuning training controls.** Gradient checkpointing now uses the HF model hook, and the facade passes through the requested model/causal loss choice. Local source content hashes are included in fine-tuning summaries and validated by the restore helper. Native TPU hardware behavior remains unverified.
+
+**Chunked causal-LM loss.** The Python facade accepts `chunked_linear` when callers supply an explicit `LinearCausalLMTrainingView` factory. It uses capability inspection, checks model identity and forwards the configured chunk size. Model-specific hidden-state adapters and hardware performance evidence remain required.
