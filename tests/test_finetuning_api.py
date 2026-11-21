@@ -14,6 +14,7 @@ from trainlm import (
     TrainLMTrainingArguments,
     restore_finetuning_config,
     run_finetuning,
+    tokenizer_vocab_sha256,
 )
 
 
@@ -689,6 +690,7 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
         dataset_id=None,
         dataset_revision=None,
         data_format="tokens",
+        expected_tokenizer_vocab_sha256=tokenizer_vocab_sha256(tokenizer),
     )
     tokenized_train = FakeDataset(
         [

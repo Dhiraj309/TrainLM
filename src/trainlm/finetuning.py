@@ -21,6 +21,7 @@ from .api import (
     _latest_training_checkpoint,
 )
 from .hub import HubPublishResult, _publish_model_export
+from .tokenizer_provenance import validate_vocab_expectation, verify_tokenizer_vocab
 from .training import TrainerCallback
 
 
@@ -59,6 +60,7 @@ class TrainLMFineTuningConfig:
     tokenizer_name_or_path: str | None = None
     tokenizer_revision: str | None = None
     data_format: Literal["text", "tokens"] = "text"
+    expected_tokenizer_vocab_sha256: str | None = None
     _tokenizer_object_required: bool = field(
         default=False, init=False, repr=False, compare=False
     )
@@ -67,6 +69,7 @@ class TrainLMFineTuningConfig:
     )
 
     def __post_init__(self) -> None:
+        validate_vocab_expectation(self.data_format, self.expected_tokenizer_vocab_sha256)
         if (
             not isinstance(self.model_name_or_path, str)
             or not self.model_name_or_path.strip()
@@ -849,6 +852,8 @@ def run_finetuning(
         dataset_source=dataset_source,
         formatting_func=formatting_func,
     )
+    if config.expected_tokenizer_vocab_sha256 is not None:
+        report["data"]["expected_tokenizer_vocab_sha256"] = config.expected_tokenizer_vocab_sha256
     _write_summary(summary_path, report)
     run_state: dict[str, Any] = {
         "phase": "validation",
@@ -1243,6 +1248,7 @@ def restore_finetuning_config(
             train_split=data["train_split"],
             validation_split=data["validation_split"],
             data_format=data.get("data_format", "text"),
+            expected_tokenizer_vocab_sha256=data.get("expected_tokenizer_vocab_sha256"),
             args=args,
         )
         tokenizer_object_required = report.get(
@@ -1395,6 +1401,7 @@ def _run_finetuning_impl(
             )
         tokenizer.pad_token = tokenizer.eos_token
 
+    verify_tokenizer_vocab(tokenizer, config.expected_tokenizer_vocab_sha256)
     run_state["phase"] = "dataset_loading"
     if train_dataset is None:
         train_source = load_dataset(

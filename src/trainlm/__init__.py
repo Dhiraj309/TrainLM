@@ -12,6 +12,7 @@ from .data import (
     PackedBinDataset,
 )
 from .pretraining import TrainLMPretrainingConfig
+from .tokenizer_provenance import tokenizer_vocab_sha256
 from .pretraining_run import (
     TrainLMPretrainingError,
     TrainLMPretrainingResult,
@@ -48,4 +49,5 @@ __all__ = [
     "restore_finetuning_config",
     "run_pretraining",
     "run_finetuning",
+    "tokenizer_vocab_sha256",
 ]

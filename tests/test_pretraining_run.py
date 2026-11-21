@@ -17,6 +17,7 @@ from trainlm import (
     bundle_pretraining_artifacts,
     restore_pretraining_report,
     run_pretraining,
+    tokenizer_vocab_sha256,
 )
 
 
@@ -481,11 +482,20 @@ def test_streamed_hf_workflow_reloads_export(tmp_path, monkeypatch, initializati
         model_initialization=initialization, data_format=data_format, max_tokens=21,
         repeat_train_data=True,
     )
+    if data_format == "tokens":
+        producer_digest = tokenizer_vocab_sha256(tokenizer)
+        config = replace(config, expected_tokenizer_vocab_sha256=producer_digest)
     result = run_pretraining(config)
     assert calls == [(config.dataset_id, "a" * 40, split, True)
                      for split in ("train", "validation")]
     assert result.report["training"]["supervised_tokens"] == 21
     if data_format == "tokens":
+        assert result.report["data"]["tokenizer_vocab_sha256"] == producer_digest
+        assert result.report["data"]["tokenizer_dataset_match"] == "matched_caller_vocab_sha256"
+        with pytest.raises(TrainLMPretrainingError) as mismatch:
+            run_pretraining(replace(config, output_dir=tmp_path / "wrong-vocab",
+                                    expected_tokenizer_vocab_sha256="0" * 64))
+        assert "differs from the tokenized corpus" in str(mismatch.value.__cause__)
         assert result.report["data"]["tokenizer_provenance"]["mapping_sha256"]
     assert result.report["data"]["repeat_train_data"] is True
     model = AutoModelForCausalLM.from_pretrained(result.export_path, local_files_only=True)

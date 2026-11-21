@@ -11,7 +11,7 @@ from datasets import load_dataset
 from huggingface_hub import HfApi
 from transformers import AutoTokenizer
 
-from trainlm import TrainLMPretrainingConfig, run_pretraining
+from trainlm import TrainLMPretrainingConfig, run_pretraining, tokenizer_vocab_sha256
 
 
 def validate(output_dir: Path, model: str, revision: str | None, accelerator: str) -> None:
@@ -42,6 +42,7 @@ def validate(output_dir: Path, model: str, revision: str | None, accelerator: st
             }
             if data_format == "tokens":
                 sources = {
+                    "expected_tokenizer_vocab_sha256": tokenizer_vocab_sha256(tokenizer),
                     "train_file": output_dir / "train.jsonl",
                     "validation_file": output_dir / "validation.jsonl",
                 }

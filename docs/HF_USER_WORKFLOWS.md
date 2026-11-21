@@ -2,6 +2,9 @@
 
 **Preview an HF pretraining run.** The [scratch/CPT notebook](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) calls `config.training_plan(inspect_model=True)` to show the architecture, parameter count and equivalent FP32 parameter bytes before training. It uses the HF configuration and a PyTorch meta model. The normal plan stays offline. When training a new BPE tokenizer, the estimate assumes the requested vocabulary capacity. Activations, optimizer state and allocator overhead require separate memory measurements.
 
+**Check pretokenized input.** Corpus producers can record `trainlm.tokenizer_vocab_sha256(tokenizer)` alongside their token rows. Pass that digest as `expected_tokenizer_vocab_sha256` in scratch, CPT or fine-tuning configs to reject a different token-to-ID mapping before training. The comparison includes added vocabulary entries. Its scope is vocabulary identity; formatting, token boundaries and label alignment are separate contracts. The check is optional for existing corpora.
+
+
 
 The [HF workflow support matrix](HF_SUPPORT_MATRIX.md) links the scratch, CPT and tokenized corpus recipes to CPU and TPU evidence.
 
