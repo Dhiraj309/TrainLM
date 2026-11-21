@@ -135,8 +135,8 @@ def test_training_plan_marks_epoch_budget_implemented_but_unverified(tmp_path):
 
 
 def test_finetuning_config_validates_optional_dataset_metadata_and_splits(tmp_path):
-    with pytest.raises(ValueError, match="immutable 40-character"):
-        _config(tmp_path, dataset_revision="main")
+    friendly_revision = _config(tmp_path, dataset_revision="main")
+    assert friendly_revision.dataset_revision == "main"
 
     local_config = _config(
         tmp_path,
@@ -219,7 +219,7 @@ def test_run_finetuning_requires_pinned_metadata_for_hub_splits(tmp_path):
         dataset_revision=None,
     )
 
-    with pytest.raises(ValueError, match="required when .*loads splits"):
+    with pytest.raises(ValueError, match="is required when .*loads splits"):
         run_finetuning(config)
 
     assert not (tmp_path / "finetuning-summary.json").exists()
@@ -498,6 +498,10 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
         "formatting_function": None,
         "dataset_fingerprints": {"train": None, "validation": None},
         "max_dataset_token_id": None,
+        "resolved_dataset_revision": "a" * 40,
+        "train_file": None,
+        "validation_file": None,
+        "local_data_format": "auto",
     }
     assert report["training_arguments"]["output_dir"] == str(tmp_path / "run")
     assert report["training_arguments"]["max_steps"] == 4
@@ -847,3 +851,40 @@ def test_run_finetuning_rejects_legacy_xla_export_path(tmp_path):
 
     with pytest.raises(ValueError, match="legacy PyTorch/XLA coordinator"):
         run_finetuning(config)
+
+
+def test_finetuning_local_files_infer_supported_format(tmp_path):
+    train_file = tmp_path / "train.jsonl"
+    validation_file = tmp_path / "validation.jsonl"
+    train_file.write_text('{"text":"train"}\n', encoding="utf-8")
+    validation_file.write_text('{"text":"validation"}\n', encoding="utf-8")
+
+    config = _config(
+        tmp_path / "run",
+        dataset_id=None,
+        dataset_revision=None,
+        train_file=train_file,
+        validation_file=validation_file,
+    )
+
+    assert config.train_file == train_file.resolve()
+    assert config.validation_file == validation_file.resolve()
+    assert config.local_data_format == "json"
+
+
+def test_finetuning_local_files_require_a_matching_pair(tmp_path):
+    train_file = tmp_path / "train.csv"
+    train_file.write_text("text\ntrain\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="configured together"):
+        _config(tmp_path / "run", dataset_id=None, train_file=train_file)
+
+    validation_file = tmp_path / "validation.jsonl"
+    validation_file.write_text('{"text":"validation"}\n', encoding="utf-8")
+    with pytest.raises(ValueError, match="share a supported"):
+        _config(
+            tmp_path / "run",
+            dataset_id=None,
+            dataset_revision=None,
+            train_file=train_file,
+            validation_file=validation_file,
+        )

@@ -3065,3 +3065,5 @@ ordered next stories for this PR branch.
   reaches the collective probe and training stages.
 
 **HF usability follow-up.** The first reporter integration accepts `report_to="jsonl"` and appends training/evaluation metrics to the run directory. TensorBoard/W&B adapters remain queued. This keeps metrics visible without adding third-party dependencies.
+
+**Fine-tuning source parity.** Fine-tuning now accepts friendly HF dataset revisions and paired local CSV/JSONL/Parquet sources. Content fingerprints for local fine-tuning sources remain planned.
