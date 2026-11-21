@@ -659,3 +659,26 @@ Reuse upstream utilities where they fit: [Transformers loading/configuration](ht
 and [Hub uploads](https://huggingface.co/docs/huggingface_hub/guides/upload).
 These are reference entry points; implementation must check behavior against
 TrainLM's supported package profiles.
+
+### Recover a prepared corpus on persistent storage
+
+For long runs, set `output_dir` to a persistent filesystem before starting.
+After a checkpoint is published and the writer has stopped, keep the whole
+output directory, including the tokenizer, packed data, preparation manifest,
+run config, report, and checkpoints. If its mount path changes, use the report
+in the copied directory. Keep the original external model, tokenizer, local
+source files and software versions available. Supply the original Dataset
+objects and formatting function again if the first run used them.
+
+```python
+from trainlm import restore_pretraining_report, run_pretraining
+
+saved = restore_pretraining_report("/mnt/restored/report.json",
+                                  restored_output_dir="/mnt/restored")
+result = run_pretraining(saved.config, resume_from_checkpoint=saved.checkpoint_path)
+```
+
+TrainLM restores optimizer, scheduler, RNG and packed cursor during training.
+Exact resume keeps the saved budget. The CPU regression also exercises the
+explicit budget extension after moving the directory. Physical TPU VM
+replacement still needs an owner run.
