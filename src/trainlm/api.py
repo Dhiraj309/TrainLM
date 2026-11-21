@@ -110,7 +110,13 @@ _PERSISTED_TRAINER_STATE_FIELDS = frozenset(
 
 
 def _resolve_batches_per_epoch(train_dataset: Any, *, batch_size: int) -> int:
-    """Count batches for a finite map-style dataset or its DataLoader."""
+    """Count batches for finite map-style data or TrainLM's packed reader."""
+    from trainlm.data import PackedBinDataset
+
+    if isinstance(train_dataset, PackedBinDataset):
+        if len(train_dataset) == 0:
+            raise ValueError("Epoch budgets and schedules cannot use an empty dataset.")
+        return math.ceil(len(train_dataset) / batch_size)
     if isinstance(train_dataset, DataLoader):
         if isinstance(train_dataset.dataset, IterableDataset):
             raise ValueError(
@@ -1119,6 +1125,13 @@ class TrainLMTrainer:
         runtime: Any | None = None,
     ) -> None:
         self.args = args or TrainLMTrainingArguments()
+        from trainlm.data import PackedBinDataset
+
+        if (isinstance(train_dataset, PackedBinDataset)
+                and self.args.dataloader_num_workers
+                and (self.args.num_train_epochs is not None
+                     or "epoch" in (self.args.resolved_eval_strategy, self.args.resolved_save_strategy))):
+            raise ValueError("Packed epoch schedules require dataloader_num_workers=0.")
         self._uses_epoch_schedules = (
             self.args.resolved_save_strategy == "epoch"
             or self.args.resolved_eval_strategy == "epoch"

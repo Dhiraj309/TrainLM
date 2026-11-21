@@ -1,5 +1,7 @@
 # TrainLM implementation context
 
+**Finite packed training (HF-06).** The public trainer counts epochs for a zero-worker PackedBinDataset. The v5e-1 notebook uses epoch budgets and checks the checkpoint format written by the selected backend. CPU coverage exercises two epochs and continuation from the first checkpoint. Hardware validation is pending.
+
 > **Document status:** This file preserves detailed implementation history.
 > For the live project state and sequence, use [the docs guide](README.md),
 > [the handoff](HANDOFF.md), and [T0–T11](TORCHTPU_REBASELINE.md). The
