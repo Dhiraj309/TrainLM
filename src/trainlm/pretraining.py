@@ -231,8 +231,11 @@ class TrainLMPretrainingConfig:
     max_grad_norm: float = 1.0
     dataset_config_name: str | None = None
     text_formatter_name: str | None = None
+    repeat_train_data: bool = False
 
     def __post_init__(self) -> None:
+        if not isinstance(self.repeat_train_data, bool):
+            raise ValueError("repeat_train_data must be a boolean.")
         object.__setattr__(self, "output_dir", Path(self.output_dir).expanduser())
         for name in ("model_name_or_path", "tokenizer_name_or_path"):
             source = getattr(self, name)
@@ -280,9 +283,9 @@ class TrainLMPretrainingConfig:
                 "tokenizer_name_or_path."
             )
         if self.data_format == "tokens":
-            if self.dataset_source != "provided":
+            if self.dataset_source != "provided" and self.dataset_id is None and self.train_file is None:
                 raise ValueError(
-                    "data_format='tokens' requires dataset_source='provided'."
+                    "Choose a tokenized dataset_id, structured files or dataset_source='provided'."
                 )
             if self.tokenizer_mode == "train_bpe":
                 raise ValueError(
@@ -364,6 +367,8 @@ class TrainLMPretrainingConfig:
             resolved_format = _resolve_local_data_format(
                 self.local_data_format, paths
             )
+            if self.data_format == "tokens" and resolved_format not in {"json", "parquet"}:
+                raise ValueError("Tokenized local files must contain JSON or Parquet arrays.")
             if resolved_format == "text" and self.text_field != "text":
                 raise ValueError(
                     "Local text files provide the 'text' field; set text_field='text'."
@@ -751,6 +756,7 @@ class TrainLMPretrainingConfig:
                 "sequence_length": self.sequence_length,
                 "max_train_examples": self.max_train_examples,
                 "max_eval_examples": self.max_eval_examples,
+                "repeat_train_data": self.repeat_train_data,
             },
             "budget": {
                 "unit": "supervised_tokens",
@@ -1716,14 +1722,14 @@ def _preparation_cache_inputs(
                 "Provided Dataset inputs need stable train and validation identities."
             )
         inputs["provided_datasets"] = dict(provided_datasets)
-        if config.data_format == "tokens":
-            inputs["data_format"] = "tokens"
-            inputs["token_supervision_policy"] = (
-                "preserve_aligned_labels_and_loss_mask_v1"
-            )
     elif provided_datasets is not None:
         raise ValueError(
             "Pass Dataset objects only when dataset_source='provided'."
+        )
+    if config.data_format == "tokens":
+        inputs["data_format"] = "tokens"
+        inputs["token_supervision_policy"] = (
+            "preserve_aligned_labels_and_loss_mask_v1"
         )
     if tokenizer_source is not None:
         inputs["tokenizer_source"] = {
@@ -1793,16 +1799,29 @@ def _load_scratch_text_source(
             split=split_name,
             streaming=True,
         )
+    from itertools import islice
+
+    base_split, start, stop, unit, sliced = _parse_split_selector(split_name)
     kwargs: dict[str, Any] = {
         "revision": resolved_dataset_revision or config.dataset_revision,
-        "split": split_name,
+        "split": base_split,
         "streaming": True,
     }
     if config.dataset_config_name is not None:
         kwargs["name"] = config.dataset_config_name
     if config.cache_dir is not None:
         kwargs["cache_dir"] = config.cache_dir
-    return load_dataset(config.dataset_id, **kwargs)
+    stream = load_dataset(config.dataset_id, **kwargs)
+    if not sliced:
+        return stream
+    if unit == "%":
+        splits = getattr(getattr(stream, "info", None), "splits", None)
+        size = getattr((splits or {}).get(base_split), "num_examples", None)
+        if not isinstance(size, int) or size <= 0:
+            raise ValueError("Percentage slicing requires a known split size. Use row offsets or named splits.")
+        start = round(size * (start or 0) / 100)
+        stop = size if stop is None else round(size * stop / 100)
+    return islice(stream, start or 0, stop)
 
 
 def _resolve_scratch_dataset_revision(
@@ -1974,7 +1993,9 @@ def _check_scratch_dataset_sizes(
     required_train_sequences = math.ceil(
         config.max_tokens / (config.sequence_length - 1)
     )
-    if len(train_dataset) < required_train_sequences:
+    if not len(train_dataset) or (
+        not config.repeat_train_data and len(train_dataset) < required_train_sequences
+    ):
         available = len(train_dataset)
         train_dataset.close()
         eval_dataset.close()

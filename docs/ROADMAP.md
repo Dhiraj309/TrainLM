@@ -1,6 +1,6 @@
 # TrainLM Roadmap
 
-**Finite packed training (HF-06).** The public trainer counts epochs for a zero-worker PackedBinDataset. The v5e-1 notebook uses epoch budgets and checks the checkpoint format written by the selected backend. CPU coverage exercises two epochs and continuation from the first checkpoint. Hardware validation is pending.
+**Finite packed training (HF-06).** The public trainer counts epochs for a zero-worker PackedBinDataset. The v5e-1 notebook uses epoch budgets and checks the checkpoint format written by the selected backend. CPU coverage exercises two epochs and continuation from the first checkpoint. Hardware validation is pending. Scratch and CPT can stream token rows from a pinned Hub split or paired JSON/Parquet files, and repeat finite prepared data with `repeat_train_data=True`. The CPU CPT regression preserves tokenizer provenance, reaches the budget across passes, and generates from the export. Streamed Hub slices are applied to the named split using offsets or published split sizes.
 
 **Current product delivery plan (2026-11-19):**
 [Hugging Face user workflows, HF-01–HF-08](HF_USER_WORKFLOWS.md).

@@ -457,6 +457,7 @@ def _initial_report(
                 else None
             ),
             "max_train_examples": config.max_train_examples,
+            "repeat_train_data": config.repeat_train_data,
             "max_eval_examples": config.max_eval_examples,
             "local_files": (
                 {
@@ -570,22 +571,22 @@ def _capture_local_text_sources(
                 "The prepared-data cache does not record both provided Dataset inputs."
             )
         report["data"]["provided_datasets"] = datasets
-        if config.data_format == "tokens":
-            tokenizer_source = inputs.get("tokenizer_source")
-            if not isinstance(tokenizer_source, Mapping):
-                raise RuntimeError(
-                    "The prepared token Dataset cache does not record tokenizer provenance."
-                )
-            report["data"]["tokenizer_provenance"] = {
-                name: tokenizer_source.get(name)
-                for name in (
-                    "requested_source",
-                    "requested_revision",
-                    "resolved_revision",
-                    "local_source",
-                    "mapping_sha256",
-                )
-            }
+    if config.data_format == "tokens":
+        tokenizer_source = inputs.get("tokenizer_source")
+        if not isinstance(tokenizer_source, Mapping):
+            raise RuntimeError(
+                "The prepared token Dataset cache does not record tokenizer provenance."
+            )
+        report["data"]["tokenizer_provenance"] = {
+            name: tokenizer_source.get(name)
+            for name in (
+                "requested_source",
+                "requested_revision",
+                "resolved_revision",
+                "local_source",
+                "mapping_sha256",
+            )
+        }
     if config.train_file is not None and config.validation_file is not None:
         files = inputs.get("local_text_files")
         if files is None:
