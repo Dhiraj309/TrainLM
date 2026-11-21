@@ -690,18 +690,19 @@ class TrainLMPretrainingConfig:
     def training_plan(
         self,
         *,
+        inspect_model: bool = False,
         resume_from_checkpoint: str | Path | None = None,
         extend_training_budget: bool = False,
     ) -> dict[str, Any]:
         """Return a lightweight budget estimate and explicit run lifecycle.
 
-        This method performs no model, dataset, or accelerator loading. The
-        optimizer-step count is estimated from the configured sequence length,
-        batch size, and accumulation. Actual supervised-token density and the
-        final microbatch can change the observed count; wall time and parameter
-        count are deliberately left unresolved. Resume and budget-extension
-        arguments mirror :func:`run_pretraining` and do not inspect files.
+        The default estimate uses configuration only. Set inspect_model=True to
+        read HF configuration and tokenizer metadata and count parameters on the
+        meta device before downloading weights. A corpus-trained vocabulary uses
+        its requested capacity until preparation determines the actual size.
         """
+        if not isinstance(inspect_model, bool):
+            raise TypeError("inspect_model must be a boolean.")
         if resume_from_checkpoint is not None and (
             not isinstance(resume_from_checkpoint, (str, Path))
             or not str(resume_from_checkpoint).strip()
@@ -732,7 +733,7 @@ class TrainLMPretrainingConfig:
         )
         estimated_steps = math.ceil(self.max_tokens / tokens_per_update)
         default_cadence = max(1, estimated_steps // 10)
-        return {
+        plan = {
             "workflow": "continued_pretraining"
             if self.model_initialization == "pretrained"
             else "scratch_pretraining",
@@ -740,7 +741,7 @@ class TrainLMPretrainingConfig:
                 "source": str(self.model_name_or_path)
                 if self.model_name_or_path is not None
                 else None,
-                "model_type": self.model_type,
+                "model_type": self.model_type if self.model_name_or_path is None else "resolved_from_hf_config",
                 "initialization": self.model_initialization,
                 "parameter_count": "resolved_during_model_loading",
             },
@@ -825,6 +826,10 @@ class TrainLMPretrainingConfig:
             },
             "estimate_scope": "configuration_only; no wall time or memory estimate",
         }
+        if inspect_model:
+            plan["model"].update(_planned_model_size(self))
+            plan["estimate_scope"] = "architecture and configuration; no wall time or peak memory estimate"
+        return plan
 
 
 def _token_documents(
@@ -1451,16 +1456,9 @@ def _tokenizer_vocab_capacity(tokenizer: Any) -> int:
     return capacity
 
 
-def _load_scratch_model(
-    config: TrainLMPretrainingConfig,
-    *,
-    tokenizer: Any,
-):
-    """Build random HF weights or load pretrained weights without resizing."""
+def _scratch_model_source(config: TrainLMPretrainingConfig, tokenizer: Any, vocab_size: int):
     from trainlm.config import ModelSourceConfig
-    from trainlm.model import load_huggingface_causal_lm
 
-    vocab_size = _tokenizer_vocab_capacity(tokenizer)
     overrides = dict(config.model_config_overrides or {})
     if config.model_initialization == "random":
         if config.model_name_or_path is None and config.model_type == "gpt2":
@@ -1472,14 +1470,15 @@ def _load_scratch_model(
                 "n_head": config.model_attention_heads,
                 **overrides,
             }
+        # The corpus BPE trainer reserves 1, 2 and 3 for pad, BOS and EOS.
         overrides.update(
             vocab_size=vocab_size,
-            pad_token_id=tokenizer.pad_token_id,
-            bos_token_id=tokenizer.bos_token_id,
-            eos_token_id=tokenizer.eos_token_id,
+            pad_token_id=tokenizer.pad_token_id if tokenizer is not None else 1,
+            bos_token_id=tokenizer.bos_token_id if tokenizer is not None else 2,
+            eos_token_id=tokenizer.eos_token_id if tokenizer is not None else 3,
         )
 
-    source = ModelSourceConfig(
+    return ModelSourceConfig(
         provider="huggingface",
         initialization=(
             "pretrained"
@@ -1498,6 +1497,46 @@ def _load_scratch_model(
         local_files_only=config.local_files_only,
         config_overrides=overrides,
     )
+
+
+def _planned_model_size(config: TrainLMPretrainingConfig) -> dict[str, Any]:
+    import torch
+    from transformers import AutoModelForCausalLM
+    from trainlm.model import HuggingFaceCausalLMProvider
+
+    tokenizer = None
+    if config.model_initialization == "random":
+        tokenizer, _ = _load_existing_scratch_tokenizer(config)
+    capacity = (
+        _tokenizer_vocab_capacity(tokenizer)
+        if tokenizer is not None else config.tokenizer_vocab_size
+    )
+    source = _scratch_model_source(config, tokenizer, capacity)
+    model_config = HuggingFaceCausalLMProvider().load_config(source)
+    with torch.random.fork_rng(devices=[]), torch.device("meta"):
+        model = AutoModelForCausalLM.from_config(
+            model_config, trust_remote_code=config.trust_remote_code,
+        )
+    # Some Transformers versions defer weight tying when constructed on meta.
+    model.tie_weights()
+    count = sum(parameter.numel() for parameter in model.parameters())
+    basis = "configured_architecture"
+    if config.model_initialization == "random" and tokenizer is None:
+        basis = "requested_bpe_vocabulary_capacity"
+    return {
+        "model_type": model_config.model_type,
+        "parameter_count": count,
+        "parameter_count_basis": basis,
+        "parameter_bytes_at_fp32": count * 4,
+    }
+
+
+def _load_scratch_model(config: TrainLMPretrainingConfig, *, tokenizer: Any):
+    """Build random HF weights or load pretrained weights without resizing."""
+    from trainlm.model import load_huggingface_causal_lm
+
+    vocab_size = _tokenizer_vocab_capacity(tokenizer)
+    source = _scratch_model_source(config, tokenizer, vocab_size)
     loaded = load_huggingface_causal_lm(source)
     model = loaded.model
     if config.model_name_or_path is not None:

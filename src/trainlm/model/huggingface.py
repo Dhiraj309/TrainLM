@@ -55,7 +55,7 @@ class HuggingFaceCausalLMProvider:
                 "HuggingFaceCausalLMProvider requires 'model.provider: huggingface'."
             )
 
-        config = self._load_config(source)
+        config = self.load_config(source)
         model = self._load_model(source, config)
 
         # ``from_pretrained`` returns an eval-mode model while ``from_config``
@@ -69,7 +69,7 @@ class HuggingFaceCausalLMProvider:
             metadata=self._metadata(source, config, model),
         )
 
-    def _load_config(self, source: ModelSourceConfig) -> PretrainedConfig:
+    def load_config(self, source: ModelSourceConfig) -> PretrainedConfig:
         config_kwargs = dict(source.config_overrides)
         if source.dtype not in {None, "auto"}:
             config_kwargs["dtype"] = source.dtype

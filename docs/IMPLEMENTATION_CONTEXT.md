@@ -1,5 +1,8 @@
 # TrainLM implementation context
 
+**Preview an HF pretraining run.** The [scratch/CPT notebook](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) calls `config.training_plan(inspect_model=True)` to show the architecture, parameter count and equivalent FP32 parameter bytes before training. It uses the HF configuration and a PyTorch meta model. The normal plan stays offline. When training a new BPE tokenizer, the estimate assumes the requested vocabulary capacity. Activations, optimizer state and allocator overhead require separate memory measurements.
+
+
 **Single-device HF acceptance.** PR #145 merged at `638c6643af0a6db19b491622805b74db19fcb09f`. The [HF support matrix](HF_SUPPORT_MATRIX.md) records four live Hub CPU runs covering random weights and CPT with raw reviews and tokenized JSONL. The v5e-1 validation notebook runs the same acceptance checks on native TorchTPU. Hardware results remain outstanding.
 
 
