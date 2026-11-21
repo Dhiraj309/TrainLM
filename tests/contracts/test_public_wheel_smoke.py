@@ -65,6 +65,7 @@ assert set(trainlm.__all__) == {{
     'restore_finetuning_config',
     'run_pretraining',
     'run_finetuning',
+    'tokenizer_vocab_sha256',
 }}
 args = trainlm.TrainLMTrainingArguments(max_steps=1, accelerator='cpu')
 assert args.max_steps == 1

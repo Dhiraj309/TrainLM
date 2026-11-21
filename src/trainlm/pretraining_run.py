@@ -577,6 +577,9 @@ def _capture_local_text_sources(
             raise RuntimeError(
                 "The prepared token Dataset cache does not record tokenizer provenance."
             )
+        if config.expected_tokenizer_vocab_sha256 is not None:
+            report["data"]["tokenizer_dataset_match"] = "matched_caller_vocab_sha256"
+            report["data"]["tokenizer_vocab_sha256"] = config.expected_tokenizer_vocab_sha256
         report["data"]["tokenizer_provenance"] = {
             name: tokenizer_source.get(name)
             for name in (

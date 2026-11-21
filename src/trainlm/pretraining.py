@@ -23,6 +23,8 @@ import sys
 import tempfile
 from typing import Any, Literal
 
+from .tokenizer_provenance import validate_vocab_expectation, verify_tokenizer_vocab
+
 
 DEFAULT_DATASET_ID = "roneneldan/TinyStories"
 DEFAULT_DATASET_REVISION = "f54c09fd23315a6f9c86f9dc80f725de7d8f9c64"
@@ -232,8 +234,10 @@ class TrainLMPretrainingConfig:
     dataset_config_name: str | None = None
     text_formatter_name: str | None = None
     repeat_train_data: bool = False
+    expected_tokenizer_vocab_sha256: str | None = None
 
     def __post_init__(self) -> None:
+        validate_vocab_expectation(self.data_format, self.expected_tokenizer_vocab_sha256)
         if not isinstance(self.repeat_train_data, bool):
             raise ValueError("repeat_train_data must be a boolean.")
         object.__setattr__(self, "output_dir", Path(self.output_dir).expanduser())
@@ -2269,6 +2273,7 @@ def _prepare_scratch_training(
     )
     resolved_dataset_revision = _resolve_scratch_dataset_revision(config)
     tokenizer, tokenizer_source = _load_existing_scratch_tokenizer(config)
+    verify_tokenizer_vocab(tokenizer, config.expected_tokenizer_vocab_sha256)
     preparation_inputs = _preparation_cache_inputs(
         config,
         tokenizer_source=tokenizer_source,

@@ -1741,6 +1741,8 @@ class TrainLMTrainer:
             )
 
         pretraining = asdict(config)
+        if config.expected_tokenizer_vocab_sha256 is None:
+            pretraining.pop("expected_tokenizer_vocab_sha256", None)
         if not config.repeat_train_data:
             pretraining.pop("repeat_train_data", None)
         pretraining.pop("output_dir", None)
