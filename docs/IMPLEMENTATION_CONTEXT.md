@@ -2152,17 +2152,17 @@ versioned package symbols as required exports rather than an exhaustive
 aliases. The installed-wheel smoke test covers the workflow exports; both CI
 dependency profiles pass this test.
 
-## JSONL metric reporting
+## Metric reporting
 
-`TrainLMTrainingArguments(report_to="jsonl")` writes sparse training and evaluation metric snapshots to `output_dir/metrics.jsonl`. The default `report_to="none"` remains unchanged. TensorBoard and W&B are not accepted until dedicated adapters and dependency behavior are implemented. JSONL writes use the existing host-materialized callback snapshots and therefore do not trigger extra accelerator synchronization.
+`TrainLMTrainingArguments(report_to="jsonl")` writes sparse training and evaluation metric snapshots to `output_dir/metrics.jsonl`. TensorBoard and W&B are imported only when selected and produce actionable missing-package errors. The default `report_to="none"` remains unchanged. Reporters use host-materialized callback snapshots and do not trigger extra accelerator synchronization.
 
 ## Fine-tuning dataset sources
 
-Fine-tuning accepts paired local CSV, JSON/JSONL, or Parquet paths and resolves friendly Hub dataset refs to immutable commits before loading. The resolved revision and source paths are included in the run summary. Local file-content hashing and resume identity are follow-up work.
+Fine-tuning accepts paired local CSV, JSON/JSONL, or Parquet paths and resolves friendly Hub dataset refs to immutable commits before loading. The resolved revision and source paths are included in the run summary. Local file contents are fingerprinted and checked when restoring a run config.
 
 ## Fine-tuning memory and loss controls
 
-The shared training arguments can enable the model's Hugging Face gradient-checkpointing hook and turn off KV cache during training. The selected `loss_implementation` now reaches the causal-LM task instead of being overridden. Local fine-tuning run summaries fingerprint train and validation files and reject changed files when restoring a run config. Chunked loss still requires an explicit linear training view and is not exposed by the facade.
+The shared training arguments can enable the model's Hugging Face gradient-checkpointing hook and turn off KV cache during training. The selected `loss_implementation` now reaches the causal-LM task instead of being overridden. Local fine-tuning run summaries fingerprint train and validation files and reject changed files when restoring a run config. Chunked loss requires an explicit linear training view factory.
 
 ## Public chunked loss adapter
 
@@ -2171,3 +2171,14 @@ The shared training arguments can enable the model's Hugging Face gradient-check
 ## Metric reporter integrations
 
 report_to supports JSONL, TensorBoard, and W&B. TensorBoard and W&B are imported only when selected and produce actionable missing-package errors. Reporter resources are closed at train end. The default remains disabled.
+
+## High-level training CLI
+
+`trainlm pretrain --config FILE` and `trainlm finetune --config FILE` invoke
+the same high-level run functions exported by the Python package. YAML fields
+map to the corresponding workflow config; fine-tuning arguments are nested
+under `args`. `--dry-run` prints the lightweight training plan without loading
+the model, dataset, or accelerator. Resume uses `--resume-from-checkpoint`;
+pretraining additionally accepts `--extend-training-budget`. Examples live in
+`examples/pretrain.yaml` and `examples/finetune.yaml`. The older `train`
+subcommand remains the lower-level packed-manifest interface.
