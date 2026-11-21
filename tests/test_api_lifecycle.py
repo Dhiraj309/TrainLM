@@ -1,4 +1,5 @@
 """HF-like facade lifecycle, cadence, metrics, and local resume."""
+import json
 
 from copy import deepcopy
 from pathlib import Path
@@ -1363,3 +1364,29 @@ def test_native_random_resume_requires_trainlm_owned_generator():
 
     with pytest.raises(ValueError, match="TrainLM-owned deterministic"):
         trainer._validate_native_resume_data(engine)
+
+
+def test_jsonl_reporter_writes_training_and_evaluation_metrics(tmp_path):
+    trainer = TrainLMTrainer(
+        model=TinyModel(),
+        train_dataset=_dataset(),
+        eval_dataset=_dataset(),
+        args=TrainLMTrainingArguments(
+            output_dir=tmp_path,
+            max_steps=1,
+            sequence_length=4,
+            logging_steps=1,
+            eval_steps=1,
+            report_to="jsonl",
+        ),
+    )
+    trainer.train()
+
+    rows = [json.loads(line) for line in (tmp_path / "metrics.jsonl").read_text().splitlines()]
+    assert any(row["phase"] == "training" and "loss" in row["metrics"] for row in rows)
+    assert any(row["phase"] == "evaluating" and "eval_loss" in row["metrics"] for row in rows)
+
+
+def test_report_to_rejects_unimplemented_integrations():
+    with pytest.raises(ValueError, match="supports 'none' or 'jsonl'"):
+        TrainLMTrainingArguments(report_to="wandb")

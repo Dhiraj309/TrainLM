@@ -3063,3 +3063,5 @@ ordered next stories for this PR branch.
   added a regression contract for the externally initialized case.
 - Follow-up: rerun the MB4/GA16 candidate on v5e-8 and confirm worker startup
   reaches the collective probe and training stages.
+
+**HF usability follow-up.** The first reporter integration accepts `report_to="jsonl"` and appends training/evaluation metrics to the run directory. TensorBoard/W&B adapters remain queued. This keeps metrics visible without adding third-party dependencies.

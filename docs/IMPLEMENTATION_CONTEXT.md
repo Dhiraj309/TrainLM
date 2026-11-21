@@ -2151,3 +2151,7 @@ versioned package symbols as required exports rather than an exhaustive
 `__all__` snapshot, while retaining exact checks for config keys and deprecated
 aliases. The installed-wheel smoke test covers the workflow exports; both CI
 dependency profiles pass this test.
+
+## JSONL metric reporting
+
+`TrainLMTrainingArguments(report_to="jsonl")` writes sparse training and evaluation metric snapshots to `output_dir/metrics.jsonl`. The default `report_to="none"` remains unchanged. TensorBoard and W&B are not accepted until dedicated adapters and dependency behavior are implemented. JSONL writes use the existing host-materialized callback snapshots and therefore do not trigger extra accelerator synchronization.
