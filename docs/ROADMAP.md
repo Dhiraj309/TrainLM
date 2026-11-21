@@ -1,5 +1,7 @@
 # TrainLM Roadmap
 
+**Finite packed training (HF-06).** The public trainer counts epochs for a zero-worker PackedBinDataset. The v5e-1 notebook uses epoch budgets and checks the checkpoint format written by the selected backend. CPU coverage exercises two epochs and continuation from the first checkpoint. Hardware validation is pending.
+
 **Current product delivery plan (2026-11-19):**
 [Hugging Face user workflows, HF-01–HF-08](HF_USER_WORKFLOWS.md).
 The owner's priority is reusable HF models/tokenizers/datasets through

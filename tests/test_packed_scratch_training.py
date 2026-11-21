@@ -162,3 +162,30 @@ def test_random_init_training_stops_at_supervised_token_budget(tmp_path):
         assert state.loss is not None and torch.isfinite(torch.tensor(state.loss))
     finally:
         train_data.close()
+
+
+def test_packed_epochs_resume_from_first_boundary(tmp_path):
+    write_packed_binary_shard(
+        [[1, 2, 3, 4] * 16], tmp_path / "data", shard_id="train", vocab_size=8
+    )
+    source = tmp_path / "tiny-model"
+    GPT2LMHeadModel(GPT2Config(
+        vocab_size=8, n_positions=4, n_embd=8, n_layer=1, n_head=2,
+    )).save_pretrained(source)
+    for name, checkpoint in (("fresh", None), ("resumed", tmp_path / "fresh/checkpoint-3")):
+        dataset = PackedBinDataset.from_directory(
+            tmp_path / "data", sequence_length=4, split="train"
+        )
+        try:
+            trainer = TrainLMTrainer.from_pretrained(
+                source, train_dataset=dataset, args=TrainLMTrainingArguments(
+                    accelerator="cpu", output_dir=tmp_path / name, sequence_length=4,
+                    num_train_epochs=2, max_steps=None, per_device_train_batch_size=2,
+                    gradient_accumulation_steps=3, save_strategy="epoch",
+                ),
+            )
+            state = trainer.train(resume_from_checkpoint=checkpoint)
+            assert (state.step, state.micro_step) == (6, 16)
+            assert (tmp_path / name / "checkpoint-6/trainer_state.pt").is_file()
+        finally:
+            dataset.close()
