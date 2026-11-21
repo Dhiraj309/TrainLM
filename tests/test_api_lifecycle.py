@@ -1390,3 +1390,30 @@ def test_jsonl_reporter_writes_training_and_evaluation_metrics(tmp_path):
 def test_report_to_rejects_unimplemented_integrations():
     with pytest.raises(ValueError, match="supports 'none' or 'jsonl'"):
         TrainLMTrainingArguments(report_to="wandb")
+
+def test_gradient_checkpointing_is_enabled_and_loss_choice_reaches_task(tmp_path):
+    class CheckpointModel(TinyModel):
+        def __init__(self):
+            super().__init__()
+            self.config = SimpleNamespace(use_cache=True)
+            self.checkpointing_enabled = False
+
+        def gradient_checkpointing_enable(self):
+            self.checkpointing_enabled = True
+
+    model = CheckpointModel()
+    trainer = TrainLMTrainer(
+        model=model,
+        train_dataset=_dataset(),
+        args=TrainLMTrainingArguments(
+            output_dir=tmp_path,
+            max_steps=1,
+            sequence_length=4,
+            gradient_checkpointing=True,
+            loss_implementation="model",
+        ),
+    )
+
+    assert model.checkpointing_enabled
+    assert model.config.use_cache is False
+    assert trainer.engine.task.loss_implementation == "model"

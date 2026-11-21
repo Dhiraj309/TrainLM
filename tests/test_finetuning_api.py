@@ -502,6 +502,7 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
         "train_file": None,
         "validation_file": None,
         "local_data_format": "auto",
+        "local_file_sha256": None,
     }
     assert report["training_arguments"]["output_dir"] == str(tmp_path / "run")
     assert report["training_arguments"]["max_steps"] == 4
@@ -888,3 +889,21 @@ def test_finetuning_local_files_require_a_matching_pair(tmp_path):
             train_file=train_file,
             validation_file=validation_file,
         )
+
+def test_local_finetuning_fingerprints_detect_file_changes(tmp_path):
+    from trainlm.finetuning import _local_finetuning_file_hashes
+
+    train_file = tmp_path / "train.csv"
+    validation_file = tmp_path / "validation.csv"
+    train_file.write_text("text\noriginal train\n", encoding="utf-8")
+    validation_file.write_text("text\noriginal eval\n", encoding="utf-8")
+    config = _config(
+        tmp_path / "run",
+        dataset_id=None,
+        dataset_revision=None,
+        train_file=train_file,
+        validation_file=validation_file,
+    )
+    original = _local_finetuning_file_hashes(config)
+    train_file.write_text("text\nchanged train\n", encoding="utf-8")
+    assert _local_finetuning_file_hashes(config) != original

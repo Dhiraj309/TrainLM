@@ -3067,3 +3067,5 @@ ordered next stories for this PR branch.
 **HF usability follow-up.** The first reporter integration accepts `report_to="jsonl"` and appends training/evaluation metrics to the run directory. TensorBoard/W&B adapters remain queued. This keeps metrics visible without adding third-party dependencies.
 
 **Fine-tuning source parity.** Fine-tuning now accepts friendly HF dataset revisions and paired local CSV/JSONL/Parquet sources. Content fingerprints for local fine-tuning sources remain planned.
+
+**Fine-tuning training controls.** Gradient checkpointing now uses the HF model hook, and the facade passes through the requested model/causal loss choice. Local source content hashes are included in fine-tuning summaries and validated by the restore helper. Native TPU hardware behavior remains unverified.
