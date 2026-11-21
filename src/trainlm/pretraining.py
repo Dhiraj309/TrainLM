@@ -153,7 +153,7 @@ class TrainLMPretrainingConfig:
     initializes random weights. Set ``model_initialization="pretrained"`` to
     continue training its weights without resizing embeddings. Existing HF
     tokenizers can be selected independently with ``tokenizer_name_or_path``.
-    Set ``data_format="tokens"`` with ``dataset_source="provided"`` to pack
+    Set ``data_format="tokens"`` to pack
     tokenized Dataset rows. TrainLM preserves optional caller labels and loss
     masks, creates labels from ``input_ids`` when absent, and shifts once.
     For raw rows with multiple columns, set ``text_formatter_name`` here and
@@ -2002,7 +2002,8 @@ def _check_scratch_dataset_sizes(
         raise ValueError(
             f"Packed training text provides {available} sequences, but the "
             f"token budget needs at least {required_train_sequences}. Increase "
-            "max_train_examples or lower max_tokens."
+            "max_train_examples, lower max_tokens, or set repeat_train_data=True "
+            "for a non-empty corpus."
         )
     if len(eval_dataset) == 0:
         train_dataset.close()

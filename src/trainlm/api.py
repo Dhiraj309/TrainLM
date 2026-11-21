@@ -981,6 +981,14 @@ class TrainLMTrainer:
                     "The packed training dataset contains no supervised next-token "
                     "targets after applying labels and loss masks."
                 )
+            if not config.repeat_train_data and supervised_per_epoch < config.max_tokens:
+                train_dataset.close()
+                eval_dataset.close()
+                raise ValueError(
+                    f"One pass provides {supervised_per_epoch} supervised next-token "
+                    f"targets for a budget of {config.max_tokens}. Add training data, "
+                    "lower max_tokens, or set repeat_train_data=True."
+                )
             nominal_per_epoch = len(train_dataset) * (config.sequence_length - 1)
             if supervised_per_epoch != nominal_per_epoch:
                 loader_batches_per_epoch = math.ceil(
