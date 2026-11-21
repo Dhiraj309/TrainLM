@@ -1,0 +1,11 @@
+# Config-only preview: trainlm finetune --config examples/finetune.yaml --dry-run
+# Start the run by removing --dry-run. The example uses a small public dataset.
+model_name_or_path: distilgpt2
+dataset_id: roneneldan/TinyStories
+dataset_revision: main
+text_field: text
+args:
+  output_dir: runs/tinystories-finetuned
+  max_steps: 10
+  sequence_length: 128
+  accelerator: auto

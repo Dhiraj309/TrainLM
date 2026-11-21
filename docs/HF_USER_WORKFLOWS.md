@@ -8,6 +8,31 @@
 
 The [HF workflow support matrix](HF_SUPPORT_MATRIX.md) links the scratch, CPT and tokenized corpus recipes to CPU and TPU evidence.
 
+## Command-line runs
+
+The public CLI exposes the same high-level pretraining and fine-tuning APIs for
+YAML-driven jobs. Use `--dry-run` to print the config-only budget and workflow
+plan; it does not download model or dataset assets, initialize an accelerator,
+or start training.
+
+```sh
+trainlm pretrain --config pretrain.yaml --dry-run
+trainlm pretrain --config pretrain.yaml
+trainlm finetune --config finetune.yaml --dry-run
+trainlm finetune --config finetune.yaml
+```
+
+Copy-ready starting points are [`examples/pretrain.yaml`](../examples/pretrain.yaml)
+and [`examples/finetune.yaml`](../examples/finetune.yaml). Both examples use
+the small TinyStories dataset and short budgets for initial validation.
+
+Pretraining YAML contains `TrainLMPretrainingConfig` fields at the root. Fine-
+tuning YAML contains `TrainLMFineTuningConfig` fields and nests
+`TrainLMTrainingArguments` under `args`. Use only Hub or local file sources in
+CLI configs; in-memory datasets, Python formatters, and custom callbacks remain
+available through the Python API. Resume runs with `--resume-from-checkpoint`;
+pretraining budget extensions can additionally use `--extend-training-budget`.
+
 **Priority reset requested by the owner on 2026-11-17.** This is the active
 product delivery plan. T0–T11 remains the architecture and accelerator evidence
 plan. Story labels below distinguish merged work, the current implementation

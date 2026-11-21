@@ -8,6 +8,8 @@ import json
 from pathlib import Path
 from typing import Any, Sequence
 
+import yaml
+
 from .api import (
     TrainLMTrainer,
     TrainLMTrainingArguments,
@@ -15,6 +17,9 @@ from .api import (
 )
 from .data import PackedBinDataset
 from .runtime.diagnostics_cli import collect_diagnostics
+from .finetuning import TrainLMFineTuningConfig, run_finetuning
+from .pretraining import TrainLMPretrainingConfig
+from .pretraining_run import run_pretraining
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -37,6 +42,20 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Validate inputs and print the trainer explanation without training.",
     )
+    for name, help_text in (
+        ("pretrain", "Run scratch or continued pretraining from a YAML config."),
+        ("finetune", "Run causal language-model fine-tuning from a YAML config."),
+    ):
+        workflow = commands.add_parser(name, help=help_text)
+        workflow.add_argument("--config", type=Path, required=True)
+        workflow.add_argument(
+            "--dry-run",
+            action="store_true",
+            help="Print the configuration-only training plan without starting a run.",
+        )
+        workflow.add_argument("--resume-from-checkpoint", type=Path)
+        if name == "pretrain":
+            workflow.add_argument("--extend-training-budget", action="store_true")
     commands.add_parser(
         "doctor", help="Report package compatibility and available TPU runtime facts."
     )
@@ -62,6 +81,39 @@ def main(argv: Sequence[str] | None = None) -> int:
         report = collect_diagnostics()
         print(json.dumps(report, sort_keys=True))
         return 1 if report["status"] != "diagnostics_complete" else 0
+    if args.command in {"pretrain", "finetune"}:
+        if args.dry_run and args.resume_from_checkpoint is not None:
+            parser.error("--dry-run cannot be combined with --resume-from-checkpoint")
+        values = _load_workflow_config(args.config)
+        if args.command == "pretrain":
+            config = TrainLMPretrainingConfig(**values)
+            if args.dry_run:
+                result = config.training_plan()
+            else:
+                result = run_pretraining(
+                    config,
+                    resume_from_checkpoint=args.resume_from_checkpoint,
+                    extend_training_budget=args.extend_training_budget,
+                )
+                print(result.summary())
+                return 0 if result.status == "passed" else 1
+        else:
+            training_values = values.pop("args", {})
+            if not isinstance(training_values, dict):
+                raise TypeError("'args' must be a mapping.")
+            config = TrainLMFineTuningConfig(
+                args=TrainLMTrainingArguments(**training_values), **values
+            )
+            if args.dry_run:
+                result = config.training_plan()
+            else:
+                result = run_finetuning(
+                    config, resume_from_checkpoint=args.resume_from_checkpoint
+                )
+                print(json.dumps(result.summary(), sort_keys=True, default=str))
+                return 0 if result.status == "passed" else 1
+        print(json.dumps(result, sort_keys=True, default=str))
+        return 0
     if args.command != "train":  # pragma: no cover - argparse owns this guard
         raise AssertionError(f"Unexpected command: {args.command}")
     if args.dry_run and args.resume_from_checkpoint is not None:
@@ -127,6 +179,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     print(json.dumps(_result_payload(result), sort_keys=True, default=str))
     return 0
+
+
+def _load_workflow_config(path: Path) -> dict[str, Any]:
+    """Load a user workflow YAML mapping without normalizing its schema."""
+    if not path.is_file():
+        raise FileNotFoundError(f"Training configuration does not exist: {path}")
+    with path.open("r", encoding="utf-8") as handle:
+        values = yaml.safe_load(handle)
+    if not isinstance(values, dict):
+        raise ValueError("Training configuration root must be a YAML mapping.")
+    return dict(values)
 
 
 __all__ = ["main"]

@@ -1,0 +1,13 @@
+# Config-only preview: trainlm pretrain --config examples/pretrain.yaml --dry-run
+# Start the run by removing --dry-run. Increase max_tokens for real training.
+output_dir: runs/tinystories-from-scratch
+dataset_id: roneneldan/TinyStories
+dataset_revision: f54c09fd23315a6f9c86f9dc80f725de7d8f9c64
+text_field: text
+max_tokens: 10000
+sequence_length: 128
+model_type: gpt2
+model_embedding_size: 256
+model_layers: 4
+model_attention_heads: 4
+accelerator: auto
