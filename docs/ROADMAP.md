@@ -3080,3 +3080,9 @@ Both expose allocation-free `--dry-run` plans and checkpoint resume; pretraining
 also exposes budget extension. Copy-ready TinyStories configs are in `examples/`.
 The CLI supports Hub and local-file configuration, while Python-only datasets,
 formatters, and callbacks remain Python API features.
+
+**CLI Hub publishing.** Both high-level commands can explicitly publish a
+successful run with `--push-to-hub REPO_ID`; new repositories default to
+private, and public visibility requires `--public`. Dry-run and publication
+options are mutually exclusive. The CLI prints the upload receipt without
+exposing credentials. Live Hub upload remains owner-validated.

@@ -20,6 +20,8 @@ trainlm pretrain --config pretrain.yaml --dry-run
 trainlm pretrain --config pretrain.yaml
 trainlm finetune --config finetune.yaml --dry-run
 trainlm finetune --config finetune.yaml
+trainlm pretrain --config pretrain.yaml --push-to-hub my-account/my-model
+trainlm finetune --config finetune.yaml --push-to-hub my-account/my-model
 ```
 
 Copy-ready starting points are [`examples/pretrain.yaml`](../examples/pretrain.yaml)
@@ -32,6 +34,13 @@ tuning YAML contains `TrainLMFineTuningConfig` fields and nests
 CLI configs; in-memory datasets, Python formatters, and custom callbacks remain
 available through the Python API. Resume runs with `--resume-from-checkpoint`;
 pretraining budget extensions can additionally use `--extend-training-budget`.
+Hub publication is opt-in through `--push-to-hub REPO_ID` and requires a
+completed run. The CLI creates new repositories as private by default. Add
+`--public` only when you intend the model repository to be public; TrainLM
+never changes the visibility of an existing repository. Authenticate with
+`hf auth login` or the standard `HF_TOKEN` mechanism before starting the run.
+The command prints the training summary and the Hub repository/commit receipt
+after a successful upload. Dry-run cannot be combined with publication flags.
 
 **Priority reset requested by the owner on 2026-11-17.** This is the active
 product delivery plan. T0–T11 remains the architecture and accelerator evidence
@@ -92,7 +101,7 @@ remain separate scopes. Unsupported cases need an actionable early error.
 | Modern HF vocabularies | Packed writer and scratch config support uint32 IDs; scratch derives required capacity from the largest tokenizer ID, including sparse/added IDs | HF-02 removed the 65,536 ceiling; a CPU round-trip covers token ID 70,000 |
 | Train/evaluate/save/resume | Public trainer and helper lifecycles exist; scratch has strong prepared-data identity checks | Share contracts across HF data paths; include tokenizer/data identity and declare which streams can resume exactly |
 | Standard HF model export | `save_model` uses `save_pretrained` and saves the processing class when supplied | A CPU fresh-process check reloads model and tokenizer and generates from the export; accelerator export remains owner-validated |
-| Publish to HF Hub | Completed pretraining and fine-tuning results expose `push_to_hub`; only model/tokenizer artifacts and a model card are published | Review license and provenance before public release; live Hub upload remains user-run |
+| Publish to HF Hub | Results expose `push_to_hub`; `trainlm pretrain` and `trainlm finetune` also accept opt-in `--push-to-hub REPO_ID`, private by default | Review license and provenance before public release; live Hub upload remains user-run |
 | Inference | `examples/infer_local_export.py` and the scratch notebook load the export in a clean Python process using Transformers | Other inference engines require their own compatibility evidence; Hub-hosted inference remains a user-managed Transformers workflow |
 
 Evidence paths:

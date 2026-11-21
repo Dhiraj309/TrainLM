@@ -54,6 +54,20 @@ def _parser() -> argparse.ArgumentParser:
             help="Print the configuration-only training plan without starting a run.",
         )
         workflow.add_argument("--resume-from-checkpoint", type=Path)
+        workflow.add_argument(
+            "--push-to-hub",
+            metavar="REPO_ID",
+            help="Publish the completed model export to this Hugging Face repository.",
+        )
+        workflow.add_argument(
+            "--public",
+            action="store_true",
+            help="Create or use a public Hub repository (requires --push-to-hub).",
+        )
+        workflow.add_argument(
+            "--hub-commit-message",
+            help="Commit message for the model upload (requires --push-to-hub).",
+        )
         if name == "pretrain":
             workflow.add_argument("--extend-training-budget", action="store_true")
     commands.add_parser(
@@ -82,8 +96,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(json.dumps(report, sort_keys=True))
         return 1 if report["status"] != "diagnostics_complete" else 0
     if args.command in {"pretrain", "finetune"}:
-        if args.dry_run and args.resume_from_checkpoint is not None:
-            parser.error("--dry-run cannot be combined with --resume-from-checkpoint")
+        if args.dry_run and (
+            args.resume_from_checkpoint is not None
+            or args.push_to_hub is not None
+            or args.public
+            or args.hub_commit_message is not None
+        ):
+            parser.error("--dry-run cannot be combined with run-only options")
+        if args.public and args.push_to_hub is None:
+            parser.error("--public requires --push-to-hub REPO_ID")
+        if args.hub_commit_message is not None and args.push_to_hub is None:
+            parser.error("--hub-commit-message requires --push-to-hub REPO_ID")
         values = _load_workflow_config(args.config)
         if args.command == "pretrain":
             config = TrainLMPretrainingConfig(**values)
@@ -95,7 +118,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                     resume_from_checkpoint=args.resume_from_checkpoint,
                     extend_training_budget=args.extend_training_budget,
                 )
-                print(result.summary())
+                if result.status != "passed":
+                    print(result.summary())
+                    return 1
+                _print_run_result(result, args)
                 return 0 if result.status == "passed" else 1
         else:
             training_values = values.pop("args", {})
@@ -110,8 +136,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 result = run_finetuning(
                     config, resume_from_checkpoint=args.resume_from_checkpoint
                 )
-                print(json.dumps(result.summary(), sort_keys=True, default=str))
-                return 0 if result.status == "passed" else 1
+                _print_run_result(result, args)
+                return 0
         print(json.dumps(result, sort_keys=True, default=str))
         return 0
     if args.command != "train":  # pragma: no cover - argparse owns this guard
@@ -190,6 +216,27 @@ def _load_workflow_config(path: Path) -> dict[str, Any]:
     if not isinstance(values, dict):
         raise ValueError("Training configuration root must be a YAML mapping.")
     return dict(values)
+
+
+def _print_run_result(result: Any, args: argparse.Namespace) -> None:
+    """Print a completed run summary and, only when requested, its Hub receipt."""
+    summary = result.summary()
+    if args.push_to_hub is None:
+        if isinstance(summary, str):
+            print(summary)
+        else:
+            print(json.dumps(summary, sort_keys=True, default=str))
+        return
+    published = result.push_to_hub(
+        args.push_to_hub,
+        private=not args.public,
+        commit_message=args.hub_commit_message,
+    )
+    print(json.dumps(
+        {"training": summary, "hub": asdict(published)},
+        sort_keys=True,
+        default=str,
+    ))
 
 
 __all__ = ["main"]
