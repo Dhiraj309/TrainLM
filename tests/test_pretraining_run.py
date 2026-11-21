@@ -448,7 +448,9 @@ def test_run_pretraining_report_preserves_package_preflight_failure(
     )
 
 
-def test_streamed_token_cpt_repeats_finite_corpus_and_reloads_export(tmp_path, monkeypatch):
+@pytest.mark.parametrize("initialization", ["random", "pretrained"])
+@pytest.mark.parametrize("data_format", ["text", "tokens"])
+def test_streamed_hf_workflow_reloads_export(tmp_path, monkeypatch, initialization, data_format):
     import torch
     from transformers import AutoModelForCausalLM, GPT2Config, GPT2LMHeadModel
     from trainlm.pretraining import _train_byte_level_tokenizer
@@ -466,6 +468,8 @@ def test_streamed_token_cpt_repeats_finite_corpus_and_reloads_export(tmp_path, m
     def stream(repo, *, revision, split, streaming):
         calls.append((repo, revision, split, streaming))
         token = 4 if split == "train" else 5
+        if data_format == "text":
+            return iter([{"text": "A short local story."}])
         return iter([{"input_ids": [token] * 7 + [tokenizer.eos_token_id]}])
 
     datasets = ModuleType("datasets")
@@ -474,17 +478,30 @@ def test_streamed_token_cpt_repeats_finite_corpus_and_reloads_export(tmp_path, m
     config = replace(
         _config(tmp_path / "run"), model_name_or_path=base,
         model_embedding_size=768, model_layers=6, model_attention_heads=12,
-        model_initialization="pretrained", data_format="tokens", max_tokens=21,
+        model_initialization=initialization, data_format=data_format, max_tokens=21,
         repeat_train_data=True,
     )
     result = run_pretraining(config)
     assert calls == [(config.dataset_id, "a" * 40, split, True)
                      for split in ("train", "validation")]
     assert result.report["training"]["supervised_tokens"] == 21
-    assert result.report["data"]["tokenizer_provenance"]["mapping_sha256"]
+    if data_format == "tokens":
+        assert result.report["data"]["tokenizer_provenance"]["mapping_sha256"]
     assert result.report["data"]["repeat_train_data"] is True
     model = AutoModelForCausalLM.from_pretrained(result.export_path, local_files_only=True)
     assert model.generate(torch.tensor([[4]]), max_new_tokens=1).shape == (1, 2)
+    if data_format == "tokens" and initialization == "pretrained":
+        def masked_stream(*args, **kwargs):
+            return iter([{"input_ids": [4] * 7 + [tokenizer.eos_token_id],
+                          "loss_mask": [0] * 6 + [1, 1]}])
+
+        datasets.load_dataset = masked_stream
+        masked = replace(config, output_dir=tmp_path / "masked", max_tokens=7,
+                         repeat_train_data=False)
+        with pytest.raises(TrainLMPretrainingError) as caught:
+            run_pretraining(masked)
+        assert "2 supervised next-token targets" in str(caught.value.__cause__)
+
 
 
 def test_moved_run_directory_resumes_to_a_larger_token_budget(tmp_path, monkeypatch):
