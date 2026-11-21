@@ -6,9 +6,7 @@ The [HF workflow support matrix](HF_SUPPORT_MATRIX.md) links the scratch, CPT an
 product delivery plan. T0–T11 remains the architecture and accelerator evidence
 plan. Story labels below distinguish merged work, the current implementation
 branch, and work that remains planned.
-Verified merged `main` is `7138cc04b26a0eab48e12fc86c6787cb38741e5d`.
-PR #143 adds epoch-based evaluation/checkpointing to the legacy XLA coordinator;
-that path remains hardware-unverified.
+PR #145 merged at `638c6643af0a6db19b491622805b74db19fcb09f`. See the [HF support matrix](HF_SUPPORT_MATRIX.md) for the current CPU and hardware results.
 The baseline audit started from
 `9591d8b9823c9a8757630d1b79e724e3590d7028` (PR #138); HF-02 then merged at
 `c9ece9a2e9057260586636a428dfd7679c42e8fa` (PR #139).
@@ -180,7 +178,7 @@ silently reinterpret it as a Transformers `PretrainedConfig` factory.
 HF-01–HF-03 are merged through PR #140 at
 `242f418f4bd89a814709db5801e4f393963d86e4`. HF-05's opt-in result publishing
 is merged through PR #141; mocked CPU coverage passes, and live Hub round-trip
-evidence remains outstanding. HF-04 is in progress on PR #142;
+evidence remains outstanding. HF-04 lifecycle and epoch scheduling merged in PRs #142–143;
 HF-06–HF-08 have partial implementation and evidence. IDs
 HF-01–HF-08 identify outcomes, not Git branch sequence numbers. Deliver each
 outcome in a focused PR with meaningful

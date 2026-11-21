@@ -31,6 +31,8 @@ def test_v5e1_epoch_validation_notebook_is_runnable_and_scoped():
         '"checkpoint-only", eval_strategy="no", save_strategy="epoch"',
         "tests/test_api_tpu_coordinator.py",
         "tests/training/test_trainer.py",
+        "examples/validate_hf_pretraining.py",
+        '"hf_workflows": hf_workflows',
         "checkpoint-3",
         "evaluation_completed",
         "legacy_xla_path_hardware_validated",

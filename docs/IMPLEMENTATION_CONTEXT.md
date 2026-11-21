@@ -1,5 +1,8 @@
 # TrainLM implementation context
 
+**Single-device HF acceptance.** PR #145 merged at `638c6643af0a6db19b491622805b74db19fcb09f`. The [HF support matrix](HF_SUPPORT_MATRIX.md) records four live Hub CPU runs covering random weights and CPT with raw reviews and tokenized JSONL. The v5e-1 validation notebook runs the same acceptance checks on native TorchTPU. Hardware results remain outstanding.
+
+
 Four CPU end-to-end cases exercise random initialization and CPT on raw text and token IDs from a fixture stream, followed by Transformers generation. A single-pass token budget also checks the actual supervised targets remaining after masking.
 
 The [HF workflow support matrix](HF_SUPPORT_MATRIX.md) links the scratch, CPT and tokenized corpus recipes to CPU and TPU evidence.
