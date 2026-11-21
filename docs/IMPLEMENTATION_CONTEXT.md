@@ -2182,3 +2182,12 @@ the model, dataset, or accelerator. Resume uses `--resume-from-checkpoint`;
 pretraining additionally accepts `--extend-training-budget`. Examples live in
 `examples/pretrain.yaml` and `examples/finetune.yaml`. The older `train`
 subcommand remains the lower-level packed-manifest interface.
+
+High-level CLI publication is explicit: add `--push-to-hub REPO_ID` after
+`pretrain` or `finetune`. Successful runs only are publishable; new Hub repos
+are private unless `--public` is supplied. Existing repository visibility is
+not changed. `--public` and `--hub-commit-message` require the repo option, and
+dry-run rejects all run-only publication/resume options. Authentication comes
+from normal Hugging Face login or `HF_TOKEN`; CLI output contains only the run
+summary and the returned Hub commit receipt. No live Hub upload was performed
+for this change.
