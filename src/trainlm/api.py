@@ -490,6 +490,7 @@ class TrainLMTrainingArguments:
     fp16: bool = False
     accelerator: Literal["auto", "cpu", "cuda", "tpu", "native_tpu"] = "auto"
     torch_compile: bool = False
+    gradient_checkpointing: bool = False
     logging_steps: int = 10
     save_steps: int | None = None
     eval_steps: int | None = None
@@ -689,6 +690,8 @@ class TrainLMTrainingArguments:
             raise ValueError("max_grad_norm must be finite and non-negative.")
         if not isinstance(self.weight_decay, (int, float)) or self.weight_decay < 0:
             raise ValueError("weight_decay must be non-negative.")
+        if not isinstance(self.gradient_checkpointing, bool):
+            raise ValueError("gradient_checkpointing must be a boolean.")
         if not isinstance(self.seed, int) or isinstance(self.seed, bool) or self.seed < 0:
             raise ValueError("seed must be non-negative.")
         reporters = (self.report_to,) if isinstance(self.report_to, str) else self.report_to
@@ -725,6 +728,16 @@ class TrainLMTrainingArguments:
     def resolved_eval_strategy(self) -> Literal["no", "steps", "epoch"]:
         """Return evaluation policy, inferring the legacy step policy when omitted."""
         return self.eval_strategy or ("steps" if self.eval_steps is not None else "no")
+
+
+def _enable_model_gradient_checkpointing(model: nn.Module) -> None:
+    enable = getattr(model, "gradient_checkpointing_enable", None)
+    if not callable(enable):
+        raise ValueError("The selected model does not support gradient checkpointing.")
+    config = getattr(model, "config", None)
+    if config is not None and hasattr(config, "use_cache"):
+        config.use_cache = False
+    enable()
 
 
 class _JSONLMetricsCallback(TrainerCallback):
@@ -1247,6 +1260,10 @@ class TrainLMTrainer:
             from trainlm._tpu_coordinator import _TPUCoordinator
 
             self._tpu_coordinator = _TPUCoordinator()
+            if self.args.gradient_checkpointing:
+                raise NotImplementedError(
+                    "gradient_checkpointing is not yet exposed through the legacy XLA coordinator."
+                )
             self.model = None
             self.runtime = None
             self.optimizer = None
@@ -1264,6 +1281,8 @@ class TrainLMTrainer:
                 "select accelerator='native_tpu' so TrainLM can configure it."
             )
         self.model = self._resolve_model(model)
+        if self.args.gradient_checkpointing:
+            _enable_model_gradient_checkpointing(self.model)
         self.runtime = runtime or self._make_runtime()
         if self.args.num_train_epochs is not None and self.runtime.is_distributed:
             raise NotImplementedError(
@@ -1319,7 +1338,7 @@ class TrainLMTrainer:
             runtime=self.runtime,
             optimizer=self.optimizer,
             scheduler=self.scheduler,
-            task=CausalLMTask(loss_implementation="causal_lm"),
+            task=CausalLMTask(loss_implementation=self.args.loss_implementation),
             train_dataloader=train_loader,
             eval_dataloader=eval_loader,
             callbacks=(

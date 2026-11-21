@@ -2159,3 +2159,7 @@ dependency profiles pass this test.
 ## Fine-tuning dataset sources
 
 Fine-tuning accepts paired local CSV, JSON/JSONL, or Parquet paths and resolves friendly Hub dataset refs to immutable commits before loading. The resolved revision and source paths are included in the run summary. Local file-content hashing and resume identity are follow-up work.
+
+## Fine-tuning memory and loss controls
+
+The shared training arguments can enable the model's Hugging Face gradient-checkpointing hook and turn off KV cache during training. The selected `loss_implementation` now reaches the causal-LM task instead of being overridden. Local fine-tuning run summaries fingerprint train and validation files and reject changed files when restoring a run config. Chunked loss still requires an explicit linear training view and is not exposed by the facade.

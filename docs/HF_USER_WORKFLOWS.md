@@ -695,3 +695,7 @@ Pass `report_to="jsonl"` to `TrainLMTrainingArguments` to append each configured
 ### Fine-tune from local CSV, JSONL, or Parquet
 
 Set `train_file` and `validation_file` to paired files. TrainLM infers the shared format from their extensions or accepts `local_data_format="csv"`, `"json"`, or `"parquet"`. For Hub datasets, `dataset_revision` accepts a branch, tag, or commit SHA. TrainLM resolves named refs to a commit and records the resolved revision in the run summary.
+
+### Reduce activation memory during fine-tuning
+
+Set `gradient_checkpointing=True` in `TrainLMTrainingArguments` to enable the selected Hugging Face model's checkpointing support. TrainLM disables KV caching while checkpointing is active. Models without the checkpointing hook fail before training. The legacy XLA coordinator currently reports this option as unsupported.

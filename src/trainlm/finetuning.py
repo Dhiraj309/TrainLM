@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field, fields
+import hashlib
 import json
 import math
 from numbers import Integral, Real
@@ -877,6 +878,7 @@ def run_finetuning(
     )
     if config.expected_tokenizer_vocab_sha256 is not None:
         report["data"]["expected_tokenizer_vocab_sha256"] = config.expected_tokenizer_vocab_sha256
+    report["data"]["local_file_sha256"] = _local_finetuning_file_hashes(config)
     _write_summary(summary_path, report)
     run_state: dict[str, Any] = {
         "phase": "validation",
@@ -967,6 +969,23 @@ def run_finetuning(
         raise
 
 
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _local_finetuning_file_hashes(config: TrainLMFineTuningConfig) -> dict[str, str] | None:
+    if config.train_file is None or config.validation_file is None:
+        return None
+    return {
+        "train": _sha256_file(Path(config.train_file)),
+        "validation": _sha256_file(Path(config.validation_file)),
+    }
+
 def _initial_finetuning_summary(
     config: TrainLMFineTuningConfig,
     summary_path: Path,
@@ -1017,6 +1036,7 @@ def _initial_finetuning_summary(
             "train_file": str(config.train_file) if config.train_file is not None else None,
             "validation_file": str(config.validation_file) if config.validation_file is not None else None,
             "local_data_format": config.local_data_format,
+            "local_file_sha256": _local_finetuning_file_hashes(config),
         },
         "training_arguments": _json_compatible({
             item.name: getattr(config.args, item.name)
@@ -1198,10 +1218,19 @@ def restore_finetuning_config(
     data = report.get("data")
     if not isinstance(training_args, Mapping) or not isinstance(data, Mapping):
         raise ValueError("The fine-tuning summary is missing its saved settings.")
+    recorded_hashes = data.get("local_file_sha256")
+    if recorded_hashes is not None:
+        if not isinstance(recorded_hashes, Mapping):
+            raise ValueError("The saved local fine-tuning file hashes are invalid.")
+        for name, key in (("train", "train_file"), ("validation", "validation_file")):
+            file_path = data.get(key)
+            if not isinstance(file_path, str) or _sha256_file(Path(file_path)) != recorded_hashes.get(name):
+                raise ValueError("Local fine-tuning files changed since the saved run.")
 
     expected_argument_names = {item.name for item in fields(TrainLMTrainingArguments)}
     additive_arguments = {
         "num_train_epochs": None,
+        "gradient_checkpointing": False,
         "save_strategy": None,
         "eval_strategy": None,
         "load_best_model_at_end": False,
