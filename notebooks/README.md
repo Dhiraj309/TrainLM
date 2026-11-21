@@ -22,7 +22,7 @@
   checks TrainLM's experimental trainer using a pretrained DistilGPT-2
   checkpoint. It complements the standalone probe and the scratch workflow.
 - [v5e-1 epoch evaluation and checkpoint validation](TrainLM_TPU_Epoch_Eval_Save_V5e1.ipynb)
-  runs the focused CPU contracts, then a tiny single-device v5e-1 training,
+  runs the focused CPU contracts and, on native TorchTPU, all four HF pretraining workflows with fresh-process Transformers reload. It then runs a tiny single-device
   epoch evaluation/checkpoint, and checkpoint-resume check. It prefers native
   TorchTPU when available and can select legacy PyTorch/XLA explicitly. The
   report labels which backend ran; a native run does not validate the XLA path.
