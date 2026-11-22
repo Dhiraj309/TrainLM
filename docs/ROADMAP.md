@@ -1,5 +1,13 @@
 # TrainLM Roadmap
 
+**Dedicated v5e-1 LLM MFU benchmark notebook (2026-11-22):** added
+[`notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb`](../notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb)
+as a short 5-cell notebook dedicated solely to training `SmolLM2-135M`,
+`SmolLM2-360M`, and `Qwen2.5-0.5B` on `TPU v5e-1` with live MFU, cold-vs-steady
+window separation, HBM stats, and `torch.profiler` bottleneck reporting.
+Notebook JSON, syntax, and catalog contracts pass on CPU; TPU execution is
+pending.
+
 **Colab v5e-1 full validation notebook (2026-11-22):** added
 [`notebooks/TrainLM_Colab_v5e1_Full_Validation.ipynb`](../notebooks/TrainLM_Colab_v5e1_Full_Validation.ipynb)
 to group all owner-run single-device v5e-1 checks into one toggleable notebook.

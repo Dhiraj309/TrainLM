@@ -1,5 +1,14 @@
 # TrainLM implementation context
 
+**Dedicated v5e-1 LLM MFU benchmark notebook (2026-11-22):** added
+`notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb` (registered in
+`notebooks/README.md` and covered by
+`tests/contracts/test_v5e1_mfu_benchmark_notebook.py`) for focused LLM training
+and MFU bottleneck measurement across `SmolLM2-135M` (eager + `torch_compile`),
+`SmolLM2-360M`, and `Qwen2.5-0.5B` (`chunked_linear`) without running the full
+T1/HF-matrix validation suite first. CPU contract tests pass; TPU execution
+remains pending.
+
 **Colab v5e-1 full validation notebook (2026-11-22):** added
 `notebooks/TrainLM_Colab_v5e1_Full_Validation.ipynb` (registered in
 `notebooks/README.md` and guarded by
