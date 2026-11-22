@@ -280,7 +280,7 @@ def test_legacy_stateful_iterable_without_preflight_hook_is_rejected(tmp_path):
             ),
         )
 
-    first_data = LegacyStatefulExamples(deepcopy(examples))
+    first_data = StatefulExamples(deepcopy(examples))
     first = make_trainer(
         deepcopy(initial_model), first_data, tmp_path / "resumed", max_steps=2
     )

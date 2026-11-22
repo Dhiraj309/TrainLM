@@ -9,10 +9,11 @@ return MFU unavailable instead of substituting a guessed value. This provides
 input-pipeline evidence; device-kernel timeline profiling and owner-run TPU
 measurements remain outstanding.
 
-PR #156's first hosted CI run caught three scratch-notebook contract mismatches
-and two stale tests that allowed exact iterable resume without a verifiable
-cursor/source identity. The notebook contract and tests have been aligned with
-the current UX and resume safety rules; the follow-up hosted CI run is the
+PR #156's hosted CI runs caught scratch-notebook contract mismatches and stale
+tests expecting exact iterable resume without a verifiable cursor/source
+identity. The notebook now keeps fresh-run controls and exact-resume/budget-
+extension choices within its concise layout. The resume tests now verify that
+unverifiable readers are rejected before state changes. Hosted CI is the
 validation gate before merging.
 
 **Pinned Hub streaming fine-tuning (2026-11-22):**
