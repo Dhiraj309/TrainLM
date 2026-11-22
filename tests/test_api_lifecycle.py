@@ -7,7 +7,13 @@ from types import SimpleNamespace
 
 import pytest
 import torch
-from torch.utils.data import DataLoader, Dataset, RandomSampler, SequentialSampler
+from torch.utils.data import (
+    DataLoader,
+    Dataset,
+    IterableDataset,
+    RandomSampler,
+    SequentialSampler,
+)
 
 from trainlm import TrainLMTrainer, TrainLMTrainingArguments
 from trainlm.api import _BestModelSelectionCallback, _latest_training_checkpoint
@@ -1312,6 +1318,79 @@ def test_cpu_resumed_weights_match_uninterrupted_four_step_run(tmp_path):
 class _IterableRows(torch.utils.data.IterableDataset):
     def __iter__(self):
         return iter(_dataset())
+
+
+class StatefulTokenStream(IterableDataset):
+    def __init__(self, rows=8):
+        self.rows = rows
+        self.position = 0
+
+    def __iter__(self):
+        while self.position < self.rows:
+            offset = self.position
+            self.position += 1
+            yield {
+                "input_ids": torch.tensor([offset % 8, 1, 2, 3]),
+                "labels": torch.tensor([offset % 8, 1, 2, 3]),
+            }
+
+    def state_dict(self):
+        return {"position": self.position}
+
+    def load_state_dict(self, state):
+        self.position = state["position"]
+
+
+def test_iterable_checkpoint_resume_matches_uninterrupted_and_checks_identity(tmp_path):
+    def make_trainer(output_dir, *, identity="pinned-stream-v1"):
+        return TrainLMTrainer(
+            model=TinyModel(),
+            train_dataset=StatefulTokenStream(),
+            train_dataset_identity=identity,
+            args=TrainLMTrainingArguments(
+                output_dir=output_dir,
+                max_steps=4,
+                sequence_length=4,
+                accelerator="cpu",
+                seed=47,
+                save_steps=2,
+                dataloader_num_workers=0,
+            ),
+        )
+
+    torch.manual_seed(47)
+    uninterrupted = make_trainer(tmp_path / "stream-uninterrupted")
+    uninterrupted.train()
+    expected = deepcopy(uninterrupted.model.state_dict())
+
+    torch.manual_seed(47)
+    first = make_trainer(tmp_path / "stream-source")
+    first.train()
+    checkpoint = (
+        tmp_path / "stream-source" / "checkpoint-2" / "trainer_state.pt"
+    )
+    payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    assert payload["train_dataset_state"] == {"position": 2}
+    assert payload["train_dataset_identity"] == "pinned-stream-v1"
+
+    resumed = make_trainer(tmp_path / "stream-resume")
+    state = resumed.train(resume_from_checkpoint=checkpoint)
+    assert state.step == 4
+    assert all(
+        torch.equal(expected[name], value)
+        for name, value in resumed.model.state_dict().items()
+    )
+
+    changed_source = make_trainer(
+        tmp_path / "stream-mismatch", identity="different-stream-v1"
+    )
+    before = deepcopy(changed_source.model.state_dict())
+    with pytest.raises(ValueError, match="dataset identity changed"):
+        changed_source.train(resume_from_checkpoint=checkpoint)
+    assert all(
+        torch.equal(before[name], value)
+        for name, value in changed_source.model.state_dict().items()
+    )
 
 
 def _native_resume_validator(dataset, sampler, *, workers=0, generator=True):

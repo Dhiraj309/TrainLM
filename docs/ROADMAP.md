@@ -1,11 +1,14 @@
 # TrainLM Roadmap
 
-**High-level iterable fine-tuning (2026-11-22):** `run_finetuning` now accepts
-caller-supplied raw-text iterable splits with a finite step budget and bounded
-evaluation. Checkpoint/resume requires zero workers, a stateful iterable, and
-a stable dataset identity or state validator. Automatic Hub streaming,
-tokenized streams, and epoch schedules remain unsupported. This code has not
-been CPU-tested or run on TPU; HF-06 remains partial.
+**Pinned Hub streaming fine-tuning (2026-11-22):**
+`TrainLMFineTuningConfig(streaming=True)` resolves one immutable Hub revision
+and loads raw-text splits lazily. TrainLM fingerprints the source, splits,
+preprocessing, tokenizer mapping and sequence length for resume. Finite steps,
+bounded evaluation, zero workers and step schedules are required. CPU suites
+pass (84 tests), including exact stateful iterable resume parity and the
+mocked Hub loader/restore contract. Live Hub and TPU execution remain
+unverified; tokenized streaming, epoch budgets and high-level pretraining
+streams remain future work. HF-06 remains partial.
 
 **HF workflow implementation follow-up (2026-11-22):** fine-tuning resume now
 restores the resolved immutable Hub dataset revision and records/compares
@@ -21,13 +24,13 @@ publishing cell disabled by default. The support matrix now lists runtime,
 dtype/compile and evidence status for each workflow. `TrainLMTrainer` also
 gates iterable checkpoint/resume on zero workers, a state cursor, and a stable
 dataset identity or an explicit state validation hook, then checks available
-identity before restoring model or optimizer state. This capability is limited to `TrainLMTrainer`, not the
-high-level data helpers. These code and notebook changes have not yet been
-test-run or exercised on TPU/Hub. HF-03, HF-06 and
-HF-07 remain in progress; HF-08 still needs the owner-run hardware and Hub
-evidence described in [the matrix](HF_SUPPORT_MATRIX.md). The stream cursor
-path has not been CPU-tested in this change, and replacement-VM recovery
-remains unverified. Provided
+identity before restoring model or optimizer state. `run_finetuning` now
+exposes the contract for raw-text streams; `run_pretraining` remains finite-
+preparation based. The fine-tuning and trainer CPU suites pass (84 tests).
+No TPU execution, replacement-VM resume or authenticated Hub upload has been
+run. HF-03, HF-06 and HF-07 remain in progress; HF-08 still needs the owner-run
+hardware and Hub evidence described in [the matrix](HF_SUPPORT_MATRIX.md).
+Replacement-VM recovery remains unverified. Provided
 pretraining Datasets can declare an HF source/revision for provenance; TrainLM
 resolves it and fingerprints the supplied objects but cannot independently
 prove their origin.

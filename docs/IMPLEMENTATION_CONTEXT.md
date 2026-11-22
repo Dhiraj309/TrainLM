@@ -1,14 +1,16 @@
 # TrainLM implementation context
 
-**High-level iterable fine-tuning (2026-11-22):** `run_finetuning` now
-accepts caller-supplied raw-text iterable train/evaluation datasets. Training
-requires a finite `max_steps`; iterable evaluation requires
-`max_eval_batches`; stream checkpointing uses zero workers and the public
-trainer's cursor plus stable identity checks. Callers can set
-`train_dataset_identity` and must reconstruct the same pinned source and
-identity on resume. The helper still does not load Hub streams automatically,
-and tokenized streaming and epoch-based schedules remain unsupported. This
-implementation has not been CPU-tested or run on TPU.
+**Pinned Hub streaming fine-tuning (2026-11-22):**
+`TrainLMFineTuningConfig(streaming=True)` resolves the Hub dataset revision
+before opening raw-text train/validation streams. The resume identity covers
+the immutable source revision, splits, text transform, tokenizer commit and
+vocabulary mapping, and sequence length; `restore_finetuning_config()` retains
+that identity. Training requires finite `max_steps`, bounded evaluation,
+zero workers and step-based schedules. Caller-created iterables remain
+supported with an explicit identity or stable fingerprints. Tokenized stream
+inputs and epoch budgets remain unsupported. Focused CPU suites pass (84
+tests), including exact stateful iterable resume parity and a mocked Hub
+loader/restore contract. No live Hub download or TPU run was performed.
 
 **HF workflow implementation follow-up (2026-11-22):** the current local
 implementation extends HF-03/06/07/08. Fine-tuning resume restores the
@@ -28,9 +30,9 @@ device/package profile, dtype/compile mode, evidence and next owner-run checks.
 The public trainer now gates iterable checkpoint/resume before training on
 zero workers, a state cursor, and a stable source identity or an explicit
 `validate_state_dict()` source/cursor check; it compares available identity
-before applying saved model/optimizer state. This path is not exposed
-through the high-level pretraining/fine-tuning helpers and has not been CPU-
-tested in this local change. No TPU execution, replacement-VM resume or
+before applying saved model/optimizer state. `run_finetuning` now uses this
+contract for raw-text iterable sources; `run_pretraining` does not yet expose
+the same cursor interface. No TPU execution, replacement-VM resume or
 authenticated Hub upload has been run. HF-03/06/07 remain partial and HF-08
 evidence gates remain open; arbitrary streams without these guarantees remain
 unsupported for exact resume.
