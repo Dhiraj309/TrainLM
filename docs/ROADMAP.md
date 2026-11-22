@@ -1,5 +1,16 @@
 # TrainLM Roadmap
 
+**Colab v5e-1 full validation notebook (2026-11-22):** added
+[`notebooks/TrainLM_Colab_v5e1_Full_Validation.ipynb`](../notebooks/TrainLM_Colab_v5e1_Full_Validation.ipynb)
+to group all owner-run single-device v5e-1 checks into one toggleable notebook
+(T1 probes, 4-case GPT-2/Llama HF matrices, `trainlm pretrain`/`finetune` CLI,
+`run_pretraining` and `run_finetuning` feature options including `bf16`,
+`torch_compile`, `gradient_checkpointing`, best-model/early-stopping,
+VM-replacement recovery bundles, `streaming=True` fine-tuning resume,
+`PackedBinDataset` epoch schedules, `chunked_linear` loss, and opt-in
+`push_to_hub`). Notebook JSON, Python syntax, and catalog contracts are verified
+on CPU; no TPU execution has been run for this notebook yet.
+
 **Measured training performance (2026-11-22):** ordinary training runs now
 collect sparse synchronized wall-clock windows and report observed supervised
 tokens/second plus dataloader wait fraction. Native single-device TPU v5e BF16
