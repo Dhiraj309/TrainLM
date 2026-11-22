@@ -1,5 +1,15 @@
 # TrainLM implementation context
 
+**High-level iterable fine-tuning (2026-11-22):** `run_finetuning` now
+accepts caller-supplied raw-text iterable train/evaluation datasets. Training
+requires a finite `max_steps`; iterable evaluation requires
+`max_eval_batches`; stream checkpointing uses zero workers and the public
+trainer's cursor plus stable identity checks. Callers can set
+`train_dataset_identity` and must reconstruct the same pinned source and
+identity on resume. The helper still does not load Hub streams automatically,
+and tokenized streaming and epoch-based schedules remain unsupported. This
+implementation has not been CPU-tested or run on TPU.
+
 **HF workflow implementation follow-up (2026-11-22):** the current local
 implementation extends HF-03/06/07/08. Fine-tuning resume restores the
 resolved immutable Hub dataset revision and rejects a changed provided-HF-

@@ -15,6 +15,8 @@ import zipfile
 from pathlib import Path
 from typing import Any, Literal
 
+from torch.utils.data import IterableDataset
+
 from .api import (
     TrainLMTrainer,
     TrainLMTrainingArguments,
@@ -74,6 +76,9 @@ class TrainLMFineTuningConfig:
         default=None, init=False, repr=False, compare=False
     )
     _expected_dataset_fingerprints: tuple[str | None, str | None] | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
+    _expected_train_dataset_identity: str | None = field(
         default=None, init=False, repr=False, compare=False
     )
     _expected_local_file_hashes: tuple[str, str] | None = field(
@@ -820,12 +825,16 @@ def run_finetuning(
     data_collator: Callable[[Sequence[Any]], Mapping[str, Any]] | None = None,
     callbacks: Sequence[TrainerCallback] | None = None,
     resume_from_checkpoint: str | Path | None = None,
+    train_dataset_identity: str | None = None,
 ) -> TrainLMFineTuningResult:
     """Run pretrained causal-LM fine-tuning and persist a run summary.
 
     By default, load the configured pinned Hub dataset. To use preloaded
     Hugging Face ``Dataset`` splits, pass both ``train_dataset`` and
-    ``eval_dataset``. With the default ``data_format="text"``,
+    ``eval_dataset``. Raw-text iterable splits are supported with a finite
+    ``max_steps`` budget; give streamed evaluation a ``max_eval_batches`` bound.
+    When checkpointing streams, pass a stable ``train_dataset_identity`` and
+    use ``dataloader_num_workers=0``. With the default ``data_format="text"``,
     ``formatting_func`` receives one row and returns its training text. With
     ``data_format="tokens"``, rows must already contain ``input_ids`` and are
     validated and passed through without decoding or tokenization. A custom
@@ -868,6 +877,19 @@ def run_finetuning(
         )
     if data_collator is not None and not callable(data_collator):
         raise TypeError("data_collator must be callable when provided.")
+    if train_dataset_identity is not None and (
+        not isinstance(train_dataset_identity, str)
+        or not train_dataset_identity.strip()
+    ):
+        raise ValueError("train_dataset_identity must be a non-empty string.")
+    expected_train_identity = config._expected_train_dataset_identity
+    if expected_train_identity is not None:
+        if train_dataset_identity is not None and train_dataset_identity != expected_train_identity:
+            raise ValueError(
+                "The supplied train_dataset_identity does not match the "
+                "identity recorded by the restored run."
+            )
+        train_dataset_identity = expected_train_identity
 
     summary_path = Path(config.args.output_dir) / "finetuning-summary.json"
     dataset_source = (
@@ -881,7 +903,9 @@ def run_finetuning(
         resume_from_checkpoint=resume_from_checkpoint,
         dataset_source=dataset_source,
         formatting_func=formatting_func,
+        train_dataset_identity=train_dataset_identity,
     )
+    report["data"]["streaming"] = _is_streaming_dataset(train_dataset)
     if config.expected_tokenizer_vocab_sha256 is not None:
         report["data"]["expected_tokenizer_vocab_sha256"] = config.expected_tokenizer_vocab_sha256
     report["data"]["local_file_sha256"] = _local_finetuning_file_hashes(config)
@@ -907,6 +931,7 @@ def run_finetuning(
             data_collator=data_collator,
             callbacks=callbacks,
             resume_from_checkpoint=resume_from_checkpoint,
+            train_dataset_identity=train_dataset_identity,
             run_state=run_state,
         )
         report.update(result.summary())
@@ -992,6 +1017,12 @@ def _local_finetuning_file_hashes(config: TrainLMFineTuningConfig) -> dict[str, 
         "validation": _sha256_file(Path(config.validation_file)),
     }
 
+
+def _is_streaming_dataset(dataset: Any) -> bool:
+    return isinstance(dataset, IterableDataset) or (
+        hasattr(dataset, "__iter__") and not hasattr(dataset, "__getitem__")
+    )
+
 def _initial_finetuning_summary(
     config: TrainLMFineTuningConfig,
     summary_path: Path,
@@ -999,6 +1030,7 @@ def _initial_finetuning_summary(
     resume_from_checkpoint: str | Path | None,
     dataset_source: str,
     formatting_func: Callable[[Mapping[str, Any]], str] | None,
+    train_dataset_identity: str | None,
 ) -> dict[str, Any]:
     return {
         "schema_version": 1,
@@ -1036,6 +1068,7 @@ def _initial_finetuning_summary(
             "train_split": config.train_split,
             "validation_split": config.validation_split,
             "formatting_function": _callable_label(formatting_func),
+            "train_dataset_identity": train_dataset_identity,
             "dataset_fingerprints": None,
             "max_dataset_token_id": None,
             "resolved_dataset_revision": None,
@@ -1311,6 +1344,7 @@ def restore_finetuning_config(
             )
 
     expected_dataset_fingerprints = None
+    expected_train_dataset_identity = None
     if data.get("source") == "provided_dataset":
         fingerprints = data.get("dataset_fingerprints")
         if fingerprints is None:
@@ -1326,7 +1360,16 @@ def restore_finetuning_config(
             for value in (train_fingerprint, validation_fingerprint)
         ):
             raise ValueError("The saved fine-tuning Dataset fingerprints are invalid.")
-        expected_dataset_fingerprints = (train_fingerprint, validation_fingerprint)
+        if data.get("streaming"):
+            train_identity = data.get("train_dataset_identity")
+            if not isinstance(train_identity, str) or not train_identity.strip():
+                raise ValueError(
+                    "Resuming a provided iterable fine-tuning dataset requires "
+                    "the stable train_dataset_identity recorded by the run."
+                )
+            expected_train_dataset_identity = train_identity
+        else:
+            expected_dataset_fingerprints = (train_fingerprint, validation_fingerprint)
 
     try:
         args = TrainLMTrainingArguments(**restored_args)
@@ -1370,6 +1413,12 @@ def restore_finetuning_config(
                 config,
                 "_expected_dataset_fingerprints",
                 expected_dataset_fingerprints,
+            )
+        if expected_train_dataset_identity is not None:
+            object.__setattr__(
+                config,
+                "_expected_train_dataset_identity",
+                expected_train_dataset_identity,
             )
         if expected_local_file_hashes is not None:
             object.__setattr__(
@@ -1418,6 +1467,7 @@ def _run_finetuning_impl(
     data_collator: Callable[[Sequence[Any]], Mapping[str, Any]] | None = None,
     callbacks: Sequence[TrainerCallback] | None = None,
     resume_from_checkpoint: str | Path | None = None,
+    train_dataset_identity: str | None = None,
     run_state: dict[str, Any],
 ) -> TrainLMFineTuningResult:
     """Load data, fine-tune, evaluate, and export one pretrained causal LM.
@@ -1589,6 +1639,39 @@ def _run_finetuning_impl(
                 "saved run. Reload the original train and validation splits "
                 "before resuming."
             )
+    train_is_iterable = _is_streaming_dataset(train_source)
+    validation_is_iterable = _is_streaming_dataset(validation_source)
+    if (train_is_iterable or validation_is_iterable) and config.data_format != "text":
+        raise ValueError(
+            "High-level streaming fine-tuning currently supports raw text. "
+            "Tokenized streaming validation is not bounded yet; use finite "
+            "Datasets for data_format='tokens'."
+        )
+    if train_is_iterable:
+        if config.args.max_steps is None or config.args.num_train_epochs is not None:
+            raise ValueError(
+                "Streaming fine-tuning requires a finite max_steps budget; "
+                "epoch-based budgets need a finite dataset."
+            )
+        if config.args.dataloader_num_workers != 0:
+            raise ValueError(
+                "Streaming fine-tuning currently requires "
+                "dataloader_num_workers=0 for exact cursor handling."
+            )
+        if "epoch" in (
+            config.args.resolved_eval_strategy,
+            config.args.resolved_save_strategy,
+        ):
+            raise ValueError(
+                "Streaming fine-tuning cannot use epoch-based evaluation or "
+                "checkpoint schedules; use step-based schedules."
+            )
+    if validation_is_iterable and config.args.max_eval_batches is None:
+        raise ValueError(
+            "Streaming evaluation requires max_eval_batches so evaluation has "
+            "a finite bound."
+        )
+
     for split_name, dataset in (
         (config.train_split, train_source),
         (config.validation_split, validation_source),
@@ -1717,6 +1800,7 @@ def _run_finetuning_impl(
             )
         ),
         callbacks=callbacks,
+        train_dataset_identity=train_dataset_identity,
     )
     run_state["trainer"] = trainer
     resolved_training_budget = getattr(trainer, "training_budget", None)

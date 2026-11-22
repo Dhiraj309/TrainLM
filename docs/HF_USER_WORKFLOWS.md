@@ -102,7 +102,7 @@ remain separate scopes. Unsupported cases need an actionable early error.
 | Start from pretrained weights for CPT | `TrainLMPretrainingConfig.continued_pretraining(model_id, ...)` selects the HF checkpoint and reuses the scratch/CPT lifecycle for raw text or tokenized HF Dataset rows | HF-02 is merged; model loading begins only when the run starts |
 | Reuse an HF tokenizer | Scratch defaults to the model repository's tokenizer or accepts independent `tokenizer_name_or_path` and `tokenizer_revision`; `tokenizer_mode="train_bpe"` retains corpus training for random initialization | HF-02 fingerprints tokenizer mapping and resolved source; independently hosted token meaning remains the user's responsibility |
 | Independently hosted tokenizer | `run_finetuning` accepts separate model/tokenizer IDs and revisions, resolves them independently, and checks known token-ID bounds and static context limits | Token meanings cannot be proven from Hub IDs or vocabulary sizes; the report marks them unverified and an explicit user policy remains |
-| Raw HF datasets | Scratch streams pinned Hub text and accepts supplied HF `Dataset` splits; fine-tuning accepts Hub, local CSV/JSON/JSONL/Parquet, or supplied HF splits | Exact streaming resume is limited to the cursor-capable public trainer contract; the high-level helpers do not accept streaming datasets |
+| Raw HF datasets | Scratch streams pinned Hub text; fine-tuning accepts Hub, local CSV/JSON/JSONL/Parquet, HF splits, and caller-supplied raw-text iterables | Fine-tuning streaming requires finite step budgets, bounded iterable evaluation, zero workers and a resumable cursor when checkpointing; automatic Hub streaming and tokenized streams remain unsupported |
 | Pretokenized HF datasets | Fine-tuning and scratch/CPT accept `input_ids` with optional aligned labels and masks; scratch/CPT preserves them in checksummed sidecars, derives labels only when absent, and shifts once | Verify tokenizer-to-dataset semantics and unify provenance and resume identity across workflows |
 | Modern HF vocabularies | Packed writer and scratch config support uint32 IDs; scratch derives required capacity from the largest tokenizer ID, including sparse/added IDs | HF-02 removed the 65,536 ceiling; a CPU round-trip covers token ID 70,000 |
 | Train/evaluate/save/resume | Public trainer and helper lifecycles exist; scratch checks prepared-data identity; fine-tuning resume pins Hub revisions and checks local hashes and supplied Dataset fingerprints | Arbitrary streams without a deterministic cursor remain unsupported for exact resume |
@@ -650,14 +650,21 @@ without repeating or skipping training data silently.
 - Check resume capability before training starts. Capture dataset/tokenizer/
   transformation identity and the cursor/RNG needed for supported loaders;
   do not promise exact resume for arbitrary streams or worker settings.
-- `TrainLMTrainer` now supports checkpointed `torch.utils.data.IterableDataset`
-  sources only when they provide `state_dict()` and `load_state_dict()`, use
-  `dataloader_num_workers=0`, and have a stable identity or a
+- `TrainLMTrainer` and `run_finetuning` now support caller-supplied raw-text
+  `torch.utils.data.IterableDataset` sources for finite-step fine-tuning.
+  Streaming evaluation requires `max_eval_batches`; epoch-based schedules,
+  tokenized streaming, and automatic `streaming=True` Hub loading remain
+  unsupported. For exact checkpoint resume, the source must expose
+  `state_dict()` and `load_state_dict()`, use `dataloader_num_workers=0`, and
+  have a stable identity or a
   `validate_state_dict()` hook that rejects source/cursor mismatches. Pass
   `train_dataset_identity="owner/dataset@commit-sha"` or use an HF iterable
-  with a stable `_fingerprint`. These checks run before the first training
-  batch and again before restoring checkpoint state. This does not add
-  streaming support to `run_finetuning` or `run_pretraining` helpers.
+  with a stable `_fingerprint`. The same source and identity must be supplied
+  again when resuming.
+- Direct `TrainLMTrainer` checkpointing of iterable sources also requires
+  zero workers, a state cursor, and a stable identity or a source validator.
+  These checks run before the first training batch and before restoring
+  saved model/optimizer state.
 - Support durable run directories and a documented recovery flow containing
   optimizer, scheduler, RNG, data cursor and required preparation artifacts.
   `bundle_pretraining_artifacts(..., include_resume_state=True)` now adds the
@@ -669,28 +676,40 @@ without repeating or skipping training data silently.
   changed data/tokenizer is rejected before state mutation; retained-file and
   VM-replacement recovery are reported as different evidence.
 
-Example for a streaming dataset that implements the HF/PyTorch iterable state
-protocol (load model/tokenizer and `tokenize` for the selected model first):
+Example for raw-text Hub streams that implement the HF/PyTorch iterable state
+protocol. Keep the dataset revision pinned and reconstruct the same streams
+with the same identity when resuming:
 
 ```python
-stream = load_dataset(
-    "owner/dataset", revision="<40-character-commit>", split="train", streaming=True
-).map(tokenize, batched=True, remove_columns=["text"])
-trainer = TrainLMTrainer(
-    model=model,
-    train_dataset=stream,
-    train_dataset_identity="owner/dataset@<40-character-commit>",
-    args=TrainLMTrainingArguments(
-        output_dir="stream-run", max_steps=1000, save_steps=100,
-        dataloader_num_workers=0,
-    ),
+from datasets import load_dataset
+from trainlm import TrainLMFineTuningConfig, TrainLMTrainingArguments, run_finetuning
+
+revision = "<40-character-commit>"
+train_stream = load_dataset(
+    "owner/dataset", revision=revision, split="train", streaming=True
 )
-trainer.train()
+eval_stream = load_dataset(
+    "owner/dataset", revision=revision, split="validation", streaming=True
+)
+result = run_finetuning(
+    TrainLMFineTuningConfig(
+        model_name_or_path="org/model",
+        args=TrainLMTrainingArguments(
+            output_dir="stream-run", max_steps=1000, save_steps=100,
+            eval_steps=100, max_eval_batches=32, dataloader_num_workers=0,
+        ),
+    ),
+    train_dataset=train_stream,
+    eval_dataset=eval_stream,
+    train_dataset_identity=f"owner/dataset@{revision}",
+)
 ```
 
-This code path has not yet been CPU-tested in the current change. Dataset
-transformations must be deterministic, and the identity must pin both the
-source and any relevant preprocessing choices.
+Dataset transformations must be deterministic, and the identity must pin
+both the source and relevant preprocessing choices. This implementation has
+not been CPU-tested or run on TPU in this change. The resolved run summary
+records the streaming flag and source identity; `restore_finetuning_config()`
+retains that identity so the same identity is used when the stream is rebuilt.
 
 ### HF-07 — Three user recipes, one API (P0 alongside each feature)
 

@@ -1,5 +1,12 @@
 # TrainLM Roadmap
 
+**High-level iterable fine-tuning (2026-11-22):** `run_finetuning` now accepts
+caller-supplied raw-text iterable splits with a finite step budget and bounded
+evaluation. Checkpoint/resume requires zero workers, a stateful iterable, and
+a stable dataset identity or state validator. Automatic Hub streaming,
+tokenized streams, and epoch schedules remain unsupported. This code has not
+been CPU-tested or run on TPU; HF-06 remains partial.
+
 **HF workflow implementation follow-up (2026-11-22):** fine-tuning resume now
 restores the resolved immutable Hub dataset revision and records/compares
 fingerprints for caller-provided HF Dataset splits; a provided split without a
