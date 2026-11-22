@@ -2216,3 +2216,9 @@ dry-run rejects all run-only publication/resume options. Authentication comes
 from normal Hugging Face login or `HF_TOKEN`; CLI output contains only the run
 summary and the returned Hub commit receipt. No live Hub upload was performed
 for this change.
+
+The scratch/CPT notebook adds a separate private Hub smoke cell after the
+artifact cell. It uses whichever fresh or resumed `run` was selected, keeps
+publishing opt-in, prompts for Hugging Face auth only if no token is already
+available, and reports the repository URL and upload commit. This supports an
+owner-run Colab/Kaggle check; CI and this implementation did not upload a model.

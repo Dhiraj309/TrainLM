@@ -8,6 +8,12 @@
 
 The [HF workflow support matrix](HF_SUPPORT_MATRIX.md) links the scratch, CPT and tokenized corpus recipes to CPU and TPU evidence.
 
+The scratch/CPT [Colab and Kaggle notebook](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb)
+also has an optional private publication cell after artifact export. It uses
+the completed run result, remains disabled by default, and prints only the Hub
+repository and commit SHA. This is a user-run upload check; it is not live Hub
+validation performed by TrainLM CI.
+
 ## Command-line runs
 
 The public CLI exposes the same high-level pretraining and fine-tuning APIs for

@@ -3111,3 +3111,9 @@ successful run with `--push-to-hub REPO_ID`; new repositories default to
 private, and public visibility requires `--public`. Dry-run and publication
 options are mutually exclusive. The CLI prints the upload receipt without
 exposing credentials. Live Hub upload remains owner-validated.
+
+**Notebook Hub publishing check.** The short scratch/CPT notebook now includes
+an optional private upload cell after a successful local export. It is disabled
+by default, uses Hugging Face's standard login flow, and prints only the
+repository URL and commit SHA. A real upload still must be run and reviewed by
+the owner in Colab or Kaggle.
