@@ -154,6 +154,17 @@ def _resolve_batches_per_epoch(train_dataset: Any, *, batch_size: int) -> int:
     return batches_per_epoch
 
 
+def _is_iterable_dataset(dataset: Any) -> bool:
+    """Recognize map-style and iterable datasets after DataLoader unwrapping."""
+    return isinstance(dataset, IterableDataset) or (
+        hasattr(dataset, "__iter__") and not hasattr(dataset, "__getitem__")
+    )
+
+
+def _loader_dataset(source: Any) -> Any:
+    return source.dataset if isinstance(source, DataLoader) else source
+
+
 def _resolve_epoch_budget(
     train_dataset: Any,
     *,
@@ -1207,6 +1218,7 @@ class TrainLMTrainer:
         scheduler: LRScheduler | None = None,
         runtime: Any | None = None,
         training_view_factory: Callable[[nn.Module], Any] | None = None,
+        train_dataset_identity: str | None = None,
     ) -> None:
         self.args = args or TrainLMTrainingArguments()
         from trainlm.data import PackedBinDataset
@@ -1267,6 +1279,21 @@ class TrainLMTrainer:
         self.processing_class = processing_class if processing_class is not None else tokenizer
         self.train_dataset = train_dataset
         self.eval_dataset = eval_dataset
+        if train_dataset_identity is not None and (
+            not isinstance(train_dataset_identity, str)
+            or not train_dataset_identity.strip()
+        ):
+            raise ValueError("train_dataset_identity must be a non-empty string.")
+        identity_dataset = _loader_dataset(train_dataset)
+        self._train_dataset_identity = train_dataset_identity
+        self._train_dataset_fingerprint = getattr(
+            identity_dataset, "_fingerprint", None
+        )
+        if self._train_dataset_fingerprint is not None and (
+            not isinstance(self._train_dataset_fingerprint, str)
+            or not self._train_dataset_fingerprint.strip()
+        ):
+            self._train_dataset_fingerprint = None
         self.data_collator = data_collator or _default_collator
         self.callbacks = tuple(callbacks or ())
         if self.args.resolved_eval_strategy != "no" and eval_dataset is None:
@@ -1668,6 +1695,16 @@ class TrainLMTrainer:
                     f"{Path(self.args.output_dir)}."
                 )
 
+        if (
+            self._tpu_coordinator is None
+            and self.engine is not None
+            and (
+                resume_from_checkpoint is not None
+                or self.args.resolved_save_strategy != "no"
+            )
+        ):
+            self._validate_checkpoint_resume_data(self.engine)
+
         if self._tpu_coordinator is not None:
             return self._consume_tpu_result(
                 self._tpu_coordinator.run(
@@ -1697,6 +1734,19 @@ class TrainLMTrainer:
         if self._best_model_callback is not None:
             self._load_best_model_at_end()
         return state
+
+    def performance_summary(self) -> dict[str, Any]:
+        """Return synchronized run throughput and available MFU details."""
+
+        if self.engine is None:
+            return {
+                "status": "unavailable",
+                "mfu_status": "unavailable",
+                "mfu_unavailable_reason": (
+                    "The worker-coordinated backend does not yet return performance telemetry."
+                ),
+            }
+        return self.engine.performance_summary()
 
     @property
     def best_model_selection(self) -> dict[str, Any] | None:
@@ -1826,7 +1876,18 @@ class TrainLMTrainer:
         loader = engine.train_dataloader
         dataset = getattr(loader, "dataset", None)
         dataset_state_dict = getattr(dataset, "state_dict", None)
-        if (
+        if _is_iterable_dataset(dataset):
+            self._validate_checkpoint_resume_data(engine)
+            dataset_state = dataset_state_dict()
+            if dataset_state is None:
+                raise ValueError(
+                    "The iterable dataset returned no cursor state; a resumable "
+                    "checkpoint cannot be written."
+                )
+            payload["train_dataset_state"] = dataset_state
+            payload["train_dataset_identity"] = self._train_dataset_identity
+            payload["train_dataset_fingerprint"] = self._train_dataset_fingerprint
+        elif (
             getattr(loader, "num_workers", 0) == 0
             and callable(dataset_state_dict)
             and callable(getattr(dataset, "load_state_dict", None))
@@ -2315,7 +2376,42 @@ class TrainLMTrainer:
                 "serializable."
             )
 
+    def _validate_checkpoint_resume_data(self, engine: EngineTrainer) -> None:
+        """Fail before updates if an iterable source cannot resume exactly."""
+        loader = engine.train_dataloader
+        dataset = getattr(loader, "dataset", None)
+        if not _is_iterable_dataset(dataset):
+            return
+        if getattr(loader, "num_workers", 0) != 0:
+            raise ValueError(
+                "Checkpointing an iterable dataset requires "
+                "dataloader_num_workers=0 so worker prefetch state is not lost."
+            )
+        if not (
+            callable(getattr(dataset, "state_dict", None))
+            and callable(getattr(dataset, "load_state_dict", None))
+        ):
+            raise ValueError(
+                "Checkpointing an iterable dataset requires exact "
+                "state_dict()/load_state_dict() cursor methods."
+            )
+        has_stable_identity = bool(
+            self._train_dataset_identity or self._train_dataset_fingerprint
+        )
+        has_dataset_validator = callable(
+            getattr(dataset, "validate_state_dict", None)
+        )
+        if not has_stable_identity and not has_dataset_validator:
+            raise ValueError(
+                "Checkpointing an iterable dataset requires a stable source "
+                "identity: pass train_dataset_identity (for example, "
+                "'owner/dataset@commit-sha') or use a Dataset with a stable "
+                "fingerprint, or implement validate_state_dict() to verify the "
+                "source identity from its saved cursor."
+            )
+
     def _save_training_checkpoint(self, engine: EngineTrainer, destination: object | None):
+        self._validate_checkpoint_resume_data(engine)
         self._validate_native_resume_data(engine)
         root = Path(self.args.output_dir)
         path = root / str(destination or f"checkpoint-{engine.state.step}")
@@ -2509,6 +2605,33 @@ class TrainLMTrainer:
 
         dataset_state = payload.get("train_dataset_state")
         dataset = getattr(engine.train_dataloader, "dataset", None)
+        if _is_iterable_dataset(dataset):
+            if dataset_state is None:
+                raise ValueError(
+                    "Exact resume for an iterable dataset requires a saved "
+                    "state_dict() cursor."
+                )
+            has_stable_identity = bool(
+                self._train_dataset_identity or self._train_dataset_fingerprint
+            )
+            has_dataset_validator = callable(
+                getattr(dataset, "validate_state_dict", None)
+            )
+            if not has_stable_identity and not has_dataset_validator:
+                raise ValueError(
+                    "Exact resume for an iterable dataset requires a stable "
+                    "source identity or a validate_state_dict() identity check."
+                )
+            if (
+                payload.get("train_dataset_identity")
+                != self._train_dataset_identity
+                or payload.get("train_dataset_fingerprint")
+                != self._train_dataset_fingerprint
+            ):
+                raise ValueError(
+                    "The iterable training dataset identity changed since the "
+                    "checkpoint was saved. Restore the original pinned source."
+                )
         if dataset_state is not None:
             if not callable(getattr(dataset, "load_state_dict", None)):
                 raise ValueError(
@@ -2787,6 +2910,7 @@ class TrainLMTrainer:
                 raise ValueError("Training checkpoint token scheduler LR ratio is invalid.")
 
     def _load_training_checkpoint(self, engine: EngineTrainer, source: object):
+        self._validate_checkpoint_resume_data(engine)
         self._validate_native_resume_data(engine)
         path = Path(source)
         if path.is_dir():

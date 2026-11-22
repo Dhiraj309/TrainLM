@@ -50,3 +50,27 @@ and the matching `trainlm.benchmark.BenchmarkResult` API.
 Cold compilation, warm-cache execution, and steady-state measurement must be
 reported separately. The schema also records HBM, input idle, collectives,
 compile/fallback counts, and workload identity.
+
+## User-run measured training performance
+
+The public `TrainLMTrainer` records bounded, synchronized wall-clock windows at
+the configured logging cadence. Progress metrics include observed supervised
+tokens/second, wall time, and the fraction spent waiting for the training
+dataloader. `TrainLMTrainer.performance_summary()` and from-scratch run reports
+expose the aggregate for the current process run; fine-tuning result summaries
+carry the same report.
+
+For a single native TPU v5e using BF16, TrainLM reports non-embedding and
+logits-inclusive MFU using measured supervised-token throughput, the dense
+causal-LM FLOPs formula in `trainlm.benchmark.calculate_causal_lm_flops`, and
+Google's documented 197 TFLOPs BF16 peak per v5e chip
+([hardware specification](https://docs.cloud.google.com/tpu/docs/v5e)). This is
+the standard model-FLOPs utilization definition; MFU is a model-based ratio,
+not a hardware FLOP counter. No MFU is reported when hardware, precision, model
+geometry, or measurement scope is unknown.
+
+Elevated dataloader wait is surfaced as an input-pipeline hint. A low wait
+fraction does not identify a particular slow kernel: detailed operator and
+device timeline profiling remains a separate opt-in diagnostic. A window
+includes startup/compilation work if it occurs during that window, so compare
+later logging windows for steady-state behavior.

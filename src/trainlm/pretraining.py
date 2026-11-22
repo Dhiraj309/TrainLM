@@ -384,13 +384,32 @@ class TrainLMPretrainingConfig:
                     "validation_file are configured."
                 )
             if self.dataset_source == "provided":
-                if any(value is not None for value in (
-                    self.dataset_id, self.dataset_revision, self.dataset_config_name
-                )):
+                if self.dataset_id is None and any(
+                    value is not None
+                    for value in (self.dataset_revision, self.dataset_config_name)
+                ):
                     raise ValueError(
-                        "dataset_source='provided' cannot be combined with "
-                        "dataset_id, dataset_revision, or dataset_config_name."
+                        "dataset_revision and dataset_config_name require a "
+                        "declared dataset_id for provided Dataset provenance."
                     )
+                if self.dataset_id is not None:
+                    if not isinstance(self.dataset_id, str) or not _DATASET_ID.fullmatch(
+                        self.dataset_id
+                    ):
+                        raise ValueError(
+                            "dataset_id must be a Hugging Face owner/name ID."
+                        )
+                    if self.dataset_revision is None:
+                        object.__setattr__(self, "dataset_revision", "main")
+                    if (
+                        not isinstance(self.dataset_revision, str)
+                        or not self.dataset_revision.strip()
+                        or len(self.dataset_revision) > 256
+                        or "\x00" in self.dataset_revision
+                    ):
+                        raise ValueError(
+                            "dataset_revision must be a non-empty Hub revision."
+                        )
             else:
                 if self.dataset_config_name is not None and self.dataset_id is None:
                     raise ValueError(
@@ -2430,6 +2449,11 @@ def _prepare_scratch_training(
         "dataset_config_name": config.dataset_config_name,
         "requested_revision": config.dataset_revision,
         "resolved_revision": resolved_dataset_revision,
+        "source_relation": (
+            "caller_declared"
+            if config.dataset_source == "provided" and config.dataset_id is not None
+            else "loaded_by_trainlm"
+        ),
         "train_split": config.train_split,
         "validation_split": config.validation_split,
         "text_field": config.text_field,

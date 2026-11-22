@@ -102,11 +102,11 @@ remain separate scopes. Unsupported cases need an actionable early error.
 | Start from pretrained weights for CPT | `TrainLMPretrainingConfig.continued_pretraining(model_id, ...)` selects the HF checkpoint and reuses the scratch/CPT lifecycle for raw text or tokenized HF Dataset rows | HF-02 is merged; model loading begins only when the run starts |
 | Reuse an HF tokenizer | Scratch defaults to the model repository's tokenizer or accepts independent `tokenizer_name_or_path` and `tokenizer_revision`; `tokenizer_mode="train_bpe"` retains corpus training for random initialization | HF-02 fingerprints tokenizer mapping and resolved source; independently hosted token meaning remains the user's responsibility |
 | Independently hosted tokenizer | `run_finetuning` accepts separate model/tokenizer IDs and revisions, resolves them independently, and checks known token-ID bounds and static context limits | Token meanings cannot be proven from Hub IDs or vocabulary sizes; the report marks them unverified and an explicit user policy remains |
-| Raw HF datasets | Scratch streams pinned Hub text and accepts supplied raw-text or tokenized HF `Dataset` splits with fingerprinted cache identity; scratch/CPT and fine-tuning accept row formatters | Arbitrary structured local data file loading and unified provenance remain |
+| Raw HF datasets | Scratch and fine-tuning can stream pinned Hub text; fine-tuning also accepts local CSV/JSON/JSONL/Parquet, HF splits, and caller-supplied raw-text iterables | Fine-tuning streaming requires finite step budgets, bounded evaluation and zero workers; tokenized streams remain unsupported |
 | Pretokenized HF datasets | Fine-tuning and scratch/CPT accept `input_ids` with optional aligned labels and masks; scratch/CPT preserves them in checksummed sidecars, derives labels only when absent, and shifts once | Verify tokenizer-to-dataset semantics and unify provenance and resume identity across workflows |
 | Modern HF vocabularies | Packed writer and scratch config support uint32 IDs; scratch derives required capacity from the largest tokenizer ID, including sparse/added IDs | HF-02 removed the 65,536 ceiling; a CPU round-trip covers token ID 70,000 |
-| Train/evaluate/save/resume | Public trainer and helper lifecycles exist; scratch has strong prepared-data identity checks | Share contracts across HF data paths; include tokenizer/data identity and declare which streams can resume exactly |
-| Standard HF model export | `save_model` uses `save_pretrained` and saves the processing class when supplied | A CPU fresh-process check reloads model and tokenizer and generates from the export; accelerator export remains owner-validated |
+| Train/evaluate/save/resume | Public trainer and helper lifecycles exist; scratch checks prepared-data identity; fine-tuning resume pins Hub revisions and checks local hashes and supplied Dataset fingerprints | Arbitrary streams without a deterministic cursor remain unsupported for exact resume |
+| Standard HF model export | `save_model` uses `save_pretrained` and saves the processing class when supplied | CPU fresh-process reload and generation are covered; accelerator export remains owner-validated |
 | Publish to HF Hub | Results expose `push_to_hub`; `trainlm pretrain` and `trainlm finetune` also accept opt-in `--push-to-hub REPO_ID`, private by default | Review license and provenance before public release; live Hub upload remains user-run |
 | Inference | `examples/infer_local_export.py` and the scratch notebook load the export in a clean Python process using Transformers | Other inference engines require their own compatibility evidence; Hub-hosted inference remains a user-managed Transformers workflow |
 
@@ -335,14 +335,21 @@ tokenizer source and mapping, but cannot verify that the dataset token IDs were
 produced by that tokenizer. Raw text datasets with multiple columns accept a
 `formatting_func(row) -> str`; its stable `text_formatter_name` is included in
 the preparation cache and checkpoint identity, and the caller supplies the
-same formatter again on resume. Other local formats and unified
-cross-workflow source/resume fingerprints remain outstanding.
+same formatter again on resume. Hub fine-tuning resumes now use the resolved
+immutable dataset revision, local fine-tuning resumes verify saved file hashes,
+and provided HF Dataset resumes compare both saved split fingerprints before
+tokenization and model loading. A provided Dataset without stable fingerprints
+is rejected for exact resume. Tokenizer semantic compatibility for
+pretokenized data remains caller-verified.
 Raw text HF `Dataset` splits now enter scratch/CPT through
 `run_pretraining(..., train_dataset=..., eval_dataset=...)` or
 `TrainLMTrainer.from_scratch`, using `dataset_source="provided"`. Their stable
 HF fingerprints and row counts enter the prepared-data cache and run report;
-resume requires the same splits again. This branch has CPU evidence only; it
-does not establish live-Hub or TPU execution.
+resume requires the same splits again. `dataset_id`, config and revision may
+also be supplied as caller-declared provenance for provided objects; TrainLM
+resolves and records that revision but cannot prove that an arbitrary object
+came from the declared source. This branch has CPU evidence only; it does not
+establish live-Hub or TPU execution.
 
 Runnable example: [examples/pretrain_from_scratch.py](../examples/pretrain_from_scratch.py).
 Its 10,000-token budget is only a workflow smoke test, not a useful training
@@ -462,7 +469,13 @@ config = TrainLMFineTuningConfig(
     args=TrainLMTrainingArguments(output_dir="trainlm-finetuned", max_steps=100),
 )
 result = run_finetuning(
-    config,
+    TrainLMFineTuningConfig(
+        model_name_or_path="org/model",
+        args=TrainLMTrainingArguments(
+            output_dir="caller-stream-run", max_steps=1000, save_steps=100,
+            eval_steps=100, max_eval_batches=32, dataloader_num_workers=0,
+        ),
+    ),
     train_dataset=tokenized["train"],
     eval_dataset=tokenized["validation"],
 )
@@ -643,12 +656,88 @@ without repeating or skipping training data silently.
 - Check resume capability before training starts. Capture dataset/tokenizer/
   transformation identity and the cursor/RNG needed for supported loaders;
   do not promise exact resume for arbitrary streams or worker settings.
+- `TrainLMTrainer` and `run_finetuning` now support caller-supplied raw-text
+  iterables and `TrainLMFineTuningConfig(streaming=True)` for pinned Hub
+  fine-tuning.
+  Streaming evaluation requires `max_eval_batches`; epoch-based schedules,
+  and tokenized streaming remain unsupported. Hub stream identity is derived
+  from the immutable dataset revision, split and preprocessing settings. For
+  exact checkpoint resume, the source must expose
+  `state_dict()` and `load_state_dict()`, use `dataloader_num_workers=0`, and
+  have a stable identity or a
+  `validate_state_dict()` hook that rejects source/cursor mismatches. Pass
+  `train_dataset_identity="owner/dataset@commit-sha"` or use an HF iterable
+  with a stable `_fingerprint`. The same source and identity must be supplied
+  again when resuming.
+- Direct `TrainLMTrainer` checkpointing of iterable sources also requires
+  zero workers, a state cursor, and a stable identity or a source validator.
+  These checks run before the first training batch and before restoring
+  saved model/optimizer state.
 - Support durable run directories and a documented recovery flow containing
   optimizer, scheduler, RNG, data cursor and required preparation artifacts.
-  The existing model ZIP alone cannot resume a run after VM replacement.
+  `bundle_pretraining_artifacts(..., include_resume_state=True)` now adds the
+  generated resume files, prepared shards/tokenizer and checkpoints to an
+  explicit recovery archive. This is separate from the default model bundle;
+  it may be large and can contain private prepared corpus data. External model
+  sources and local input files must remain accessible.
 - Acceptance: interrupted/resumed updates match the documented reference;
   changed data/tokenizer is rejected before state mutation; retained-file and
   VM-replacement recovery are reported as different evidence.
+
+The high-level Hub path resolves a friendly revision once, loads both splits
+with `streaming=True`, and derives the training identity for exact resume:
+
+```python
+from trainlm import (
+    TrainLMFineTuningConfig,
+    TrainLMTrainingArguments,
+    run_finetuning,
+)
+
+config = TrainLMFineTuningConfig(
+    model_name_or_path="org/model",
+    dataset_id="owner/dataset",
+    dataset_revision="main",  # resolved and pinned in the run summary
+    streaming=True,
+    args=TrainLMTrainingArguments(
+        output_dir="stream-run", max_steps=1000, save_steps=100,
+        eval_steps=100, max_eval_batches=32, dataloader_num_workers=0,
+    ),
+)
+result = run_finetuning(config)
+```
+
+Resume from the saved summary. TrainLM reloads the pinned revision and checks
+the stored stream identity before restoring model or optimizer state:
+
+```python
+from trainlm import restore_finetuning_config, run_finetuning
+
+saved = restore_finetuning_config(
+    "stream-run/finetuning-summary.json", max_steps=2000
+)
+result = run_finetuning(saved, resume_from_checkpoint="latest")
+```
+
+For a caller-created iterable, pass both splits and a stable
+`train_dataset_identity`. The source must implement the HF/PyTorch iterable
+state protocol for checkpoint resume. Reconstruct the same source and
+identity when resuming:
+
+```python
+result = run_finetuning(
+    config,
+    train_dataset=train_stream,
+    eval_dataset=eval_stream,
+    train_dataset_identity="owner/dataset@commit-sha:preprocessing-v1",
+)
+```
+
+Dataset transformations must be deterministic, and the identity must pin
+both the source and relevant preprocessing choices. The 84-test CPU suites
+cover the mocked Hub loading and local cursor/resume path; no live Hub request
+or TPU run was performed. The run summary records the streaming flag and
+source identity; `restore_finetuning_config()` retains that identity.
 
 ### HF-07 — Three user recipes, one API (P0 alongside each feature)
 
@@ -668,6 +757,28 @@ readable cells without copying library internals.
   tests for incidental prose or compressing code into unreadable lines merely
   to satisfy a line-count limit. Mark planned examples as planned until runnable.
 
+The scratch/CPT notebook now has distinct raw-Hub and tokenized-HF-Dataset
+input paths. The token path resolves the dataset revision once and reloads the
+same train/validation splits for resume. It prints the selected tokenizer
+vocabulary digest; compare it with the corpus producer's digest before
+training on token IDs.
+
+To move a resumable run to another machine, opt in to the recovery bundle in
+the notebook, extract it, and restore from its `recovery/` directory:
+
+```python
+from trainlm import restore_pretraining_report
+
+recovery = restore_pretraining_report(
+    "recovery/report.json",
+    restored_output_dir="recovery",
+)
+```
+
+Keep the matching TrainLM/package profile and any original external model or
+local inputs available. This flow is implemented but replacement-VM execution
+has not yet been owner-verified.
+
 ### HF-08 — Publish an evidence-based support matrix (P0 release gate)
 
 **User outcome:** know which combinations are usable on their hardware.
@@ -681,6 +792,11 @@ readable cells without copying library internals.
   including fresh-process HF reload and checkpoint recovery. Broader models,
   compile and scale stay explicitly unverified until measured. A 10K/1M-token
   completion proves a workflow, not convergence or useful generated text.
+
+The [support matrix](HF_SUPPORT_MATRIX.md) now records model/init, input and
+tokenizer, device/package profile, dtype/compile mode, evidence status and the
+next owner-run check separately for each path. CPU success and owner-reported
+v5e-1 results are labeled separately.
 
 ## First complete release slice and later work
 

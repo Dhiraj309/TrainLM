@@ -1,5 +1,63 @@
 # TrainLM implementation context
 
+**Measured training performance (2026-11-22):** the shared trainer now
+measures synchronized wall-clock windows at logging boundaries, accumulating
+actual supervised tokens, dataloader wait time, and throughput. Its performance
+summary computes standard dense causal-LM MFU only when model geometry is
+available and the exact single-device native TPU v5e BF16 peak is applicable.
+The peak is 197 TFLOPs/chip from the linked Google Cloud specification. MFU
+uses a model FLOPs formula with measured tokens/second; it is not a hardware
+counter. Detailed kernel profiling and live v5e-1 validation are still pending.
+
+**PR #156 CI follow-up (2026-11-22):** hosted CI exposed stale notebook
+contracts after the scratch notebook was simplified, plus two old iterable
+resume tests that expected exact replay without a stable source identity or a
+saved state cursor. The notebook now exposes both fresh-run limits as named
+settings and allows the artifact-download cell to run with report-only results.
+The notebook also retains both exact-resume and budget-extension choices. The
+regression tests now require unverifiable iterable readers to fail before
+model or dataset state changes, while checkpoint fixtures use a source that
+meets the checkpoint contract. The notebook now states the smoke-run quality
+limit, checkpoint-recovery use and single-device TorchTPU scope. The cloud
+workspace has no pytest module, so hosted CI is the validation gate.
+
+**Pinned Hub streaming fine-tuning (2026-11-22):**
+`TrainLMFineTuningConfig(streaming=True)` resolves the Hub dataset revision
+before opening raw-text train/validation streams. The resume identity covers
+the immutable source revision, splits, text transform, tokenizer commit and
+vocabulary mapping, and sequence length; `restore_finetuning_config()` retains
+that identity. Training requires finite `max_steps`, bounded evaluation,
+zero workers and step-based schedules. Caller-created iterables remain
+supported with an explicit identity or stable fingerprints. Tokenized stream
+inputs and epoch budgets remain unsupported. Focused CPU suites pass (84
+tests), including exact stateful iterable resume parity and a mocked Hub
+loader/restore contract. No live Hub download or TPU run was performed.
+
+**HF workflow implementation follow-up (2026-11-22):** the current local
+implementation extends HF-03/06/07/08. Fine-tuning resume restores the
+resolved immutable Hub dataset revision and rejects a changed provided-HF-
+Dataset split fingerprint; fine-tuning local inputs retain their saved SHA256
+check. `bundle_pretraining_artifacts(..., include_resume_state=True)` can
+package generated checkpoints, prepared shards/tokenizer and reports for
+recovery. The option is explicit because the archive may be large and can
+contain private prepared corpus content; original external sources must remain
+available. Provided pretraining Dataset objects may record a caller-declared
+Hub source/revision with their stable fingerprints; TrainLM records the
+declaration but cannot prove the object's origin. The scratch/CPT notebook
+now selects either raw Hub text or actual tokenized HF Dataset splits, reloads
+the same revision on resume, and exposes
+optional private-by-default Hub publishing. The HF support matrix records
+device/package profile, dtype/compile mode, evidence and next owner-run checks.
+The public trainer now gates iterable checkpoint/resume before training on
+zero workers, a state cursor, and a stable source identity or an explicit
+`validate_state_dict()` source/cursor check; it compares available identity
+before applying saved model/optimizer state. `run_finetuning` now uses this
+contract for raw-text iterable sources; `run_pretraining` does not yet expose
+the same cursor interface. No TPU execution, replacement-VM resume or
+authenticated Hub upload has been run. HF-03/06/07 remain partial and HF-08
+evidence gates remain open; arbitrary streams without these guarantees remain
+unsupported for exact resume.
+
 **Preview an HF pretraining run.** The [scratch/CPT notebook](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) calls `config.training_plan(inspect_model=True)` to show the architecture, parameter count and equivalent FP32 parameter bytes before training. It uses the HF configuration and a PyTorch meta model. The normal plan stays offline. When training a new BPE tokenizer, the estimate assumes the requested vocabulary capacity. Activations, optimizer state and allocator overhead require separate memory measurements.
 
 **Check pretokenized input.** Corpus producers can record `trainlm.tokenizer_vocab_sha256(tokenizer)` alongside their token rows. Pass that digest as `expected_tokenizer_vocab_sha256` in scratch, CPT or fine-tuning configs to reject a different token-to-ID mapping before training. The comparison includes added vocabulary entries. Its scope is vocabulary identity; formatting, token boundaries and label alignment are separate contracts. The check is optional for existing corpora.

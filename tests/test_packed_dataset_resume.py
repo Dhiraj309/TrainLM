@@ -253,7 +253,7 @@ def test_custom_stateful_iterable_resume_matches_uninterrupted_training(tmp_path
         )
 
 
-def test_legacy_stateful_iterable_without_preflight_hook_still_resumes(tmp_path):
+def test_legacy_stateful_iterable_without_preflight_hook_is_rejected(tmp_path):
     examples = [
         {
             "input_ids": torch.tensor([(index + offset) % 8 for offset in range(4)]),
@@ -280,7 +280,7 @@ def test_legacy_stateful_iterable_without_preflight_hook_still_resumes(tmp_path)
             ),
         )
 
-    first_data = LegacyStatefulExamples(deepcopy(examples))
+    first_data = StatefulExamples(deepcopy(examples))
     first = make_trainer(
         deepcopy(initial_model), first_data, tmp_path / "resumed", max_steps=2
     )
@@ -293,22 +293,23 @@ def test_legacy_stateful_iterable_without_preflight_hook_still_resumes(tmp_path)
     resumed = make_trainer(
         deepcopy(initial_model), resumed_data, tmp_path / "resumed", max_steps=4
     )
-    assert resumed.train(resume_from_checkpoint=checkpoint).step == 4
-
-    reference_data = LegacyStatefulExamples(deepcopy(examples))
-    reference = make_trainer(
-        deepcopy(initial_model), reference_data, tmp_path / "reference", max_steps=4
+    before_model = {
+        name: value.detach().clone()
+        for name, value in resumed.model.state_dict().items()
+    }
+    with pytest.raises(
+        ValueError,
+        match="stable source identity",
+    ):
+        resumed.train(resume_from_checkpoint=checkpoint)
+    assert resumed_data.position == 0
+    assert all(
+        torch.equal(before_model[name], value)
+        for name, value in resumed.model.state_dict().items()
     )
-    assert reference.train().step == 4
-
-    assert resumed_data.position == reference_data.position == 4
-    for name, expected in reference.model.state_dict().items():
-        torch.testing.assert_close(
-            resumed.model.state_dict()[name], expected, rtol=0, atol=0
-        )
 
 
-def test_legacy_checkpoint_without_dataset_state_replays_progress(tmp_path):
+def test_legacy_checkpoint_without_dataset_state_rejects_exact_resume(tmp_path):
     examples = [
         {
             "input_ids": torch.tensor([(index + offset) % 8 for offset in range(4)]),
@@ -355,19 +356,20 @@ def test_legacy_checkpoint_without_dataset_state_replays_progress(tmp_path):
     resumed = make_trainer(
         deepcopy(initial_model), resumed_data, tmp_path / "resumed", max_steps=4
     )
-    assert resumed.train(resume_from_checkpoint=checkpoint).step == 4
-
-    reference_data = StatefulExamples(deepcopy(examples))
-    reference = make_trainer(
-        deepcopy(initial_model), reference_data, tmp_path / "reference", max_steps=4
+    before_model = {
+        name: value.detach().clone()
+        for name, value in resumed.model.state_dict().items()
+    }
+    with pytest.raises(
+        ValueError,
+        match=r"requires a saved state_dict\(\) cursor",
+    ):
+        resumed.train(resume_from_checkpoint=checkpoint)
+    assert resumed_data.position == 0
+    assert all(
+        torch.equal(before_model[name], value)
+        for name, value in resumed.model.state_dict().items()
     )
-    assert reference.train().step == 4
-
-    assert resumed_data.position == reference_data.position == 4
-    for name, expected in reference.model.state_dict().items():
-        torch.testing.assert_close(
-            resumed.model.state_dict()[name], expected, rtol=0, atol=0
-        )
 
 
 @pytest.mark.parametrize(

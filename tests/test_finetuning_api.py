@@ -290,12 +290,13 @@ def test_restore_finetuning_config_extends_epoch_budget(tmp_path):
 
 
 def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch):
-    calls = {"datasets": [], "trainer": {}}
+    calls = {"datasets": [], "dataset_streaming": [], "trainer": {}}
 
     class FakeDataset:
         def __init__(self, rows):
             self.rows = rows
             self.column_names = list(rows[0])
+            self._fingerprint = None
 
         def __len__(self):
             return len(self.rows)
@@ -319,13 +320,32 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
                 }
                 for index, row in enumerate(self.rows)
             ]
-            return FakeDataset(rows)
+            return self.__class__(rows)
+
+    class FakeIterableDataset(FakeDataset, torch.utils.data.IterableDataset):
+        def __init__(self, rows):
+            super().__init__(rows)
+            self.position = 0
+
+        def __iter__(self):
+            while self.position < len(self.rows):
+                row = self.rows[self.position]
+                self.position += 1
+                yield row
+
+        def state_dict(self):
+            return {"position": self.position}
+
+        def load_state_dict(self, state):
+            self.position = state["position"]
 
     datasets = ModuleType("datasets")
 
-    def load_dataset(dataset_id, *, revision, split):
+    def load_dataset(dataset_id, *, revision, split, streaming=False):
         calls["datasets"].append((dataset_id, revision, split))
-        return FakeDataset([{"text": f"{split} sample", "metadata": "remove"}])
+        calls["dataset_streaming"].append(streaming)
+        dataset_type = FakeIterableDataset if streaming else FakeDataset
+        return dataset_type([{"text": f"{split} sample", "metadata": "remove"}])
 
     datasets.load_dataset = load_dataset
 
@@ -388,7 +408,14 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
 
     class FakeTrainer:
         def __init__(self):
-            self.model = SimpleNamespace(config=SimpleNamespace(pad_token_id=None))
+            self.model = SimpleNamespace(
+                config=SimpleNamespace(
+                    pad_token_id=None,
+                    vocab_size=100,
+                    max_position_embeddings=128,
+                ),
+                get_input_embeddings=lambda: SimpleNamespace(num_embeddings=100),
+            )
             self.loaded = SimpleNamespace(
                 metadata=SimpleNamespace(resolved_revision="c" * 40)
             )
@@ -496,6 +523,9 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
         "train_split": "train",
         "validation_split": "validation",
         "formatting_function": None,
+        "train_dataset_identity": None,
+        "streaming": False,
+        "hub_streaming": False,
         "dataset_fingerprints": {"train": None, "validation": None},
         "max_dataset_token_id": None,
         "resolved_dataset_revision": "a" * 40,
@@ -837,6 +867,55 @@ def test_run_finetuning_loads_trains_evaluates_and_exports(tmp_path, monkeypatch
     assert context_report["tokenizer_compatibility"]["context_length"] == (
         "exceeds_model_limit"
     )
+
+    # The high-level streaming option must load each split lazily at the
+    # resolved immutable revision and reproduce the same identity on resume.
+    fake_trainer.loaded.metadata.resolved_revision = "c" * 40
+    fake_trainer.model.get_input_embeddings = lambda: SimpleNamespace(
+        num_embeddings=100
+    )
+    fake_trainer.model.config.max_position_embeddings = 128
+    streaming_config = _config(
+        tmp_path / "hub-stream",
+        streaming=True,
+        args=TrainLMTrainingArguments(
+            output_dir=tmp_path / "hub-stream",
+            max_steps=4,
+            save_steps=2,
+            eval_steps=2,
+            max_eval_batches=1,
+            sequence_length=8,
+            accelerator="cpu",
+        ),
+    )
+    streaming_result = run_finetuning(streaming_config)
+    assert calls["dataset_streaming"][-2:] == [True, True]
+    _, streaming_trainer_kwargs = calls["trainer"]["model_load"]
+    stream_identity = streaming_trainer_kwargs["train_dataset_identity"]
+    assert stream_identity.startswith("hf-stream:")
+    stream_report = json.loads(
+        streaming_result.summary_path.read_text(encoding="utf-8")
+    )
+    assert stream_report["data"]["streaming"] is True
+    assert stream_report["data"]["hub_streaming"] is True
+    assert stream_report["data"]["train_dataset_identity"] == stream_identity
+
+    stream_checkpoint = streaming_config.args.output_dir / "checkpoint-4"
+    stream_checkpoint.mkdir(parents=True)
+    torch.save(
+        {"schema_version": 1}, stream_checkpoint / "trainer_state.pt"
+    )
+    calls["trainer"]["latest_checkpoint"] = str(stream_checkpoint)
+    restored_stream_config = restore_finetuning_config(
+        streaming_result.summary_path,
+        max_steps=8,
+    )
+    assert restored_stream_config.streaming is True
+    assert restored_stream_config._expected_train_dataset_identity == stream_identity
+    run_finetuning(restored_stream_config, resume_from_checkpoint="latest")
+    assert calls["dataset_streaming"][-2:] == [True, True]
+    _, resumed_stream_kwargs = calls["trainer"]["model_load"]
+    assert resumed_stream_kwargs["train_dataset_identity"] == stream_identity
 
 
 def test_run_finetuning_rejects_legacy_xla_export_path(tmp_path):

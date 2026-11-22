@@ -1,5 +1,57 @@
 # TrainLM Roadmap
 
+**Measured training performance (2026-11-22):** ordinary training runs now
+collect sparse synchronized wall-clock windows and report observed supervised
+tokens/second plus dataloader wait fraction. Native single-device TPU v5e BF16
+runs also report standard non-embedding and logits-inclusive MFU using the
+documented 197 TFLOPs/chip peak. Unknown peak/model/precision combinations
+return MFU unavailable instead of substituting a guessed value. This provides
+input-pipeline evidence; device-kernel timeline profiling and owner-run TPU
+measurements remain outstanding.
+
+PR #156's hosted CI runs caught scratch-notebook contract mismatches and stale
+tests expecting exact iterable resume without a verifiable cursor/source
+identity. The notebook now keeps fresh-run controls and exact-resume/budget-
+extension choices within its concise layout. The resume tests now verify that
+unverifiable readers are rejected before state changes. Its intro now clearly
+labels the short run as a workflow check with no useful model output. Hosted
+CI is the validation gate before merging.
+
+**Pinned Hub streaming fine-tuning (2026-11-22):**
+`TrainLMFineTuningConfig(streaming=True)` resolves one immutable Hub revision
+and loads raw-text splits lazily. TrainLM fingerprints the source, splits,
+preprocessing, tokenizer mapping and sequence length for resume. Finite steps,
+bounded evaluation, zero workers and step schedules are required. CPU suites
+pass (84 tests), including exact stateful iterable resume parity and the
+mocked Hub loader/restore contract. Live Hub and TPU execution remain
+unverified; tokenized streaming, epoch budgets and high-level pretraining
+streams remain future work. HF-06 remains partial.
+
+**HF workflow implementation follow-up (2026-11-22):** fine-tuning resume now
+restores the resolved immutable Hub dataset revision and records/compares
+fingerprints for caller-provided HF Dataset splits; a provided split without a
+stable fingerprint is rejected for exact resume. Existing local fine-tuning
+file hashes continue to be checked during restore. `bundle_pretraining_artifacts`
+has an explicit `include_resume_state=True` option that packages generated
+resume files, checkpoint, prepared tokenizer/shards and report for recovery;
+it is opt-in because archives may be large and contain private prepared corpus
+data. The scratch/CPT notebook now separates raw Hub input from tokenized HF
+Dataset input, reloads the pinned splits for resume, and has a private Hub
+publishing cell disabled by default. The support matrix now lists runtime,
+dtype/compile and evidence status for each workflow. `TrainLMTrainer` also
+gates iterable checkpoint/resume on zero workers, a state cursor, and a stable
+dataset identity or an explicit state validation hook, then checks available
+identity before restoring model or optimizer state. `run_finetuning` now
+exposes the contract for raw-text streams; `run_pretraining` remains finite-
+preparation based. The fine-tuning and trainer CPU suites pass (84 tests).
+No TPU execution, replacement-VM resume or authenticated Hub upload has been
+run. HF-03, HF-06 and HF-07 remain in progress; HF-08 still needs the owner-run
+hardware and Hub evidence described in [the matrix](HF_SUPPORT_MATRIX.md).
+Replacement-VM recovery remains unverified. Provided
+pretraining Datasets can declare an HF source/revision for provenance; TrainLM
+resolves it and fingerprints the supplied objects but cannot independently
+prove their origin.
+
 **Preview an HF pretraining run.** The [scratch/CPT notebook](../notebooks/TrainLM_Native_TorchTPU_From_Scratch.ipynb) calls `config.training_plan(inspect_model=True)` to show the architecture, parameter count and equivalent FP32 parameter bytes before training. It uses the HF configuration and a PyTorch meta model. The normal plan stays offline. When training a new BPE tokenizer, the estimate assumes the requested vocabulary capacity. Activations, optimizer state and allocator overhead require separate memory measurements.
 
 **Check pretokenized input.** Corpus producers can record `trainlm.tokenizer_vocab_sha256(tokenizer)` alongside their token rows. Pass that digest as `expected_tokenizer_vocab_sha256` in scratch, CPT or fine-tuning configs to reject a different token-to-ID mapping before training. The comparison includes added vocabulary entries. Its scope is vocabulary identity; formatting, token boundaries and label alignment are separate contracts. The check is optional for existing corpora.

@@ -15,6 +15,8 @@ import zipfile
 from pathlib import Path
 from typing import Any, Literal
 
+from torch.utils.data import IterableDataset
+
 from .api import (
     TrainLMTrainer,
     TrainLMTrainingArguments,
@@ -22,7 +24,11 @@ from .api import (
     _latest_training_checkpoint,
 )
 from .hub import HubPublishResult, _publish_model_export
-from .tokenizer_provenance import validate_vocab_expectation, verify_tokenizer_vocab
+from .tokenizer_provenance import (
+    tokenizer_vocab_sha256 as _tokenizer_vocab_sha256,
+    validate_vocab_expectation,
+    verify_tokenizer_vocab,
+)
 from .training import TrainerCallback
 
 
@@ -67,10 +73,20 @@ class TrainLMFineTuningConfig:
     tokenizer_revision: str | None = None
     data_format: Literal["text", "tokens"] = "text"
     expected_tokenizer_vocab_sha256: str | None = None
+    streaming: bool = False
     _tokenizer_object_required: bool = field(
         default=False, init=False, repr=False, compare=False
     )
     _expected_tokenizer_revision: str | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
+    _expected_dataset_fingerprints: tuple[str | None, str | None] | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
+    _expected_train_dataset_identity: str | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
+    _expected_local_file_hashes: tuple[str, str] | None = field(
         default=None, init=False, repr=False, compare=False
     )
 
@@ -85,6 +101,8 @@ class TrainLMFineTuningConfig:
             not isinstance(self.dataset_id, str) or not self.dataset_id.strip()
         ):
             raise ValueError("dataset_id must be a non-empty string when provided.")
+        if not isinstance(self.streaming, bool):
+            raise TypeError("streaming must be a boolean.")
         if self.dataset_revision is not None and (
             not isinstance(self.dataset_revision, str)
             or not self.dataset_revision.strip()
@@ -112,6 +130,40 @@ class TrainLMFineTuningConfig:
                 object.__setattr__(self, name, path.resolve())
         elif self.local_data_format != "auto":
             raise ValueError("local_data_format requires paired local files.")
+        if not isinstance(self.args, TrainLMTrainingArguments):
+            raise TypeError("args must be a TrainLMTrainingArguments instance.")
+        if self.streaming:
+            if self.dataset_id is None or has_local_files:
+                raise ValueError(
+                    "streaming=True requires a Hugging Face dataset_id; local "
+                    "files cannot be loaded in streaming mode by this helper."
+                )
+            if self.data_format != "text":
+                raise ValueError(
+                    "Hub streaming fine-tuning currently supports raw text; "
+                    "use a finite dataset for data_format='tokens'."
+                )
+            if self.args.max_steps is None or self.args.num_train_epochs is not None:
+                raise ValueError(
+                    "Hub streaming fine-tuning requires a finite max_steps budget."
+                )
+            if self.args.dataloader_num_workers != 0:
+                raise ValueError(
+                    "Hub streaming fine-tuning requires "
+                    "dataloader_num_workers=0."
+                )
+            if self.args.max_eval_batches is None:
+                raise ValueError(
+                    "Hub streaming fine-tuning requires max_eval_batches to "
+                    "bound validation."
+                )
+            if "epoch" in (
+                self.args.resolved_eval_strategy,
+                self.args.resolved_save_strategy,
+            ):
+                raise ValueError(
+                    "Hub streaming fine-tuning cannot use epoch-based schedules."
+                )
         if self.model_revision is not None and (
             not isinstance(self.model_revision, str) or not self.model_revision.strip()
         ):
@@ -247,6 +299,7 @@ class TrainLMFineTuningConfig:
                 "train_split": self.train_split,
                 "validation_split": self.validation_split,
                 "sequence_length": args.sequence_length,
+                "streaming": self.streaming,
             },
             "budget": budget,
             "stop_conditions": stop_conditions,
@@ -302,6 +355,7 @@ class TrainLMFineTuningResult:
     tokenizer_revision: str | None = None
     tokenizer_compatibility: Mapping[str, Any] | None = None
     tokenizer_object_required: bool = False
+    performance: Mapping[str, Any] = field(default_factory=dict)
 
     def push_to_hub(
         self,
@@ -364,6 +418,7 @@ class TrainLMFineTuningResult:
             "best_model_selection": _json_compatible(
                 self.best_model_selection
             ),
+            "performance": _json_compatible(self.performance),
         }
 
 
@@ -814,12 +869,16 @@ def run_finetuning(
     data_collator: Callable[[Sequence[Any]], Mapping[str, Any]] | None = None,
     callbacks: Sequence[TrainerCallback] | None = None,
     resume_from_checkpoint: str | Path | None = None,
+    train_dataset_identity: str | None = None,
 ) -> TrainLMFineTuningResult:
     """Run pretrained causal-LM fine-tuning and persist a run summary.
 
     By default, load the configured pinned Hub dataset. To use preloaded
     Hugging Face ``Dataset`` splits, pass both ``train_dataset`` and
-    ``eval_dataset``. With the default ``data_format="text"``,
+    ``eval_dataset``. Raw-text iterable splits are supported with a finite
+    ``max_steps`` budget; give streamed evaluation a ``max_eval_batches`` bound.
+    When checkpointing streams, pass a stable ``train_dataset_identity`` and
+    use ``dataloader_num_workers=0``. With the default ``data_format="text"``,
     ``formatting_func`` receives one row and returns its training text. With
     ``data_format="tokens"``, rows must already contain ``input_ids`` and are
     validated and passed through without decoding or tokenization. A custom
@@ -862,6 +921,19 @@ def run_finetuning(
         )
     if data_collator is not None and not callable(data_collator):
         raise TypeError("data_collator must be callable when provided.")
+    if train_dataset_identity is not None and (
+        not isinstance(train_dataset_identity, str)
+        or not train_dataset_identity.strip()
+    ):
+        raise ValueError("train_dataset_identity must be a non-empty string.")
+    expected_train_identity = config._expected_train_dataset_identity
+    if expected_train_identity is not None:
+        if train_dataset_identity is not None and train_dataset_identity != expected_train_identity:
+            raise ValueError(
+                "The supplied train_dataset_identity does not match the "
+                "identity recorded by the restored run."
+            )
+        train_dataset_identity = expected_train_identity
 
     summary_path = Path(config.args.output_dir) / "finetuning-summary.json"
     dataset_source = (
@@ -875,6 +947,10 @@ def run_finetuning(
         resume_from_checkpoint=resume_from_checkpoint,
         dataset_source=dataset_source,
         formatting_func=formatting_func,
+        train_dataset_identity=train_dataset_identity,
+    )
+    report["data"]["streaming"] = bool(
+        config.streaming or _is_streaming_dataset(train_dataset)
     )
     if config.expected_tokenizer_vocab_sha256 is not None:
         report["data"]["expected_tokenizer_vocab_sha256"] = config.expected_tokenizer_vocab_sha256
@@ -890,6 +966,8 @@ def run_finetuning(
         "tokenizer_object_required": config._tokenizer_object_required,
         "dataset_fingerprints": None,
         "max_dataset_token_id": None,
+        "streaming": bool(config.streaming or _is_streaming_dataset(train_dataset)),
+        "train_dataset_identity": train_dataset_identity,
     }
     try:
         result = _run_finetuning_impl(
@@ -901,11 +979,18 @@ def run_finetuning(
             data_collator=data_collator,
             callbacks=callbacks,
             resume_from_checkpoint=resume_from_checkpoint,
+            train_dataset_identity=train_dataset_identity,
             run_state=run_state,
         )
         report.update(result.summary())
         report["data"]["dataset_fingerprints"] = run_state.get(
             "dataset_fingerprints"
+        )
+        report["data"]["streaming"] = run_state.get(
+            "streaming", report["data"]["streaming"]
+        )
+        report["data"]["train_dataset_identity"] = run_state.get(
+            "train_dataset_identity", train_dataset_identity
         )
         report["resolved_dataset_revision"] = run_state.get("resolved_dataset_revision")
         report["data"]["resolved_dataset_revision"] = run_state.get("resolved_dataset_revision")
@@ -923,6 +1008,12 @@ def run_finetuning(
     except Exception as exc:
         report["data"]["dataset_fingerprints"] = run_state.get(
             "dataset_fingerprints"
+        )
+        report["data"]["streaming"] = run_state.get(
+            "streaming", report["data"]["streaming"]
+        )
+        report["data"]["train_dataset_identity"] = run_state.get(
+            "train_dataset_identity", train_dataset_identity
         )
         report["resolved_dataset_revision"] = run_state.get("resolved_dataset_revision")
         report["data"]["resolved_dataset_revision"] = run_state.get("resolved_dataset_revision")
@@ -986,6 +1077,12 @@ def _local_finetuning_file_hashes(config: TrainLMFineTuningConfig) -> dict[str, 
         "validation": _sha256_file(Path(config.validation_file)),
     }
 
+
+def _is_streaming_dataset(dataset: Any) -> bool:
+    return isinstance(dataset, IterableDataset) or (
+        hasattr(dataset, "__iter__") and not hasattr(dataset, "__getitem__")
+    )
+
 def _initial_finetuning_summary(
     config: TrainLMFineTuningConfig,
     summary_path: Path,
@@ -993,6 +1090,7 @@ def _initial_finetuning_summary(
     resume_from_checkpoint: str | Path | None,
     dataset_source: str,
     formatting_func: Callable[[Mapping[str, Any]], str] | None,
+    train_dataset_identity: str | None,
 ) -> dict[str, Any]:
     return {
         "schema_version": 1,
@@ -1013,6 +1111,7 @@ def _initial_finetuning_summary(
         "tokenizer_object_required": config._tokenizer_object_required,
         "dataset_id": config.dataset_id,
         "dataset_revision": config.dataset_revision,
+        "streaming": config.streaming,
         "resolved_dataset_revision": None,
         "train_file": str(config.train_file) if config.train_file is not None else None,
         "validation_file": str(config.validation_file) if config.validation_file is not None else None,
@@ -1030,6 +1129,9 @@ def _initial_finetuning_summary(
             "train_split": config.train_split,
             "validation_split": config.validation_split,
             "formatting_function": _callable_label(formatting_func),
+            "train_dataset_identity": train_dataset_identity,
+            "streaming": config.streaming,
+            "hub_streaming": config.streaming,
             "dataset_fingerprints": None,
             "max_dataset_token_id": None,
             "resolved_dataset_revision": None,
@@ -1219,13 +1321,24 @@ def restore_finetuning_config(
     if not isinstance(training_args, Mapping) or not isinstance(data, Mapping):
         raise ValueError("The fine-tuning summary is missing its saved settings.")
     recorded_hashes = data.get("local_file_sha256")
+    expected_local_file_hashes = None
     if recorded_hashes is not None:
         if not isinstance(recorded_hashes, Mapping):
+            raise ValueError("The saved local fine-tuning file hashes are invalid.")
+        stored_hash_values = (
+            recorded_hashes.get("train"), recorded_hashes.get("validation")
+        )
+        if any(
+            not isinstance(value, str)
+            or re.fullmatch(r"[0-9a-f]{64}", value) is None
+            for value in stored_hash_values
+        ):
             raise ValueError("The saved local fine-tuning file hashes are invalid.")
         for name, key in (("train", "train_file"), ("validation", "validation_file")):
             file_path = data.get(key)
             if not isinstance(file_path, str) or _sha256_file(Path(file_path)) != recorded_hashes.get(name):
                 raise ValueError("Local fine-tuning files changed since the saved run.")
+        expected_local_file_hashes = stored_hash_values
 
     expected_argument_names = {item.name for item in fields(TrainLMTrainingArguments)}
     additive_arguments = {
@@ -1293,6 +1406,59 @@ def restore_finetuning_config(
                 f"({saved_step})."
             )
 
+    expected_dataset_fingerprints = None
+    expected_train_dataset_identity = None
+    if data.get("streaming"):
+        fingerprints = data.get("dataset_fingerprints")
+        if fingerprints is None:
+            fingerprints = {}
+        if not isinstance(fingerprints, Mapping):
+            raise ValueError("The saved fine-tuning Dataset identity is invalid.")
+        train_fingerprint = fingerprints.get("train")
+        validation_fingerprint = fingerprints.get("validation")
+        if any(
+            value is not None and (
+                not isinstance(value, str) or not value.strip()
+            )
+            for value in (train_fingerprint, validation_fingerprint)
+        ):
+            raise ValueError("The saved fine-tuning Dataset fingerprints are invalid.")
+        train_identity = data.get("train_dataset_identity")
+        if isinstance(train_identity, str) and train_identity.strip():
+            expected_train_dataset_identity = train_identity
+        elif (
+            data.get("source") == "provided_dataset"
+            and isinstance(train_fingerprint, str)
+            and train_fingerprint.strip()
+            and isinstance(validation_fingerprint, str)
+            and validation_fingerprint.strip()
+        ):
+            expected_dataset_fingerprints = (
+                train_fingerprint,
+                validation_fingerprint,
+            )
+        else:
+            raise ValueError(
+                "Resuming a streamed fine-tuning run requires its stable "
+                "dataset identity or fingerprints."
+            )
+    elif data.get("source") == "provided_dataset":
+        fingerprints = data.get("dataset_fingerprints")
+        if fingerprints is None:
+            fingerprints = {}
+        if not isinstance(fingerprints, Mapping):
+            raise ValueError("The saved fine-tuning Dataset identity is invalid.")
+        train_fingerprint = fingerprints.get("train")
+        validation_fingerprint = fingerprints.get("validation")
+        if any(
+            value is not None and (
+                not isinstance(value, str) or not value.strip()
+            )
+            for value in (train_fingerprint, validation_fingerprint)
+        ):
+            raise ValueError("The saved fine-tuning Dataset fingerprints are invalid.")
+        expected_dataset_fingerprints = (train_fingerprint, validation_fingerprint)
+
     try:
         args = TrainLMTrainingArguments(**restored_args)
         config = TrainLMFineTuningConfig(
@@ -1308,7 +1474,11 @@ def restore_finetuning_config(
                 else report.get("tokenizer_revision")
             ),
             dataset_id=report.get("dataset_id"),
-            dataset_revision=report.get("dataset_revision"),
+            dataset_revision=(
+                _resolved_commit(data.get("resolved_dataset_revision"))
+                or report.get("dataset_revision")
+            ),
+            streaming=data.get("hub_streaming", False),
             train_file=data.get("train_file"),
             validation_file=data.get("validation_file"),
             local_data_format=data.get("local_data_format", "auto"),
@@ -1327,6 +1497,24 @@ def restore_finetuning_config(
         object.__setattr__(
             config, "_tokenizer_object_required", tokenizer_object_required
         )
+        if expected_dataset_fingerprints is not None:
+            object.__setattr__(
+                config,
+                "_expected_dataset_fingerprints",
+                expected_dataset_fingerprints,
+            )
+        if expected_train_dataset_identity is not None:
+            object.__setattr__(
+                config,
+                "_expected_train_dataset_identity",
+                expected_train_dataset_identity,
+            )
+        if expected_local_file_hashes is not None:
+            object.__setattr__(
+                config,
+                "_expected_local_file_hashes",
+                expected_local_file_hashes,
+            )
         if tokenizer_object_required:
             object.__setattr__(
                 config,
@@ -1358,6 +1546,32 @@ def _resolve_finetuning_dataset_revision(config: TrainLMFineTuningConfig) -> str
         raise ValueError("Hugging Face did not resolve the dataset revision to a commit SHA.")
     return resolved
 
+
+def _hub_stream_identity(
+    config: TrainLMFineTuningConfig,
+    *,
+    revision: str,
+    tokenizer_source: str | None,
+    tokenizer_revision: str | None,
+    tokenizer_vocab_digest: str,
+    formatting_func: Callable[[Mapping[str, Any]], str] | None,
+) -> str:
+    identity = {
+        "dataset_id": config.dataset_id,
+        "dataset_revision": revision,
+        "train_split": config.train_split,
+        "validation_split": config.validation_split,
+        "data_format": config.data_format,
+        "text_field": config.text_field,
+        "formatting_function": _callable_label(formatting_func),
+        "tokenizer_name_or_path": tokenizer_source,
+        "tokenizer_revision": tokenizer_revision,
+        "tokenizer_vocab_sha256": tokenizer_vocab_digest,
+        "sequence_length": config.args.sequence_length,
+    }
+    serialized = json.dumps(identity, sort_keys=True, separators=(",", ":"))
+    return "hf-stream:" + hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
 def _run_finetuning_impl(
     config: TrainLMFineTuningConfig,
     *,
@@ -1368,6 +1582,7 @@ def _run_finetuning_impl(
     data_collator: Callable[[Sequence[Any]], Mapping[str, Any]] | None = None,
     callbacks: Sequence[TrainerCallback] | None = None,
     resume_from_checkpoint: str | Path | None = None,
+    train_dataset_identity: str | None = None,
     run_state: dict[str, Any],
 ) -> TrainLMFineTuningResult:
     """Load data, fine-tune, evaluate, and export one pretrained causal LM.
@@ -1379,6 +1594,23 @@ def _run_finetuning_impl(
     local_files = config.train_file is not None
     if not isinstance(config, TrainLMFineTuningConfig):
         raise TypeError("config must be a TrainLMFineTuningConfig instance.")
+    expected_file_hashes = config._expected_local_file_hashes
+    if expected_file_hashes is not None:
+        try:
+            current_hashes = _local_finetuning_file_hashes(config)
+        except OSError as exc:
+            raise ValueError(
+                "The original local fine-tuning files are unavailable; exact "
+                "resume cannot be verified."
+            ) from exc
+        current_pair = (
+            current_hashes.get("train"), current_hashes.get("validation")
+        ) if current_hashes is not None else None
+        if current_pair != expected_file_hashes:
+            raise ValueError(
+                "Local fine-tuning files changed after restoring the run. "
+                "Restore the original files before resuming."
+            )
     if config.args.accelerator == "tpu":
         raise ValueError(
             "run_finetuning does not support the legacy PyTorch/XLA coordinator "
@@ -1491,11 +1723,14 @@ def _run_finetuning_impl(
             validation_source = load_dataset(builder, data_files={config.validation_split: str(config.validation_file)}, split=config.validation_split)
         else:
             resolved_dataset_revision = _resolve_finetuning_dataset_revision(config)
+            stream_kwargs = {"streaming": True} if config.streaming else {}
             train_source = load_dataset(
                 config.dataset_id, revision=resolved_dataset_revision, split=config.train_split,
+                **stream_kwargs,
             )
             validation_source = load_dataset(
                 config.dataset_id, revision=resolved_dataset_revision, split=config.validation_split,
+                **stream_kwargs,
             )
         run_state["resolved_dataset_revision"] = resolved_dataset_revision
     else:
@@ -1505,6 +1740,83 @@ def _run_finetuning_impl(
         "train": getattr(train_source, "_fingerprint", None),
         "validation": getattr(validation_source, "_fingerprint", None),
     }
+    expected_fingerprints = config._expected_dataset_fingerprints
+    if expected_fingerprints is not None:
+        if any(not isinstance(value, str) for value in expected_fingerprints):
+            raise ValueError(
+                "The original provided fine-tuning Dataset did not have stable "
+                "fingerprints, so exact resume cannot be verified. Start a new run."
+            )
+        actual_fingerprints = (
+            run_state["dataset_fingerprints"]["train"],
+            run_state["dataset_fingerprints"]["validation"],
+        )
+        if actual_fingerprints != expected_fingerprints:
+            raise ValueError(
+                "Provided fine-tuning Dataset fingerprints changed since the "
+                "saved run. Reload the original train and validation splits "
+                "before resuming."
+            )
+    train_is_iterable = _is_streaming_dataset(train_source)
+    validation_is_iterable = _is_streaming_dataset(validation_source)
+    run_state["streaming"] = bool(train_is_iterable or validation_is_iterable)
+    if config.streaming and not (
+        train_dataset is None and train_is_iterable and validation_is_iterable
+    ):
+        raise ValueError(
+            "streaming=True must load both train and validation splits as "
+            "Hugging Face iterable datasets."
+        )
+    if config.streaming and resolved_dataset_revision is not None:
+        resolved_stream_identity = _hub_stream_identity(
+            config,
+            revision=resolved_dataset_revision,
+            tokenizer_source=tokenizer_source,
+            tokenizer_revision=resolved_tokenizer_revision,
+            tokenizer_vocab_digest=_tokenizer_vocab_sha256(tokenizer),
+            formatting_func=formatting_func,
+        )
+        if (
+            train_dataset_identity is not None
+            and train_dataset_identity != resolved_stream_identity
+        ):
+            raise ValueError(
+                "The restored train dataset identity does not match the pinned "
+                "Hub stream and preprocessing configuration."
+            )
+        train_dataset_identity = resolved_stream_identity
+    run_state["train_dataset_identity"] = train_dataset_identity
+    if (train_is_iterable or validation_is_iterable) and config.data_format != "text":
+        raise ValueError(
+            "High-level streaming fine-tuning currently supports raw text. "
+            "Tokenized streaming validation is not bounded yet; use finite "
+            "Datasets for data_format='tokens'."
+        )
+    if train_is_iterable:
+        if config.args.max_steps is None or config.args.num_train_epochs is not None:
+            raise ValueError(
+                "Streaming fine-tuning requires a finite max_steps budget; "
+                "epoch-based budgets need a finite dataset."
+            )
+        if config.args.dataloader_num_workers != 0:
+            raise ValueError(
+                "Streaming fine-tuning currently requires "
+                "dataloader_num_workers=0 for exact cursor handling."
+            )
+        if "epoch" in (
+            config.args.resolved_eval_strategy,
+            config.args.resolved_save_strategy,
+        ):
+            raise ValueError(
+                "Streaming fine-tuning cannot use epoch-based evaluation or "
+                "checkpoint schedules; use step-based schedules."
+            )
+    if validation_is_iterable and config.args.max_eval_batches is None:
+        raise ValueError(
+            "Streaming evaluation requires max_eval_batches so evaluation has "
+            "a finite bound."
+        )
+
     for split_name, dataset in (
         (config.train_split, train_source),
         (config.validation_split, validation_source),
@@ -1633,6 +1945,7 @@ def _run_finetuning_impl(
             )
         ),
         callbacks=callbacks,
+        train_dataset_identity=train_dataset_identity,
     )
     run_state["trainer"] = trainer
     resolved_training_budget = getattr(trainer, "training_budget", None)
@@ -1730,6 +2043,16 @@ def _run_finetuning_impl(
         train_loss = None
     summary_path = Path(config.args.output_dir) / "finetuning-summary.json"
     run_state["phase"] = "summary"
+    performance_method = getattr(trainer, "performance_summary", None)
+    performance = (
+        performance_method()
+        if callable(performance_method)
+        else {
+            "status": "unavailable",
+            "mfu_status": "unavailable",
+            "mfu_unavailable_reason": "The trainer did not expose synchronized performance telemetry.",
+        }
+    )
     result = TrainLMFineTuningResult(
         model_name_or_path=config.model_name_or_path,
         model_revision=config.model_revision,
@@ -1757,5 +2080,6 @@ def _run_finetuning_impl(
             },
         ),
         best_model_selection=run_state.get("best_model_selection"),
+        performance=performance,
     )
     return result
