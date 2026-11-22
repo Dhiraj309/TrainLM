@@ -37,6 +37,12 @@
   `load_best_model_at_end`, `early_stopping_patience`, `streaming=True` resume,
   VM-replacement recovery bundles, `chunked_linear` loss, and opt-in
   `push_to_hub`), and downloads one sanitized JSON evidence report.
+- [v5e-1 LLM MFU benchmark](TrainLM_v5e1_MFU_Benchmark.ipynb)
+  ([open in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb))
+  runs a focused, standalone LLM training and MFU bottleneck check across
+  `SmolLM2-135M`, `SmolLM2-360M`, and `Qwen2.5-0.5B` on a single `TPU v5e-1`,
+  separating cold Window 1 from steady-state MFU and capturing `torch.profiler`
+  host ops.
 
 These notebooks collect evidence for their stated scope; CPU runs and
 standalone probes do not certify end-to-end TPU training or performance.
