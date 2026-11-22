@@ -28,6 +28,15 @@
   epoch evaluation/checkpoint, and checkpoint-resume check. It prefers native
   TorchTPU when available and can select legacy PyTorch/XLA explicitly. The
   report labels which backend ran; a native run does not validate the XLA path.
+- [v5e-1 full validation suite](TrainLM_Colab_v5e1_Full_Validation.ipynb)
+  ([open in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_Colab_v5e1_Full_Validation.ipynb))
+  provides one toggleable Colab v5e-1 checklist covering T1 probes (eager,
+  optional `torch.compile`, and process lifecycle), 4-case GPT-2/Llama HF
+  matrices, `trainlm pretrain`/`finetune` CLI workflows, `run_pretraining` and
+  `run_finetuning` options (`bf16`, `fp32`, `gradient_checkpointing`,
+  `load_best_model_at_end`, `early_stopping_patience`, `streaming=True` resume,
+  VM-replacement recovery bundles, `chunked_linear` loss, and opt-in
+  `push_to_hub`), and downloads one sanitized JSON evidence report.
 
 These notebooks collect evidence for their stated scope; CPU runs and
 standalone probes do not certify end-to-end TPU training or performance.
