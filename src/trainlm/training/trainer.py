@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator, Sequence
+import time
 import torch
 from torch import nn
 from torch.optim import Optimizer
@@ -97,6 +98,21 @@ class Trainer:
         self._train_iterator: Iterator | None = None
         self._global_tokens_seen: int | None = None
         self._epoch_end_pending = False
+        self._performance_model = model
+        self._performance_window_started: float | None = None
+        self._performance_window_tokens = 0
+        self._performance_window_step = 0
+        self._performance_window_data_wait = 0.0
+        self._performance = {
+            "measured_optimizer_steps": 0,
+            "supervised_tokens": 0,
+            "wall_seconds": 0.0,
+            "tokens_per_second": 0.0,
+            "dataloader_wait_seconds": 0.0,
+            "dataloader_wait_fraction": 0.0,
+        }
+        self._last_performance_window: dict[str, float] = {}
+        self._performance_windows: list[dict[str, float]] = []
 
     def prepare(self) -> TrainerState:
         """Initialize backend resources and enter the prepared phase."""
@@ -147,6 +163,7 @@ class Trainer:
                 self.state,
                 self.control,
             )
+            self._start_performance_measurement()
 
             while not self._should_stop():
                 self.control.reset()
@@ -209,6 +226,8 @@ class Trainer:
         self.state.is_training = False
         self.state.should_stop = self.state.should_stop or self.control.should_stop
         try:
+            if self.state.phase != TrainerPhase.FAILED:
+                self._record_performance_window(emit_metrics=True)
             self._save_final_training_checkpoint()
             self.state.transition(TrainerPhase.STOPPING)
             self.callback_handler.on_train_end(
@@ -353,6 +372,7 @@ class Trainer:
             raise ValueError("logging.log_every_steps must be positive.")
         if self.state.step % interval != 0:
             return
+        self._record_performance_window(emit_metrics=False)
         tokens_seen, samples_seen = self._sum_progress_counters()
         metrics: dict[str, float] = {
             "step": float(self.state.step),
@@ -364,7 +384,118 @@ class Trainer:
             metrics["loss"] = self.state.loss
         if self.state.grad_norm is not None:
             metrics["grad_norm"] = self.state.grad_norm
+        metrics.update(self._last_performance_window)
         self.callback_handler.on_metrics(self.state, self.control, metrics)
+
+    @property
+    def performance_measurements(self) -> dict[str, float | int]:
+        """Return aggregate synchronized training-window observations."""
+
+        return dict(self._performance)
+
+    def performance_summary(self) -> dict[str, object]:
+        """Return measured throughput, input-wait, and supported MFU details."""
+
+        from .performance import build_performance_summary
+
+        measurements = {
+            **self._performance,
+            "recent_windows": list(self._performance_windows),
+        }
+        return build_performance_summary(
+            measurements=measurements,
+            model=self._performance_model,
+            runtime=self.runtime,
+            sequence_length=int(
+                getattr(getattr(self.config, "dataset", None), "sequence_length", 0)
+            ),
+        )
+
+    def _start_performance_measurement(self) -> None:
+        self._performance_window_started = time.perf_counter()
+        self._performance_window_tokens = self.state.tokens_seen
+        self._performance_window_step = self.state.step
+
+    def _record_performance_window(self, *, emit_metrics: bool) -> None:
+        """Close a sparse synchronized wall-clock window and update counters."""
+
+        started = self._performance_window_started
+        if started is None:
+            return
+        self.runtime.synchronize()
+        ended = time.perf_counter()
+        wall_seconds = ended - started
+        tokens = self.state.tokens_seen - self._performance_window_tokens
+        steps = self.state.step - self._performance_window_step
+        data_wait = min(self._performance_window_data_wait, wall_seconds)
+        self._performance_window_started = ended
+        self._performance_window_tokens = self.state.tokens_seen
+        self._performance_window_step = self.state.step
+        self._performance_window_data_wait = 0.0
+        if wall_seconds <= 0 or tokens <= 0 or steps <= 0:
+            return
+
+        throughput = tokens / wall_seconds
+        self._performance["measured_optimizer_steps"] += steps
+        self._performance["supervised_tokens"] += tokens
+        self._performance["wall_seconds"] += wall_seconds
+        self._performance["tokens_per_second"] = (
+            self._performance["supervised_tokens"] / self._performance["wall_seconds"]
+        )
+        self._performance["dataloader_wait_seconds"] += data_wait
+        self._performance["dataloader_wait_fraction"] = (
+            self._performance["dataloader_wait_seconds"]
+            / self._performance["wall_seconds"]
+        )
+        self._last_performance_window = {
+            "train_wall_seconds": wall_seconds,
+            "train_tokens_per_second": throughput,
+            "dataloader_wait_seconds": data_wait,
+            "dataloader_wait_fraction": data_wait / wall_seconds,
+        }
+        from .performance import build_performance_summary
+
+        summary = build_performance_summary(
+            measurements={
+                "measured_optimizer_steps": steps,
+                "supervised_tokens": tokens,
+                "wall_seconds": wall_seconds,
+                "tokens_per_second": throughput,
+                "dataloader_wait_seconds": data_wait,
+                "dataloader_wait_fraction": data_wait / wall_seconds,
+            },
+            model=self._performance_model,
+            runtime=self.runtime,
+            sequence_length=int(
+                getattr(getattr(self.config, "dataset", None), "sequence_length", 0)
+            ),
+        )
+        if summary.get("mfu_status") == "measured":
+            self._last_performance_window["non_embedding_mfu"] = float(
+                summary["non_embedding_mfu"]
+            )
+            self._last_performance_window["logits_inclusive_mfu"] = float(
+                summary["logits_inclusive_mfu"]
+            )
+        self._performance_windows.append({
+            "step": float(self.state.step),
+            "supervised_tokens": float(tokens),
+            **self._last_performance_window,
+        })
+        if len(self._performance_windows) > 100:
+            del self._performance_windows[:-100]
+        if emit_metrics:
+            tokens_seen, samples_seen = self._sum_progress_counters()
+            metrics = {
+                "step": float(self.state.step),
+                "tokens_seen": float(tokens_seen),
+                "samples_seen": float(samples_seen),
+                "learning_rate": self.state.learning_rate,
+                **self._last_performance_window,
+            }
+            if self.state.loss is not None:
+                metrics["loss"] = self.state.loss
+            self.callback_handler.on_metrics(self.state, self.control, metrics)
 
     def request_stop(self) -> None:
         """Request a graceful stop at the next completed-step boundary."""
@@ -376,12 +507,16 @@ class Trainer:
         if self._train_iterator is None:
             self._train_iterator = iter(self.train_dataloader)
 
+        started = time.perf_counter()
         try:
             return next(self._train_iterator)
 
         except StopIteration:
             self._train_iterator = iter(self.train_dataloader)
             return next(self._train_iterator)
+        finally:
+            if self._performance_window_started is not None:
+                self._performance_window_data_wait += time.perf_counter() - started
 
     def _current_learning_rate(self) -> float:
         """Return the current learning rate."""

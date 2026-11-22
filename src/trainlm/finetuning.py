@@ -355,6 +355,7 @@ class TrainLMFineTuningResult:
     tokenizer_revision: str | None = None
     tokenizer_compatibility: Mapping[str, Any] | None = None
     tokenizer_object_required: bool = False
+    performance: Mapping[str, Any] = field(default_factory=dict)
 
     def push_to_hub(
         self,
@@ -417,6 +418,7 @@ class TrainLMFineTuningResult:
             "best_model_selection": _json_compatible(
                 self.best_model_selection
             ),
+            "performance": _json_compatible(self.performance),
         }
 
 
@@ -2041,6 +2043,16 @@ def _run_finetuning_impl(
         train_loss = None
     summary_path = Path(config.args.output_dir) / "finetuning-summary.json"
     run_state["phase"] = "summary"
+    performance_method = getattr(trainer, "performance_summary", None)
+    performance = (
+        performance_method()
+        if callable(performance_method)
+        else {
+            "status": "unavailable",
+            "mfu_status": "unavailable",
+            "mfu_unavailable_reason": "The trainer did not expose synchronized performance telemetry.",
+        }
+    )
     result = TrainLMFineTuningResult(
         model_name_or_path=config.model_name_or_path,
         model_revision=config.model_revision,
@@ -2068,5 +2080,6 @@ def _run_finetuning_impl(
             },
         ),
         best_model_selection=run_state.get("best_model_selection"),
+        performance=performance,
     )
     return result

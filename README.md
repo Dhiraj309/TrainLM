@@ -56,6 +56,13 @@ the instantiated model; `result.summary()` includes the same count. Progress
 updates use the configured `logging_steps` cadence. Omit `show_progress=True`
 for a quiet library call.
 
+Training progress also reports synchronized supervised tokens/second and
+observed dataloader wait. `result.report["training"]["performance"]` contains
+the aggregate measurements. Native single-device TPU v5e BF16 runs include
+standard MFU values when the model geometry is supported; CPU runs and unknown
+hardware/precision combinations return MFU as unavailable. See the
+[measurement definition and limits](docs/benchmarks/README.md#user-run-measured-training-performance).
+
 With no model or tokenizer source configured, the original convenience path
 builds a small GPT-2 config and trains a byte-level BPE tokenizer on the
 training split. To use an architecture and tokenizer already hosted on the HF

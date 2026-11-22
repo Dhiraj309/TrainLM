@@ -143,6 +143,17 @@ class TrainLMPretrainingResult:
             if training.get("early_stopping_triggered")
             else ""
         )
+        performance = training.get("performance")
+        performance_summary = ""
+        if isinstance(performance, Mapping):
+            rate = performance.get("tokens_per_second")
+            if isinstance(rate, (int, float)) and rate > 0:
+                performance_summary = f" tokens_per_second={rate:,.1f}"
+            mfu = performance.get("non_embedding_mfu")
+            if performance.get("mfu_status") == "measured" and isinstance(
+                mfu, (int, float)
+            ):
+                performance_summary += f" mfu={mfu:.1%}"
         return (
             f"status={self.status} "
             f"model={model.get('model_class') or model.get('requested_model_type', 'unknown')} "
@@ -152,6 +163,7 @@ class TrainLMPretrainingResult:
             f"{training.get('target_supervised_tokens', 'unknown')} "
             f"eval_loss={training.get('eval_loss', 'not_run')} "
             f"accelerator={accelerator.get('backend', accelerator.get('requested', 'unknown'))}"
+            f"{performance_summary}"
             f"{best_summary}"
             f"{stop_summary}"
         )
@@ -310,6 +322,7 @@ def run_pretraining(
             "train_loss": train_loss,
             "eval_loss": eval_loss,
             "early_stopping_triggered": early_stopping_triggered,
+            "performance": trainer.performance_summary(),
         }
         report["best_model_selection"] = best_model_selection
         report["checkpoint"] = checkpoint
@@ -325,6 +338,16 @@ def run_pretraining(
     except Exception as exc:
         report["status"] = "failed"
         report["error_type"] = type(exc).__name__
+        if trainer is not None:
+            try:
+                report.setdefault("training", {})["performance"] = (
+                    trainer.performance_summary()
+                )
+            except Exception as performance_exc:
+                report.setdefault("training", {})["performance"] = {
+                    "status": "unavailable",
+                    "error_type": type(performance_exc).__name__,
+                }
         package_profile = getattr(exc, "profile", None)
         if (isinstance(package_profile, dict)
                 and package_profile.get("scope") == "installed_metadata_only"):
@@ -376,10 +399,18 @@ def _make_training_progress_callback(
                 return
             reported_steps.add(step)
             learning_rate = metrics.get("learning_rate", state.learning_rate)
+            rate = metrics.get("train_tokens_per_second")
+            mfu = metrics.get("non_embedding_mfu")
+            perf = f" | {rate:,.1f} tokens/s" if rate is not None else ""
+            if mfu is not None:
+                perf += f" | MFU {mfu:.1%}"
+            wait = metrics.get("dataloader_wait_fraction")
+            if wait is not None:
+                perf += f" | input wait {wait:.0%}"
             print(
                 f"train step {step}/{total_steps} | "
                 f"tokens {tokens_seen:,}/{config.max_tokens:,} | "
-                f"loss {loss:.4f} | lr {learning_rate:.3g}"
+                f"loss {loss:.4f} | lr {learning_rate:.3g}{perf}"
             )
 
     return _ProgressCallback()

@@ -371,7 +371,7 @@ class MetricsRecordingCallback(TrainerCallback):
 
 def test_training_emits_sparse_materialized_metrics():
     callback = MetricsRecordingCallback()
-    trainer = create_trainer()
+    trainer = create_trainer(task=CountingTask())
     trainer.callback_handler.add_callback(callback)
 
     trainer.train()
@@ -379,6 +379,12 @@ def test_training_emits_sparse_materialized_metrics():
     assert len(callback.metrics) == 1
     assert callback.metrics[0]["step"] == 1.0
     assert isinstance(callback.metrics[0]["loss"], float)
+    assert callback.metrics[0]["train_tokens_per_second"] > 0
+    assert 0 <= callback.metrics[0]["dataloader_wait_fraction"] <= 1
+    performance = trainer.performance_measurements
+    assert performance["measured_optimizer_steps"] == 1
+    assert performance["supervised_tokens"] > 0
+    assert performance["wall_seconds"] > 0
 
 
 def test_sparse_logging_materializes_at_cadence_and_on_the_terminal_step(monkeypatch):

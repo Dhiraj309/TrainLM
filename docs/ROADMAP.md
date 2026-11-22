@@ -1,5 +1,14 @@
 # TrainLM Roadmap
 
+**Measured training performance (2026-11-22):** ordinary training runs now
+collect sparse synchronized wall-clock windows and report observed supervised
+tokens/second plus dataloader wait fraction. Native single-device TPU v5e BF16
+runs also report standard non-embedding and logits-inclusive MFU using the
+documented 197 TFLOPs/chip peak. Unknown peak/model/precision combinations
+return MFU unavailable instead of substituting a guessed value. This provides
+input-pipeline evidence; device-kernel timeline profiling and owner-run TPU
+measurements remain outstanding.
+
 **Pinned Hub streaming fine-tuning (2026-11-22):**
 `TrainLMFineTuningConfig(streaming=True)` resolves one immutable Hub revision
 and loads raw-text splits lazily. TrainLM fingerprints the source, splits,

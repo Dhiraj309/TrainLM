@@ -1735,6 +1735,19 @@ class TrainLMTrainer:
             self._load_best_model_at_end()
         return state
 
+    def performance_summary(self) -> dict[str, Any]:
+        """Return synchronized run throughput and available MFU details."""
+
+        if self.engine is None:
+            return {
+                "status": "unavailable",
+                "mfu_status": "unavailable",
+                "mfu_unavailable_reason": (
+                    "The worker-coordinated backend does not yet return performance telemetry."
+                ),
+            }
+        return self.engine.performance_summary()
+
     @property
     def best_model_selection(self) -> dict[str, Any] | None:
         """Return the selected evaluation metric and retained checkpoint."""

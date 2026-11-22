@@ -84,7 +84,7 @@ class TorchTPURuntime(TorchRuntime):
         )
         self._seed = seed
         self._native_report = discover_tpu(
-            torch, verify_allocation=True, include_properties=False
+            torch, verify_allocation=True, include_properties=True
         )
         if self._native_report["status"] != "ready":
             detail = self._native_report.get("error_type") or self._native_report["status"]
@@ -184,6 +184,7 @@ class TorchTPURuntime(TorchRuntime):
             {
                 "native_tpu_status": report.get("status", "not_initialized"),
                 "device_count_visible": report.get("device_count_visible"),
+                "device_name": report.get("device_name"),
                 "torch_tpu_version": report.get("torch_tpu_version"),
                 "libtpu_version": report.get("libtpu_version"),
             }

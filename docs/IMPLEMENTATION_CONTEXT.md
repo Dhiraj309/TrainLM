@@ -1,5 +1,14 @@
 # TrainLM implementation context
 
+**Measured training performance (2026-11-22):** the shared trainer now
+measures synchronized wall-clock windows at logging boundaries, accumulating
+actual supervised tokens, dataloader wait time, and throughput. Its performance
+summary computes standard dense causal-LM MFU only when model geometry is
+available and the exact single-device native TPU v5e BF16 peak is applicable.
+The peak is 197 TFLOPs/chip from the linked Google Cloud specification. MFU
+uses a model FLOPs formula with measured tokens/second; it is not a hardware
+counter. Detailed kernel profiling and live v5e-1 validation are still pending.
+
 **Pinned Hub streaming fine-tuning (2026-11-22):**
 `TrainLMFineTuningConfig(streaming=True)` resolves the Hub dataset revision
 before opening raw-text train/validation streams. The resume identity covers
