@@ -9,6 +9,12 @@ return MFU unavailable instead of substituting a guessed value. This provides
 input-pipeline evidence; device-kernel timeline profiling and owner-run TPU
 measurements remain outstanding.
 
+PR #156's first hosted CI run caught three scratch-notebook contract mismatches
+and two stale tests that allowed exact iterable resume without a verifiable
+cursor/source identity. The notebook contract and tests have been aligned with
+the current UX and resume safety rules; the follow-up hosted CI run is the
+validation gate before merging.
+
 **Pinned Hub streaming fine-tuning (2026-11-22):**
 `TrainLMFineTuningConfig(streaming=True)` resolves one immutable Hub revision
 and loads raw-text splits lazily. TrainLM fingerprints the source, splits,

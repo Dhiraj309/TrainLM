@@ -9,6 +9,15 @@ The peak is 197 TFLOPs/chip from the linked Google Cloud specification. MFU
 uses a model FLOPs formula with measured tokens/second; it is not a hardware
 counter. Detailed kernel profiling and live v5e-1 validation are still pending.
 
+**PR #156 CI follow-up (2026-11-22):** hosted CI exposed stale notebook
+contracts after the scratch notebook was simplified, plus two old iterable
+resume tests that expected exact replay without a stable source identity or a
+saved state cursor. The notebook now exposes both fresh-run limits as named
+settings and allows the artifact-download cell to run with report-only results.
+The regression tests now require these unverifiable legacy resumes to fail
+before model or dataset state is changed. The cloud workspace has no pytest
+module, so this correction must be confirmed by the hosted CI profiles.
+
 **Pinned Hub streaming fine-tuning (2026-11-22):**
 `TrainLMFineTuningConfig(streaming=True)` resolves the Hub dataset revision
 before opening raw-text train/validation streams. The resume identity covers
