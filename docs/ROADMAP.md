@@ -2,14 +2,23 @@
 
 **Colab v5e-1 full validation notebook (2026-11-22):** added
 [`notebooks/TrainLM_Colab_v5e1_Full_Validation.ipynb`](../notebooks/TrainLM_Colab_v5e1_Full_Validation.ipynb)
-to group all owner-run single-device v5e-1 checks into one toggleable notebook
-(T1 probes, 4-case GPT-2/Llama HF matrices, `trainlm pretrain`/`finetune` CLI,
-`run_pretraining` and `run_finetuning` feature options including `bf16`,
-`torch_compile`, `gradient_checkpointing`, best-model/early-stopping,
-VM-replacement recovery bundles, `streaming=True` fine-tuning resume,
-`PackedBinDataset` epoch schedules, `chunked_linear` loss, and opt-in
-`push_to_hub`). Notebook JSON, Python syntax, and catalog contracts are verified
-on CPU; no TPU execution has been run for this notebook yet.
+to group all owner-run single-device v5e-1 checks into one toggleable notebook.
+An initial owner run on Colab `TPU v5e` (`torch==2.14.1+cpu`, `torch-tpu==0.2.0`,
+`libtpu==0.0.50`, `transformers==5.22.1`, source `a091ce4`) passed 15 checks:
+`t1_install_preflight`, `cli_doctor`, `t1_eager_probe`, `t1_compile_probe`,
+`t1_lifecycle_probe` (2 fresh child processes), `hf_matrix_gpt2`,
+`hf_matrix_llama`, `cli_pretrain_and_finetune` (reporting `mfu_status="measured"`),
+`vm_replacement_recovery_and_extend`, all four `run_finetuning` checks (finite
+Hub, local JSONL epoch/best/early-stop, pretokenized `vocab_sha256`, and
+`streaming=True` cursor resume), and `packed_epoch_and_chunked_linear`.
+`pretrain_options_bf16` failed because `TrainLMTrainer._make_scheduler` does
+not yet pass `horizon_tokens` for `lr_scheduler_type="wsd"` (tracked for the
+next fix PR). The notebook now uses `cosine` in `pretrain_options` and adds
+Section 8 (`RUN_MFU_BASELINE`) to measure steady-state MFU and bottlenecks
+across `SmolLM2-135M` (eager + `torch_compile`), `SmolLM2-360M`, and
+`Qwen2.5-0.5B` (`chunked_linear`). Notebook JSON, syntax, and contract tests
+pass on CPU; the MFU baseline and `pretrain_options` rerun on v5e-1 remain
+pending.
 
 **Measured training performance (2026-11-22):** ordinary training runs now
 collect sparse synchronized wall-clock windows and report observed supervised

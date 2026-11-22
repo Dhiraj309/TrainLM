@@ -3,15 +3,23 @@
 **Colab v5e-1 full validation notebook (2026-11-22):** added
 `notebooks/TrainLM_Colab_v5e1_Full_Validation.ipynb` (registered in
 `notebooks/README.md` and guarded by
-`tests/contracts/test_colab_v5e1_full_validation_notebook.py`) so an owner on a
-Colab Cloud TPU v5e-1 runtime can run all implemented single-device checks in
-one session—running TPU-acquiring subprocesses (`T1` probes,
-`validate_hf_pretraining.py`, `trainlm pretrain`/`finetune` CLI) before
-in-process `native_tpu` checks (`run_pretraining` options, VM-replacement
-recovery bundles, `run_finetuning` finite/epoch/tokenized/`streaming=True`
-resume, `PackedBinDataset` epochs, `chunked_linear` loss, and opt-in
-`push_to_hub`). Contract tests verify notebook JSON, cell syntax, and required
-toggles on CPU; no TPU execution or Hub upload has been performed.
+`tests/contracts/test_colab_v5e1_full_validation_notebook.py`). On Colab
+`TPU v5e` (`torch==2.14.1+cpu`, `torch-tpu==0.2.0`, `libtpu==0.0.50`,
+`transformers==5.22.1`, source `a091ce4`), the owner ran the suite and passed 15
+checks: T1 preflight/doctor/eager/compile/2-attempt lifecycle, 4-case GPT-2 and
+Llama HF matrices, `trainlm pretrain`/`finetune` CLI (`bf16` with measured
+`TPU v5e` MFU), `bundle_pretraining_artifacts(..., include_resume_state=True)`
+VM-replacement recovery + budget extension, all four `run_finetuning` checks
+(including `streaming=True` cursor resume), and `PackedBinDataset` epoch +
+`chunked_linear` loss. `pretrain_options_bf16` failed with
+`ValueError: WSD requires horizon_tokens.` because
+`TrainLMTrainer._make_scheduler` does not populate `horizon_tokens` for
+`lr_scheduler_type="wsd"` (to be fixed in a follow-up PR after #157). Updated
+the notebook to use `cosine` in `pretrain_options` and added Section 8
+(`RUN_MFU_BASELINE`) to measure cold vs. steady-state MFU, HBM, and
+`torch.profiler` CPU bottlenecks across `SmolLM2-135M` (eager +
+`torch_compile`), `SmolLM2-360M`, and `Qwen2.5-0.5B` (`chunked_linear`).
+Contract tests pass on CPU; the MFU baseline run on v5e-1 remains pending.
 
 **Measured training performance (2026-11-22):** the shared trainer now
 measures synchronized wall-clock windows at logging boundaries, accumulating
