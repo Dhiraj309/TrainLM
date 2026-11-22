@@ -73,6 +73,12 @@ class TrainLMFineTuningConfig:
     _expected_tokenizer_revision: str | None = field(
         default=None, init=False, repr=False, compare=False
     )
+    _expected_dataset_fingerprints: tuple[str | None, str | None] | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
+    _expected_local_file_hashes: tuple[str, str] | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
 
     def __post_init__(self) -> None:
         validate_vocab_expectation(self.data_format, self.expected_tokenizer_vocab_sha256)
@@ -1219,13 +1225,24 @@ def restore_finetuning_config(
     if not isinstance(training_args, Mapping) or not isinstance(data, Mapping):
         raise ValueError("The fine-tuning summary is missing its saved settings.")
     recorded_hashes = data.get("local_file_sha256")
+    expected_local_file_hashes = None
     if recorded_hashes is not None:
         if not isinstance(recorded_hashes, Mapping):
+            raise ValueError("The saved local fine-tuning file hashes are invalid.")
+        stored_hash_values = (
+            recorded_hashes.get("train"), recorded_hashes.get("validation")
+        )
+        if any(
+            not isinstance(value, str)
+            or re.fullmatch(r"[0-9a-f]{64}", value) is None
+            for value in stored_hash_values
+        ):
             raise ValueError("The saved local fine-tuning file hashes are invalid.")
         for name, key in (("train", "train_file"), ("validation", "validation_file")):
             file_path = data.get(key)
             if not isinstance(file_path, str) or _sha256_file(Path(file_path)) != recorded_hashes.get(name):
                 raise ValueError("Local fine-tuning files changed since the saved run.")
+        expected_local_file_hashes = stored_hash_values
 
     expected_argument_names = {item.name for item in fields(TrainLMTrainingArguments)}
     additive_arguments = {
@@ -1293,6 +1310,24 @@ def restore_finetuning_config(
                 f"({saved_step})."
             )
 
+    expected_dataset_fingerprints = None
+    if data.get("source") == "provided_dataset":
+        fingerprints = data.get("dataset_fingerprints")
+        if fingerprints is None:
+            fingerprints = {}
+        if not isinstance(fingerprints, Mapping):
+            raise ValueError("The saved fine-tuning Dataset identity is invalid.")
+        train_fingerprint = fingerprints.get("train")
+        validation_fingerprint = fingerprints.get("validation")
+        if any(
+            value is not None and (
+                not isinstance(value, str) or not value.strip()
+            )
+            for value in (train_fingerprint, validation_fingerprint)
+        ):
+            raise ValueError("The saved fine-tuning Dataset fingerprints are invalid.")
+        expected_dataset_fingerprints = (train_fingerprint, validation_fingerprint)
+
     try:
         args = TrainLMTrainingArguments(**restored_args)
         config = TrainLMFineTuningConfig(
@@ -1308,7 +1343,10 @@ def restore_finetuning_config(
                 else report.get("tokenizer_revision")
             ),
             dataset_id=report.get("dataset_id"),
-            dataset_revision=report.get("dataset_revision"),
+            dataset_revision=(
+                _resolved_commit(data.get("resolved_dataset_revision"))
+                or report.get("dataset_revision")
+            ),
             train_file=data.get("train_file"),
             validation_file=data.get("validation_file"),
             local_data_format=data.get("local_data_format", "auto"),
@@ -1327,6 +1365,18 @@ def restore_finetuning_config(
         object.__setattr__(
             config, "_tokenizer_object_required", tokenizer_object_required
         )
+        if expected_dataset_fingerprints is not None:
+            object.__setattr__(
+                config,
+                "_expected_dataset_fingerprints",
+                expected_dataset_fingerprints,
+            )
+        if expected_local_file_hashes is not None:
+            object.__setattr__(
+                config,
+                "_expected_local_file_hashes",
+                expected_local_file_hashes,
+            )
         if tokenizer_object_required:
             object.__setattr__(
                 config,
@@ -1379,6 +1429,23 @@ def _run_finetuning_impl(
     local_files = config.train_file is not None
     if not isinstance(config, TrainLMFineTuningConfig):
         raise TypeError("config must be a TrainLMFineTuningConfig instance.")
+    expected_file_hashes = config._expected_local_file_hashes
+    if expected_file_hashes is not None:
+        try:
+            current_hashes = _local_finetuning_file_hashes(config)
+        except OSError as exc:
+            raise ValueError(
+                "The original local fine-tuning files are unavailable; exact "
+                "resume cannot be verified."
+            ) from exc
+        current_pair = (
+            current_hashes.get("train"), current_hashes.get("validation")
+        ) if current_hashes is not None else None
+        if current_pair != expected_file_hashes:
+            raise ValueError(
+                "Local fine-tuning files changed after restoring the run. "
+                "Restore the original files before resuming."
+            )
     if config.args.accelerator == "tpu":
         raise ValueError(
             "run_finetuning does not support the legacy PyTorch/XLA coordinator "
@@ -1505,6 +1572,23 @@ def _run_finetuning_impl(
         "train": getattr(train_source, "_fingerprint", None),
         "validation": getattr(validation_source, "_fingerprint", None),
     }
+    expected_fingerprints = config._expected_dataset_fingerprints
+    if expected_fingerprints is not None:
+        if any(not isinstance(value, str) for value in expected_fingerprints):
+            raise ValueError(
+                "The original provided fine-tuning Dataset did not have stable "
+                "fingerprints, so exact resume cannot be verified. Start a new run."
+            )
+        actual_fingerprints = (
+            run_state["dataset_fingerprints"]["train"],
+            run_state["dataset_fingerprints"]["validation"],
+        )
+        if actual_fingerprints != expected_fingerprints:
+            raise ValueError(
+                "Provided fine-tuning Dataset fingerprints changed since the "
+                "saved run. Reload the original train and validation splits "
+                "before resuming."
+            )
     for split_name, dataset in (
         (config.train_split, train_source),
         (config.validation_split, validation_source),

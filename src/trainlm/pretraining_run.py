@@ -575,6 +575,17 @@ def _capture_local_text_sources(
                 "The prepared-data cache does not record both provided Dataset inputs."
             )
         report["data"]["provided_datasets"] = datasets
+        report["data"]["dataset_identity_relation"] = (
+            "caller_declared"
+            if config.dataset_id is not None
+            else "fingerprint_only"
+        )
+        report["data"]["dataset_source"] = {
+            "dataset_id": config.dataset_id,
+            "config_name": config.dataset_config_name,
+            "requested_revision": config.dataset_revision,
+            "resolved_revision": inputs.get("dataset_revision"),
+        }
     if config.data_format == "tokens":
         tokenizer_source = inputs.get("tokenizer_source")
         if not isinstance(tokenizer_source, Mapping):
@@ -976,8 +987,18 @@ def bundle_pretraining_artifacts(
     report_path: str | Path,
     *,
     bundle_path: str | Path | None = None,
+    include_resume_state: bool = False,
 ) -> Path:
-    """Bundle the run report, resume example, and valid model export."""
+    """Bundle a run report and model export, with optional portable resume state.
+
+    ``include_resume_state=True`` adds the generated files required for resume
+    (checkpoint, prepared tokenizer/data, manifests and the selected report) under
+    ``recovery/``. The archive can contain prepared copies of private corpus
+    data and may be large. Original external model/tokenizer sources and local
+    input files are not copied; keep them accessible when resuming.
+    """
+    if not isinstance(include_resume_state, bool):
+        raise TypeError("include_resume_state must be a boolean.")
     path = Path(report_path).expanduser()
     if not path.is_file():
         raise FileNotFoundError(f"The evidence report is missing: {path}")
@@ -1004,8 +1025,69 @@ def bundle_pretraining_artifacts(
         if bundle_path is not None
         else path.parent / "trainlm-scratch-artifact.zip"
     )
+    if destination.resolve() == path.resolve():
+        raise ValueError("bundle_path cannot overwrite the run report.")
     destination.parent.mkdir(parents=True, exist_ok=True)
     resume_code = (report.get("resume") or {}).get("code")
+    recovery_root: Path | None = None
+    recovery_report: Path | None = None
+    if include_resume_state:
+        resume = report.get("resume")
+        settings = (
+            resume.get("pretraining_config")
+            if isinstance(resume, Mapping)
+            else None
+        )
+        output_value = (
+            settings.get("output_dir") if isinstance(settings, Mapping) else None
+        )
+        checkpoint_value = (
+            resume.get("checkpoint_path") if isinstance(resume, Mapping) else None
+        )
+        if not isinstance(output_value, str) or not output_value.strip():
+            raise ValueError("The report does not identify a resumable run directory.")
+        if not isinstance(checkpoint_value, str) or not checkpoint_value.strip():
+            raise ValueError("The report does not identify a resumable checkpoint.")
+        recovery_root = Path(output_value).expanduser().resolve()
+        checkpoint = Path(checkpoint_value).expanduser().resolve()
+        if not checkpoint.is_relative_to(recovery_root):
+            raise FileNotFoundError(
+                "The checkpoint is outside the reported run directory."
+            )
+        if not checkpoint.is_relative_to(recovery_root / "checkpoints"):
+            raise FileNotFoundError(
+                "The checkpoint is outside the run's checkpoints directory."
+            )
+        required = (
+            recovery_root / "run_config.json",
+            recovery_root / "preparation_cache.json",
+            checkpoint / "trainer_state.pt",
+        )
+        if not checkpoint.is_dir() or any(
+            not item.is_file() for item in required
+        ):
+            raise FileNotFoundError(
+                "The complete run directory, prepared data, or checkpoint is "
+                "missing; a recovery archive cannot be created."
+            )
+        recovery_report = path
+        destination_relative = (
+            destination.resolve().relative_to(recovery_root)
+            if destination.resolve().is_relative_to(recovery_root)
+            else None
+        )
+        if destination_relative is not None and (
+            destination_relative.parts[0] in {"checkpoints", "data", "tokenizer"}
+            or destination_relative
+            in {Path("run_config.json"), Path("preparation_cache.json")}
+        ):
+            raise ValueError("bundle_path cannot overwrite a recovery input.")
+    if (
+        export_ready
+        and export_dir is not None
+        and destination.resolve().is_relative_to(export_dir.resolve())
+    ):
+        raise ValueError("bundle_path cannot be inside the model export.")
     with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         archive.write(path, arcname="report.json")
         if isinstance(resume_code, str) and resume_code:
@@ -1018,4 +1100,27 @@ def bundle_pretraining_artifacts(
                 if item.is_symlink() or not item.resolve().is_relative_to(root):
                     raise ValueError("The model export contains a symlinked file.")
                 archive.write(item, arcname=Path("model") / item.relative_to(export_dir))
+        if recovery_root is not None and recovery_report is not None:
+            archive.write(recovery_report, arcname="recovery/report.json")
+            required_roots = {"checkpoints", "data", "tokenizer"}
+            required_files = {"run_config.json", "preparation_cache.json"}
+            for item in sorted(recovery_root.rglob("*")):
+                if not item.is_file():
+                    continue
+                if item.is_symlink() or not item.resolve().is_relative_to(
+                    recovery_root
+                ):
+                    raise ValueError("The run directory contains a symlinked file.")
+                resolved = item.resolve()
+                if resolved == destination.resolve():
+                    continue
+                if resolved == recovery_report.resolve():
+                    continue
+                relative = item.relative_to(recovery_root)
+                if (
+                    relative.parts[0] not in required_roots
+                    and relative not in {Path(name) for name in required_files}
+                ):
+                    continue
+                archive.write(item, arcname=Path("recovery") / relative)
     return destination
