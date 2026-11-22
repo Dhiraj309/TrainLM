@@ -13,8 +13,9 @@ PR #156's hosted CI runs caught scratch-notebook contract mismatches and stale
 tests expecting exact iterable resume without a verifiable cursor/source
 identity. The notebook now keeps fresh-run controls and exact-resume/budget-
 extension choices within its concise layout. The resume tests now verify that
-unverifiable readers are rejected before state changes. Hosted CI is the
-validation gate before merging.
+unverifiable readers are rejected before state changes. Its intro now clearly
+labels the short run as a workflow check with no useful model output. Hosted
+CI is the validation gate before merging.
 
 **Pinned Hub streaming fine-tuning (2026-11-22):**
 `TrainLMFineTuningConfig(streaming=True)` resolves one immutable Hub revision
