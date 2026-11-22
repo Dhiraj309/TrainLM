@@ -1,5 +1,18 @@
 # TrainLM implementation context
 
+**Colab v5e-1 full validation notebook (2026-11-22):** added
+`notebooks/TrainLM_Colab_v5e1_Full_Validation.ipynb` (registered in
+`notebooks/README.md` and guarded by
+`tests/contracts/test_colab_v5e1_full_validation_notebook.py`) so an owner on a
+Colab Cloud TPU v5e-1 runtime can run all implemented single-device checks in
+one session—running TPU-acquiring subprocesses (`T1` probes,
+`validate_hf_pretraining.py`, `trainlm pretrain`/`finetune` CLI) before
+in-process `native_tpu` checks (`run_pretraining` options, VM-replacement
+recovery bundles, `run_finetuning` finite/epoch/tokenized/`streaming=True`
+resume, `PackedBinDataset` epochs, `chunked_linear` loss, and opt-in
+`push_to_hub`). Contract tests verify notebook JSON, cell syntax, and required
+toggles on CPU; no TPU execution or Hub upload has been performed.
+
 **Measured training performance (2026-11-22):** the shared trainer now
 measures synchronized wall-clock windows at logging boundaries, accumulating
 actual supervised tokens, dataloader wait time, and throughput. Its performance
