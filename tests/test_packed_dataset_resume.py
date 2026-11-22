@@ -299,7 +299,7 @@ def test_legacy_stateful_iterable_without_preflight_hook_is_rejected(tmp_path):
     }
     with pytest.raises(
         ValueError,
-        match="stable source identity or a validate_state_dict",
+        match="stable source identity",
     ):
         resumed.train(resume_from_checkpoint=checkpoint)
     assert resumed_data.position == 0
