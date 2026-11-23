@@ -226,7 +226,7 @@ class TorchRuntime:
 
 def _move_to_device(value: Any, device: torch.device) -> Any:
     if isinstance(value, torch.Tensor):
-        return value.to(device)
+        return value if value.device == device else value.to(device)
     if isinstance(value, Mapping):
         return type(value)(
             (key, _move_to_device(item, device))
