@@ -1,5 +1,18 @@
 # TrainLM Roadmap
 
+**Tier 2 — Native TorchTPU Splash Attention, SwiGLU packing, and loss provider catalog (2026-11-23):**
+implemented on branch `perf/40-tier2-torchtpu-kernels-and-packing` after
+PR #160 merged (`eccef6f`). Added guarded native Splash Attention adapter
+(`src/trainlm/optimization/torchtpu_attention.py`), reversible
+`apply_torchtpu_kernel_plan` with `PackedGatedMLPBlock`
+(`src/trainlm/optimization/torchtpu_kernels.py`), and `"torchtpu"` backend
+support in `causal_loss_provider_specs`
+(`src/trainlm/optimization/loss_providers.py`). CPU unit tests added in
+`tests/optimization/test_torchtpu_kernels.py`; hosted CI and Colab v5e-1 MFU
+rerun remain pending. Tier 3 (BF16 optimizer states, selective
+rematerialization, MXU precision/bucketing) and Tier 4 (auto-wired UX) follow
+in separate branches.
+
 **Tier 1 — Whole-step compile, DeferAndFuse, and foreach grad scaling (2026-11-22):**
 implemented on branch `perf/39-tier1-whole-step-compile-and-defer-fuse` after
 PR #159 merged (`9cd249f`). `TorchTPURuntime.compile_model` and

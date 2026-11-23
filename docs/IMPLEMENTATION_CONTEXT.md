@@ -1,5 +1,19 @@
 # TrainLM implementation context
 
+**Tier 2 — Native TorchTPU Splash Attention, SwiGLU packing, and loss provider catalog (2026-11-23):**
+on branch `perf/40-tier2-torchtpu-kernels-and-packing` (branched from merged
+`main` `eccef6f`): (1) added `TorchTPUSplashAttentionRuntime`,
+`torchtpu_splash_attention_provider`, and `probe_torchtpu_splash_kernel` in
+`src/trainlm/optimization/torchtpu_attention.py` using `hf_attention.py`
+registration with non-materializing causal mask factory; (2) added
+`PackedGatedMLPBlock` and reversible `apply_torchtpu_kernel_plan` in
+`src/trainlm/optimization/torchtpu_kernels.py`; (3) added `"torchtpu"` backend
+support to `causal_loss_provider_specs` in
+`src/trainlm/optimization/loss_providers.py`; and (4) exported all new APIs in
+`src/trainlm/optimization/__init__.py`. Added CPU unit tests in
+`tests/optimization/test_torchtpu_kernels.py`. Hosted CI and Colab TPU v5e-1
+validation remain pending.
+
 **Tier 1 — Whole-step compile, DeferAndFuse, and foreach grad scaling (2026-11-22):**
 on branch `perf/39-tier1-whole-step-compile-and-defer-fuse` (branched from
 merged `main` `9cd249f`): (1) `TorchTPURuntime.compile_model` and
