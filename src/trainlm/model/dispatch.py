@@ -70,11 +70,7 @@ class ForwardBatchDispatcher:
     ) -> "ForwardBatchDispatcher":
         if not isinstance(model, nn.Module):
             raise TypeError("model must be a torch.nn.Module.")
-        signature_model = (
-            model.module
-            if isinstance(model, DistributedDataParallel)
-            else model
-        )
+        signature_model = _unwrap_model(model)
         try:
             signature = inspect.signature(
                 signature_model.forward,
@@ -152,6 +148,22 @@ class ForwardBatchDispatcher:
             dropped_fields=dropped,
             signature=self.signature,
         )
+
+
+def _unwrap_model(model: nn.Module) -> nn.Module:
+    seen: set[int] = set()
+    current: Any = model
+    while id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, DistributedDataParallel):
+            current = current.module
+            continue
+        orig_mod = getattr(current, "_orig_mod", None)
+        if isinstance(orig_mod, nn.Module):
+            current = orig_mod
+            continue
+        break
+    return current
 
 
 def dispatch_model_batch(

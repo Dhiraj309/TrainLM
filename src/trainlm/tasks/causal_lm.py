@@ -75,6 +75,8 @@ class CausalLMTask:
             )
         self._dispatcher_model: nn.Module | None = None
         self._dispatcher: ForwardBatchDispatcher | None = None
+        self._compiled_hidden_key: tuple[int, int] | None = None
+        self._compiled_hidden_fn: Any = None
 
     def training_step(
         self,
@@ -215,6 +217,7 @@ class CausalLMTask:
                 if self.assume_all_supervised and counts.ignored_tokens == 0
                 else loss_mask
             )
+            hidden_state_fn = self._resolve_compiled_hidden_fn(model)
             with backend.autocast():
                 loss, z_loss_value = self.training_view.loss(
                     model_inputs,
@@ -224,6 +227,7 @@ class CausalLMTask:
                     ignore_index=self.ignore_index,
                     z_loss=self.z_loss,
                     rematerialization=self.rematerialization,
+                    hidden_state_fn=hidden_state_fn,
                 )
             metrics: dict[str, torch.Tensor | float] = {}
             if z_loss_value is not None:
@@ -283,6 +287,20 @@ class CausalLMTask:
             metrics=metrics,
             loss_source=loss_source,
         )
+
+    def _resolve_compiled_hidden_fn(self, model: nn.Module):
+        if self.training_view is None:
+            return None
+        if getattr(model, "_orig_mod", None) is None:
+            return None
+        key = (id(model), id(self.training_view))
+        if self._compiled_hidden_key != key:
+            provider = self.training_view.hidden_state_provider
+            self._compiled_hidden_fn = torch.compile(
+                lambda cur, inputs: provider(cur, inputs)
+            )
+            self._compiled_hidden_key = key
+        return self._compiled_hidden_fn
 
     @property
     def _model_loss_compatible(self) -> bool:
