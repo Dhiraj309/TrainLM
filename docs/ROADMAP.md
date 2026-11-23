@@ -1,12 +1,26 @@
 # TrainLM Roadmap
 
+**TorchTPU compile, BF16 chunked-loss, and WSD fixes (2026-11-22):** following
+owner-run Colab `TPU v5e-1` MFU benchmark output (`SmolLM2-135M` eager `13.68%`
+MFU, `SmolLM2-135M` compiled failure in `ForwardBatchDispatcher`,
+`SmolLM2-360M` `15.04%` MFU, `Qwen2.5-0.5B` `9.26%` MFU, `wait=0.1%`),
+implemented the PR A fixes on branch `fix/38-torchtpu-compile-and-bf16-chunked-loss`:
+unwrapped `_orig_mod` in `ForwardBatchDispatcher.from_model`, routed
+`LinearCausalLMTrainingView` hidden-state extraction through `torch.compile`
+when the trainer's model is compiled, kept `chunked_loss._chunk_terms` `F.linear`
+in BF16/FP16 on `device.type == "tpu"` (not only `"xla"`), and populated
+`horizon_tokens` (and warmup/stable fractions) for `lr_scheduler_type="wsd"` in
+`TrainLMTrainer`. CPU unit tests were added; hosted CI and owner v5e-1 MFU
+rerun remain pending. Whole-step compilation (`compile_training_step`) and
+Pallas/Splash kernels remain next in PR B/C.
+
 **Dedicated v5e-1 LLM MFU benchmark notebook (2026-11-22):** added
 [`notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb`](../notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb)
 as a short 5-cell notebook dedicated solely to training `SmolLM2-135M`,
 `SmolLM2-360M`, and `Qwen2.5-0.5B` on `TPU v5e-1` with live MFU, cold-vs-steady
 window separation, HBM stats, and `torch.profiler` bottleneck reporting.
-Notebook JSON, syntax, and catalog contracts pass on CPU; TPU execution is
-pending.
+Notebook JSON, syntax, and catalog contracts pass on CPU; owner v5e-1 baseline
+run completed (see above).
 
 **Colab v5e-1 full validation notebook (2026-11-22):** added
 [`notebooks/TrainLM_Colab_v5e1_Full_Validation.ipynb`](../notebooks/TrainLM_Colab_v5e1_Full_Validation.ipynb)
