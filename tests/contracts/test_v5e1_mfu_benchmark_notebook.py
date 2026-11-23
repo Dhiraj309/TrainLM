@@ -30,8 +30,8 @@ def test_v5e1_mfu_benchmark_notebook_is_runnable_and_focused():
         "RUN_PROFILER",
         "USE_SYNTHETIC_DATA",
         "chunked_linear",
-        "LinearCausalLMTrainingView",
         "torch.profiler.profile",
         "trainlm_v5e1_mfu_benchmark.json",
     ):
         assert required in source, f"Missing {required!r} in {NOTEBOOK}"
+    assert "LinearCausalLMTrainingView" not in source

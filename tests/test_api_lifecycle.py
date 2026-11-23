@@ -1597,3 +1597,35 @@ def test_tensorboard_reporter_writes_and_closes(tmp_path, monkeypatch):
 
     assert calls["scalars"] == [("evaluating/eval_loss", 0.75, 3)]
     assert calls["closed"] is True
+
+
+def test_auto_training_view_resolves_hf_causal_lm_without_factory(tmp_path):
+    from transformers import LlamaConfig, LlamaForCausalLM
+
+    model = LlamaForCausalLM(
+        LlamaConfig(
+            vocab_size=32,
+            hidden_size=8,
+            intermediate_size=16,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            max_position_embeddings=16,
+        )
+    )
+    trainer = TrainLMTrainer(
+        model=model,
+        train_dataset=_dataset(),
+        args=TrainLMTrainingArguments(
+            output_dir=tmp_path,
+            max_steps=1,
+            sequence_length=4,
+            loss_implementation="chunked_linear",
+            logits_chunk_size=2,
+        ),
+    )
+
+    assert trainer.engine.task.loss_implementation == "chunked_linear"
+    assert trainer.engine.task.training_view is not None
+    assert trainer.engine.task.training_view.model is model
+    assert trainer.train().step == 1
