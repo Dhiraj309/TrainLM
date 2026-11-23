@@ -36,10 +36,16 @@ class AdamWStateDtype(torch.optim.AdamW):
     def _cast_moment_state(self) -> None:
         for state in self.state.values():
             exp_avg = state.get("exp_avg")
-            if isinstance(exp_avg, torch.Tensor):
+            if (
+                isinstance(exp_avg, torch.Tensor)
+                and exp_avg.dtype != self.state_policy.mu_dtype
+            ):
                 state["exp_avg"] = exp_avg.to(dtype=self.state_policy.mu_dtype)
             exp_avg_sq = state.get("exp_avg_sq")
-            if isinstance(exp_avg_sq, torch.Tensor):
+            if (
+                isinstance(exp_avg_sq, torch.Tensor)
+                and exp_avg_sq.dtype != self.state_policy.nu_dtype
+            ):
                 state["exp_avg_sq"] = exp_avg_sq.to(
                     dtype=self.state_policy.nu_dtype
                 )

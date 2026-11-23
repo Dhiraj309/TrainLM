@@ -1557,16 +1557,25 @@ class TrainLMTrainer:
             generator=generator,
         )
 
+    def _optimizer_config(self) -> OptimizerConfig:
+        use_bf16_mu = (
+            getattr(self.runtime, "name", None) == "torchtpu"
+            and self.runtime.precision == "bf16"
+        )
+        return OptimizerConfig(
+            learning_rate=self.args.learning_rate,
+            betas=self.args.betas,
+            eps=self.args.eps,
+            weight_decay=self.args.weight_decay,
+            mu_dtype="bfloat16" if use_bf16_mu else "float32",
+            nu_dtype="float32",
+            fused=False,
+        )
+
     def _make_optimizer(self) -> Optimizer:
         return create_optimizer(
             self.model.parameters(),
-            OptimizerConfig(
-                learning_rate=self.args.learning_rate,
-                betas=self.args.betas,
-                eps=self.args.eps,
-                weight_decay=self.args.weight_decay,
-                fused=False,
-            ),
+            self._optimizer_config(),
         )
 
     def _scheduler_config(self) -> SchedulerConfig:
@@ -1624,13 +1633,7 @@ class TrainLMTrainer:
             ),
             parallelism=ParallelismConfig(data=1),
             optimizations=OptimizationConfig(policy="auto", allow_fallbacks=True),
-            optimizer=OptimizerConfig(
-                learning_rate=self.args.learning_rate,
-                betas=self.args.betas,
-                eps=self.args.eps,
-                weight_decay=self.args.weight_decay,
-                fused=False,
-            ),
+            optimizer=self._optimizer_config(),
             scheduler=self._scheduler_config(),
             trainer=TrainerConfig(
                 max_steps=self._effective_max_steps,
