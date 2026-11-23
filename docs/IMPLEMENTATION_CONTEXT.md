@@ -1,5 +1,11 @@
 # TrainLM implementation context
 
+**Fix MFU notebook `nbformat` cell ID (2026-11-23):** on branch
+`fix/44-notebook-cell-id-nbformat`, renamed cell ID `qwen2.5-0.5b` to
+`qwen2_5-0_5b` in `notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb` (`nbformat`
+`^[a-zA-Z0-9-_]+$` validation) and added the regex check to
+`tests/contracts/test_v5e1_mfu_benchmark_notebook.py`.
+
 **Split MFU benchmark into per-model cells (2026-11-23):** split
 `notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb` on branch
 `refactor/43-split-mfu-notebook-cells` into 7 code cells (setup, config,

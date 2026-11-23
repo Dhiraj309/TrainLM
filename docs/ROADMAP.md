@@ -1,5 +1,12 @@
 # TrainLM Roadmap
 
+**Fix MFU notebook `nbformat` cell ID (2026-11-23):** on branch
+`fix/44-notebook-cell-id-nbformat`, renamed cell ID `qwen2.5-0.5b` to
+`qwen2_5-0_5b` in
+[`notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb`](../notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb)
+to match `nbformat`'s `^[a-zA-Z0-9-_]+$` requirement and added a regex guard
+to `tests/contracts/test_v5e1_mfu_benchmark_notebook.py`.
+
 **Split MFU benchmark into per-model cells (2026-11-23):** updated
 [`notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb`](../notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb)
 on branch `refactor/43-split-mfu-notebook-cells` so setup, config, helpers,
