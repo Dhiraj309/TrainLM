@@ -1,5 +1,16 @@
 # TrainLM Roadmap
 
+**Fix compiled-step device transfer & `chunked_loss` graph break (2026-11-23):**
+owner Colab `TPU v5e-1` run (`db9eb94`) improved `SmolLM2-135M` eager (`DeferAndFuse`)
+to `14.35%` MFU (`27,723.9 tok/s`), and uncovered why all three `compiled`
+runs failed (`expected tensor to be on tpu, got cpu` because `prepare_batch` ran
+inside `compile_training_step`) plus a Dynamo graph break on
+`denominator.item()` in `chunked_loss.py`. On branch
+`fix/45-tpu-compiled-step-args-and-graph-break`: moved
+`runtime.prepare_batch(task_batch)` before `step_fn(task_batch, counts)` in
+`Trainer._train_step`, skipped no-op `.to(device)` in `_move_to_device`, and
+guarded `denominator.item()` with `not torch.compiler.is_compiling()`.
+
 **Fix MFU notebook `nbformat` cell ID (2026-11-23):** on branch
 `fix/44-notebook-cell-id-nbformat`, renamed cell ID `qwen2.5-0.5b` to
 `qwen2_5-0_5b` in
