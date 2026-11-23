@@ -164,9 +164,19 @@ class TorchRuntime:
             or scale <= 0
         ):
             raise ValueError("Gradient scale must be positive.")
-        for parameter in parameters:
-            if parameter.grad is not None:
-                parameter.grad.mul_(scale)
+        grads = [
+            parameter.grad
+            for parameter in parameters
+            if parameter.grad is not None
+        ]
+        if not grads:
+            return
+        foreach_mul = getattr(torch, "_foreach_mul_", None)
+        if callable(foreach_mul) and not isinstance(scale, torch.Tensor):
+            foreach_mul(grads, scale)
+        else:
+            for grad in grads:
+                grad.mul_(scale)
 
     def reduce_sum(self, value: torch.Tensor) -> torch.Tensor:
         """Return a sum reduction; the portable runtime is single-process."""
