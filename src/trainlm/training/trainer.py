@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterator, Sequence
 import time
+from typing import Any
 import torch
 from torch import nn
 from torch.optim import Optimizer
@@ -98,6 +99,8 @@ class Trainer:
         self._train_iterator: Iterator | None = None
         self._global_tokens_seen: int | None = None
         self._epoch_end_pending = False
+        self._compiled_single_step_fn = None
+        self._compiled_single_step_active = False
         self._performance_model = model
         self._performance_window_started: float | None = None
         self._performance_window_tokens = 0
@@ -636,6 +639,51 @@ class Trainer:
             )
             microbatch_limit = min(microbatch_limit, batches_to_epoch_end)
 
+        if (
+            microbatch_limit == 1
+            and not self.runtime.is_distributed
+            and callable(getattr(self.task, "prepare_batch_on_host", None))
+            and callable(getattr(self.task, "training_step_prepared", None))
+        ):
+            raw_batch = self._next_batch()
+            if self._can_prepare_on_host(raw_batch):
+                task_batch, counts = self.task.prepare_batch_on_host(raw_batch)
+                self.state.micro_step += 1
+                if self._train_batches_per_epoch:
+                    self.state.epoch = (
+                        self.state.micro_step // self._train_batches_per_epoch
+                    )
+                token_count = counts.supervised_tokens
+                if self.config.trainer.max_tokens is not None:
+                    global_microbatch_tokens = self._global_microbatch_tokens(
+                        local_tokens=token_count,
+                        exact=counts.exact,
+                    )
+                    if self._global_tokens_seen is None:
+                        raise RuntimeError("Global token budget was not initialized.")
+                    self._global_tokens_seen += global_microbatch_tokens
+                step_fn = self._resolve_single_step_fn()
+                loss_numerator, grad_norm = step_fn(task_batch, counts)
+                observe_accumulation = getattr(
+                    self.runtime,
+                    "observe_accumulation_steps",
+                    None,
+                )
+                if callable(observe_accumulation):
+                    observe_accumulation(1)
+                self._update_accumulated_state(
+                    total_tokens=token_count,
+                    total_sequences=counts.sequences,
+                    loss_numerator=loss_numerator,
+                    exact_tokens=True,
+                    grad_norm=grad_norm,
+                )
+                self._advance_scheduler(total_tokens=token_count)
+                self.state.learning_rate = self._current_learning_rate()
+                self.runtime.on_step_end(self.state.step)
+                return
+            self._train_iterator = self._prepend_batch(raw_batch)
+
         total_tokens = 0
         total_sequences = 0
         loss_numerator: torch.Tensor | None = None
@@ -786,6 +834,65 @@ class Trainer:
         self.state.learning_rate = self._current_learning_rate()
 
         self.runtime.on_step_end(self.state.step)
+
+    @staticmethod
+    def _can_prepare_on_host(raw_batch: Any) -> bool:
+        from collections.abc import Mapping
+
+        if not isinstance(raw_batch, Mapping) or "input_ids" not in raw_batch:
+            return False
+        return all(
+            not isinstance(value, torch.Tensor) or value.device.type == "cpu"
+            for value in raw_batch.values()
+        )
+
+    def _prepend_batch(self, raw_batch: Any) -> Iterator:
+        from itertools import chain
+
+        assert self._train_iterator is not None
+        return chain((raw_batch,), self._train_iterator)
+
+    def _resolve_single_step_fn(self):
+        if self._compiled_single_step_fn is not None:
+            return self._compiled_single_step_fn
+
+        def _single_step_tensors(task_batch, counts):
+            step_model = (
+                getattr(self.model, "_orig_mod", self.model)
+                if self._compiled_single_step_active
+                else self.model
+            )
+            self.runtime.zero_grad(self.optimizer)
+            result = self.task.training_step_prepared(
+                step_model,
+                task_batch,
+                counts,
+                self.runtime,
+            )
+            weighted_loss = result.loss * result.tokens.supervised_tokens
+            self.runtime.backward(weighted_loss)
+            self.runtime.scale_gradients(
+                step_model.parameters(),
+                1.0 / result.tokens.supervised_tokens,
+            )
+            grad_norm = None
+            if self.config.trainer.max_grad_norm > 0:
+                grad_norm = self.runtime.clip_gradients(
+                    step_model.parameters(),
+                    self.config.trainer.max_grad_norm,
+                )
+            self.runtime.optimizer_step(self.optimizer)
+            return weighted_loss.detach(), grad_norm
+
+        compile_fn = getattr(self.runtime, "compile_training_step", None)
+        if callable(compile_fn):
+            compiled = compile_fn(_single_step_tensors)
+            self._compiled_single_step_active = compiled is not _single_step_tensors
+            self._compiled_single_step_fn = compiled
+        else:
+            self._compiled_single_step_active = False
+            self._compiled_single_step_fn = _single_step_tensors
+        return self._compiled_single_step_fn
 
     def _advance_scheduler(self, *, total_tokens: int) -> None:
         """Advance token-indexed schedules by cumulative consumed tokens."""
