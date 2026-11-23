@@ -1,5 +1,6 @@
 import ast
 import json
+import re
 from pathlib import Path
 
 
@@ -9,6 +10,10 @@ NOTEBOOK = Path("notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb")
 def test_v5e1_mfu_benchmark_notebook_is_runnable_and_focused():
     notebook = json.loads(NOTEBOOK.read_text(encoding="utf-8"))
     assert notebook["nbformat"] == 4
+    assert all(
+        re.fullmatch(r"[a-zA-Z0-9-_]+", cell.get("id", ""))
+        for cell in notebook["cells"]
+    )
     code_cells = [cell for cell in notebook["cells"] if cell["cell_type"] == "code"]
     assert len(code_cells) == 7
     assert all(cell.get("execution_count") is None for cell in code_cells)
