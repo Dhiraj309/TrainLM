@@ -129,3 +129,43 @@ def test_chunked_loss_rejects_invalid_or_empty_requests(kwargs, message):
             torch.randint(0, 7, (2, 5)),
             **kwargs,
         )
+
+
+def test_chunked_loss_keeps_bf16_projection_on_tpu_device_type(monkeypatch):
+    from types import SimpleNamespace
+    from trainlm.tasks.chunked_loss import _chunk_terms
+
+    seen_dtypes = []
+    original = F.linear
+
+    def recording_linear(input, weight, bias=None):
+        seen_dtypes.append((input.dtype, weight.dtype, None if bias is None else bias.dtype))
+        return original(input, weight, bias)
+
+    monkeypatch.setattr(F, "linear", recording_linear)
+
+    class _FakeTPUHidden:
+        def __init__(self, tensor):
+            self._t = tensor
+            self.device = SimpleNamespace(type="tpu")
+            self.dtype = tensor.dtype
+
+        def to(self, *, dtype):
+            return self._t.to(dtype=dtype)
+
+    hidden_bf16 = torch.randn(3, 4, dtype=torch.bfloat16)
+    weight_fp32 = torch.randn(7, 4, dtype=torch.float32)
+    bias_fp32 = torch.randn(7, dtype=torch.float32)
+    labels = torch.randint(0, 7, (3,))
+
+    loss_sum, _ = _chunk_terms(
+        _FakeTPUHidden(hidden_bf16),
+        weight_fp32,
+        labels,
+        bias_fp32,
+        ignore_index=-100,
+        include_z_loss=False,
+    )
+
+    assert seen_dtypes == [(torch.bfloat16, torch.bfloat16, torch.bfloat16)]
+    assert torch.isfinite(loss_sum)

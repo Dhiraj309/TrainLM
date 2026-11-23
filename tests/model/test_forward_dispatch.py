@@ -127,3 +127,25 @@ def test_tiny_hf_models_receive_only_their_supported_forward_fields(
     assert set(dispatched.dropped_fields) == set(batch) - expected
     assert {"input_ids", "attention_mask", "position_ids"} <= expected
     assert "dataset_document_id" in dispatched.dropped_fields
+
+
+def test_dispatch_unwraps_compiled_orig_mod_wrapper():
+    class CompiledLikeWrapper(nn.Module):
+        def __init__(self, orig_mod: nn.Module):
+            super().__init__()
+            self._orig_mod = orig_mod
+
+        def forward(self, *args, **kwargs):
+            return self._orig_mod(*args, **kwargs)
+
+    wrapped = CompiledLikeWrapper(ExplicitFamilyForward())
+    batch = {
+        "input_ids": torch.ones(1, 4, dtype=torch.long),
+        "attention_mask": torch.ones(1, 4, dtype=torch.long),
+        "unknown_extra": torch.tensor(9),
+    }
+
+    dispatched = dispatch_model_batch(wrapped, batch)
+
+    assert tuple(dispatched.inputs) == ("input_ids", "attention_mask")
+    assert dispatched.dropped_fields == ("unknown_extra",)

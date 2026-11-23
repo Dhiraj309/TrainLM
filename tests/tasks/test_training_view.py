@@ -85,3 +85,48 @@ def test_training_view_rejects_hidden_width_mismatch():
         assert "projection width" in str(exc)
     else:
         raise AssertionError("Expected hidden width mismatch to fail.")
+
+
+def test_causal_lm_task_compiles_hidden_provider_for_compiled_model(monkeypatch):
+    from trainlm.runtime import TorchRuntime
+    from trainlm.tasks import CausalLMTask
+
+    model = FixtureCausalLM()
+    view = LinearCausalLMTrainingView(
+        model=model,
+        capabilities=inspect_dense_causal_lm(model),
+        hidden_state_provider=hidden_provider,
+        provider_id="fixture.body",
+    )
+
+    class CompiledLikeWrapper(torch.nn.Module):
+        def __init__(self, orig_mod):
+            super().__init__()
+            self._orig_mod = orig_mod
+
+    compiled_model = CompiledLikeWrapper(model)
+    compile_calls = []
+
+    def fake_compile(fn):
+        compile_calls.append(fn)
+
+        def wrapped(*args, **kwargs):
+            return fn(*args, **kwargs)
+
+        return wrapped
+
+    monkeypatch.setattr(torch, "compile", fake_compile)
+
+    task = CausalLMTask(
+        loss_implementation="chunked_linear",
+        training_view=view,
+        logits_chunk_size=3,
+    )
+    runtime = TorchRuntime(device="cpu", precision="fp32")
+    batch = {"input_ids": torch.randint(0, 11, (2, 5))}
+
+    task.training_step(compiled_model, batch, runtime)
+    task.training_step(compiled_model, batch, runtime)
+
+    assert len(compile_calls) == 1
+    assert model.full_forward_calls == 0
