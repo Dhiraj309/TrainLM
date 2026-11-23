@@ -1,5 +1,12 @@
 # TrainLM implementation context
 
+**Split MFU benchmark into per-model cells (2026-11-23):** split
+`notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb` on branch
+`refactor/43-split-mfu-notebook-cells` into 7 code cells (setup, config,
+shared helpers, `SmolLM2-135M`, `SmolLM2-360M`, `Qwen2.5-0.5B`, and
+summary/download) and updated `tests/contracts/test_v5e1_mfu_benchmark_notebook.py`.
+Contract tests pass on CPU; Colab v5e-1 MFU rerun remains pending.
+
 **Tier 4 — HF-simple auto-UX for chunked linear loss (2026-11-23):**
 on branch `feat/42-tier4-hf-simple-auto-ux` (branched from merged `main`
 `30f2e57`): (1) added `_auto_training_view(model)` in `src/trainlm/api.py`

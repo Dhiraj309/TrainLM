@@ -1,5 +1,12 @@
 # TrainLM Roadmap
 
+**Split MFU benchmark into per-model cells (2026-11-23):** updated
+[`notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb`](../notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb)
+on branch `refactor/43-split-mfu-notebook-cells` so setup, config, helpers,
+`SmolLM2-135M`, `SmolLM2-360M`, `Qwen2.5-0.5B`, and summary/download each live
+in separate runnable cells (7 code cells total). Contract tests pass on CPU;
+Colab v5e-1 MFU rerun remains pending.
+
 **Tier 4 — HF-simple auto-UX for chunked linear loss (2026-11-23):**
 implemented on branch `feat/42-tier4-hf-simple-auto-ux` after PR #162 merged
 (`30f2e57`). `TrainLMTrainer` now auto-resolves `LinearCausalLMTrainingView`
