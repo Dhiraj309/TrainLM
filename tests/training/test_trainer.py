@@ -679,12 +679,18 @@ def test_trainer_uses_compile_training_step_for_single_microbatch_causal_lm():
             super().__init__(device="cpu", precision="fp32")
             self.compile_step_calls = 0
             self.compiled_invocations = 0
+            self.events = []
+
+        def prepare_batch(self, batch):
+            self.events.append("prepare_batch")
+            return batch
 
         def compile_training_step(self, step_fn):
             self.compile_step_calls += 1
 
             def wrapped(task_batch, counts):
                 self.compiled_invocations += 1
+                self.events.append("compiled_step")
                 return step_fn(task_batch, counts)
 
             return wrapped
@@ -713,4 +719,5 @@ def test_trainer_uses_compile_training_step_for_single_microbatch_causal_lm():
 
     assert runtime.compile_step_calls == 1
     assert runtime.compiled_invocations == 2
+    assert runtime.events[:2] == ["prepare_batch", "compiled_step"]
     assert trainer.state.step == 2
