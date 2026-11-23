@@ -13,6 +13,68 @@ _TPU_PEAK_FLOPS_PER_DEVICE = {
     ("TPU v5e", "bf16"): 197_000_000_000_000.0,
 }
 
+_CUDA_PEAK_FLOPS_RULES: tuple[tuple[str, tuple[str, ...], float, str], ...] = (
+    (
+        "H100 PCIE",
+        ("bf16", "fp16"),
+        756_000_000_000_000.0,
+        "https://resources.nvidia.com/en-us-tensor-core",
+    ),
+    (
+        "H100",
+        ("bf16", "fp16"),
+        989_000_000_000_000.0,
+        "https://resources.nvidia.com/en-us-tensor-core",
+    ),
+    (
+        "A100",
+        ("bf16", "fp16"),
+        312_000_000_000_000.0,
+        "https://www.nvidia.com/en-us/data-center/a100/",
+    ),
+    (
+        "L40S",
+        ("bf16", "fp16"),
+        362_000_000_000_000.0,
+        "https://www.nvidia.com/en-us/data-center/l40s/",
+    ),
+    (
+        "L4",
+        ("bf16", "fp16"),
+        121_000_000_000_000.0,
+        "https://www.nvidia.com/en-us/data-center/l4/",
+    ),
+    (
+        "T4",
+        ("fp16",),
+        65_000_000_000_000.0,
+        "https://www.nvidia.com/en-us/data-center/tesla-t4/",
+    ),
+    (
+        "V100",
+        ("fp16",),
+        125_000_000_000_000.0,
+        "https://www.nvidia.com/en-us/data-center/v100/",
+    ),
+)
+
+
+def _resolve_hardware_peak(
+    *,
+    device_type: Any,
+    device_name: Any,
+    precision: Any,
+) -> tuple[float | None, str | None]:
+    tpu_peak = _TPU_PEAK_FLOPS_PER_DEVICE.get((device_name, precision))
+    if tpu_peak is not None:
+        return tpu_peak, "https://docs.cloud.google.com/tpu/docs/v5e"
+    if device_type == "cuda" and isinstance(device_name, str):
+        normalized = device_name.upper()
+        for token, supported_precisions, peak, source in _CUDA_PEAK_FLOPS_RULES:
+            if token in normalized and precision in supported_precisions:
+                return peak, source
+    return None, None
+
 
 def build_performance_summary(
     *,
@@ -84,7 +146,11 @@ def build_performance_summary(
     if world_size != 1:
         result["mfu_unavailable_reason"] = "MFU currently requires a single-device measured window."
         return result
-    peak = _TPU_PEAK_FLOPS_PER_DEVICE.get((device_name, precision))
+    peak, peak_source = _resolve_hardware_peak(
+        device_type=device_type,
+        device_name=device_name,
+        precision=precision,
+    )
     if peak is None:
         result["mfu_unavailable_reason"] = (
             "No documented peak is registered for this exact accelerator and precision."
@@ -136,7 +202,7 @@ def build_performance_summary(
         ),
     })
     hardware["peak_flops_per_device"] = peak
-    hardware["peak_source"] = "https://docs.cloud.google.com/tpu/docs/v5e"
+    hardware["peak_source"] = peak_source
     return result
 
 

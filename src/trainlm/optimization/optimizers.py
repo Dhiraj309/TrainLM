@@ -73,6 +73,12 @@ class AdamWStateDtype(torch.optim.AdamW):
                         state[key] = value.to(dtype=gradient.dtype)
 
     def step(self, closure=None):
+        if (
+            self.defaults.get("fused", False)
+            and self.state_policy.mu_dtype == torch.float32
+            and self.state_policy.nu_dtype == torch.float32
+        ):
+            return super().step(closure)
         self._cast_moment_state()
         self._prepare_step_dtypes()
         result = super().step(closure)
