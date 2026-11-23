@@ -1,5 +1,17 @@
 # TrainLM Roadmap
 
+**Tier 4 — HF-simple auto-UX for chunked linear loss (2026-11-23):**
+implemented on branch `feat/42-tier4-hf-simple-auto-ux` after PR #162 merged
+(`30f2e57`). `TrainLMTrainer` now auto-resolves `LinearCausalLMTrainingView`
+for standard HF `PreTrainedModel` causal LMs via `_auto_training_view(model)`
+(`model.base_model` + `ForwardBatchDispatcher`) whenever
+`loss_implementation="chunked_linear"` is selected without a manual
+`training_view_factory`. Simplified
+[`notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb`](../notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb)
+to drop manual `LinearCausalLMTrainingView`/`inspect_dense_causal_lm`
+boilerplate, updated contract tests, and added CPU lifecycle tests. Hosted CI
+and Colab v5e-1 MFU rerun remain pending.
+
 **Tier 3 — Native BF16 parameters, BF16 first-moment policy, and MXU precision controls (2026-11-23):**
 implemented on branch `perf/41-tier3-torchtpu-memory-precision-and-remat` after
 PR #161 merged (`f597e35`). `TorchTPURuntime.prepare_model` now places models in
