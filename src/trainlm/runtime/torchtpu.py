@@ -139,7 +139,7 @@ class TorchTPURuntime(TorchRuntime):
         self._previous_eager_mode = None
         self._previous_matmul_precision = None
         self._previous_excess_precision = None
-        if self._precision == "bf16":
+        if getattr(self, "_precision", "fp32") == "bf16":
             getter_p = getattr(torch, "get_float32_matmul_precision", None)
             setter_p = getattr(torch, "set_float32_matmul_precision", None)
             if callable(setter_p):
@@ -150,13 +150,14 @@ class TorchTPURuntime(TorchRuntime):
                         self._previous_matmul_precision = None
                 setter_p("medium")
         tpu_mod = getattr(torch, "tpu", None)
-        if self._allow_excess_precision is not None and hasattr(
+        allow_excess = getattr(self, "_allow_excess_precision", None)
+        if allow_excess is not None and hasattr(
             tpu_mod, "allow_excess_precision"
         ):
             self._previous_excess_precision = getattr(
                 tpu_mod, "allow_excess_precision"
             )
-            setattr(tpu_mod, "allow_excess_precision", self._allow_excess_precision)
+            setattr(tpu_mod, "allow_excess_precision", allow_excess)
         if self._compile_enabled:
             return
         eager_enum = getattr(tpu_mod, "EagerMode", None)
