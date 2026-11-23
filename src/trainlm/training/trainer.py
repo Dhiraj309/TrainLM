@@ -663,6 +663,7 @@ class Trainer:
                         raise RuntimeError("Global token budget was not initialized.")
                     self._global_tokens_seen += global_microbatch_tokens
                 step_fn = self._resolve_single_step_fn()
+                task_batch = self.runtime.prepare_batch(task_batch)
                 loss_numerator, grad_norm = step_fn(task_batch, counts)
                 observe_accumulation = getattr(
                     self.runtime,
