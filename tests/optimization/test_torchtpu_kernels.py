@@ -84,15 +84,8 @@ def test_apply_torchtpu_kernel_plan_packs_swiglu_preserves_parity_and_rolls_back
 
     ref_logits = model(input_ids=input_ids).logits.detach().clone()
 
-    class _Registry:
-        def __init__(self):
-            self.items = {}
+    from transformers import AttentionInterface, AttentionMaskInterface
 
-        def register(self, name, fn):
-            self.items[name] = fn
-
-    attn_reg = _Registry()
-    mask_reg = _Registry()
     splash_runtime = TorchTPUSplashAttentionRuntime(
         torch_tpu_version="0.2.0",
         tested_torch_tpu_versions=("0.2.0",),
@@ -105,18 +98,16 @@ def test_apply_torchtpu_kernel_plan_packs_swiglu_preserves_parity_and_rolls_back
         model,
         splash_runtime=splash_runtime,
         pack_mlp=True,
-        attention_interface=attn_reg,
-        mask_interface=mask_reg,
     )
 
     assert plan_result.attention_installation is not None
-    assert "trainlm.torchtpu_splash" in attn_reg.items
-    assert "trainlm.torchtpu_splash" in mask_reg.items
+    assert "trainlm.torchtpu_splash" in AttentionInterface
+    assert "trainlm.torchtpu_splash" in AttentionMaskInterface
     assert len(plan_result.packed_mlp_paths) == 2
     assert isinstance(model.model.layers[0].mlp, PackedGatedMLPBlock)
 
     # Restore attention implementation to eager to verify packed-MLP parity on CPU.
-    model.config._attn_implementation = previous_impl
+    model.set_attn_implementation(previous_impl or "eager")
     packed_out = model(input_ids=input_ids).logits
     torch.testing.assert_close(packed_out, ref_logits)
     packed_out.sum().backward()
