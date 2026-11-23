@@ -983,6 +983,28 @@ def _default_collator(features: Sequence[Any]) -> dict[str, torch.Tensor]:
     return batch
 
 
+def _auto_training_view(model: nn.Module):
+    base_model = getattr(model, "base_model", None)
+    if not isinstance(base_model, nn.Module) or base_model is model:
+        return None
+    from trainlm.model.dispatch import ForwardBatchDispatcher
+    from trainlm.optimization import inspect_dense_causal_lm
+    from trainlm.tasks import LinearCausalLMTrainingView, extract_hidden_state
+
+    capabilities = inspect_dense_causal_lm(model)
+    if capabilities.lm_head.status not in {"known", "inferred"} or capabilities.lm_head.kind != "linear":
+        return None
+    dispatcher = ForwardBatchDispatcher.from_model(base_model)
+    return LinearCausalLMTrainingView(
+        model=model,
+        capabilities=capabilities,
+        hidden_state_provider=lambda cur, batch: extract_hidden_state(
+            cur.base_model(**dispatcher.dispatch(batch).inputs)
+        ),
+        provider_id="hf.base_model_hidden",
+    )
+
+
 class TrainLMTrainer:
     """HF-like facade over TrainLM's backend-neutral trainer engine."""
 
@@ -1338,14 +1360,6 @@ class TrainLMTrainer:
             self.scheduler = None
             self.engine = None
             return
-        if (
-            self.args.loss_implementation == "chunked_linear"
-            and training_view_factory is None
-        ):
-            raise ValueError(
-                "chunked_linear requires training_view_factory so hidden-state "
-                "extraction is explicit for this model."
-            )
         if self.args.torch_compile and runtime is not None:
             raise ValueError(
                 "torch_compile cannot be combined with an injected runtime; "
@@ -1354,17 +1368,20 @@ class TrainLMTrainer:
         self.model = self._resolve_model(model)
         self.training_view = None
         if self.args.loss_implementation == "chunked_linear":
-            if training_view_factory is None:
-                raise ValueError(
-                    "chunked_linear requires training_view_factory so hidden-state "
-                    "extraction is explicit for this model."
-                )
-            self.training_view = training_view_factory(self.model)
-            from trainlm.tasks import LinearCausalLMTrainingView
-            if not isinstance(self.training_view, LinearCausalLMTrainingView):
-                raise TypeError("training_view_factory must return LinearCausalLMTrainingView.")
-            if self.training_view.model is not self.model:
-                raise ValueError("The training view must reference the trainer's model.")
+            if training_view_factory is not None:
+                self.training_view = training_view_factory(self.model)
+                from trainlm.tasks import LinearCausalLMTrainingView
+                if not isinstance(self.training_view, LinearCausalLMTrainingView):
+                    raise TypeError("training_view_factory must return LinearCausalLMTrainingView.")
+                if self.training_view.model is not self.model:
+                    raise ValueError("The training view must reference the trainer's model.")
+            else:
+                self.training_view = _auto_training_view(self.model)
+                if self.training_view is None:
+                    raise ValueError(
+                        "chunked_linear requires training_view_factory so hidden-state "
+                        "extraction is explicit for this model."
+                    )
         elif training_view_factory is not None:
             raise ValueError("training_view_factory applies only to chunked_linear loss.")
         if self.args.gradient_checkpointing:
