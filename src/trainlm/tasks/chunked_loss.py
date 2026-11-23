@@ -21,13 +21,20 @@ def _chunk_terms(
     ignore_index: int,
     include_z_loss: bool,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    # Keep the TPU projection in bf16. Casting the tied vocabulary matrix to
-    # fp32 duplicates roughly 128 MiB for the 32k x 1024 reference head.
-    if hidden.device.type == "xla":
-        if hidden.dtype != weight.dtype:
-            hidden = hidden.to(dtype=weight.dtype)
-        if bias is not None and bias.dtype != weight.dtype:
-            bias = bias.to(dtype=weight.dtype)
+    # Keep TPU projections in bf16/fp16 when active. Casting the tied
+    # vocabulary matrix to fp32 duplicates ~128-544 MiB and leaves the BF16 MXU.
+    if hidden.device.type in {"xla", "tpu"}:
+        compute_dtype = (
+            hidden.dtype
+            if hidden.dtype in {torch.bfloat16, torch.float16}
+            else weight.dtype
+        )
+        if hidden.dtype != compute_dtype:
+            hidden = hidden.to(dtype=compute_dtype)
+        if weight.dtype != compute_dtype:
+            weight = weight.to(dtype=compute_dtype)
+        if bias is not None and bias.dtype != compute_dtype:
+            bias = bias.to(dtype=compute_dtype)
         logits = F.linear(hidden, weight, bias)
     else:
         logits = F.linear(
