@@ -84,8 +84,6 @@ def test_apply_torchtpu_kernel_plan_packs_swiglu_preserves_parity_and_rolls_back
 
     ref_logits = model(input_ids=input_ids).logits.detach().clone()
 
-    from transformers import AttentionInterface, AttentionMaskInterface
-
     splash_runtime = TorchTPUSplashAttentionRuntime(
         torch_tpu_version="0.2.0",
         tested_torch_tpu_versions=("0.2.0",),
@@ -101,8 +99,7 @@ def test_apply_torchtpu_kernel_plan_packs_swiglu_preserves_parity_and_rolls_back
     )
 
     assert plan_result.attention_installation is not None
-    assert "trainlm.torchtpu_splash" in AttentionInterface
-    assert "trainlm.torchtpu_splash" in AttentionMaskInterface
+    assert model.config._attn_implementation == "trainlm.torchtpu_splash"
     assert len(plan_result.packed_mlp_paths) == 2
     assert isinstance(model.model.layers[0].mlp, PackedGatedMLPBlock)
 
