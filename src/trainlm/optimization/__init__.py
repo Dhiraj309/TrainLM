@@ -142,6 +142,16 @@ from .rope_gated_family_adapters import (
     ROPE_GATED_DENSE_MAPPINGS,
     register_rope_gated_dense_adapters,
 )
+from .torchtpu_attention import (
+    TorchTPUSplashAttentionRuntime,
+    probe_torchtpu_splash_kernel,
+    torchtpu_splash_attention_provider,
+)
+from .torchtpu_kernels import (
+    PackedGatedMLPBlock,
+    TorchTPUKernelPlanResult,
+    apply_torchtpu_kernel_plan,
+)
 
 __all__ = [
     "CapabilityFact",
@@ -253,4 +263,10 @@ __all__ = [
     "select_batch_prefetch_geometry",
     "causal_loss_provider_specs",
     "causal_loss_request",
+    "PackedGatedMLPBlock",
+    "TorchTPUKernelPlanResult",
+    "TorchTPUSplashAttentionRuntime",
+    "apply_torchtpu_kernel_plan",
+    "probe_torchtpu_splash_kernel",
+    "torchtpu_splash_attention_provider",
 ]
