@@ -1569,16 +1569,40 @@ class TrainLMTrainer:
             ),
         )
 
-    def _make_scheduler(self) -> LRScheduler:
-        horizon = self._effective_max_steps or 1
-        return create_scheduler(
-            self.optimizer,
-            SchedulerConfig(
-                name=self.args.lr_scheduler_type,
-                horizon_steps=horizon if self.args.lr_scheduler_type != "constant" else None,
-                warmup_steps=self.args.warmup_steps,
-            ),
+    def _scheduler_config(self) -> SchedulerConfig:
+        horizon_steps = (
+            (self._effective_max_steps or 1)
+            if self.args.lr_scheduler_type != "constant"
+            else None
         )
+        horizon_tokens = None
+        warmup_fraction = 0.0
+        stable_fraction = 1.0
+        if self.args.lr_scheduler_type == "wsd":
+            if self.args.max_tokens is not None:
+                horizon_tokens = self.args.max_tokens
+            else:
+                steps = horizon_steps or 1
+                tokens_per_step = (
+                    self.args.per_device_train_batch_size
+                    * self.args.gradient_accumulation_steps
+                    * max(1, self.args.sequence_length)
+                )
+                horizon_tokens = max(1, steps * tokens_per_step)
+            if self.args.warmup_steps > 0 and horizon_steps:
+                warmup_fraction = min(1.0, self.args.warmup_steps / horizon_steps)
+                stable_fraction = max(0.0, 1.0 - warmup_fraction)
+        return SchedulerConfig(
+            name=self.args.lr_scheduler_type,
+            horizon_steps=horizon_steps,
+            warmup_steps=self.args.warmup_steps,
+            horizon_tokens=horizon_tokens,
+            warmup_fraction=warmup_fraction,
+            stable_fraction=stable_fraction,
+        )
+
+    def _make_scheduler(self) -> LRScheduler:
+        return create_scheduler(self.optimizer, self._scheduler_config())
 
     def _make_config(self) -> TrainConfig:
         runtime_name = self.runtime.device.type
@@ -1607,12 +1631,7 @@ class TrainLMTrainer:
                 weight_decay=self.args.weight_decay,
                 fused=False,
             ),
-            scheduler=SchedulerConfig(
-                name=self.args.lr_scheduler_type,
-                horizon_steps=(self._effective_max_steps or 1)
-                if self.args.lr_scheduler_type != "constant" else None,
-                warmup_steps=self.args.warmup_steps,
-            ),
+            scheduler=self._scheduler_config(),
             trainer=TrainerConfig(
                 max_steps=self._effective_max_steps,
                 max_tokens=self.args.max_tokens,
