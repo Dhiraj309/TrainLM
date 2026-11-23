@@ -1,13 +1,33 @@
 # TrainLM implementation context
 
+**TorchTPU compile, BF16 chunked-loss, and WSD fixes (2026-11-22):** owner-run
+Colab `TPU v5e-1` output on `TrainLM_v5e1_MFU_Benchmark.ipynb` (`65de4f1`,
+`torch==2.14.1+cpu`, `torch-tpu==0.2.0`, `libtpu==0.0.50`, `transformers==5.22.1`)
+recorded `wait=0.1%`, `SmolLM2-135M` eager `13.68%` non-emb MFU (`145.9ms` CPU
+profiler op dispatch), `SmolLM2-135M` compiled failure (`input_ids` dropped by
+`ForwardBatchDispatcher` on `OptimizedModule`), `SmolLM2-360M` `15.04%` MFU,
+and `Qwen2.5-0.5B` `9.26%` MFU (both bypassing `torch.compile` via
+`LinearCausalLMTrainingView` and hitting FP32 `F.linear` in `chunked_loss.py`).
+PR A (`fix/38-torchtpu-compile-and-bf16-chunked-loss`) fixes: (1) `_unwrap_model`
+in `src/trainlm/model/dispatch.py` unwrapping `_orig_mod` and DDP `.module`;
+(2) `CausalLMTask._resolve_compiled_hidden_fn` + `LinearCausalLMTrainingView`
+`hidden_state_fn` so `chunked_linear` compiles the backbone when `model` is
+compiled; (3) `chunked_loss._chunk_terms` keeping `F.linear` in `bf16`/`fp16`
+on `device.type in {"xla", "tpu"}`; and (4) `TrainLMTrainer._scheduler_config`
+populating `horizon_tokens` and fractions for `wsd`. Added CPU tests in
+`tests/model/test_forward_dispatch.py`, `tests/tasks/test_chunked_loss.py`,
+`tests/tasks/test_training_view.py`, and `tests/training/test_scheduler.py`.
+Local VM lacks `torch`/`transformers`, so hosted CI and Colab v5e-1 rerun
+remain pending.
+
 **Dedicated v5e-1 LLM MFU benchmark notebook (2026-11-22):** added
 `notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb` (registered in
 `notebooks/README.md` and covered by
 `tests/contracts/test_v5e1_mfu_benchmark_notebook.py`) for focused LLM training
 and MFU bottleneck measurement across `SmolLM2-135M` (eager + `torch_compile`),
 `SmolLM2-360M`, and `Qwen2.5-0.5B` (`chunked_linear`) without running the full
-T1/HF-matrix validation suite first. CPU contract tests pass; TPU execution
-remains pending.
+T1/HF-matrix validation suite first. PR #158 merged at `2aef748`; owner v5e-1
+run completed (see above).
 
 **Colab v5e-1 full validation notebook (2026-11-22):** added
 `notebooks/TrainLM_Colab_v5e1_Full_Validation.ipynb` (registered in
