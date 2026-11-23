@@ -1,5 +1,22 @@
 # TrainLM implementation context
 
+**Tier 1 — Whole-step compile, DeferAndFuse, and foreach grad scaling (2026-11-22):**
+on branch `perf/39-tier1-whole-step-compile-and-defer-fuse` (branched from
+merged `main` `9cd249f`): (1) `TorchTPURuntime.compile_model` and
+`compile_training_step` (`src/trainlm/runtime/torchtpu.py`) compile with
+`backend="tpu", dynamic=False` (falling back to 1-arg `torch.compile` for
+test doubles); (2) `TorchTPURuntime.on_train_begin`/`on_train_end` enable and
+restore `torch.tpu.EagerMode.DEFER_AND_FUSE` when `compile_enabled=False`;
+(3) `TorchRuntime.scale_gradients` (`src/trainlm/runtime/runtime.py`) uses
+`torch._foreach_mul_` for scalar gradient scaling; and (4) `Trainer._train_step`
+(`src/trainlm/training/trainer.py`) adds `_resolve_single_step_fn` to execute
+single-microbatch, single-device host-prepared steps (`zero_grad -> forward ->
+loss -> backward -> scale -> clip -> optimizer_step`) inside
+`runtime.compile_training_step` (unwrapping `_orig_mod` inside the outer
+compiled step to avoid nested Dynamo breaks). Added CPU tests in
+`tests/runtime/test_torchtpu_runtime.py` and `tests/training/test_trainer.py`.
+Hosted CI and Colab TPU v5e-1 MFU rerun remain pending.
+
 **TorchTPU compile, BF16 chunked-loss, and WSD fixes (2026-11-22):** owner-run
 Colab `TPU v5e-1` output on `TrainLM_v5e1_MFU_Benchmark.ipynb` (`65de4f1`,
 `torch==2.14.1+cpu`, `torch-tpu==0.2.0`, `libtpu==0.0.50`, `transformers==5.22.1`)

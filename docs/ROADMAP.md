@@ -1,5 +1,17 @@
 # TrainLM Roadmap
 
+**Tier 1 — Whole-step compile, DeferAndFuse, and foreach grad scaling (2026-11-22):**
+implemented on branch `perf/39-tier1-whole-step-compile-and-defer-fuse` after
+PR #159 merged (`9cd249f`). `TorchTPURuntime.compile_model` and
+`compile_training_step` now compile with `backend="tpu", dynamic=False`;
+`TorchTPURuntime.on_train_begin`/`on_train_end` enable `DeferAndFuse` eager
+mode when `compile_enabled=False`; `TorchRuntime.scale_gradients` uses
+`torch._foreach_mul_` to eliminate per-parameter Python loops; and
+`Trainer._train_step` routes single-microbatch host-prepared steps through
+`runtime.compile_training_step`. CPU unit tests were added; hosted CI and
+Colab v5e-1 MFU rerun remain pending. Tier 2 (Pallas Splash Attention, Fused
+CE, QKV/SwiGLU packing) and Tier 3/4 follow in separate branches.
+
 **TorchTPU compile, BF16 chunked-loss, and WSD fixes (2026-11-22):** following
 owner-run Colab `TPU v5e-1` MFU benchmark output (`SmolLM2-135M` eager `13.68%`
 MFU, `SmolLM2-135M` compiled failure in `ForwardBatchDispatcher`,
