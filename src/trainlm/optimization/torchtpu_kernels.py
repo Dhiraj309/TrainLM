@@ -87,8 +87,12 @@ def apply_torchtpu_kernel_plan(
 
     packed_paths: list[str] = []
     snapshots: list[tuple[str, nn.Module]] = []
-    if pack_mlp and caps.mlp.status in {"known", "inferred"} and caps.mlp.kind in {"swiglu", "geglu"}:
-        activation = caps.mlp.kind
+    if (
+        pack_mlp
+        and caps.mlp.status in {"known", "inferred"}
+        and caps.mlp.kind in {"feed_forward", "swiglu", "geglu"}
+    ):
+        activation = _resolve_gated_activation(caps, model)
         for path, module in list(model.named_modules()):
             if not path:
                 continue
@@ -155,6 +159,15 @@ def _canonical_attention_spec(
         position_encoding=pos_kind,
         mask=AttentionMaskSpec(layout="causal"),
     )
+
+
+def _resolve_gated_activation(caps: ModelCapabilities, model: nn.Module) -> str:
+    if caps.mlp.kind in {"swiglu", "geglu"}:
+        return caps.mlp.kind
+    hidden_act = getattr(getattr(model, "config", None), "hidden_act", "")
+    if isinstance(hidden_act, str) and "gelu" in hidden_act.lower():
+        return "geglu"
+    return "swiglu"
 
 
 def _set_submodule(model: nn.Module, path: str, replacement: nn.Module) -> None:
