@@ -75,14 +75,20 @@ class TorchTPURuntime(TorchRuntime):
         precision: Precision = "fp32",
         seed: int = 42,
         compile_enabled: bool = False,
+        allow_excess_precision: bool | None = None,
     ) -> None:
         if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
             raise ValueError("seed must be a non-negative integer.")
+        if allow_excess_precision is not None and not isinstance(
+            allow_excess_precision, bool
+        ):
+            raise TypeError("allow_excess_precision must be boolean or None.")
         # Explicit native_tpu selection is the opt-in allocation boundary.
         super().__init__(
             device="cpu", precision=precision, compile_enabled=compile_enabled
         )
         self._seed = seed
+        self._allow_excess_precision = allow_excess_precision
         self._native_report = discover_tpu(
             torch, verify_allocation=True, include_properties=True
         )
@@ -111,7 +117,11 @@ class TorchTPURuntime(TorchRuntime):
         return "torchtpu"
 
     def prepare_model(self, model: nn.Module) -> nn.Module:
-        return super().prepare_model(model)
+        if self._precision == "bf16":
+            model = model.to(device=self.device, dtype=torch.bfloat16)
+        else:
+            model = model.to(self.device)
+        return self.compile_model(model)
 
     def compile_model(self, model: nn.Module) -> nn.Module:
         if not self._compile_enabled:
@@ -127,9 +137,28 @@ class TorchTPURuntime(TorchRuntime):
 
     def on_train_begin(self) -> None:
         self._previous_eager_mode = None
+        self._previous_matmul_precision = None
+        self._previous_excess_precision = None
+        if self._precision == "bf16":
+            getter_p = getattr(torch, "get_float32_matmul_precision", None)
+            setter_p = getattr(torch, "set_float32_matmul_precision", None)
+            if callable(setter_p):
+                if callable(getter_p):
+                    try:
+                        self._previous_matmul_precision = getter_p()
+                    except Exception:
+                        self._previous_matmul_precision = None
+                setter_p("medium")
+        tpu_mod = getattr(torch, "tpu", None)
+        if self._allow_excess_precision is not None and hasattr(
+            tpu_mod, "allow_excess_precision"
+        ):
+            self._previous_excess_precision = getattr(
+                tpu_mod, "allow_excess_precision"
+            )
+            setattr(tpu_mod, "allow_excess_precision", self._allow_excess_precision)
         if self._compile_enabled:
             return
-        tpu_mod = getattr(torch, "tpu", None)
         eager_enum = getattr(tpu_mod, "EagerMode", None)
         setter = getattr(tpu_mod, "set_eager_mode", None)
         defer_and_fuse = getattr(eager_enum, "DEFER_AND_FUSE", None)
@@ -143,16 +172,29 @@ class TorchTPURuntime(TorchRuntime):
             setter(defer_and_fuse)
 
     def on_train_end(self) -> None:
-        prev = getattr(self, "_previous_eager_mode", None)
-        if prev is None:
-            return
         tpu_mod = getattr(torch, "tpu", None)
-        setter = getattr(tpu_mod, "set_eager_mode", None)
-        if callable(setter):
+        prev = getattr(self, "_previous_eager_mode", None)
+        if prev is not None:
+            setter = getattr(tpu_mod, "set_eager_mode", None)
+            if callable(setter):
+                try:
+                    setter(prev)
+                finally:
+                    self._previous_eager_mode = None
+        prev_excess = getattr(self, "_previous_excess_precision", None)
+        if prev_excess is not None and hasattr(tpu_mod, "allow_excess_precision"):
             try:
-                setter(prev)
+                setattr(tpu_mod, "allow_excess_precision", prev_excess)
             finally:
-                self._previous_eager_mode = None
+                self._previous_excess_precision = None
+        prev_matmul = getattr(self, "_previous_matmul_precision", None)
+        if prev_matmul is not None:
+            setter_p = getattr(torch, "set_float32_matmul_precision", None)
+            if callable(setter_p):
+                try:
+                    setter_p(prev_matmul)
+                finally:
+                    self._previous_matmul_precision = None
 
     def initialize(self) -> None:
         # PyTorch's public seed helper covers the active accelerator backend.
