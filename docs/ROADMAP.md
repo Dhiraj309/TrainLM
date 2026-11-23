@@ -1,5 +1,17 @@
 # TrainLM Roadmap
 
+**Tier 3 — Native BF16 parameters, BF16 first-moment policy, and MXU precision controls (2026-11-23):**
+implemented on branch `perf/41-tier3-torchtpu-memory-precision-and-remat` after
+PR #161 merged (`f597e35`). `TorchTPURuntime.prepare_model` now places models in
+`torch.bfloat16` when `precision == "bf16"` (eliminating per-layer FP32→BF16
+`_to_copy` casts and halving weight HBM); `on_train_begin`/`on_train_end`
+manage `float32_matmul_precision("medium")` and optional
+`allow_excess_precision`; `TrainLMTrainer._optimizer_config` selects
+`mu_dtype="bfloat16", nu_dtype="float32"` on `torchtpu + bf16`; and
+`AdamWStateDtype._cast_moment_state` skips redundant `.to()` casts when dtypes
+already match. CPU unit tests added; hosted CI and Colab v5e-1 MFU rerun remain
+pending. Tier 4 (HF-simple auto-UX) follows on the next branch after merge.
+
 **Tier 2 — Native TorchTPU Splash Attention, SwiGLU packing, and loss provider catalog (2026-11-23):**
 implemented on branch `perf/40-tier2-torchtpu-kernels-and-packing` after
 PR #160 merged (`eccef6f`). Added guarded native Splash Attention adapter

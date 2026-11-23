@@ -1,5 +1,19 @@
 # TrainLM implementation context
 
+**Tier 3 — Native BF16 parameters, BF16 first-moment policy, and MXU precision controls (2026-11-23):**
+on branch `perf/41-tier3-torchtpu-memory-precision-and-remat` (branched from
+merged `main` `f597e35`): (1) `TorchTPURuntime.prepare_model`
+(`src/trainlm/runtime/torchtpu.py`) places models directly in `torch.bfloat16`
+for `precision == "bf16"` and `on_train_begin`/`on_train_end` set/restore
+`float32_matmul_precision("medium")` and optional `allow_excess_precision`;
+(2) `TrainLMTrainer._optimizer_config` (`src/trainlm/api.py`) selects
+`mu_dtype="bfloat16", nu_dtype="float32"` on `torchtpu + bf16`; and
+(3) `AdamWStateDtype._cast_moment_state` (`src/trainlm/optimization/optimizers.py`)
+skips redundant `.to(dtype=...)` copies when moment dtypes already match. Added
+CPU tests in `tests/runtime/test_torchtpu_runtime.py` and
+`tests/optimization/test_optimizers.py`. Hosted CI and Colab TPU v5e-1
+validation remain pending.
+
 **Tier 2 — Native TorchTPU Splash Attention, SwiGLU packing, and loss provider catalog (2026-11-23):**
 on branch `perf/40-tier2-torchtpu-kernels-and-packing` (branched from merged
 `main` `eccef6f`): (1) added `TorchTPUSplashAttentionRuntime`,
