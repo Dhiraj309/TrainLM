@@ -106,7 +106,8 @@ def chunked_linear_causal_cross_entropy(
         )
     supervised = shifted_labels.ne(ignore_index)
     denominator: torch.Tensor = supervised.sum()
-    if loss_mask is not None:
+    is_compiling = getattr(getattr(torch, "compiler", None), "is_compiling", None)
+    if loss_mask is not None and not (callable(is_compiling) and is_compiling()):
         if not bool(denominator.item()):
             raise ValueError("Causal loss contains no supervised target tokens.")
 
