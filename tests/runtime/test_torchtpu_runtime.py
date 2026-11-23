@@ -193,3 +193,52 @@ def test_native_runtime_refuses_checkpoint_without_rng_capture_api(monkeypatch):
 
     with pytest.raises(RuntimeError, match="accelerator RNG capture"):
         runtime.state_dict()
+
+
+def test_native_runtime_compiles_training_step_with_tpu_backend_when_enabled(monkeypatch):
+    compile_calls = []
+    monkeypatch.setattr(
+        base_runtime,
+        "torch",
+        SimpleNamespace(
+            compile=lambda fn, **kwargs: compile_calls.append((fn, kwargs)) or (lambda *a, **k: fn(*a, **k))
+        ),
+    )
+    step = lambda batch, counts: (batch, counts)
+    disabled = object.__new__(native_runtime.TorchTPURuntime)
+    disabled._compile_enabled = False
+    enabled = object.__new__(native_runtime.TorchTPURuntime)
+    enabled._compile_enabled = True
+
+    assert disabled.compile_training_step(step) is step
+    compiled = enabled.compile_training_step(step)
+    assert compiled is not step
+    assert compile_calls == [(step, {"backend": "tpu", "dynamic": False})]
+    assert compiled("b", 4) == ("b", 4)
+
+
+def test_native_runtime_toggles_defer_and_fuse_only_when_not_compiled(monkeypatch):
+    modes = ["STRICT"]
+
+    def set_mode(mode):
+        modes.append(mode)
+
+    tpu_ns = SimpleNamespace(
+        EagerMode=SimpleNamespace(DEFER_AND_FUSE="DEFER_AND_FUSE"),
+        get_eager_mode=lambda: modes[-1],
+        set_eager_mode=set_mode,
+    )
+    monkeypatch.setattr(native_runtime, "torch", SimpleNamespace(tpu=tpu_ns))
+
+    compiled = object.__new__(native_runtime.TorchTPURuntime)
+    compiled._compile_enabled = True
+    compiled.on_train_begin()
+    compiled.on_train_end()
+    assert modes == ["STRICT"]
+
+    eager = object.__new__(native_runtime.TorchTPURuntime)
+    eager._compile_enabled = False
+    eager.on_train_begin()
+    assert modes == ["STRICT", "DEFER_AND_FUSE"]
+    eager.on_train_end()
+    assert modes == ["STRICT", "DEFER_AND_FUSE", "STRICT"]

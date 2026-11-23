@@ -668,3 +668,49 @@ def test_trainer_uses_backend_lifecycle_hooks():
         "train_end",
         "finalize",
     ]
+
+
+def test_trainer_uses_compile_training_step_for_single_microbatch_causal_lm():
+    from transformers import GPT2Config, GPT2LMHeadModel
+    from trainlm.tasks import CausalLMTask
+
+    class CompileStepRuntime(Runtime):
+        def __init__(self):
+            super().__init__(device="cpu", precision="fp32")
+            self.compile_step_calls = 0
+            self.compiled_invocations = 0
+
+        def compile_training_step(self, step_fn):
+            self.compile_step_calls += 1
+
+            def wrapped(task_batch, counts):
+                self.compiled_invocations += 1
+                return step_fn(task_batch, counts)
+
+            return wrapped
+
+    model = GPT2LMHeadModel(
+        GPT2Config(vocab_size=32, n_positions=16, n_embd=8, n_layer=1, n_head=2)
+    )
+    optimizer = SGD(model.parameters(), lr=0.1)
+    scheduler = LambdaLR(optimizer, lr_lambda=lambda _: 1.0)
+    rows = [{"input_ids": torch.arange(8, dtype=torch.long)} for _ in range(4)]
+    loader = DataLoader(rows, batch_size=2)
+    config = DummyConfig()
+    config.trainer.max_steps = 2
+    runtime = CompileStepRuntime()
+
+    trainer = Trainer(
+        config=config,
+        model=model,
+        runtime=runtime,
+        optimizer=optimizer,
+        scheduler=scheduler,
+        task=CausalLMTask(),
+        train_dataloader=loader,
+    )
+    trainer.train()
+
+    assert runtime.compile_step_calls == 1
+    assert runtime.compiled_invocations == 2
+    assert trainer.state.step == 2
