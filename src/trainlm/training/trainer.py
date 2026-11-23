@@ -839,7 +839,7 @@ class Trainer:
     def _can_prepare_on_host(raw_batch: Any) -> bool:
         from collections.abc import Mapping
 
-        if not isinstance(raw_batch, Mapping) or "input_ids" not in raw_batch:
+        if not isinstance(raw_batch, Mapping):
             return False
         return all(
             not isinstance(value, torch.Tensor) or value.device.type == "cpu"
