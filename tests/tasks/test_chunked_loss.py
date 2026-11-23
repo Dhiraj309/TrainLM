@@ -140,7 +140,7 @@ def test_chunked_loss_keeps_bf16_projection_on_tpu_device_type(monkeypatch):
 
     def recording_linear(input, weight, bias=None):
         seen_dtypes.append((input.dtype, weight.dtype, None if bias is None else bias.dtype))
-        return original(input, weight, bias)
+        return original(getattr(input, "_t", input), weight, bias)
 
     monkeypatch.setattr(F, "linear", recording_linear)
 
