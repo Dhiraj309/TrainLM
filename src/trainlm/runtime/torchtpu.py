@@ -113,6 +113,47 @@ class TorchTPURuntime(TorchRuntime):
     def prepare_model(self, model: nn.Module) -> nn.Module:
         return super().prepare_model(model)
 
+    def compile_model(self, model: nn.Module) -> nn.Module:
+        if not self._compile_enabled:
+            return model
+        return _compile_with_tpu_options(model)
+
+    def compile_training_step(self, step_fn):
+        if not callable(step_fn):
+            raise TypeError("step_fn must be callable.")
+        if not self._compile_enabled:
+            return step_fn
+        return _compile_with_tpu_options(step_fn)
+
+    def on_train_begin(self) -> None:
+        self._previous_eager_mode = None
+        if self._compile_enabled:
+            return
+        tpu_mod = getattr(torch, "tpu", None)
+        eager_enum = getattr(tpu_mod, "EagerMode", None)
+        setter = getattr(tpu_mod, "set_eager_mode", None)
+        defer_and_fuse = getattr(eager_enum, "DEFER_AND_FUSE", None)
+        if callable(setter) and defer_and_fuse is not None:
+            getter = getattr(tpu_mod, "get_eager_mode", None)
+            if callable(getter):
+                try:
+                    self._previous_eager_mode = getter()
+                except Exception:
+                    self._previous_eager_mode = None
+            setter(defer_and_fuse)
+
+    def on_train_end(self) -> None:
+        prev = getattr(self, "_previous_eager_mode", None)
+        if prev is None:
+            return
+        tpu_mod = getattr(torch, "tpu", None)
+        setter = getattr(tpu_mod, "set_eager_mode", None)
+        if callable(setter):
+            try:
+                setter(prev)
+            finally:
+                self._previous_eager_mode = None
+
     def initialize(self) -> None:
         # PyTorch's public seed helper covers the active accelerator backend.
         torch.manual_seed(self._seed)
@@ -198,6 +239,16 @@ class TorchTPURuntime(TorchRuntime):
             local_rank=base.local_rank,
             values=values,
         )
+
+
+def _compile_with_tpu_options(target: Any) -> Any:
+    from . import runtime as base_runtime
+
+    compile_fn = base_runtime.torch.compile
+    try:
+        return compile_fn(target, backend="tpu", dynamic=False)
+    except TypeError:
+        return compile_fn(target)
 
 
 __all__ = ["TorchTPURuntime"]
