@@ -10,7 +10,7 @@ def test_v5e1_mfu_benchmark_notebook_is_runnable_and_focused():
     notebook = json.loads(NOTEBOOK.read_text(encoding="utf-8"))
     assert notebook["nbformat"] == 4
     code_cells = [cell for cell in notebook["cells"] if cell["cell_type"] == "code"]
-    assert len(code_cells) == 4
+    assert len(code_cells) == 7
     assert all(cell.get("execution_count") is None for cell in code_cells)
     assert all(not cell.get("outputs") for cell in code_cells)
 
