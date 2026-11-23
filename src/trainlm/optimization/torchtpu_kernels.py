@@ -147,12 +147,13 @@ def _canonical_attention_spec(
     layout = "mha" if kv_heads == query_heads else ("mqa" if kv_heads == 1 else "gqa")
     pos_kind = caps.position.kind if caps.position.kind in {"learned", "rope", "alibi", "none"} else "rope"
     return CanonicalAttentionSpec(
+        schema_version=1,
         layout=layout,
         query_heads=query_heads,
         key_value_heads=kv_heads,
         head_dim=head_dim,
-        mask=AttentionMaskSpec(layout="causal"),
         position_encoding=pos_kind,
+        mask=AttentionMaskSpec(layout="causal"),
     )
 
 

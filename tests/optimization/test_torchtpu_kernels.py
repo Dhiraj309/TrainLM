@@ -34,12 +34,13 @@ def test_torchtpu_splash_provider_guards_and_dispatch():
         block_k=64,
     )
     spec = CanonicalAttentionSpec(
+        schema_version=1,
         layout="gqa",
         query_heads=4,
         key_value_heads=2,
         head_dim=8,
-        mask=AttentionMaskSpec(layout="causal"),
         position_encoding="rope",
+        mask=AttentionMaskSpec(layout="causal"),
     )
     provider = torchtpu_splash_attention_provider(runtime, spec)
 
