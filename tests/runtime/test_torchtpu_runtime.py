@@ -242,3 +242,42 @@ def test_native_runtime_toggles_defer_and_fuse_only_when_not_compiled(monkeypatc
     assert modes == ["STRICT", "DEFER_AND_FUSE"]
     eager.on_train_end()
     assert modes == ["STRICT", "DEFER_AND_FUSE", "STRICT"]
+
+
+def test_native_runtime_prepares_bf16_model_and_restores_mxu_precision(monkeypatch):
+    import torch
+
+    calls = []
+
+    class _Model:
+        def to(self, *args, **kwargs):
+            calls.append((args, kwargs))
+            return self
+
+    runtime = object.__new__(native_runtime.TorchTPURuntime)
+    runtime._device = "tpu"
+    runtime._precision = "bf16"
+    runtime._compile_enabled = False
+    runtime._allow_excess_precision = True
+
+    runtime.prepare_model(_Model())
+    assert calls == [((), {"device": "tpu", "dtype": torch.bfloat16})]
+
+    matmul_precisions = ["high"]
+    tpu_ns = SimpleNamespace(allow_excess_precision=False)
+    monkeypatch.setattr(
+        native_runtime,
+        "torch",
+        SimpleNamespace(
+            get_float32_matmul_precision=lambda: matmul_precisions[-1],
+            set_float32_matmul_precision=lambda p: matmul_precisions.append(p),
+            tpu=tpu_ns,
+        ),
+    )
+
+    runtime.on_train_begin()
+    assert matmul_precisions[-1] == "medium"
+    assert tpu_ns.allow_excess_precision is True
+    runtime.on_train_end()
+    assert matmul_precisions[-1] == "high"
+    assert tpu_ns.allow_excess_precision is False
