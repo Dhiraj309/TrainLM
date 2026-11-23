@@ -162,3 +162,33 @@ def test_wsd_resume_produces_identical_future_schedule():
         resumed.step_tokens(tokens)
         assert resumed.get_last_lr() == pytest.approx(uninterrupted.get_last_lr())
         assert resumed.state_dict() == uninterrupted.state_dict()
+
+
+def test_trainlm_trainer_builds_wsd_scheduler_with_derived_horizon_tokens(tmp_path):
+    from transformers import GPT2Config, GPT2LMHeadModel
+    from trainlm import TrainLMTrainer, TrainLMTrainingArguments
+
+    model = GPT2LMHeadModel(
+        GPT2Config(vocab_size=32, n_positions=16, n_embd=8, n_layer=1, n_head=2)
+    )
+    dataset = [{"input_ids": torch.arange(8, dtype=torch.long)} for _ in range(4)]
+
+    trainer = TrainLMTrainer(
+        model=model,
+        train_dataset=dataset,
+        args=TrainLMTrainingArguments(
+            output_dir=str(tmp_path),
+            accelerator="cpu",
+            per_device_train_batch_size=2,
+            sequence_length=8,
+            max_steps=5,
+            warmup_steps=1,
+            lr_scheduler_type="wsd",
+            report_to="none",
+            save_strategy="no",
+        ),
+    )
+
+    assert isinstance(trainer.scheduler, TokenWSD)
+    assert trainer.scheduler.horizon_tokens == 5 * 2 * 8
+    assert trainer.scheduler.warmup_tokens == int((5 * 2 * 8) * (1 / 5))
