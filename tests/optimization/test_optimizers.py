@@ -74,3 +74,22 @@ def test_optimizer_factory_rejects_parameter_dtype_mismatch():
                 parameter_dtype="bfloat16",
             ),
         )
+
+
+def test_adamw_state_dtype_skips_redundant_cast_when_matching():
+    parameter = nn.Parameter(torch.ones(4, dtype=torch.bfloat16))
+    optimizer = create_optimizer(
+        [parameter],
+        OptimizerConfig(mu_dtype="bfloat16", nu_dtype="float32", fused=False),
+    )
+    parameter.grad = torch.ones(4, dtype=torch.bfloat16)
+    optimizer.step()
+
+    exp_avg_before = optimizer.state[parameter]["exp_avg"]
+    exp_avg_sq_before = optimizer.state[parameter]["exp_avg_sq"]
+    assert exp_avg_before.dtype == torch.bfloat16
+    assert exp_avg_sq_before.dtype == torch.float32
+
+    optimizer._cast_moment_state()
+    assert optimizer.state[parameter]["exp_avg"] is exp_avg_before
+    assert optimizer.state[parameter]["exp_avg_sq"] is exp_avg_sq_before
