@@ -98,10 +98,18 @@ class LinearCausalLMTrainingView:
             raise TypeError("Output embedding bias must match the vocabulary size.")
         return weight, bias
 
-    def hidden_states(self, model_inputs: Mapping[str, Any]) -> torch.Tensor:
+    def hidden_states(
+        self,
+        model_inputs: Mapping[str, Any],
+        *,
+        hidden_state_fn: HiddenStateProvider | None = None,
+    ) -> torch.Tensor:
         if not isinstance(model_inputs, Mapping):
             raise TypeError("model_inputs must be a mapping.")
-        hidden = self.hidden_state_provider(self.model, model_inputs)
+        provider = (
+            self.hidden_state_provider if hidden_state_fn is None else hidden_state_fn
+        )
+        hidden = provider(self.model, model_inputs)
         if not isinstance(hidden, torch.Tensor) or hidden.ndim < 3:
             raise TypeError(
                 "Hidden-state provider must return [..., sequence, hidden] tensor."
@@ -121,8 +129,9 @@ class LinearCausalLMTrainingView:
         ignore_index: int = -100,
         z_loss: float = 0.0,
         rematerialization: RematerializationPolicy = "disabled",
+        hidden_state_fn: HiddenStateProvider | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        hidden = self.hidden_states(model_inputs)
+        hidden = self.hidden_states(model_inputs, hidden_state_fn=hidden_state_fn)
         weight, bias = self.output_projection()
         return chunked_linear_causal_cross_entropy(
             hidden,
