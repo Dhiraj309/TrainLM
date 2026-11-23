@@ -33,7 +33,7 @@ def causal_loss_provider_specs() -> tuple[ProviderSpec, ...]:
     return (
         ProviderSpec(
             provider_id="trainlm.pallas_linear_ce",
-            backends=("xla",),
+            backends=("xla", "torchtpu"),
             precisions=("bf16", "fp32"),
             runtime_requirements=(
                 "torch_xla",
@@ -45,7 +45,7 @@ def causal_loss_provider_specs() -> tuple[ProviderSpec, ...]:
         ),
         ProviderSpec(
             provider_id="trainlm.tokamax_linear_ce",
-            backends=("xla",),
+            backends=("xla", "torchtpu"),
             precisions=("bf16", "fp32"),
             runtime_requirements=(
                 "tokamax_linear_ce",
@@ -56,7 +56,7 @@ def causal_loss_provider_specs() -> tuple[ProviderSpec, ...]:
         ),
         ProviderSpec(
             provider_id="trainlm.chunked_linear_ce",
-            backends=("cpu", "cuda", "xla"),
+            backends=("cpu", "cuda", "xla", "torchtpu"),
             precisions=("fp32", "fp16", "bf16"),
             fallback=True,
             priority=100,
