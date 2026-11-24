@@ -3475,3 +3475,15 @@ consistent with JAX's default `x64=False` mode.
 sequences and updated `notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb` to test
 larger microbatches (`bs=8` / `bs=4`) enabled by `pallas_ce` plus `Qwen/Qwen3-0.6B`
 (`head_dim=128` for full MXU width and `pallas_splash`).
+
+
+**Splash contiguous `fake_impl` & Pallas TPU bridge health probe.** Fixed
+`_build_splash_ops` / `_build_pallas_ce_ops` `fake_impl` shapes to emit
+contiguous `torch.empty(shape, ...)` instead of `torch.empty_like(...)` (which
+had copied transposed `[B, H, S, D]` Q strides, causing `AOTAutograd` to elide
+`.transpose(1, 2).contiguous()` and break `Qwen3Attention.reshape`), and ensured
+contiguous inputs before invoking Pallas ops. Reordered bridge selection to prefer
+TorchTPU 0.2.0's public `torch.tpu.pallas.jax_op` before `_internal.pallas.custom_jax_kernel`,
+and added `verify_pallas_bridge_runtime()` so incompatible MLIR custom-kernel builds
+(`call_custom_kernel()` refinement errors) automatically fall back cleanly to
+XLA-compiled SDPA and PyTorch `chunked_linear` loss.

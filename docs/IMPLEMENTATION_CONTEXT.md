@@ -2654,3 +2654,19 @@ TPU re-run is pending.
 - `notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb`: Updated per-device batch sizes
   (`bs=8` for `135M`, `bs=4` for `360M`/`0.5B`) and added `Qwen/Qwen3-0.6B`
   (`head_dim=128`) to validate full `128x128` MXU and `pallas_splash`.
+
+
+## Splash contiguous `fake_impl` & TPU bridge health probe
+
+- `src/trainlm/kernels/pallas/splash_attention.py`: Fixed `_build_splash_ops`
+  `fake_impl` to return contiguous `torch.empty(q.shape, ...)` instead of
+  `torch.empty_like(q)` (preventing `torch.compile` from eliding
+  `.transpose(1, 2).contiguous()` when `q` is transposed `[B, H, S, D]`), made
+  `q_in`/`k_in`/`v_in` contiguous before `fwd_op`, reordered bridge preference to
+  `torch.tpu.pallas.jax_op` before `custom_jax_kernel`, and added
+  `verify_pallas_bridge_runtime()` so failing `call_custom_kernel()` MLIR bridges
+  disable cleanly and fall back to XLA SDPA / `chunked_linear`.
+- `src/trainlm/kernels/pallas/cross_entropy.py` & `src/trainlm/api.py`: Wired
+  `verify_pallas_bridge_runtime()` into `is_pallas_ce_available()` and TPU plan
+  setup (`_apply_kernel_and_attention_plan`), and made Pallas CE `fake_impl` and
+  forward inputs contiguous.
