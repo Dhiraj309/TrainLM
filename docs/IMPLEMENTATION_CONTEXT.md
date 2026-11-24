@@ -1,5 +1,17 @@
 # TrainLM implementation context
 
+**8-Bit Optimizer States & PEFT/LoRA Integration (2026-11-23):** on branch
+`feat/48-8bit-optimizer-and-peft` (from `main` `9cd8202`): (1) extended
+`OptimizerConfig.name` in `src/trainlm/config/optimizer.py` to include
+`adamw_8bit`, `paged_adamw_8bit`, and `torchao_adamw_8bit`; (2) updated
+`OptimizerFactory.create` in `src/trainlm/optimization/optimizers.py` to
+filter frozen parameters (`requires_grad=False`) when trainable parameters
+exist and construct `bitsandbytes`/`torchao` 8-bit AdamW optimizers; and (3)
+added `optim` to `TrainLMTrainingArguments` and `peft_config` to
+`TrainLMTrainer.__init__` in `src/trainlm/api.py`. Added
+`tests/optimization/test_8bit_optimizer_and_peft.py`; real hardware and hosted
+CI remain pending.
+
 **Kernel & Packing Auto-Wiring (2026-11-23):** on branch
 `perf/47-kernel-and-packing-autowire` (from `main` `23b0c8c`): (1) updated
 `TorchTPUKernelPlanResult.rollback` in
