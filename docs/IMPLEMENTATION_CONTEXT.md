@@ -2580,3 +2580,17 @@ to keep peak 2K logits HBM bounded to `O(chunk_size * vocab)`, and enables
 `pallas` and `torch_tpu._internal` containers alongside `ops`/`kernels`, and
 `notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb` runs at `seq_len=2048` across all
 models and prints `torch.tpu` / `torch_tpu` / `torch.ops.tpu` kernel entrypoints.
+
+
+## Native GPU Triton & TPU Pallas kernels (`src/trainlm/kernels/`)
+
+`src/trainlm/kernels/triton/` implements `@triton.jit` fused `RMSNorm` and
+`SwiGLU` kernels with PyTorch autograd + clean CPU/PyTorch fallbacks, wired into
+`PackedGatedMLPProjection` (CUDA SiLU) and `TrainLMTrainer` when `liger-kernel`
+is not applied. `src/trainlm/kernels/pallas/` implements
+`pallas_splash_attention()` bridging `jax.experimental.pallas.ops.tpu.splash_attention`
+through `torch_tpu._internal.pallas.custom_jax_kernel` / `torch.tpu.pallas.jax_op`
+and `torch.library.custom_op` (`register_fake` + `register_autograd`), integrated
+into `probe_torchtpu_kernels()` and `TrainLMTrainer` for 128-multiple TPU sequences
+when `jax` and `torch_tpu` are both installed. Verified on CPU/CI; real CUDA Triton
+and TPU Pallas execution remain owner-validated.

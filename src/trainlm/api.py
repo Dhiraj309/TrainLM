@@ -1794,23 +1794,34 @@ class TrainLMTrainer:
                 strict=(self.args.use_liger_kernel is True),
             )
 
-        # 1c. Reversible F.rms_norm replacement when Liger RMSNorm was not applied.
+        # 1c. Reversible Triton (CUDA) / F.rms_norm replacement when Liger RMSNorm was not applied.
         self._rms_norm_result = None
         if self.args.use_fused_rms_norm and not (
             self._liger_result is not None and self._liger_result.fused_rms_norm
         ):
-            from trainlm.optimization import apply_fused_rms_norm
+            if device_type == "cuda":
+                from trainlm.kernels.triton import (
+                    apply_triton_rms_norm,
+                    is_triton_available,
+                )
 
-            self._rms_norm_result = apply_fused_rms_norm(self.model)
+                if is_triton_available():
+                    self._rms_norm_result = apply_triton_rms_norm(self.model)
+            if self._rms_norm_result is None or not self._rms_norm_result.applied:
+                from trainlm.optimization import apply_fused_rms_norm
 
-        # 2. Splash Attention (explicit or TPU auto-probe) + Gated MLP packing.
+                self._rms_norm_result = apply_fused_rms_norm(self.model)
+
+        # 2. Splash Attention (explicit or TPU auto-probe via Pallas) + Gated MLP packing.
         splash_runtime: TorchTPUSplashAttentionRuntime | None = None
+        seq_len_hint = int(getattr(self.args, "sequence_length", 1024) or 1024)
+        splash_block = 512 if seq_len_hint >= 512 and seq_len_hint % 512 == 0 else 128
         if attn_choice == "splash":
             kernel = probe_torchtpu_splash_kernel()
             if kernel is None:
                 raise RuntimeError(
-                    "attn_implementation='splash' requested, but TorchTPU Splash "
-                    "Attention kernel is unavailable in this environment."
+                    "attn_implementation='splash' requested, but neither a TorchTPU Splash "
+                    "kernel nor the Pallas Splash bridge (torch_tpu + jax) is available."
                 )
             import torch_tpu  # type: ignore[import-not-found]
 
@@ -1820,11 +1831,15 @@ class TrainLMTrainer:
                 tested_torch_tpu_versions=(tpu_ver,),
                 kernel=kernel,
                 backward_verified=True,
+                block_q=splash_block,
+                block_k=splash_block,
             )
         elif (
             attn_choice == "auto"
             and device_type == "tpu"
             and not getattr(self.args, "packing", False)
+            and seq_len_hint >= 128
+            and seq_len_hint % 128 == 0
         ):
             kernel = probe_torchtpu_splash_kernel()
             if kernel is not None:
@@ -1836,6 +1851,8 @@ class TrainLMTrainer:
                     tested_torch_tpu_versions=(tpu_ver,),
                     kernel=kernel,
                     backward_verified=True,
+                    block_q=splash_block,
+                    block_k=splash_block,
                 )
 
         if self.args.pack_gated_mlp is True:

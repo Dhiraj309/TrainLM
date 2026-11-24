@@ -135,6 +135,7 @@ class TorchTPUKernelInventory:
     flash_attention: Callable[..., Any] | None = None
     rms_norm: Callable[..., Any] | None = None
     cross_entropy: Callable[..., Any] | None = None
+    pallas_bridge: Callable[..., Any] | None = None
 
     @property
     def has_splash_attention(self) -> bool:
@@ -143,6 +144,10 @@ class TorchTPUKernelInventory:
     @property
     def has_flash_attention(self) -> bool:
         return self.flash_attention is not None
+
+    @property
+    def has_pallas_bridge(self) -> bool:
+        return self.pallas_bridge is not None
 
 
 def _find_callable_attr(containers: tuple[Any, ...], names: tuple[str, ...]) -> Callable[..., Any] | None:
@@ -157,7 +162,7 @@ def _find_callable_attr(containers: tuple[Any, ...], names: tuple[str, ...]) -> 
 
 
 def probe_torchtpu_kernels() -> TorchTPUKernelInventory:
-    """Probe ``torch.tpu`` and ``torch_tpu`` for available native TPU kernels."""
+    """Probe ``torch.tpu``, ``torch_tpu``, and Pallas bridge for native TPU kernels."""
 
     containers: list[Any] = []
     version: str | None = None
@@ -209,12 +214,22 @@ def probe_torchtpu_kernels() -> TorchTPUKernelInventory:
     except ImportError:
         pass
 
+    from trainlm.kernels.pallas import (
+        is_pallas_splash_available,
+        pallas_splash_attention,
+        probe_pallas_bridge,
+    )
+
     container_tuple = tuple(containers)
+    splash = _find_callable_attr(
+        container_tuple, ("splash_attention", "pallas_splash_attention")
+    )
+    if splash is None and is_pallas_splash_available():
+        splash = pallas_splash_attention
+
     return TorchTPUKernelInventory(
         torch_tpu_version=version,
-        splash_attention=_find_callable_attr(
-            container_tuple, ("splash_attention", "pallas_splash_attention")
-        ),
+        splash_attention=splash,
         flash_attention=_find_callable_attr(
             container_tuple, ("flash_attention", "pallas_flash_attention", "tpu_flash_attention")
         ),
@@ -222,11 +237,12 @@ def probe_torchtpu_kernels() -> TorchTPUKernelInventory:
         cross_entropy=_find_callable_attr(
             container_tuple, ("cross_entropy", "fused_cross_entropy")
         ),
+        pallas_bridge=probe_pallas_bridge(),
     )
 
 
 def probe_torchtpu_splash_kernel() -> Callable[..., Any] | None:
-    """Return an explicit Splash Attention callable if exposed by torch_tpu, else None."""
+    """Return an explicit Splash Attention callable if exposed by torch_tpu or Pallas, else None."""
 
     inv = probe_torchtpu_kernels()
     return inv.splash_attention or inv.flash_attention
