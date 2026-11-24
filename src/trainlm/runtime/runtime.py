@@ -13,11 +13,6 @@ from torch.optim import Optimizer
 from .base import BackendDiagnostics, LogicalMesh, Precision
 
 
-def _compiler_disable(fn):
-    disable = getattr(getattr(torch, "compiler", None), "disable", None)
-    return disable(fn) if callable(disable) else fn
-
-
 class TorchRuntime:
     """CPU/CUDA-capable baseline implementation of ``ExecutionBackend``."""
 
@@ -167,7 +162,6 @@ class TorchRuntime:
         del mesh
         return optimizer
 
-    @_compiler_disable
     def backward(self, loss: torch.Tensor) -> None:
         if self._grad_scaler is not None:
             self._grad_scaler.scale(loss).backward()
@@ -223,7 +217,6 @@ class TorchRuntime:
             raise TypeError("value must be a torch.Tensor.")
         return value
 
-    @_compiler_disable
     def optimizer_step(self, optimizer: Optimizer) -> None:
         if self._grad_scaler is not None:
             self._grad_scaler.step(optimizer)
@@ -232,7 +225,6 @@ class TorchRuntime:
             return
         optimizer.step()
 
-    @_compiler_disable
     def zero_grad(self, optimizer: Optimizer) -> None:
         self._unscaled_this_step = False
         optimizer.zero_grad(set_to_none=True)

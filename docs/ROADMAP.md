@@ -1,5 +1,13 @@
 # TrainLM Roadmap
 
+**Fix Compiled Backward Graph Break Regression (2026-11-23):** on branch
+`fix/53-remove-compiler-disable-from-backward` (from `main` `2472116`):
+removed `@_compiler_disable` from `TorchRuntime.backward`, `optimizer_step`,
+and `zero_grad` in `src/trainlm/runtime/runtime.py` (which caused
+`TPU v5e-1` compiled MFU on `2472116` to fall back to eager backward and drop
+from `39.46%` -> `18.06%` on `SmolLM2-360M`), keeping `@_compiler_disable`
+only on `AdamWStateDtype.step`.
+
 **Fix MFU Notebook Accelerator Routing (2026-11-23):** on branch
 `fix/52-notebook-accelerator-routing` (from `main` `8abbf3b`): updated
 `notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb` to pass explicit

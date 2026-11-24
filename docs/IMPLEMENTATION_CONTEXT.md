@@ -1,5 +1,14 @@
 # TrainLM implementation context
 
+**Fix Compiled Backward Graph Break Regression (2026-11-23):** on branch
+`fix/53-remove-compiler-disable-from-backward` (from `main` `2472116`):
+removed `@_compiler_disable` from `TorchRuntime.backward`, `optimizer_step`,
+and `zero_grad` in `src/trainlm/runtime/runtime.py` because `TorchTPURuntime`
+inherits `backward()` and disabling Dynamo there forced the entire backward
+pass + gradient clipping to execute eager inside `compile_training_step`.
+Kept `@_compiler_disable` solely on `AdamWStateDtype.step` in
+`src/trainlm/optimization/optimizers.py`.
+
 **Fix MFU Notebook Accelerator Routing (2026-11-23):** on branch
 `fix/52-notebook-accelerator-routing` (from `main` `8abbf3b`): replaced
 `accelerator="auto"` in `notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb` with
