@@ -1,5 +1,15 @@
 # TrainLM Roadmap
 
+**Liger-Kernel Auto-Wiring & `torch_compile_mode` (2026-11-23):** on branch
+`perf/56-liger-kernel-and-compile-mode` (from `main` `c554749`): added
+`use_liger_kernel: bool | Literal["auto"] = "auto"` and
+`torch_compile_mode` (`"default"`, `"reduce-overhead"`, `"max-autotune"`,
+`"max-autotune-no-cudagraphs"`) to `TrainLMTrainingArguments`, implemented
+`apply_liger_kernels` in `src/trainlm/optimization/liger.py` (auto-applied on
+CUDA when `liger-kernel` is installed, skipping `pack_gated_mlp` when Liger's
+fused SwiGLU is active), and wired `compile_mode` through `TorchRuntime`.
+CPU/mocked tests added; real GPU validation and hosted CI remain pending.
+
 **Built-In Console Step Logging (2026-11-23):** on branch
 `feat/55-builtin-console-step-logging` (from `main` `c76b758`): added
 `_ConsoleLoggingCallback` to `TrainLMTrainer` (`src/trainlm/api.py`) so

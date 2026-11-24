@@ -1,5 +1,16 @@
 # TrainLM implementation context
 
+**Liger-Kernel Auto-Wiring & `torch_compile_mode` (2026-11-23):** on branch
+`perf/56-liger-kernel-and-compile-mode` (from `main` `c554749`): (1) added
+`src/trainlm/optimization/liger.py` (`apply_liger_kernels`,
+`LigerKernelResult`) and exported it from `src/trainlm/optimization/__init__.py`;
+(2) added `compile_mode` to `TorchRuntime` (`src/trainlm/runtime/runtime.py`);
+and (3) added `use_liger_kernel` and `torch_compile_mode` to
+`TrainLMTrainingArguments` in `src/trainlm/api.py`, wiring
+`apply_liger_kernels` in `_apply_kernel_and_attention_plan`. Added
+`tests/optimization/test_liger_and_compile_mode.py`; real CUDA hardware and
+hosted CI remain pending.
+
 **Built-In Console Step Logging (2026-11-23):** on branch
 `feat/55-builtin-console-step-logging` (from `main` `c76b758`): added
 `_ConsoleLoggingCallback(TrainerCallback)` in `src/trainlm/api.py` and
