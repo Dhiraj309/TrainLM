@@ -143,7 +143,9 @@ from .rope_gated_family_adapters import (
     register_rope_gated_dense_adapters,
 )
 from .torchtpu_attention import (
+    TorchTPUKernelInventory,
     TorchTPUSplashAttentionRuntime,
+    probe_torchtpu_kernels,
     probe_torchtpu_splash_kernel,
     torchtpu_splash_attention_provider,
 )
@@ -165,6 +167,11 @@ from .rmsnorm import (
     RMSNormPatchResult,
     apply_fused_rms_norm,
     restore_rms_norm,
+)
+from .alignment import (
+    AlignmentReport,
+    inspect_model_alignment,
+    pad_vocab_to_multiple,
 )
 
 __all__ = [
@@ -278,9 +285,11 @@ __all__ = [
     "causal_loss_provider_specs",
     "causal_loss_request",
     "PackedGatedMLPBlock",
+    "TorchTPUKernelInventory",
     "TorchTPUKernelPlanResult",
     "TorchTPUSplashAttentionRuntime",
     "apply_torchtpu_kernel_plan",
+    "probe_torchtpu_kernels",
     "probe_torchtpu_splash_kernel",
     "torchtpu_splash_attention_provider",
     "QuantizedTrainingMode",
@@ -291,4 +300,7 @@ __all__ = [
     "RMSNormPatchResult",
     "apply_fused_rms_norm",
     "restore_rms_norm",
+    "AlignmentReport",
+    "inspect_model_alignment",
+    "pad_vocab_to_multiple",
 ]
