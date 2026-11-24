@@ -529,10 +529,25 @@ class TrainLMTrainingArguments:
     ] = "auto"
     pack_gated_mlp: bool | None = None
     packing: bool = False
+    optim: Literal[
+        "adamw",
+        "adamw_torch",
+        "adamw_8bit",
+        "paged_adamw_8bit",
+        "torchao_adamw_8bit",
+    ] = "adamw"
 
     def __post_init__(self) -> None:
         if isinstance(self.betas, list):
             object.__setattr__(self, "betas", tuple(self.betas))
+        if self.optim not in {
+            "adamw",
+            "adamw_torch",
+            "adamw_8bit",
+            "paged_adamw_8bit",
+            "torchao_adamw_8bit",
+        }:
+            raise ValueError(f"Unsupported optimizer: {self.optim}")
         if self.attn_implementation not in {
             "auto",
             "eager",
@@ -1262,6 +1277,7 @@ class TrainLMTrainer:
         runtime: Any | None = None,
         training_view_factory: Callable[[nn.Module], Any] | None = None,
         train_dataset_identity: str | None = None,
+        peft_config: Any | None = None,
     ) -> None:
         self.args = args or TrainLMTrainingArguments()
         from trainlm.data import PackedBinDataset
@@ -1387,6 +1403,14 @@ class TrainLMTrainer:
                 "select accelerator='native_tpu' so TrainLM can configure it."
             )
         self.model = self._resolve_model(model)
+        if peft_config is not None and not hasattr(self.model, "peft_config"):
+            try:
+                from peft import get_peft_model  # type: ignore[import-not-found]
+            except ModuleNotFoundError as exc:
+                raise RuntimeError(
+                    "peft_config requires the 'peft' package (pip install peft)."
+                ) from exc
+            self.model = get_peft_model(self.model, peft_config)
         self.training_view = None
         if self.args.loss_implementation == "chunked_linear":
             if training_view_factory is not None:
@@ -1672,7 +1696,9 @@ class TrainLMTrainer:
         )
         runtime_device = getattr(self.runtime, "device", None)
         use_fused = getattr(runtime_device, "type", None) == "cuda"
+        optim_name = "adamw" if self.args.optim == "adamw_torch" else self.args.optim
         return OptimizerConfig(
+            name=optim_name,
             learning_rate=self.args.learning_rate,
             betas=self.args.betas,
             eps=self.args.eps,

@@ -93,7 +93,7 @@ class OptimizerFactory:
     def create(
         parameters: Iterable[nn.Parameter],
         config: OptimizerConfig,
-    ) -> AdamWStateDtype:
+    ) -> torch.optim.Optimizer:
         if not isinstance(config, OptimizerConfig):
             raise TypeError("config must be an OptimizerConfig.")
         parameter_list = list(parameters)
@@ -101,6 +101,9 @@ class OptimizerFactory:
             raise ValueError("OptimizerFactory requires at least one parameter.")
         if any(not isinstance(parameter, nn.Parameter) for parameter in parameter_list):
             raise TypeError("Optimizer parameters must be torch.nn.Parameter values.")
+        trainable = [parameter for parameter in parameter_list if parameter.requires_grad]
+        if trainable:
+            parameter_list = trainable
         if config.parameter_dtype is not None:
             expected_dtype = _TORCH_DTYPES[config.parameter_dtype]
             mismatched = [
@@ -112,6 +115,10 @@ class OptimizerFactory:
                 raise ValueError(
                     "Parameter dtype does not match optimizer parameter_dtype."
                 )
+        if config.name in {"adamw_8bit", "paged_adamw_8bit"}:
+            return _create_bnb_adamw8bit(parameter_list, config)
+        if config.name == "torchao_adamw_8bit":
+            return _create_torchao_adamw8bit(parameter_list, config)
         policy = OptimizerStatePolicy(
             mu_dtype=_TORCH_DTYPES[config.mu_dtype],
             nu_dtype=_TORCH_DTYPES[config.nu_dtype],
@@ -127,10 +134,63 @@ class OptimizerFactory:
         )
 
 
+def _create_bnb_adamw8bit(
+    parameters: list[nn.Parameter],
+    config: OptimizerConfig,
+) -> torch.optim.Optimizer:
+    try:
+        import bitsandbytes as bnb  # type: ignore[import-not-found]
+    except ModuleNotFoundError as exc:
+        raise RuntimeError(
+            f"optim={config.name!r} requires the 'bitsandbytes' package "
+            "(pip install bitsandbytes)."
+        ) from exc
+    optim_cls = (
+        bnb.optim.PagedAdamW8bit
+        if config.name == "paged_adamw_8bit"
+        else bnb.optim.AdamW8bit
+    )
+    return optim_cls(
+        parameters,
+        lr=config.learning_rate,
+        betas=config.betas,
+        eps=config.eps,
+        weight_decay=config.weight_decay,
+    )
+
+
+def _create_torchao_adamw8bit(
+    parameters: list[nn.Parameter],
+    config: OptimizerConfig,
+) -> torch.optim.Optimizer:
+    optim_cls = None
+    try:
+        from torchao.optim import AdamW8bit  # type: ignore[import-not-found]
+
+        optim_cls = AdamW8bit
+    except ModuleNotFoundError:
+        try:
+            from torchao.prototype.low_bit_optim import AdamW8bit  # type: ignore[import-not-found]
+
+            optim_cls = AdamW8bit
+        except ModuleNotFoundError as exc:
+            raise RuntimeError(
+                "optim='torchao_adamw_8bit' requires the 'torchao' package "
+                "(pip install torchao)."
+            ) from exc
+    return optim_cls(
+        parameters,
+        lr=config.learning_rate,
+        betas=config.betas,
+        eps=config.eps,
+        weight_decay=config.weight_decay,
+    )
+
+
 def create_optimizer(
     parameters: Iterable[nn.Parameter],
     config: OptimizerConfig,
-) -> AdamWStateDtype:
+) -> torch.optim.Optimizer:
     """Convenience wrapper for the public optimizer factory."""
 
     return OptimizerFactory.create(parameters, config)
