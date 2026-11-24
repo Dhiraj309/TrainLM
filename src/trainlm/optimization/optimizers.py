@@ -72,12 +72,32 @@ class AdamWStateDtype(torch.optim.AdamW):
                     ):
                         state[key] = value.to(dtype=gradient.dtype)
 
+    def _moments_match_grads_and_policy(self) -> bool:
+        if self.state_policy.mu_dtype != self.state_policy.nu_dtype:
+            return False
+        target_dtype = self.state_policy.mu_dtype
+        for group in self.param_groups:
+            for parameter in group["params"]:
+                gradient = parameter.grad
+                if gradient is not None and gradient.dtype != target_dtype:
+                    return False
+                state = self.state.get(parameter)
+                if not state:
+                    continue
+                for key in ("exp_avg", "exp_avg_sq"):
+                    value = state.get(key)
+                    if isinstance(value, torch.Tensor) and value.dtype != target_dtype:
+                        return False
+        return True
+
     def step(self, closure=None):
         if (
             self.defaults.get("fused", False)
             and self.state_policy.mu_dtype == torch.float32
             and self.state_policy.nu_dtype == torch.float32
         ):
+            return super().step(closure)
+        if self._moments_match_grads_and_policy():
             return super().step(closure)
         self._cast_moment_state()
         self._prepare_step_dtypes()
@@ -119,10 +139,16 @@ class OptimizerFactory:
             return _create_bnb_adamw8bit(parameter_list, config)
         if config.name == "torchao_adamw_8bit":
             return _create_torchao_adamw8bit(parameter_list, config)
-        policy = OptimizerStatePolicy(
-            mu_dtype=_TORCH_DTYPES[config.mu_dtype],
-            nu_dtype=_TORCH_DTYPES[config.nu_dtype],
-        )
+        if config.name == "adamw_bf16":
+            policy = OptimizerStatePolicy(
+                mu_dtype=torch.bfloat16,
+                nu_dtype=torch.bfloat16,
+            )
+        else:
+            policy = OptimizerStatePolicy(
+                mu_dtype=_TORCH_DTYPES[config.mu_dtype],
+                nu_dtype=_TORCH_DTYPES[config.nu_dtype],
+            )
         return AdamWStateDtype(
             parameter_list,
             lr=config.learning_rate,

@@ -30,6 +30,7 @@ class OptimizerConfig:
 
     name: Literal[
         "adamw",
+        "adamw_bf16",
         "adamw_8bit",
         "paged_adamw_8bit",
         "torchao_adamw_8bit",
@@ -56,6 +57,7 @@ class OptimizerConfig:
     def __post_init__(self) -> None:
         if self.name not in {
             "adamw",
+            "adamw_bf16",
             "adamw_8bit",
             "paged_adamw_8bit",
             "torchao_adamw_8bit",

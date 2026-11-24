@@ -97,6 +97,8 @@ class Trainer:
         self._last_checkpoint_step: int | None = None
 
         self._train_iterator: Iterator | None = None
+        self._active_prefetcher: Any = None
+        self._prefetch_batches: bool = False
         self._global_tokens_seen: int | None = None
         self._epoch_end_pending = False
         self._compiled_single_step_fn = None
@@ -242,6 +244,7 @@ class Trainer:
             self.state.mark_failed(exc)
             raise
         finally:
+            self._close_prefetcher()
             try:
                 self.runtime.on_train_end()
             except BaseException as exc:
@@ -521,16 +524,35 @@ class Trainer:
         self.control.request_stop()
         self.state.should_stop = True
 
+    def _close_prefetcher(self) -> None:
+        prefetcher = getattr(self, "_active_prefetcher", None)
+        if prefetcher is not None:
+            try:
+                prefetcher.close()
+            finally:
+                self._active_prefetcher = None
+
+    def _new_train_iterator(self) -> Iterator:
+        self._close_prefetcher()
+        raw_iter = iter(self.train_dataloader)
+        if getattr(self, "_prefetch_batches", False):
+            from trainlm.runtime.prefetch import AsyncBatchPrefetcher
+
+            prefetcher = AsyncBatchPrefetcher(raw_iter, prefetch_depth=2)
+            self._active_prefetcher = prefetcher
+            return prefetcher
+        return raw_iter
+
     def _next_batch(self):
         if self._train_iterator is None:
-            self._train_iterator = iter(self.train_dataloader)
+            self._train_iterator = self._new_train_iterator()
 
         started = time.perf_counter()
         try:
             return next(self._train_iterator)
 
         except StopIteration:
-            self._train_iterator = iter(self.train_dataloader)
+            self._train_iterator = self._new_train_iterator()
             return next(self._train_iterator)
         finally:
             if self._performance_window_started is not None:
