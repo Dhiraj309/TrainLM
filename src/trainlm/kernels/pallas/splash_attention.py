@@ -32,13 +32,19 @@ def probe_pallas_bridge() -> Callable[..., Any] | None:
             if callable(fn):
                 return fn
     try:
-        from torch_tpu._internal import pallas as internal_pallas  # type: ignore[import-not-found]
+        import torch_tpu  # type: ignore[import-not-found]
     except Exception:
         return None
-    for attr in ("custom_jax_kernel", "jax_op"):
-        fn = getattr(internal_pallas, attr, None)
-        if callable(fn):
-            return fn
+    for mod in (
+        getattr(torch_tpu, "pallas", None),
+        getattr(getattr(torch_tpu, "_internal", None), "pallas", None),
+    ):
+        if mod is None:
+            continue
+        for attr in ("custom_jax_kernel", "jax_op"):
+            fn = getattr(mod, attr, None)
+            if callable(fn):
+                return fn
     return None
 
 
