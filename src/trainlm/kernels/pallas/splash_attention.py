@@ -241,10 +241,13 @@ def _build_splash_ops(
         out, lse = output
         ctx.save_for_backward(q, k, v, out, lse)
 
-    def _backward(ctx: Any, grad_out: torch.Tensor, grad_lse: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def _backward(
+        ctx: Any, grad_out: torch.Tensor | None, grad_lse: torch.Tensor | None
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         del grad_lse
         q, k, v, out, lse = ctx.saved_tensors
-        return bwd_op(q, k, v, out, lse, grad_out)
+        safe_grad_out = torch.zeros_like(out) if grad_out is None else grad_out
+        return bwd_op(q, k, v, out, lse, safe_grad_out)
 
     fwd_op.register_autograd(_backward, setup_context=_setup_ctx)
     _SPLASH_OP_CACHE[cache_key] = (fwd_name, bwd_name)

@@ -3462,3 +3462,6 @@ any `_build_splash_ops` failures in `_UNSUPPORTED_SPLASH_SPECS` with clean
 `F.scaled_dot_product_attention` fallback; updated
 `pallas_chunked_linear_cross_entropy` to cast `int64` labels to `int32`
 consistent with JAX's default `x64=False` mode.
+- Guarded `None` autograd outputs (`grad_loss` / `grad_z` in Pallas CE
+  `_backward`, `grad_out` in Splash `_backward`) and removed input aliasing
+  when `has_bias=False` in `ce_bwd` (`jnp.zeros_like(b)`).

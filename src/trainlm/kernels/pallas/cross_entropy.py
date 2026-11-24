@@ -144,7 +144,11 @@ def _build_pallas_ce_ops(
         init_db = jnp.zeros((vocab_size,), dtype=jnp.float32) if has_bias else jnp.zeros((1,), dtype=jnp.float32)
         (dw_tot, db_tot), dh_chunks = jax.lax.scan(_bwd_body, (init_dw, init_db), (h_chunks, tgt_chunks))
         dh_flat = dh_chunks.reshape(-1, hidden_size)[:num_tokens].astype(h.dtype)
-        return dh_flat, dw_tot.astype(w.dtype), (db_tot.astype(b.dtype) if has_bias and b is not None else b)
+        return (
+            dh_flat,
+            dw_tot.astype(w.dtype),
+            (db_tot.astype(b.dtype) if has_bias and b is not None else jnp.zeros_like(b)),
+        )
 
     digest = hashlib.sha256(str(cache_key).encode("utf-8")).hexdigest()[:16]
     fwd_name = f"trainlm_ce_fwd_{digest}"
@@ -184,11 +188,24 @@ def _build_pallas_ce_ops(
         ctx.save_for_backward(h, w, b, tgt)
 
     def _backward(
-        ctx: Any, grad_loss: torch.Tensor, grad_z: torch.Tensor, grad_denom: torch.Tensor
+        ctx: Any,
+        grad_loss: torch.Tensor | None,
+        grad_z: torch.Tensor | None,
+        grad_denom: torch.Tensor | None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None, None]:
         del grad_denom
         h, w, b, tgt = ctx.saved_tensors
-        dh, dw, db = bwd_op(h, w, b, tgt, grad_loss, grad_z)
+        safe_grad_loss = (
+            torch.ones((), dtype=torch.float32, device=h.device)
+            if grad_loss is None
+            else grad_loss
+        )
+        safe_grad_z = (
+            torch.zeros((), dtype=torch.float32, device=h.device)
+            if grad_z is None
+            else grad_z
+        )
+        dh, dw, db = bwd_op(h, w, b, tgt, safe_grad_loss, safe_grad_z)
         return dh, dw, (db if has_bias else None), None
 
     fwd_op.register_autograd(_backward, setup_context=_setup_ctx)

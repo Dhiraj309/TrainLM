@@ -2631,3 +2631,8 @@ TPU re-run is pending.
 - `src/trainlm/kernels/pallas/cross_entropy.py`:
   `pallas_chunked_linear_cross_entropy()` now casts non-`int32` labels (such as
   PyTorch `int64` tokens) to `torch.int32` before calling the JAX/Pallas op.
+- `src/trainlm/kernels/pallas/cross_entropy.py` & `splash_attention.py`:
+  `_backward` hooks now coerce unused `None` autograd grad outputs
+  (`grad_z`, `grad_loss`, `grad_out`) to scalar/zero tensors before invoking
+  `bwd_op`, and `ce_bwd` returns `jnp.zeros_like(b)` when `has_bias=False`
+  instead of aliasing input `b`.

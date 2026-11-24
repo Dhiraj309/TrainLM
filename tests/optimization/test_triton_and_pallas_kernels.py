@@ -182,3 +182,50 @@ def test_pallas_splash_gqa_head_dim_and_unsupported_fallback(monkeypatch) -> Non
     assert out_bad_1.shape == (1, 128, 8, 128)
     assert out_bad_2.shape == (1, 128, 8, 128)
     assert len([c for c in build_calls if c["n_heads"] == 8]) == 1
+
+
+def test_pallas_cross_entropy_autograd_handles_none_grad_z(monkeypatch) -> None:
+    import sys
+    import types
+    import torch
+    from trainlm.kernels.pallas import cross_entropy as ce_mod
+
+    ce_mod._CE_OP_CACHE.clear()
+    seen_bwd_grads: list[tuple[torch.dtype, torch.dtype]] = []
+
+    def fake_custom_jax_kernel(fn, *, name: str):
+        del fn
+        if "_fwd_" in name:
+            def _fwd(h, w, b, tgt):
+                del w, b, tgt
+                return (
+                    h.sum().to(dtype=torch.float32),
+                    torch.tensor(0.0, dtype=torch.float32, device=h.device),
+                    torch.tensor(float(h.shape[0]), dtype=torch.float32, device=h.device),
+                )
+            return _fwd
+
+        def _bwd(h, w, b, tgt, grad_loss, grad_z):
+            del tgt
+            seen_bwd_grads.append((grad_loss.dtype, grad_z.dtype))
+            return torch.ones_like(h), torch.zeros_like(w), torch.zeros_like(b)
+
+        return _bwd
+
+    fake_jax = types.ModuleType("jax")
+    fake_jax.jit = lambda fn: fn
+    fake_jnp = types.ModuleType("jax.numpy")
+    monkeypatch.setitem(sys.modules, "jax", fake_jax)
+    monkeypatch.setitem(sys.modules, "jax.numpy", fake_jnp)
+    monkeypatch.setattr(ce_mod, "probe_pallas_bridge", lambda: fake_custom_jax_kernel)
+
+    hidden = torch.randn(4, 8, dtype=torch.bfloat16, requires_grad=True)
+    weight = torch.randn(16, 8, dtype=torch.bfloat16, requires_grad=True)
+    labels = torch.tensor([0, 1, 2, 3], dtype=torch.int64)
+
+    loss, z_loss = ce_mod.pallas_chunked_linear_cross_entropy(hidden, weight, labels)
+    assert z_loss is None
+    loss.backward()
+    assert hidden.grad is not None
+    assert weight.grad is not None
+    assert seen_bwd_grads == [(torch.float32, torch.float32)]
