@@ -537,10 +537,31 @@ class TrainLMTrainingArguments:
         "torchao_adamw_8bit",
     ] = "adamw"
     quantized_training: Literal["none", "fp8", "int8"] = "none"
+    use_liger_kernel: bool | Literal["auto"] = "auto"
+    torch_compile_mode: Literal[
+        "default",
+        "reduce-overhead",
+        "max-autotune",
+        "max-autotune-no-cudagraphs",
+    ] = "default"
 
     def __post_init__(self) -> None:
         if isinstance(self.betas, list):
             object.__setattr__(self, "betas", tuple(self.betas))
+        if (
+            self.use_liger_kernel != "auto"
+            and not isinstance(self.use_liger_kernel, bool)
+        ):
+            raise ValueError("use_liger_kernel must be boolean or 'auto'.")
+        if self.torch_compile_mode not in {
+            "default",
+            "reduce-overhead",
+            "max-autotune",
+            "max-autotune-no-cudagraphs",
+        }:
+            raise ValueError(
+                f"Unsupported torch_compile_mode: {self.torch_compile_mode}"
+            )
         if self.quantized_training not in {"none", "fp8", "int8"}:
             raise ValueError(
                 f"Unsupported quantized_training mode: {self.quantized_training}"
@@ -1638,6 +1659,7 @@ class TrainLMTrainer:
             device=accelerator,
             precision=precision,
             compile_enabled=self.args.torch_compile,
+            compile_mode=self.args.torch_compile_mode,
         )
 
     def _place_model_on_runtime_device(self) -> None:
@@ -1670,6 +1692,21 @@ class TrainLMTrainer:
         elif attn_choice in {"eager", "sdpa", "flash_attention_2"}:
             _try_set_attn_implementation(self.model, attn_choice, strict=True)
 
+        # 1b. Optional Liger-Kernel Triton fusion (auto on CUDA when installed).
+        self._liger_result = None
+        if self.args.use_liger_kernel is True or (
+            self.args.use_liger_kernel == "auto" and device_type == "cuda"
+        ):
+            from trainlm.optimization import apply_liger_kernels
+
+            self._liger_result = apply_liger_kernels(
+                self.model,
+                fuse_linear_cross_entropy=(
+                    self.args.loss_implementation in {"auto", "model"}
+                ),
+                strict=(self.args.use_liger_kernel is True),
+            )
+
         # 2. Splash Attention (explicit) + Gated MLP packing (auto on CUDA/TPU).
         splash_runtime: TorchTPUSplashAttentionRuntime | None = None
         if attn_choice == "splash":
@@ -1695,6 +1732,7 @@ class TrainLMTrainer:
             self.args.pack_gated_mlp is False
             or optimizer_injected
             or self.args.quantized_training != "none"
+            or (self._liger_result is not None and self._liger_result.fused_swiglu)
         ):
             should_pack_mlp = False
         else:
