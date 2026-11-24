@@ -1541,7 +1541,9 @@ class TrainLMTrainer:
             self._place_model_on_runtime_device()
         self._distributed_wrap_result = None
         if self.args.distributed_strategy in {"ddp", "fsdp2"} or (
-            self.args.distributed_strategy == "auto" and self.runtime.is_distributed
+            self.args.distributed_strategy == "auto"
+            and self.runtime.is_distributed
+            and getattr(self.runtime, "name", None) == "torch"
         ):
             from trainlm.runtime import prepare_distributed_model
 

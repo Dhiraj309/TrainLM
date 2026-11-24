@@ -23,7 +23,7 @@ class _TinyDenseLM(nn.Module):
             tie_word_embeddings=True,
         )
         self.layers = nn.ModuleList([nn.Linear(8, 8)])
-        self.weight = nn.Parameter(torch.ones(100))
+        self.weight = nn.Parameter(torch.ones(512))
 
 
 def test_distributed_strategy_argument_validation() -> None:
