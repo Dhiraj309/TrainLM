@@ -675,10 +675,10 @@ class TrainLMTrainingArguments:
                 "save_total_limit supports single-device CPU, CUDA, and native_tpu "
                 "training; retention for the legacy XLA coordinator is not supported."
             )
-        if self.torch_compile and self.accelerator != "native_tpu":
+        if self.torch_compile and self.accelerator not in {"native_tpu", "cuda", "auto"}:
             raise ValueError(
                 "torch_compile is currently supported only with "
-                "accelerator='native_tpu'."
+                "accelerator='native_tpu', 'cuda', or 'auto'."
             )
         if self.lr_scheduler_type not in {"constant", "linear", "cosine", "wsd"}:
             raise ValueError(f"Unsupported scheduler: {self.lr_scheduler_type}")
@@ -1536,8 +1536,14 @@ class TrainLMTrainer:
             )
         if accelerator == "cuda" and not torch.cuda.is_available():
             raise RuntimeError("accelerator='cuda' requested but CUDA is unavailable.")
+        if self.args.torch_compile and accelerator == "cpu":
+            raise ValueError("torch_compile is not supported with accelerator='cpu'.")
         precision = "bf16" if self.args.bf16 else "fp16" if self.args.fp16 else "fp32"
-        return Runtime(device=accelerator, precision=precision)
+        return Runtime(
+            device=accelerator,
+            precision=precision,
+            compile_enabled=self.args.torch_compile,
+        )
 
     def _make_loader(
         self,
@@ -1579,6 +1585,8 @@ class TrainLMTrainer:
             getattr(self.runtime, "name", None) == "torchtpu"
             and self.runtime.precision == "bf16"
         )
+        runtime_device = getattr(self.runtime, "device", None)
+        use_fused = getattr(runtime_device, "type", None) == "cuda"
         return OptimizerConfig(
             learning_rate=self.args.learning_rate,
             betas=self.args.betas,
@@ -1586,7 +1594,7 @@ class TrainLMTrainer:
             weight_decay=self.args.weight_decay,
             mu_dtype="bfloat16" if use_bf16_mu else "float32",
             nu_dtype="float32",
-            fused=False,
+            fused=use_fused,
         )
 
     def _make_optimizer(self) -> Optimizer:

@@ -1,5 +1,16 @@
 # TrainLM Roadmap
 
+**Native CUDA Parity & Speed Pack (2026-11-23):** on branch
+`perf/46-cuda-compile-fused-adamw-and-mfu` (branched from `main` `54b0909`):
+enabled `torch_compile` on `accelerator="cuda"` / `"auto"`, wired `fused=True`
+AdamW on CUDA (with a Python-loop fast path in `AdamWStateDtype.step` for
+fused FP32 moments), added `float32_matmul_precision("high")` TF32 lifecycle,
+`non_blocking=True` H2D transfers, `GradScaler` for `fp16` on CUDA, BF16/FP16
+`chunked_linear` Tensor Core projection on CUDA, and documented NVIDIA GPU peak
+FLOPs (`H100`, `A100`, `L40S`, `L4`, `T4`, `V100`) in `performance.py`.
+CPU/mocked-CUDA tests added; real GPU hardware validation and hosted CI remain
+pending.
+
 **Fix compiled-step device transfer & `chunked_loss` graph break (2026-11-23):**
 owner Colab `TPU v5e-1` run (`db9eb94`) improved `SmolLM2-135M` eager (`DeferAndFuse`)
 to `14.35%` MFU (`27,723.9 tok/s`), and uncovered why all three `compiled`

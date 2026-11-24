@@ -21,9 +21,9 @@ def _chunk_terms(
     ignore_index: int,
     include_z_loss: bool,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    # Keep TPU projections in bf16/fp16 when active. Casting the tied
-    # vocabulary matrix to fp32 duplicates ~128-544 MiB and leaves the BF16 MXU.
-    if hidden.device.type in {"xla", "tpu"}:
+    # Keep TPU and CUDA projections in bf16/fp16 when active. Casting the tied
+    # vocabulary matrix to fp32 duplicates ~128-544 MiB and leaves Tensor Cores / MXU.
+    if hidden.device.type in {"xla", "tpu", "cuda"}:
         compute_dtype = (
             hidden.dtype
             if hidden.dtype in {torch.bfloat16, torch.float16}

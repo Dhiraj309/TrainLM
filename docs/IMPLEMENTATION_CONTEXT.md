@@ -1,5 +1,19 @@
 # TrainLM implementation context
 
+**Native CUDA Parity & Speed Pack (2026-11-23):** on branch
+`perf/46-cuda-compile-fused-adamw-and-mfu` (from `main` `54b0909`): (1)
+`src/trainlm/api.py` allows `torch_compile` for `cuda`/`auto`, passes
+`compile_enabled` to `TorchRuntime`, and sets `fused=True` in `_optimizer_config`
+on CUDA; (2) `src/trainlm/optimization/optimizers.py` fast-paths
+`AdamWStateDtype.step` when `fused=True` and `mu_dtype == nu_dtype == float32`;
+(3) `src/trainlm/runtime/runtime.py` manages TF32 `float32_matmul_precision`,
+`non_blocking=True` H2D copies, `torch.cuda.get_device_name` diagnostics, and
+`GradScaler` for `fp16` on CUDA; (4) `src/trainlm/tasks/chunked_loss.py` keeps
+`_chunk_terms` in `bf16`/`fp16` on CUDA; and (5) `src/trainlm/training/performance.py`
+adds documented NVIDIA GPU peak FLOPs for MFU reporting. Added
+`tests/runtime/test_cuda_speed_pack.py`; real CUDA hardware and hosted CI
+remain pending.
+
 **Fix compiled-step device transfer & `chunked_loss` graph break (2026-11-23):**
 owner Colab `TPU v5e-1` output on `db9eb94` recorded `SmolLM2-135M` eager
 (`DeferAndFuse`) at `14.35%` non-emb MFU (`27,723.9 tok/s`, `wait=0.1%`), and

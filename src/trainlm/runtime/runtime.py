@@ -30,6 +30,10 @@ class TorchRuntime:
         self._device = torch.device(device)
         self._precision = precision
         self._compile_enabled = compile_enabled
+        self._previous_matmul_precision: str | None = None
+        self._optimizer: Optimizer | None = None
+        self._unscaled_this_step = False
+        self._grad_scaler = _make_cuda_grad_scaler(self._device, self._precision)
 
     @property
     def name(self) -> str:
@@ -75,9 +79,20 @@ class TorchRuntime:
 
     def on_train_begin(self) -> None:
         """Handle the start of a training lifecycle."""
+        if self._device.type == "cuda":
+            getter = getattr(torch, "get_float32_matmul_precision", None)
+            setter = getattr(torch, "set_float32_matmul_precision", None)
+            if callable(getter) and callable(setter):
+                self._previous_matmul_precision = getter()
+                setter("high")
 
     def on_train_end(self) -> None:
         """Handle the end of a training lifecycle."""
+        if self._previous_matmul_precision is not None:
+            setter = getattr(torch, "set_float32_matmul_precision", None)
+            if callable(setter):
+                setter(self._previous_matmul_precision)
+            self._previous_matmul_precision = None
 
     def on_step_begin(self, step: int) -> None:
         del step
@@ -90,6 +105,7 @@ class TorchRuntime:
         return self.compile_model(model)
 
     def prepare_optimizer(self, optimizer: Optimizer) -> Optimizer:
+        self._optimizer = optimizer
         return optimizer
 
     def prepare_dataloader(self, dataloader: Any) -> Any:
@@ -98,7 +114,11 @@ class TorchRuntime:
     def prepare_batch(self, batch: Any) -> Any:
         if self.device.type == "cpu":
             return batch
-        return _move_to_device(batch, self.device)
+        return _move_to_device(
+            batch,
+            self.device,
+            non_blocking=self.device.type == "cuda",
+        )
 
     def configure_static_shapes(self, *, accumulation_steps: int) -> None:
         del accumulation_steps
@@ -141,6 +161,9 @@ class TorchRuntime:
         return optimizer
 
     def backward(self, loss: torch.Tensor) -> None:
+        if self._grad_scaler is not None:
+            self._grad_scaler.scale(loss).backward()
+            return
         loss.backward()
 
     def clip_gradients(
@@ -148,6 +171,13 @@ class TorchRuntime:
         parameters: Iterable[nn.Parameter],
         max_norm: float,
     ) -> torch.Tensor | None:
+        if (
+            self._grad_scaler is not None
+            and self._optimizer is not None
+            and not self._unscaled_this_step
+        ):
+            self._grad_scaler.unscale_(self._optimizer)
+            self._unscaled_this_step = True
         return torch.nn.utils.clip_grad_norm_(parameters, max_norm)
 
     def scale_gradients(
@@ -186,9 +216,15 @@ class TorchRuntime:
         return value
 
     def optimizer_step(self, optimizer: Optimizer) -> None:
+        if self._grad_scaler is not None:
+            self._grad_scaler.step(optimizer)
+            self._grad_scaler.update()
+            self._unscaled_this_step = False
+            return
         optimizer.step()
 
     def zero_grad(self, optimizer: Optimizer) -> None:
+        self._unscaled_this_step = False
         optimizer.zero_grad(set_to_none=True)
 
     def synchronize(self) -> None:
@@ -207,12 +243,21 @@ class TorchRuntime:
         self.barrier(f"after-checkpoint:{name}")
 
     def state_dict(self) -> Mapping[str, Any]:
+        if self._grad_scaler is not None:
+            return {"grad_scaler": self._grad_scaler.state_dict()}
         return {}
 
     def load_state_dict(self, state_dict: Mapping[str, Any]) -> None:
-        del state_dict
+        if self._grad_scaler is not None and "grad_scaler" in state_dict:
+            self._grad_scaler.load_state_dict(state_dict["grad_scaler"])
 
     def diagnostics(self) -> BackendDiagnostics:
+        values: dict[str, Any] = {"compile_enabled": self._compile_enabled}
+        if self.device.type == "cuda" and torch.cuda.is_available():
+            try:
+                values["device_name"] = torch.cuda.get_device_name(self.device)
+            except Exception:
+                pass
         return BackendDiagnostics(
             backend=self.name,
             device_type=self.device.type,
@@ -220,22 +265,50 @@ class TorchRuntime:
             world_size=self.world_size,
             rank=self.rank,
             local_rank=self.local_rank,
-            values={"compile_enabled": self._compile_enabled},
+            values=values,
         )
 
 
-def _move_to_device(value: Any, device: torch.device) -> Any:
+def _make_cuda_grad_scaler(device: torch.device, precision: Precision) -> Any:
+    if device.type != "cuda" or precision != "fp16":
+        return None
+    amp = getattr(torch, "amp", None)
+    scaler_cls = getattr(amp, "GradScaler", None) if amp is not None else None
+    if scaler_cls is not None:
+        try:
+            return scaler_cls("cuda")
+        except TypeError:
+            return scaler_cls()
+    cuda_amp = getattr(torch.cuda, "amp", None)
+    legacy_cls = getattr(cuda_amp, "GradScaler", None) if cuda_amp is not None else None
+    return legacy_cls() if legacy_cls is not None else None
+
+
+def _move_to_device(
+    value: Any,
+    device: torch.device,
+    *,
+    non_blocking: bool = False,
+) -> Any:
     if isinstance(value, torch.Tensor):
-        return value if value.device == device else value.to(device)
+        if value.device == device:
+            return value
+        return value.to(device, non_blocking=non_blocking)
     if isinstance(value, Mapping):
         return type(value)(
-            (key, _move_to_device(item, device))
+            (key, _move_to_device(item, device, non_blocking=non_blocking))
             for key, item in value.items()
         )
     if isinstance(value, tuple):
-        return tuple(_move_to_device(item, device) for item in value)
+        return tuple(
+            _move_to_device(item, device, non_blocking=non_blocking)
+            for item in value
+        )
     if isinstance(value, list):
-        return [_move_to_device(item, device) for item in value]
+        return [
+            _move_to_device(item, device, non_blocking=non_blocking)
+            for item in value
+        ]
     return value
 
 
