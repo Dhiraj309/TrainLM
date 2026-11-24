@@ -1,5 +1,14 @@
 # TrainLM implementation context
 
+**Restore Compiled TPU Optimizer Performance & Init Order (2026-11-23):**
+on branch `fix/54-restore-tpu-40pct-mfu` (from `main` `04b5be6`): (1) removed
+`@_compiler_disable` from `AdamWStateDtype.step` in
+`src/trainlm/optimization/optimizers.py` because disabling Dynamo on `step`
+forced single-tensor `STRICT` eager TPU launches (+85ms/step); and (2) scoped
+`_place_model_on_runtime_device()` in `src/trainlm/api.py` to CUDA only so
+`torchtpu` retains its `453a1c0` `prepare_model` order while CUDA `fused=True`
+/ `adamw_8bit` still receive CUDA parameters.
+
 **Fix Compiled Backward Graph Break Regression (2026-11-23):** on branch
 `fix/53-remove-compiler-disable-from-backward` (from `main` `2472116`):
 removed `@_compiler_disable` from `TorchRuntime.backward`, `optimizer_step`,
