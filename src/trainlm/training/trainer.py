@@ -941,9 +941,9 @@ class Trainer:
         if not param_groups:
             return
         is_adamw = isinstance(self.optimizer, torch.optim.AdamW)
-        if self._lr_tensors is None:
+        if getattr(self, "_lr_tensors", None) is None:
             self._lr_tensors = []
-        if self._lr_values is None:
+        if getattr(self, "_lr_values", None) is None:
             self._lr_values = []
         default_device = getattr(self.runtime, "device", None) or torch.device("cpu")
         for idx, group in enumerate(param_groups):

@@ -671,14 +671,13 @@ def test_packed_gated_mlp_checks_swiglu_activation_spec() -> None:
     from trainlm.optimization.mlp import GatedMLPProjectionSpec, PackedGatedMLPProjection
 
     spec = GatedMLPProjectionSpec(
-        wrapper_path="mlp",
-        gate_path="gate_proj",
-        up_path="up_proj",
-        down_path="down_proj",
+        prefix="mlp",
         activation="swiglu",
-        hidden_size=8,
+        input_size=8,
         intermediate_size=16,
-        bias=False,
+        gate_weight_key="mlp.gate_proj.weight",
+        up_weight_key="mlp.up_proj.weight",
+        packed_weight_key="mlp.packed_gate_up.weight",
     )
     g = nn.Linear(8, 16, bias=False)
     u = nn.Linear(8, 16, bias=False)

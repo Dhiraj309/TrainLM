@@ -125,22 +125,15 @@ def test_chunked_loss_pads_xla_tpu_tail_chunk_to_uniform_shape(
 
 
 def test_chunked_linear_omits_loss_mask_transfer_when_all_supervised() -> None:
-    from trainlm.tasks import CausalLMTask, LinearCausalLMTrainingView
+    from transformers import GPT2Config, GPT2LMHeadModel
+    from trainlm.api import _auto_training_view
+    from trainlm.tasks import CausalLMTask
 
-    class _TinyBackbone(nn.Module):
-        def __init__(self) -> None:
-            super().__init__()
-            self.emb = nn.Embedding(16, 8)
-            self.head = nn.Linear(8, 16, bias=False)
-
-        def forward_hidden(self, inputs):
-            return self.emb(inputs["input_ids"])
-
-    backbone = _TinyBackbone()
-    view = LinearCausalLMTrainingView(
-        hidden_state_provider=lambda m, inp: m.forward_hidden(inp),
-        output_projection_provider=lambda m: (m.head.weight, None),
+    model = GPT2LMHeadModel(
+        GPT2Config(vocab_size=32, n_positions=8, n_embd=8, n_layer=1, n_head=2)
     )
+    view = _auto_training_view(model)
+    assert view is not None
     task = CausalLMTask(loss_implementation="chunked_linear", training_view=view)
     prepared, counts = task.prepare_batch_on_host(
         {"input_ids": torch.tensor([[1, 2, 3, 4], [4, 3, 2, 1]])}
@@ -159,6 +152,8 @@ def test_compiled_lr_sync_skips_idle_fills_and_multiplicative_scheduler_item_syn
     param = nn.Parameter(torch.ones(4, 4))
     opt = torch.optim.AdamW([param], lr=1e-3)
     sched = LinearLR(opt, start_factor=1.0, end_factor=0.5, total_iters=4)
+    param.grad = torch.zeros_like(param)
+    opt.step()
 
     tr = object.__new__(Trainer)
     tr.optimizer = opt
