@@ -3422,3 +3422,14 @@ adds `loss_rematerialization` (auto-enabling `"per_chunk"` for
 `probe_torchtpu_kernels` probes `pallas` / `_internal` namespaces and
 `notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb` defaults to 2K (`2048`) sequence
 lengths with `chunked_linear`.
+
+
+**Native GPU Triton & TPU Pallas kernel packages.** Added `src/trainlm/kernels/triton/`
+(`triton_rms_norm`, `triton_swiglu`, reversible `apply_triton_rms_norm` /
+`restore_triton_rms_norm`, wired into `PackedGatedMLPProjection` and CUDA fallback
+when `liger-kernel` is absent) and `src/trainlm/kernels/pallas/`
+(`pallas_splash_attention`, `probe_pallas_bridge`, `is_pallas_splash_available`
+bridging `jax.experimental.pallas.ops.tpu.splash_attention` via
+`torch_tpu._internal.pallas.custom_jax_kernel` / `torch.tpu.pallas.jax_op` and
+`torch.library.custom_op` with `register_fake` and `register_autograd`).
+Hardware GPU Triton & TPU Pallas validation remains owner-run.
