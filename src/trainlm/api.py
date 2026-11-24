@@ -1791,7 +1791,7 @@ class TrainLMTrainer:
         elif (
             attn_choice == "auto"
             and device_type == "tpu"
-            and not getattr(self.args, "pack_sequences", False)
+            and not getattr(self.args, "packing", False)
         ):
             kernel = probe_torchtpu_splash_kernel()
             if kernel is not None:
