@@ -539,6 +539,7 @@ class TrainLMTrainingArguments:
     quantized_training: Literal["none", "fp8", "int8"] = "none"
     use_liger_kernel: bool | Literal["auto"] = "auto"
     use_fused_rms_norm: bool = True
+    pad_vocab_to_multiple: int | Literal["auto"] | None = None
     torch_compile_mode: Literal[
         "default",
         "reduce-overhead",
@@ -556,6 +557,14 @@ class TrainLMTrainingArguments:
             raise ValueError("use_liger_kernel must be boolean or 'auto'.")
         if not isinstance(self.use_fused_rms_norm, bool):
             raise ValueError("use_fused_rms_norm must be a boolean.")
+        if self.pad_vocab_to_multiple not in {None, "auto"} and (
+            isinstance(self.pad_vocab_to_multiple, bool)
+            or not isinstance(self.pad_vocab_to_multiple, int)
+            or self.pad_vocab_to_multiple < 1
+        ):
+            raise ValueError(
+                "pad_vocab_to_multiple must be None, 'auto', or a positive integer."
+            )
         if self.torch_compile_mode not in {
             "default",
             "reduce-overhead",
@@ -1679,10 +1688,26 @@ class TrainLMTrainer:
             probe_torchtpu_splash_kernel,
         )
 
-        # 1. Attention implementation selection (reversible).
-        attn_choice = self.args.attn_implementation
+        # 0. Hardware tile alignment inspection and optional 128-multiple vocab padding.
+        from trainlm.optimization import (
+            inspect_model_alignment,
+            pad_vocab_to_multiple as _pad_vocab,
+        )
+
         runtime_device = getattr(self.runtime, "device", None)
         device_type = getattr(runtime_device, "type", "cpu")
+        if self.args.pad_vocab_to_multiple == "auto" and device_type in {"cuda", "tpu"}:
+            _pad_vocab(self.model, 128)
+        elif isinstance(self.args.pad_vocab_to_multiple, int):
+            _pad_vocab(self.model, self.args.pad_vocab_to_multiple)
+        self._alignment_report = inspect_model_alignment(
+            self.model,
+            sequence_length=getattr(self.args, "max_seq_length", None),
+            alignment=128,
+        )
+
+        # 1. Attention implementation selection (reversible).
+        attn_choice = self.args.attn_implementation
         if attn_choice == "auto":
             if device_type == "cuda":
                 import importlib.util
@@ -1719,7 +1744,7 @@ class TrainLMTrainer:
 
             self._rms_norm_result = apply_fused_rms_norm(self.model)
 
-        # 2. Splash Attention (explicit) + Gated MLP packing (auto on CUDA/TPU).
+        # 2. Splash Attention (explicit or TPU auto-probe) + Gated MLP packing.
         splash_runtime: TorchTPUSplashAttentionRuntime | None = None
         if attn_choice == "splash":
             kernel = probe_torchtpu_splash_kernel()
@@ -1737,6 +1762,22 @@ class TrainLMTrainer:
                 kernel=kernel,
                 backward_verified=True,
             )
+        elif (
+            attn_choice == "auto"
+            and device_type == "tpu"
+            and not getattr(self.args, "pack_sequences", False)
+        ):
+            kernel = probe_torchtpu_splash_kernel()
+            if kernel is not None:
+                import torch_tpu  # type: ignore[import-not-found]
+
+                tpu_ver = str(getattr(torch_tpu, "__version__", "unknown"))
+                splash_runtime = TorchTPUSplashAttentionRuntime(
+                    torch_tpu_version=tpu_ver,
+                    tested_torch_tpu_versions=(tpu_ver,),
+                    kernel=kernel,
+                    backward_verified=True,
+                )
 
         if self.args.pack_gated_mlp is True:
             should_pack_mlp = True

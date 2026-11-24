@@ -3389,3 +3389,13 @@ patching (`apply_fused_rms_norm` / `restore_rms_norm`) for standard HF RMSNorm
 modules when Liger-Kernel RMSNorm is not active, controlled by
 `TrainLMTrainingArguments.use_fused_rms_norm` (default `True`). Hardware TPU/CUDA
 validation remains owner-run.
+
+
+**TorchTPU kernel probe, Splash auto-wiring, and 128-alignment advisor (Step 9).**
+`probe_torchtpu_kernels()` / `TorchTPUKernelInventory` now probe `torch.tpu` and
+`torch_tpu` kernel namespaces, and `TrainLMTrainer` auto-wires Splash Attention
+when `attn_implementation="auto"` on TPU (if a Splash kernel is present and
+`pack_sequences=False`). `src/trainlm/optimization/alignment.py` adds
+`inspect_model_alignment` and `pad_vocab_to_multiple`, exposed via
+`TrainLMTrainingArguments.pad_vocab_to_multiple` (`None`, `"auto"`, or integer).
+Hardware TPU/CUDA validation remains owner-run.

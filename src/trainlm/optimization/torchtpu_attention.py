@@ -126,30 +126,89 @@ def torchtpu_splash_attention_provider(
     )
 
 
-def probe_torchtpu_splash_kernel() -> Callable[..., Any] | None:
-    """Return an explicit Splash Attention callable if exposed by torch_tpu, else None."""
+@dataclass(frozen=True, slots=True)
+class TorchTPUKernelInventory:
+    """Discovered native TorchTPU kernel entrypoints in the active runtime."""
 
-    try:
-        import torch  # noqa: PLC0415
-    except ImportError:
-        return None
+    torch_tpu_version: str | None
+    splash_attention: Callable[..., Any] | None = None
+    flash_attention: Callable[..., Any] | None = None
+    rms_norm: Callable[..., Any] | None = None
+    cross_entropy: Callable[..., Any] | None = None
 
-    tpu_mod = getattr(torch, "tpu", None)
-    if tpu_mod is None:
-        return None
-    ops_mod = getattr(tpu_mod, "ops", None)
-    for container in (tpu_mod, ops_mod):
+    @property
+    def has_splash_attention(self) -> bool:
+        return self.splash_attention is not None
+
+
+def _find_callable_attr(containers: tuple[Any, ...], names: tuple[str, ...]) -> Callable[..., Any] | None:
+    for container in containers:
         if container is None:
             continue
-        for attr in ("splash_attention", "pallas_splash_attention"):
+        for attr in names:
             candidate = getattr(container, attr, None)
             if callable(candidate):
                 return candidate
     return None
 
 
+def probe_torchtpu_kernels() -> TorchTPUKernelInventory:
+    """Probe ``torch.tpu`` and ``torch_tpu`` for available native TPU kernels."""
+
+    containers: list[Any] = []
+    version: str | None = None
+    try:
+        import torch  # noqa: PLC0415
+
+        tpu_mod = getattr(torch, "tpu", None)
+        if tpu_mod is not None:
+            containers.extend(
+                [tpu_mod, getattr(tpu_mod, "ops", None), getattr(tpu_mod, "kernels", None)]
+            )
+        ops_mod = getattr(torch, "ops", None)
+        if ops_mod is not None:
+            containers.append(getattr(ops_mod, "tpu", None))
+    except ImportError:
+        pass
+
+    try:
+        import torch_tpu  # type: ignore[import-not-found]  # noqa: PLC0415
+
+        version = str(getattr(torch_tpu, "__version__", "unknown"))
+        containers.extend(
+            [
+                torch_tpu,
+                getattr(torch_tpu, "ops", None),
+                getattr(torch_tpu, "kernels", None),
+            ]
+        )
+    except ImportError:
+        pass
+
+    container_tuple = tuple(containers)
+    return TorchTPUKernelInventory(
+        torch_tpu_version=version,
+        splash_attention=_find_callable_attr(
+            container_tuple, ("splash_attention", "pallas_splash_attention")
+        ),
+        flash_attention=_find_callable_attr(container_tuple, ("flash_attention",)),
+        rms_norm=_find_callable_attr(container_tuple, ("rms_norm", "fused_rms_norm")),
+        cross_entropy=_find_callable_attr(
+            container_tuple, ("cross_entropy", "fused_cross_entropy")
+        ),
+    )
+
+
+def probe_torchtpu_splash_kernel() -> Callable[..., Any] | None:
+    """Return an explicit Splash Attention callable if exposed by torch_tpu, else None."""
+
+    return probe_torchtpu_kernels().splash_attention
+
+
 __all__ = [
+    "TorchTPUKernelInventory",
     "TorchTPUSplashAttentionRuntime",
+    "probe_torchtpu_kernels",
     "probe_torchtpu_splash_kernel",
     "torchtpu_splash_attention_provider",
 ]
