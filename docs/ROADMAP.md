@@ -3453,3 +3453,12 @@ strictly before any positional-only `jax_op` symbol, and decorated
 `_build_splash_ops` / `_build_pallas_ce_ops` with
 `@torch._dynamo.assume_constant_result` so TorchDynamo never traces JAX setup
 or `torch.library.custom_op` registration inside `torch.compile`.
+
+
+**Pallas Splash & CE edge-case hardening.** Updated `pallas_splash_attention`
+to require `head_dim >= 128` and `head_dim % 128 == 0`, repeat KV heads for
+GQA (`1 < n_kv_heads < n_heads`) before invoking `make_splash_mha`, and cache
+any `_build_splash_ops` failures in `_UNSUPPORTED_SPLASH_SPECS` with clean
+`F.scaled_dot_product_attention` fallback; updated
+`pallas_chunked_linear_cross_entropy` to cast `int64` labels to `int32`
+consistent with JAX's default `x64=False` mode.

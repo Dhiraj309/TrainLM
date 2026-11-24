@@ -2621,3 +2621,13 @@ than matching positional-only `torch.tpu.pallas.jax_op`, and both
 `@torch._dynamo.assume_constant_result` so `make_splash_mha` and custom-op
 registration execute outside TorchDynamo tracing. Verified on CPU/CI; Colab
 TPU re-run is pending.
+
+
+- `src/trainlm/kernels/pallas/splash_attention.py`: `pallas_splash_attention()`
+  now requires `head_dim >= 128 and head_dim % 128 == 0`, repeats KV heads when
+  `1 < n_kv_heads < n_heads` so GQA tensors match `make_splash_mha`, and caches
+  any `_build_splash_ops()` failures in `_UNSUPPORTED_SPLASH_SPECS` with clean
+  SDPA fallback.
+- `src/trainlm/kernels/pallas/cross_entropy.py`:
+  `pallas_chunked_linear_cross_entropy()` now casts non-`int32` labels (such as
+  PyTorch `int64` tokens) to `torch.int32` before calling the JAX/Pallas op.

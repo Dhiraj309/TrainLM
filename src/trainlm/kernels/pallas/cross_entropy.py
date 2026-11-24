@@ -218,5 +218,10 @@ def pallas_chunked_linear_cross_entropy(
     )
     fwd_op = getattr(torch.ops.trainlm_pallas, fwd_name)
     dummy_bias = bias if bias is not None else shifted_hidden.new_zeros((1,))
-    mean_loss, mean_z, _ = fwd_op(shifted_hidden, output_weight, dummy_bias, shifted_labels)
+    targets = (
+        shifted_labels
+        if shifted_labels.dtype == torch.int32
+        else shifted_labels.to(dtype=torch.int32)
+    )
+    mean_loss, mean_z, _ = fwd_op(shifted_hidden, output_weight, dummy_bias, targets)
     return mean_loss, (mean_z if z_loss else None)

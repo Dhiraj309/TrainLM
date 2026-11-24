@@ -251,6 +251,9 @@ def _build_splash_ops(
     return fwd_name, bwd_name
 
 
+_UNSUPPORTED_SPLASH_SPECS: set[tuple[int, int, int, int, int, bool, int, int | None]] = set()
+
+
 def pallas_splash_attention(
     query: torch.Tensor,
     key: torch.Tensor,
@@ -266,8 +269,9 @@ def pallas_splash_attention(
 ) -> torch.Tensor:
     """Compute TPU Splash Attention in HF ``(B, H, S, D)`` -> ``(B, S, H, D)`` layout.
 
-    Falls back to ``F.scaled_dot_product_attention`` on CPU, for sequences not
-    divisible by a valid ``>= 128`` Pallas block, or when JAX Splash is absent.
+    Falls back to ``F.scaled_dot_product_attention`` on CPU, for sequences or
+    head dimensions unsupported by Pallas Splash (such as ``head_dim % 128 != 0``),
+    or when JAX Splash is absent.
     """
     del query_heads, key_value_heads
     n_heads = query.shape[1]
@@ -276,14 +280,19 @@ def pallas_splash_attention(
     kv_seq_len = key.shape[2]
     head_dim = query.shape[3]
     block = _resolve_block_size(seq_len, max_block=max(128, min(block_q, block_k)))
+    effective_kv_heads = 1 if n_kv_heads == 1 else n_heads
+    spec_key = (
+        seq_len,
+        kv_seq_len,
+        n_heads,
+        effective_kv_heads,
+        head_dim,
+        causal,
+        block,
+        sliding_window,
+    )
 
-    if (
-        query.device.type != "tpu"
-        or seq_len < 128
-        or block == 0
-        or kv_seq_len != seq_len
-        or not is_pallas_splash_available()
-    ):
+    def _sdpa_fallback() -> torch.Tensor:
         out = F.scaled_dot_product_attention(
             query,
             key,
@@ -294,15 +303,32 @@ def pallas_splash_attention(
         )
         return out.transpose(1, 2).contiguous()
 
-    fwd_name, _ = _build_splash_ops(
-        seq_len=seq_len,
-        kv_seq_len=kv_seq_len,
-        n_heads=n_heads,
-        n_kv_heads=n_kv_heads,
-        is_causal=causal,
-        block_size=block,
-        sliding_window=sliding_window,
-    )
+    if (
+        query.device.type != "tpu"
+        or seq_len < 128
+        or block == 0
+        or kv_seq_len != seq_len
+        or head_dim < 128
+        or head_dim % 128 != 0
+        or (n_kv_heads != 1 and n_heads % n_kv_heads != 0)
+        or spec_key in _UNSUPPORTED_SPLASH_SPECS
+        or not is_pallas_splash_available()
+    ):
+        return _sdpa_fallback()
+
+    try:
+        fwd_name, _ = _build_splash_ops(
+            seq_len=seq_len,
+            kv_seq_len=kv_seq_len,
+            n_heads=n_heads,
+            n_kv_heads=effective_kv_heads,
+            is_causal=causal,
+            block_size=block,
+            sliding_window=sliding_window,
+        )
+    except (RuntimeError, ValueError, TypeError, NotImplementedError):
+        _UNSUPPORTED_SPLASH_SPECS.add(spec_key)
+        return _sdpa_fallback()
     fwd_op = getattr(torch.ops.trainlm_pallas, fwd_name)
 
     q_in = query
@@ -310,8 +336,16 @@ def pallas_splash_attention(
         default_scale = 1.0 / math.sqrt(head_dim)
         if abs(scale - default_scale) > 1e-6:
             q_in = q_in * (scale / default_scale)
-    k_in = key.squeeze(1) if n_kv_heads == 1 else key
-    v_in = value.squeeze(1) if n_kv_heads == 1 else value
+    if n_kv_heads == 1:
+        k_in = key.squeeze(1)
+        v_in = value.squeeze(1)
+    elif n_kv_heads != n_heads:
+        repeat_factor = n_heads // n_kv_heads
+        k_in = key.repeat_interleave(repeat_factor, dim=1)
+        v_in = value.repeat_interleave(repeat_factor, dim=1)
+    else:
+        k_in = key
+        v_in = value
     out, _ = fwd_op(q_in, k_in, v_in)
     if out.dtype != query.dtype:
         out = out.to(dtype=query.dtype)
