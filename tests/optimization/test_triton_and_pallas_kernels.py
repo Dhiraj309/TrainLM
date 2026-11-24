@@ -681,6 +681,6 @@ def test_packed_gated_mlp_checks_swiglu_activation_spec() -> None:
     )
     g = nn.Linear(8, 16, bias=False)
     u = nn.Linear(8, 16, bias=False)
-    packed = PackedGatedMLPProjection.from_projections(spec, (g, u), torch.nn.functional.silu)
+    packed = PackedGatedMLPProjection.from_separate(spec, g, u, torch.nn.functional.silu)
     x = torch.randn(2, 4, 8)
     torch.testing.assert_close(packed(x), torch.nn.functional.silu(g(x)) * u(x))
