@@ -538,6 +538,7 @@ class TrainLMTrainingArguments:
     ] = "adamw"
     quantized_training: Literal["none", "fp8", "int8"] = "none"
     use_liger_kernel: bool | Literal["auto"] = "auto"
+    use_fused_rms_norm: bool = True
     torch_compile_mode: Literal[
         "default",
         "reduce-overhead",
@@ -553,6 +554,8 @@ class TrainLMTrainingArguments:
             and not isinstance(self.use_liger_kernel, bool)
         ):
             raise ValueError("use_liger_kernel must be boolean or 'auto'.")
+        if not isinstance(self.use_fused_rms_norm, bool):
+            raise ValueError("use_fused_rms_norm must be a boolean.")
         if self.torch_compile_mode not in {
             "default",
             "reduce-overhead",
@@ -1706,6 +1709,15 @@ class TrainLMTrainer:
                 ),
                 strict=(self.args.use_liger_kernel is True),
             )
+
+        # 1c. Reversible F.rms_norm replacement when Liger RMSNorm was not applied.
+        self._rms_norm_result = None
+        if self.args.use_fused_rms_norm and not (
+            self._liger_result is not None and self._liger_result.fused_rms_norm
+        ):
+            from trainlm.optimization import apply_fused_rms_norm
+
+            self._rms_norm_result = apply_fused_rms_norm(self.model)
 
         # 2. Splash Attention (explicit) + Gated MLP packing (auto on CUDA/TPU).
         splash_runtime: TorchTPUSplashAttentionRuntime | None = None

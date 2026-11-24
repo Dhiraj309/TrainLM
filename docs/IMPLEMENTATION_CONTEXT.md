@@ -2520,3 +2520,19 @@ artifact cell. It uses whichever fresh or resumed `run` was selected, keeps
 publishing opt-in, prompts for Hugging Face auth only if no token is already
 available, and reports the repository URL and upload commit. This supports an
 owner-run Colab/Kaggle check; CI and this implementation did not upload a model.
+
+
+## Zero-recompile compiled optimizer and fused `F.rms_norm` (Step 8)
+
+When `Trainer` activates a compiled single-step function,
+`Trainer._sync_optimizer_lr_tensors()` converts each optimizer parameter group's
+`lr` into a persistent 0-D `torch.Tensor` (updated in-place via `.fill_()` after
+each scheduler step) and sets `capturable=True` on `torch.optim.AdamW` groups.
+This prevents `torch._dynamo` from guarding on changing Python float `lr`
+values and hitting `recompile_limit`. Separately,
+`src/trainlm/optimization/rmsnorm.py` (`apply_fused_rms_norm` /
+`restore_rms_norm`) replaces standard HF `*RMSNorm` forward methods (excluding
+Gemma `+1` offset norms and Liger-patched modules) with `torch.nn.functional.rms_norm`
+when `TrainLMTrainingArguments.use_fused_rms_norm` is `True` and Liger RMSNorm
+was not applied. Verified with CPU/CI unit tests; TPU/CUDA hardware validation
+is pending.
