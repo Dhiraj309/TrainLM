@@ -101,6 +101,7 @@ class Trainer:
         self._epoch_end_pending = False
         self._compiled_single_step_fn = None
         self._compiled_single_step_active = False
+        self._lr_tensors: list[torch.Tensor] | None = None
         self._performance_model = model
         self._performance_window_started: float | None = None
         self._performance_window_tokens = 0
@@ -888,7 +889,42 @@ class Trainer:
         else:
             self._compiled_single_step_active = False
             self._compiled_single_step_fn = _single_step_tensors
+        if self._compiled_single_step_active:
+            self._sync_optimizer_lr_tensors()
         return self._compiled_single_step_fn
+
+    def _sync_optimizer_lr_tensors(self) -> None:
+        """Keep ``group['lr']`` as persistent 0-D tensors when compiled to prevent Dynamo recompiles."""
+        if not self._compiled_single_step_active:
+            return
+        param_groups = getattr(self.optimizer, "param_groups", None)
+        if not param_groups:
+            return
+        is_adamw = isinstance(self.optimizer, torch.optim.AdamW)
+        if self._lr_tensors is None:
+            self._lr_tensors = []
+        default_device = getattr(self.runtime, "device", None) or torch.device("cpu")
+        for idx, group in enumerate(param_groups):
+            if is_adamw and "capturable" in group:
+                group["capturable"] = True
+            current_lr = group.get("lr")
+            if current_lr is None:
+                continue
+            lr_value = float(
+                current_lr.item() if isinstance(current_lr, torch.Tensor) else current_lr
+            )
+            if idx >= len(self._lr_tensors):
+                target_device = default_device
+                for param in group.get("params", ()):
+                    if isinstance(param, torch.Tensor):
+                        target_device = param.device
+                        break
+                self._lr_tensors.append(
+                    torch.tensor(lr_value, dtype=torch.float32, device=target_device)
+                )
+            elif current_lr is not self._lr_tensors[idx]:
+                self._lr_tensors[idx].fill_(lr_value)
+            group["lr"] = self._lr_tensors[idx]
 
     def _advance_scheduler(self, *, total_tokens: int) -> None:
         """Advance token-indexed schedules by cumulative consumed tokens."""
@@ -913,6 +949,7 @@ class Trainer:
         else:
             del total_tokens
             self.scheduler.step()
+        self._sync_optimizer_lr_tensors()
 
     def _evaluation_step(self, batch) -> TaskResult:
         """Dispatch one evaluation batch through the selected task."""

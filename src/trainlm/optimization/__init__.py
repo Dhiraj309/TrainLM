@@ -161,6 +161,11 @@ from .liger import (
     LigerKernelResult,
     apply_liger_kernels,
 )
+from .rmsnorm import (
+    RMSNormPatchResult,
+    apply_fused_rms_norm,
+    restore_rms_norm,
+)
 
 __all__ = [
     "CapabilityFact",
@@ -283,4 +288,7 @@ __all__ = [
     "apply_quantized_training",
     "LigerKernelResult",
     "apply_liger_kernels",
+    "RMSNormPatchResult",
+    "apply_fused_rms_norm",
+    "restore_rms_norm",
 ]
