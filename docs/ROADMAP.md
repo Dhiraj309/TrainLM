@@ -1,5 +1,15 @@
 # TrainLM Roadmap
 
+**8-Bit Optimizer States & PEFT/LoRA Integration (2026-11-23):** on branch
+`feat/48-8bit-optimizer-and-peft` (from `main` `9cd8202`): added
+`optim` (`"adamw"`, `"adamw_torch"`, `"adamw_8bit"`, `"paged_adamw_8bit"`,
+`"torchao_adamw_8bit"`) to `TrainLMTrainingArguments` and `OptimizerConfig`
+(using optional `bitsandbytes` / `torchao` with clear install errors when
+absent), filtered `OptimizerFactory.create` to trainable parameters when
+frozen parameters exist, and added `peft_config` support on `TrainLMTrainer`.
+CPU/mocked tests added; real GPU/TPU hardware validation and hosted CI remain
+pending.
+
 **Kernel & Packing Auto-Wiring (2026-11-23):** on branch
 `perf/47-kernel-and-packing-autowire` (from `main` `23b0c8c`): added
 `attn_implementation` (`"auto"` selects `"flash_attention_2"`/`"sdpa"` on CUDA,

@@ -30,6 +30,9 @@ class OptimizerConfig:
 
     name: Literal[
         "adamw",
+        "adamw_8bit",
+        "paged_adamw_8bit",
+        "torchao_adamw_8bit",
     ] = "adamw"
 
     learning_rate: float = 3e-4
@@ -51,7 +54,12 @@ class OptimizerConfig:
     decay_mode: DecayMode = "decoupled"
 
     def __post_init__(self) -> None:
-        if self.name != "adamw":
+        if self.name not in {
+            "adamw",
+            "adamw_8bit",
+            "paged_adamw_8bit",
+            "torchao_adamw_8bit",
+        }:
             raise ValueError(f"Unsupported optimizer: {self.name}")
         if not isinstance(self.learning_rate, (int, float)) or self.learning_rate <= 0:
             raise ValueError("learning_rate must be positive.")
