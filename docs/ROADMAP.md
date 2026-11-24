@@ -1,5 +1,17 @@
 # TrainLM Roadmap
 
+**Opt-In 8-Bit Compute Pretraining (`fp8` / experimental `int8`) (2026-11-23):**
+on branch `feat/49-opt-in-8bit-compute-pretraining` (from `main` `1ca87b5`):
+added `quantized_training: Literal["none", "fp8", "int8"] = "none"` to
+`TrainLMTrainingArguments`, implemented `apply_quantized_training` in
+`src/trainlm/optimization/quantized_training.py` (using optional
+`torchao.float8.convert_to_float8_training` for `fp8` and
+`torchao.prototype.quantized_training.Int8MixedPrecisionTrainingConfig` for
+`int8`, keeping `lm_head`/`embed_tokens` and non-16-aligned layers unquantized,
+and warning on `int8` with `hidden_size < 768`), and wired it before
+`prepare_model`/`_make_optimizer` in `TrainLMTrainer`. CPU/mocked tests added;
+real H100/L4/A100 hardware validation and hosted CI remain pending.
+
 **8-Bit Optimizer States & PEFT/LoRA Integration (2026-11-23):** on branch
 `feat/48-8bit-optimizer-and-peft` (from `main` `9cd8202`): added
 `optim` (`"adamw"`, `"adamw_torch"`, `"adamw_8bit"`, `"paged_adamw_8bit"`,

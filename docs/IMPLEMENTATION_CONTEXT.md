@@ -1,5 +1,16 @@
 # TrainLM implementation context
 
+**Opt-In 8-Bit Compute Pretraining (`fp8` / experimental `int8`) (2026-11-23):**
+on branch `feat/49-opt-in-8bit-compute-pretraining` (from `main` `1ca87b5`): (1)
+added `src/trainlm/optimization/quantized_training.py` (`apply_quantized_training`,
+`QuantizedTrainingResult`, `QuantizedTrainingMode`) and exported it from
+`src/trainlm/optimization/__init__.py`; (2) added `quantized_training` to
+`TrainLMTrainingArguments` in `src/trainlm/api.py` and wired it into
+`_apply_kernel_and_attention_plan` (skipping auto `pack_gated_mlp` when
+`quantized_training != "none"` so `torchao` converts standard `nn.Linear`
+layers). Added `tests/optimization/test_quantized_training.py`; real GPU/TPU
+hardware and hosted CI remain pending.
+
 **8-Bit Optimizer States & PEFT/LoRA Integration (2026-11-23):** on branch
 `feat/48-8bit-optimizer-and-peft` (from `main` `9cd8202`): (1) extended
 `OptimizerConfig.name` in `src/trainlm/config/optimizer.py` to include
