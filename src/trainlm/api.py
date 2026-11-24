@@ -524,10 +524,31 @@ class TrainLMTrainingArguments:
     early_stopping_patience: int | None = None
     early_stopping_threshold: float = 0.0
     max_grad_norm: float = 1.0
+    attn_implementation: Literal[
+        "auto", "eager", "sdpa", "flash_attention_2", "splash"
+    ] = "auto"
+    pack_gated_mlp: bool | None = None
+    packing: bool = False
 
     def __post_init__(self) -> None:
         if isinstance(self.betas, list):
             object.__setattr__(self, "betas", tuple(self.betas))
+        if self.attn_implementation not in {
+            "auto",
+            "eager",
+            "sdpa",
+            "flash_attention_2",
+            "splash",
+        }:
+            raise ValueError(
+                f"Unsupported attn_implementation: {self.attn_implementation}"
+            )
+        if self.pack_gated_mlp is not None and not isinstance(
+            self.pack_gated_mlp, bool
+        ):
+            raise ValueError("pack_gated_mlp must be boolean or None.")
+        if not isinstance(self.packing, bool):
+            raise ValueError("packing must be boolean.")
         for name in ("save_strategy", "eval_strategy"):
             strategy = getattr(self, name)
             if strategy is not None and strategy not in {"no", "steps", "epoch"}:
@@ -1403,6 +1424,8 @@ class TrainLMTrainer:
             )
         if self.args.save_total_limit is not None and self.runtime.is_distributed:
             raise ValueError("save_total_limit requires a single-device trainer.")
+        self._kernel_plan = None
+        self._apply_kernel_and_attention_plan(optimizer_injected=optimizer is not None)
         self.optimizer = optimizer or self._make_optimizer()
         self.scheduler = scheduler or self._make_scheduler()
         train_loader = self._make_loader(
@@ -1544,6 +1567,68 @@ class TrainLMTrainer:
             precision=precision,
             compile_enabled=self.args.torch_compile,
         )
+
+    def _apply_kernel_and_attention_plan(self, *, optimizer_injected: bool) -> None:
+        from trainlm.optimization import (
+            TorchTPUSplashAttentionRuntime,
+            apply_torchtpu_kernel_plan,
+            probe_torchtpu_splash_kernel,
+        )
+
+        # 1. Attention implementation selection (reversible).
+        attn_choice = self.args.attn_implementation
+        runtime_device = getattr(self.runtime, "device", None)
+        device_type = getattr(runtime_device, "type", "cpu")
+        if attn_choice == "auto":
+            if device_type == "cuda":
+                import importlib.util
+
+                has_flash = importlib.util.find_spec("flash_attn") is not None
+                if has_flash and (self.args.bf16 or self.args.fp16):
+                    _try_set_attn_implementation(self.model, "flash_attention_2")
+                else:
+                    _try_set_attn_implementation(self.model, "sdpa")
+        elif attn_choice in {"eager", "sdpa", "flash_attention_2"}:
+            _try_set_attn_implementation(self.model, attn_choice, strict=True)
+
+        # 2. Splash Attention (explicit) + Gated MLP packing (auto on CUDA/TPU).
+        splash_runtime: TorchTPUSplashAttentionRuntime | None = None
+        if attn_choice == "splash":
+            kernel = probe_torchtpu_splash_kernel()
+            if kernel is None:
+                raise RuntimeError(
+                    "attn_implementation='splash' requested, but TorchTPU Splash "
+                    "Attention kernel is unavailable in this environment."
+                )
+            import torch_tpu  # type: ignore[import-not-found]
+
+            tpu_ver = str(getattr(torch_tpu, "__version__", "unknown"))
+            splash_runtime = TorchTPUSplashAttentionRuntime(
+                torch_tpu_version=tpu_ver,
+                tested_torch_tpu_versions=(tpu_ver,),
+                kernel=kernel,
+                backward_verified=True,
+            )
+
+        if self.args.pack_gated_mlp is True:
+            should_pack_mlp = True
+        elif self.args.pack_gated_mlp is False or optimizer_injected:
+            should_pack_mlp = False
+        else:
+            should_pack_mlp = device_type in {"cuda", "tpu"}
+
+        if splash_runtime is not None or should_pack_mlp:
+            try:
+                plan = apply_torchtpu_kernel_plan(
+                    self.model,
+                    splash_runtime=splash_runtime,
+                    pack_mlp=should_pack_mlp,
+                )
+                if plan.packed_mlp_paths or plan.attention_installation is not None:
+                    self._kernel_plan = plan
+            except (TypeError, ValueError, RuntimeError):
+                if self.args.pack_gated_mlp is True or splash_runtime is not None:
+                    raise
 
     def _make_loader(
         self,
@@ -3136,6 +3221,9 @@ class TrainLMTrainer:
             raise NotImplementedError(
                 "TPU model export will be added with lifecycle parity."
             )
+        if getattr(self, "_kernel_plan", None) is not None:
+            self._kernel_plan.rollback(self.model)
+            self._kernel_plan = None
         destination = Path(output_dir or self.args.output_dir)
         destination.mkdir(parents=True, exist_ok=True)
         model_config = getattr(self.model, "config", None)
@@ -3281,6 +3369,89 @@ class TrainLMTrainer:
         if format == "text":
             return report.to_text()
         raise ValueError("format must be 'dict', 'json', or 'text'.")
+
+
+def _try_set_attn_implementation(
+    model: nn.Module,
+    implementation: str,
+    *,
+    strict: bool = False,
+) -> bool:
+    setter = getattr(model, "set_attn_implementation", None)
+    if callable(setter):
+        try:
+            setter(implementation)
+            return True
+        except Exception:
+            if strict:
+                raise
+            return False
+    config = getattr(model, "config", None)
+    if config is not None and hasattr(config, "_attn_implementation"):
+        config._attn_implementation = implementation
+        return True
+    if strict:
+        raise ValueError(
+            f"Model {type(model).__name__} does not support setting attn_implementation={implementation!r}."
+        )
+    return False
+
+
+class _PackedTokenDataset(Dataset):
+    """Constant-length packed token dataset for padding-free pretraining."""
+
+    def __init__(self, chunks: list[torch.Tensor]) -> None:
+        self._chunks = chunks
+
+    def __len__(self) -> int:
+        return len(self._chunks)
+
+    def __getitem__(self, index: int) -> dict[str, torch.Tensor]:
+        ids = self._chunks[index]
+        return {"input_ids": ids, "labels": ids.clone()}
+
+
+def _maybe_pack_token_dataset(
+    source: Any,
+    *,
+    sequence_length: int,
+    eos_token_id: int | None,
+) -> Any:
+    try:
+        total = len(source)
+    except (TypeError, NotImplementedError):
+        return source
+    if total == 0:
+        return source
+    first = source[0]
+    if not isinstance(first, Mapping) or "input_ids" not in first:
+        return source
+    buffer: list[int] = []
+    chunks: list[torch.Tensor] = []
+    for idx in range(total):
+        row = source[idx]
+        if not isinstance(row, Mapping) or "input_ids" not in row:
+            return source
+        raw_ids = row["input_ids"]
+        if isinstance(raw_ids, torch.Tensor):
+            if raw_ids.ndim != 1:
+                return source
+            tokens = raw_ids.tolist()
+        elif isinstance(raw_ids, (list, tuple)):
+            tokens = list(raw_ids)
+        else:
+            return source
+        if not tokens:
+            continue
+        buffer.extend(int(t) for t in tokens)
+        if eos_token_id is not None and buffer[-1] != eos_token_id:
+            buffer.append(int(eos_token_id))
+        while len(buffer) >= sequence_length:
+            chunks.append(torch.tensor(buffer[:sequence_length], dtype=torch.long))
+            del buffer[:sequence_length]
+    if not chunks:
+        return source
+    return _PackedTokenDataset(chunks)
 
 
 __all__ = [

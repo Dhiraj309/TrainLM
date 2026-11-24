@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable
 
+import torch
 from torch import Tensor, nn
 
 from .attention import AttentionMaskSpec, CanonicalAttentionSpec
@@ -44,17 +45,52 @@ class TorchTPUKernelPlanResult:
     _mlp_snapshots: tuple[tuple[str, nn.Module], ...]
 
     def rollback(self, model: nn.Module) -> None:
+        target = getattr(model, "_orig_mod", model)
         for path, original in reversed(self._mlp_snapshots):
-            _set_submodule(model, path, original)
-        if self.attention_installation is not None:
-            setter = getattr(model, "set_attn_implementation", None)
+            current = _get_submodule(target, path)
+            if isinstance(current, PackedGatedMLPBlock):
+                packed = current.packed_gate_up
+                mid = packed.spec.intermediate_size
+                with torch.no_grad():
+                    original.gate_proj.weight.data.copy_(
+                        packed.weight[:mid].to(
+                            device=original.gate_proj.weight.device,
+                            dtype=original.gate_proj.weight.dtype,
+                        )
+                    )
+                    original.up_proj.weight.data.copy_(
+                        packed.weight[mid:].to(
+                            device=original.up_proj.weight.device,
+                            dtype=original.up_proj.weight.dtype,
+                        )
+                    )
+                    if (
+                        packed.bias is not None
+                        and original.gate_proj.bias is not None
+                        and original.up_proj.bias is not None
+                    ):
+                        original.gate_proj.bias.data.copy_(
+                            packed.bias[:mid].to(
+                                device=original.gate_proj.bias.device,
+                                dtype=original.gate_proj.bias.dtype,
+                            )
+                        )
+                        original.up_proj.bias.data.copy_(
+                            packed.bias[mid:].to(
+                                device=original.up_proj.bias.device,
+                                dtype=original.up_proj.bias.dtype,
+                            )
+                        )
+            _set_submodule(target, path, original)
+        if self.attention_installation is not None or self.previous_attn_implementation is not None:
+            setter = getattr(target, "set_attn_implementation", None)
             if callable(setter) and self.previous_attn_implementation is not None:
                 setter(self.previous_attn_implementation)
             elif (
-                hasattr(model, "config")
-                and hasattr(model.config, "_attn_implementation")
+                hasattr(target, "config")
+                and hasattr(target.config, "_attn_implementation")
             ):
-                model.config._attn_implementation = self.previous_attn_implementation
+                target.config._attn_implementation = self.previous_attn_implementation
 
 
 def apply_torchtpu_kernel_plan(
@@ -168,6 +204,15 @@ def _resolve_gated_activation(caps: ModelCapabilities, model: nn.Module) -> str:
     if isinstance(hidden_act, str) and "gelu" in hidden_act.lower():
         return "geglu"
     return "swiglu"
+
+
+def _get_submodule(model: nn.Module, path: str) -> Any:
+    current: Any = model
+    for part in path.split("."):
+        current = getattr(current, part, None)
+        if current is None:
+            return None
+    return current
 
 
 def _set_submodule(model: nn.Module, path: str, replacement: nn.Module) -> None:

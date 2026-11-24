@@ -1,5 +1,18 @@
 # TrainLM implementation context
 
+**Kernel & Packing Auto-Wiring (2026-11-23):** on branch
+`perf/47-kernel-and-packing-autowire` (from `main` `23b0c8c`): (1) updated
+`TorchTPUKernelPlanResult.rollback` in
+`src/trainlm/optimization/torchtpu_kernels.py` to copy trained
+`packed_gate_up` weight/bias slices back into `gate_proj`/`up_proj`; (2) added
+`attn_implementation`, `pack_gated_mlp`, and `packing` to
+`TrainLMTrainingArguments` in `src/trainlm/api.py`, wired
+`_apply_kernel_and_attention_plan` in `TrainLMTrainer.__init__`, rolled back
+packed projections in `TrainLMTrainer.save_model`, and added
+`_maybe_pack_token_dataset` in `_make_loader`. Added
+`tests/optimization/test_kernel_and_packing_autowire.py`; real CUDA/TPU
+hardware and hosted CI remain pending.
+
 **Native CUDA Parity & Speed Pack (2026-11-23):** on branch
 `perf/46-cuda-compile-fused-adamw-and-mfu` (from `main` `54b0909`): (1)
 `src/trainlm/api.py` allows `torch_compile` for `cuda`/`auto`, passes

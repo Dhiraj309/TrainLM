@@ -1,5 +1,15 @@
 # TrainLM Roadmap
 
+**Kernel & Packing Auto-Wiring (2026-11-23):** on branch
+`perf/47-kernel-and-packing-autowire` (from `main` `23b0c8c`): added
+`attn_implementation` (`"auto"` selects `"flash_attention_2"`/`"sdpa"` on CUDA,
+and `"splash"` wires `TorchTPUSplashAttentionRuntime`), `pack_gated_mlp`
+(default auto-enabled on CUDA/TPU via `apply_torchtpu_kernel_plan`, with
+weight-preserving rollback in `TorchTPUKernelPlanResult.rollback` and
+`TrainLMTrainer.save_model`), and `packing: bool = False` for constant-length
+token sequence packing in `_maybe_pack_token_dataset`. CPU tests added;
+real GPU/TPU hardware validation and hosted CI remain pending.
+
 **Native CUDA Parity & Speed Pack (2026-11-23):** on branch
 `perf/46-cuda-compile-fused-adamw-and-mfu` (branched from `main` `54b0909`):
 enabled `torch_compile` on `accelerator="cuda"` / `"auto"`, wired `fused=True`
