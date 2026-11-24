@@ -2536,3 +2536,17 @@ Gemma `+1` offset norms and Liger-patched modules) with `torch.nn.functional.rms
 when `TrainLMTrainingArguments.use_fused_rms_norm` is `True` and Liger RMSNorm
 was not applied. Verified with CPU/CI unit tests; TPU/CUDA hardware validation
 is pending.
+
+
+## TorchTPU kernel probe and 128-alignment advisor (Step 9)
+
+`src/trainlm/optimization/torchtpu_attention.py` now provides
+`probe_torchtpu_kernels()` returning `TorchTPUKernelInventory` across `torch.tpu`
+and `torch_tpu` namespaces. In `TrainLMTrainer._apply_kernel_and_attention_plan`,
+`attn_implementation="auto"` on TPU probes for a Splash Attention kernel and
+auto-wires `TorchTPUSplashAttentionRuntime` when available and
+`pack_sequences=False`. `src/trainlm/optimization/alignment.py` adds
+`inspect_model_alignment()` and `pad_vocab_to_multiple()`, wired to
+`TrainLMTrainingArguments.pad_vocab_to_multiple` (default `None` for checkpoint
+compatibility; `"auto"` or `128` pads unaligned vocabularies). Verified with
+CPU/CI unit tests; TPU/CUDA hardware validation is pending.
