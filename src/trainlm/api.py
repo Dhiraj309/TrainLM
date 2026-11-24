@@ -1542,7 +1542,8 @@ class TrainLMTrainer:
             callbacks=(
                 self.callbacks
                 + ((_ConsoleLoggingCallback(total_steps=self._effective_max_steps),)
-                   if self.args.logging_verbosity != "quiet" and self.runtime.is_primary_process
+                   if self.args.logging_verbosity != "quiet"
+                   and getattr(self.runtime, "is_primary_process", True)
                    else ())
                 + ((_MetricsReporterCallback(
                     Path(self.args.output_dir),
