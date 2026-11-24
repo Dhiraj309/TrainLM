@@ -3399,3 +3399,14 @@ when `attn_implementation="auto"` on TPU (if a Splash kernel is present and
 `inspect_model_alignment` and `pad_vocab_to_multiple`, exposed via
 `TrainLMTrainingArguments.pad_vocab_to_multiple` (`None`, `"auto"`, or integer).
 Hardware TPU/CUDA validation remains owner-run.
+
+
+**Multi-device DDP overlap, FSDP2 sharding, and `world_size > 1` MFU (Step 10).**
+`src/trainlm/runtime/distributed_overlap.py` adds `prepare_distributed_model`,
+`apply_distributed_data_parallel` (`bucket_cap_mb`, `gradient_as_bucket_view`,
+`static_graph`), and `apply_fsdp2_fully_shard`, exposed via
+`TrainLMTrainingArguments.distributed_strategy` (`"auto"`, `"ddp"`, `"fsdp2"`,
+`"none"`) and `ddp_bucket_cap_mb`. `Trainer` and `build_performance_summary`
+now report cluster-wide MFU for `world_size > 1` when `global_tokens_per_second`
+is measured. Multi-device hardware (`v5e-8`, multi-GPU) validation remains
+owner-run.

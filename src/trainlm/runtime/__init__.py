@@ -17,10 +17,17 @@ from .fsdp import (
     FSDPMeshPolicy,
     ParameterShardingRule,
 )
+from .distributed_overlap import (
+    DistributedWrapResult,
+    apply_distributed_data_parallel,
+    apply_fsdp2_fully_shard,
+    prepare_distributed_model,
+)
 
 __all__ = [
     "BackendDiagnostics",
     "CheckpointLayout",
+    "DistributedWrapResult",
     "ExecutionBackend",
     "FSDPApplication",
     "FSDPCheckpointPolicy",
@@ -39,4 +46,7 @@ __all__ = [
     "AccumulationStrategy",
     "select_accumulation_plan",
     "XlaDiagnostics",
+    "apply_distributed_data_parallel",
+    "apply_fsdp2_fully_shard",
+    "prepare_distributed_model",
 ]

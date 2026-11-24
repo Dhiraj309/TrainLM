@@ -406,6 +406,10 @@ class Trainer:
             **self._performance,
             "recent_windows": list(self._performance_windows),
         }
+        wall_seconds = float(self._performance.get("wall_seconds", 0.0))
+        global_tokens = float(self._performance.get("global_supervised_tokens", 0))
+        if self.runtime.world_size > 1 and wall_seconds > 0 and global_tokens > 0:
+            measurements["global_tokens_per_second"] = global_tokens / wall_seconds
         return build_performance_summary(
             measurements=measurements,
             model=self._performance_model,
@@ -440,8 +444,15 @@ class Trainer:
             return
 
         throughput = tokens / wall_seconds
+        global_tokens = (
+            self._sum_tokens(tokens) if self.runtime.world_size > 1 else tokens
+        )
+        global_throughput = global_tokens / wall_seconds
         self._performance["measured_optimizer_steps"] += steps
         self._performance["supervised_tokens"] += tokens
+        self._performance["global_supervised_tokens"] = (
+            int(self._performance.get("global_supervised_tokens", 0)) + global_tokens
+        )
         self._performance["wall_seconds"] += wall_seconds
         self._performance["tokens_per_second"] = (
             self._performance["supervised_tokens"] / self._performance["wall_seconds"]
@@ -459,15 +470,18 @@ class Trainer:
         }
         from .performance import build_performance_summary
 
+        window_measurements: dict[str, object] = {
+            "measured_optimizer_steps": steps,
+            "supervised_tokens": tokens,
+            "wall_seconds": wall_seconds,
+            "tokens_per_second": throughput,
+            "dataloader_wait_seconds": data_wait,
+            "dataloader_wait_fraction": data_wait / wall_seconds,
+        }
+        if self.runtime.world_size > 1:
+            window_measurements["global_tokens_per_second"] = global_throughput
         summary = build_performance_summary(
-            measurements={
-                "measured_optimizer_steps": steps,
-                "supervised_tokens": tokens,
-                "wall_seconds": wall_seconds,
-                "tokens_per_second": throughput,
-                "dataloader_wait_seconds": data_wait,
-                "dataloader_wait_fraction": data_wait / wall_seconds,
-            },
+            measurements=window_measurements,
             model=self._performance_model,
             runtime=self.runtime,
             sequence_length=int(

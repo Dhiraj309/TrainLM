@@ -2550,3 +2550,18 @@ auto-wires `TorchTPUSplashAttentionRuntime` when available and
 `TrainLMTrainingArguments.pad_vocab_to_multiple` (default `None` for checkpoint
 compatibility; `"auto"` or `128` pads unaligned vocabularies). Verified with
 CPU/CI unit tests; TPU/CUDA hardware validation is pending.
+
+
+## Multi-device DDP overlap, FSDP2, and `world_size > 1` MFU (Step 10)
+
+`src/trainlm/runtime/distributed_overlap.py` adds `prepare_distributed_model()`,
+`apply_distributed_data_parallel()` (`bucket_cap_mb=50`,
+`gradient_as_bucket_view=True`, `static_graph=True`), and
+`apply_fsdp2_fully_shard()` (structural block-level + root `fully_shard`),
+configured via `TrainLMTrainingArguments.distributed_strategy` and
+`ddp_bucket_cap_mb`. `Trainer._record_performance_window()` and
+`Trainer.performance_summary()` now compute `global_tokens_per_second` across
+ranks when `world_size > 1`, enabling `build_performance_summary()` to report
+cluster-wide `non_embedding_mfu` and `logits_inclusive_mfu` for `v5e-8` and
+multi-GPU runs. Verified with CPU/CI unit tests; multi-device hardware
+validation is pending.
