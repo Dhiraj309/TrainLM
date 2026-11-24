@@ -531,6 +531,7 @@ class TrainLMTrainingArguments:
     packing: bool = False
     optim: Literal[
         "adamw",
+        "adamw_bf16",
         "adamw_torch",
         "adamw_8bit",
         "paged_adamw_8bit",
@@ -542,6 +543,8 @@ class TrainLMTrainingArguments:
     pad_vocab_to_multiple: int | Literal["auto"] | None = None
     loss_rematerialization: Literal["auto", "disabled", "per_chunk"] = "auto"
     tpu_allow_excess_precision: bool | Literal["auto"] = "auto"
+    tpu_compile_cache_dir: str | Literal["auto"] | None = "auto"
+    prefetch_batches: bool = True
     distributed_strategy: Literal["auto", "ddp", "fsdp2", "none"] = "auto"
     ddp_bucket_cap_mb: int = 50
     torch_compile_mode: Literal[
@@ -578,6 +581,13 @@ class TrainLMTrainingArguments:
             and not isinstance(self.tpu_allow_excess_precision, bool)
         ):
             raise ValueError("tpu_allow_excess_precision must be boolean or 'auto'.")
+        if self.tpu_compile_cache_dir is not None and (
+            not isinstance(self.tpu_compile_cache_dir, str)
+            or not self.tpu_compile_cache_dir.strip()
+        ):
+            raise ValueError("tpu_compile_cache_dir must be 'auto', a non-empty path, or None.")
+        if not isinstance(self.prefetch_batches, bool):
+            raise ValueError("prefetch_batches must be a boolean.")
         if self.distributed_strategy not in {"auto", "ddp", "fsdp2", "none"}:
             raise ValueError(
                 f"Unsupported distributed_strategy: {self.distributed_strategy}"
@@ -603,6 +613,7 @@ class TrainLMTrainingArguments:
             )
         if self.optim not in {
             "adamw",
+            "adamw_bf16",
             "adamw_torch",
             "adamw_8bit",
             "paged_adamw_8bit",
@@ -1638,6 +1649,11 @@ class TrainLMTrainer:
             checkpoint_saver=self._save_training_checkpoint,
             checkpoint_loader=self._load_training_checkpoint,
         )
+        runtime_dev = getattr(self.runtime, "device", None)
+        self.engine._prefetch_batches = bool(
+            self.args.prefetch_batches
+            and getattr(runtime_dev, "type", "cpu") in {"cuda", "tpu"}
+        )
         if (
             self.runtime.name == "torchtpu"
             and self.args.resolved_save_strategy != "no"
@@ -1715,11 +1731,17 @@ class TrainLMTrainer:
                     else None
                 )
             )
+            cache_dir = (
+                str(Path.home() / ".cache" / "trainlm" / "tpu_compile")
+                if self.args.tpu_compile_cache_dir == "auto"
+                else self.args.tpu_compile_cache_dir
+            )
             return TorchTPURuntime(
                 precision=precision,
                 seed=self.args.seed,
                 compile_enabled=self.args.torch_compile,
                 allow_excess_precision=allow_excess,
+                compile_cache_dir=cache_dir,
             )
         if accelerator == "cuda" and not torch.cuda.is_available():
             raise RuntimeError("accelerator='cuda' requested but CUDA is unavailable.")
@@ -1931,14 +1953,15 @@ class TrainLMTrainer:
         runtime_device = getattr(self.runtime, "device", None)
         use_fused = getattr(runtime_device, "type", None) == "cuda"
         optim_name = "adamw" if self.args.optim == "adamw_torch" else self.args.optim
+        use_bf16_nu = optim_name == "adamw_bf16"
         return OptimizerConfig(
             name=optim_name,
             learning_rate=self.args.learning_rate,
             betas=self.args.betas,
             eps=self.args.eps,
             weight_decay=self.args.weight_decay,
-            mu_dtype="bfloat16" if use_bf16_mu else "float32",
-            nu_dtype="float32",
+            mu_dtype="bfloat16" if (use_bf16_mu or use_bf16_nu) else "float32",
+            nu_dtype="bfloat16" if use_bf16_nu else "float32",
             fused=use_fused,
         )
 

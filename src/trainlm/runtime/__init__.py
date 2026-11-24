@@ -23,8 +23,10 @@ from .distributed_overlap import (
     apply_fsdp2_fully_shard,
     prepare_distributed_model,
 )
+from .prefetch import AsyncBatchPrefetcher
 
 __all__ = [
+    "AsyncBatchPrefetcher",
     "BackendDiagnostics",
     "CheckpointLayout",
     "DistributedWrapResult",

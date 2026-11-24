@@ -111,6 +111,23 @@ def chunked_linear_causal_cross_entropy(
         if not bool(denominator.item()):
             raise ValueError("Causal loss contains no supervised target tokens.")
 
+    if hidden_states.device.type == "tpu":
+        from trainlm.kernels.pallas import (
+            is_pallas_ce_available,
+            pallas_chunked_linear_cross_entropy,
+        )
+
+        if is_pallas_ce_available():
+            return pallas_chunked_linear_cross_entropy(
+                shifted_hidden,
+                output_weight,
+                shifted_labels,
+                bias=bias,
+                chunk_size=chunk_size,
+                ignore_index=ignore_index,
+                z_loss=float(z_loss),
+            )
+
     loss_sum = hidden_states.new_zeros((), dtype=torch.float32)
     z_sum = hidden_states.new_zeros((), dtype=torch.float32)
     weight_compute = output_weight

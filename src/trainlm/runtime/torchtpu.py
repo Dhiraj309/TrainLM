@@ -76,6 +76,7 @@ class TorchTPURuntime(TorchRuntime):
         seed: int = 42,
         compile_enabled: bool = False,
         allow_excess_precision: bool | None = None,
+        compile_cache_dir: str | None = None,
     ) -> None:
         if isinstance(seed, bool) or not isinstance(seed, int) or seed < 0:
             raise ValueError("seed must be a non-negative integer.")
@@ -83,12 +84,17 @@ class TorchTPURuntime(TorchRuntime):
             allow_excess_precision, bool
         ):
             raise TypeError("allow_excess_precision must be boolean or None.")
+        if compile_cache_dir is not None and (
+            not isinstance(compile_cache_dir, str) or not compile_cache_dir.strip()
+        ):
+            raise ValueError("compile_cache_dir must be a non-empty path string or None.")
         # Explicit native_tpu selection is the opt-in allocation boundary.
         super().__init__(
             device="cpu", precision=precision, compile_enabled=compile_enabled
         )
         self._seed = seed
         self._allow_excess_precision = allow_excess_precision
+        self._compile_cache_dir = compile_cache_dir
         self._native_report = discover_tpu(
             torch, verify_allocation=True, include_properties=True
         )
@@ -135,10 +141,32 @@ class TorchTPURuntime(TorchRuntime):
             return step_fn
         return _compile_with_tpu_options(step_fn)
 
+    def _configure_compile_cache(self) -> None:
+        cache_dir = getattr(self, "_compile_cache_dir", None)
+        if not cache_dir or not self._compile_enabled:
+            return
+        import os
+        from pathlib import Path
+
+        path = Path(cache_dir).expanduser()
+        path.mkdir(parents=True, exist_ok=True)
+        resolved = str(path)
+        os.environ.setdefault("TORCH_TPU_CACHE_DIR", resolved)
+        os.environ.setdefault("XLA_COMPILATION_CACHE_PATH", resolved)
+        tpu_mod = getattr(torch, "tpu", None)
+        for attr in ("set_compile_cache_dir", "set_compilation_cache_dir"):
+            setter = getattr(tpu_mod, attr, None)
+            if callable(setter):
+                try:
+                    setter(resolved)
+                except Exception:
+                    pass
+
     def on_train_begin(self) -> None:
         self._previous_eager_mode = None
         self._previous_matmul_precision = None
         self._previous_excess_precision = None
+        self._configure_compile_cache()
         if getattr(self, "_precision", "fp32") == "bf16":
             getter_p = getattr(torch, "get_float32_matmul_precision", None)
             setter_p = getattr(torch, "set_float32_matmul_precision", None)
