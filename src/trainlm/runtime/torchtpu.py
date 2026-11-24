@@ -124,7 +124,7 @@ class TorchTPURuntime(TorchRuntime):
         return self.compile_model(model)
 
     def compile_model(self, model: nn.Module) -> nn.Module:
-        if not self._compile_enabled:
+        if not self._compile_enabled or getattr(model, "_orig_mod", None) is not None:
             return model
         return _compile_with_tpu_options(model)
 

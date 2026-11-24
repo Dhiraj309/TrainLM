@@ -1,5 +1,22 @@
 # TrainLM implementation context
 
+**Fix Dynamo `lr`/Token-Count Recompiles, CUDA Optimizer Placement, & Steady-State MFU (2026-11-23):**
+on branch `fix/51-compile-step-recompiles-and-cuda-device-placement` (from
+`main` `c515ca1`): (1) decorated `AdamWStateDtype.step`
+(`src/trainlm/optimization/optimizers.py`) and `TorchRuntime.backward` /
+`optimizer_step` / `zero_grad` (`src/trainlm/runtime/runtime.py`) with
+`@_compiler_disable` to eliminate Dynamo `lr` recompilations and `record_function`
+warnings; (2) skipped double `compile_model` wrapping (`_orig_mod` guard) in
+`runtime.py` and `torchtpu.py`, skipped redundant device copies when tensors are
+already on device, and enabled `TorchRuntime.compile_training_step` on CUDA;
+(3) removed duplicate `zero_grad` and redundant `loss * T` / `scale_gradients(1/T)`
+round-trip from `_single_step_tensors` in `src/trainlm/training/trainer.py`;
+(4) added `_place_model_on_runtime_device()` before `_make_optimizer()` in
+`src/trainlm/api.py` so CUDA `fused=True` / `adamw_8bit` receive device parameters;
+and (5) added `steady_state` (Window 2+) to `build_performance_summary()` in
+`src/trainlm/training/performance.py` and updated
+`notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb`.
+
 **Simplify MFU Benchmark Notebook UX (2026-11-23):** on branch
 `refactor/50-simplify-mfu-benchmark-notebook` (from `main` `453a1c0`):
 simplified `notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb` to remove custom

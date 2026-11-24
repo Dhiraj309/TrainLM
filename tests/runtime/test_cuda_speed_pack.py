@@ -224,3 +224,82 @@ def test_cuda_peak_flops_and_mfu_summary(device_name: str, precision: str, expec
     assert summary["mfu_status"] == "measured"
     assert summary["hardware"]["peak_flops_per_device"] == expected_peak
     assert summary["non_embedding_mfu"] > 0.0
+
+
+def test_torch_runtime_cuda_compile_training_step_and_noop_prepare_batch(monkeypatch) -> None:
+    compiled_fns: list[object] = []
+    monkeypatch.setattr(
+        "trainlm.runtime.runtime.torch.compile",
+        lambda fn: compiled_fns.append(fn) or (lambda *a, **k: fn(*a, **k)),
+    )
+
+    cuda_rt = TorchRuntime(device="cuda", precision="bf16", compile_enabled=True)
+    cpu_rt = TorchRuntime(device="cpu", precision="fp32", compile_enabled=True)
+    step = lambda batch, counts: (batch, counts)
+
+    assert cpu_rt.compile_training_step(step) is step
+    assert cuda_rt.compile_training_step(step) is not step
+    assert compiled_fns == [step]
+
+    model = nn.Linear(4, 4)
+    model._orig_mod = model  # type: ignore[attr-defined]
+    assert cuda_rt.compile_model(model) is model
+
+
+def test_trainlm_trainer_places_model_on_cuda_before_making_optimizer(monkeypatch) -> None:
+    events: list[str] = []
+
+    class FakeModel(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.w = nn.Parameter(torch.ones(2, 2))
+            self.moved_to: list[object] = []
+
+        def to(self, *args, **kwargs):
+            events.append("model.to")
+            self.moved_to.append((args, kwargs))
+            return self
+
+        def forward(self, input_ids, labels=None):
+            return SimpleNamespace(loss=self.w.sum(), logits=self.w)
+
+    class FakeRuntime:
+        name = "pytorch"
+        device = torch.device("cuda")
+        precision = "bf16"
+        world_size = 1
+        rank = 0
+        local_rank = 0
+        is_distributed = False
+
+        def prepare_model(self, model):
+            events.append("prepare_model")
+            return model
+
+        def prepare_optimizer(self, opt):
+            return opt
+
+        def prepare_dataloader(self, dl):
+            return dl
+
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+
+    from trainlm.api import TrainLMTrainer
+
+    def spy_make_optimizer(self):
+        events.append("make_optimizer")
+        return torch.optim.SGD([p for p in self.model.parameters()], lr=0.1)
+
+    monkeypatch.setattr(TrainLMTrainer, "_make_optimizer", spy_make_optimizer)
+
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        TrainLMTrainer(
+            model=FakeModel(),
+            runtime=FakeRuntime(),
+            train_dataset=[{"input_ids": torch.tensor([1, 2]), "labels": torch.tensor([1, 2])}],
+            args=TrainLMTrainingArguments(output_dir=tmpdir, max_steps=1, sequence_length=2),
+        )
+    assert events.index("model.to") < events.index("make_optimizer")
+
