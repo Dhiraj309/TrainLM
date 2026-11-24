@@ -22,14 +22,23 @@ class TorchRuntime:
         device: str | torch.device = "cpu",
         precision: Precision = "fp32",
         compile_enabled: bool = False,
+        compile_mode: str = "default",
     ) -> None:
         if precision not in {"fp32", "fp16", "bf16"}:
             raise ValueError(f"Unsupported runtime precision: {precision}")
         if not isinstance(compile_enabled, bool):
             raise ValueError("compile_enabled must be boolean.")
+        if compile_mode not in {
+            "default",
+            "reduce-overhead",
+            "max-autotune",
+            "max-autotune-no-cudagraphs",
+        }:
+            raise ValueError(f"Unsupported compile_mode: {compile_mode}")
         self._device = torch.device(device)
         self._precision = precision
         self._compile_enabled = compile_enabled
+        self._compile_mode = compile_mode
         self._previous_matmul_precision: str | None = None
         self._optimizer: Optimizer | None = None
         self._unscaled_this_step = False
@@ -135,7 +144,7 @@ class TorchRuntime:
     def compile_model(self, model: nn.Module) -> nn.Module:
         if not self._compile_enabled or getattr(model, "_orig_mod", None) is not None:
             return model
-        return torch.compile(model)
+        return self._compile_target(model)
 
     def compile_training_step(self, step_fn):
         """Compile single-microbatch step on CUDA when requested."""
@@ -143,8 +152,17 @@ class TorchRuntime:
         if not callable(step_fn):
             raise TypeError("step_fn must be callable.")
         if self._compile_enabled and self._device.type == "cuda":
-            return torch.compile(step_fn)
+            return self._compile_target(step_fn)
         return step_fn
+
+    def _compile_target(self, target: Any) -> Any:
+        mode = getattr(self, "_compile_mode", "default")
+        if mode != "default":
+            try:
+                return torch.compile(target, mode=mode)
+            except TypeError:
+                return torch.compile(target)
+        return torch.compile(target)
 
     def create_mesh(self, mesh: LogicalMesh) -> LogicalMesh:
         if mesh.size != self.world_size:

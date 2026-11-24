@@ -157,6 +157,10 @@ from .quantized_training import (
     QuantizedTrainingResult,
     apply_quantized_training,
 )
+from .liger import (
+    LigerKernelResult,
+    apply_liger_kernels,
+)
 
 __all__ = [
     "CapabilityFact",
@@ -277,4 +281,6 @@ __all__ = [
     "QuantizedTrainingMode",
     "QuantizedTrainingResult",
     "apply_quantized_training",
+    "LigerKernelResult",
+    "apply_liger_kernels",
 ]
