@@ -540,6 +540,8 @@ class TrainLMTrainingArguments:
     use_liger_kernel: bool | Literal["auto"] = "auto"
     use_fused_rms_norm: bool = True
     pad_vocab_to_multiple: int | Literal["auto"] | None = None
+    loss_rematerialization: Literal["auto", "disabled", "per_chunk"] = "auto"
+    tpu_allow_excess_precision: bool | Literal["auto"] = "auto"
     distributed_strategy: Literal["auto", "ddp", "fsdp2", "none"] = "auto"
     ddp_bucket_cap_mb: int = 50
     torch_compile_mode: Literal[
@@ -567,6 +569,15 @@ class TrainLMTrainingArguments:
             raise ValueError(
                 "pad_vocab_to_multiple must be None, 'auto', or a positive integer."
             )
+        if self.loss_rematerialization not in {"auto", "disabled", "per_chunk"}:
+            raise ValueError(
+                f"Unsupported loss_rematerialization: {self.loss_rematerialization}"
+            )
+        if (
+            self.tpu_allow_excess_precision != "auto"
+            and not isinstance(self.tpu_allow_excess_precision, bool)
+        ):
+            raise ValueError("tpu_allow_excess_precision must be boolean or 'auto'.")
         if self.distributed_strategy not in {"auto", "ddp", "fsdp2", "none"}:
             raise ValueError(
                 f"Unsupported distributed_strategy: {self.distributed_strategy}"
@@ -1585,6 +1596,17 @@ class TrainLMTrainer:
                     "The resolved epoch batch count does not match the training loader."
                 )
             self._train_batches_per_epoch = batches_per_epoch
+        if self.args.loss_rematerialization == "auto":
+            resolved_remat = (
+                "per_chunk"
+                if (
+                    self.args.loss_implementation == "chunked_linear"
+                    and int(getattr(self.args, "sequence_length", 1024)) >= 1024
+                )
+                else "disabled"
+            )
+        else:
+            resolved_remat = self.args.loss_rematerialization
         self.engine = EngineTrainer(
             config=self._make_config(),
             model=self.model,
@@ -1595,6 +1617,7 @@ class TrainLMTrainer:
                 loss_implementation=self.args.loss_implementation,
                 training_view=self.training_view,
                 logits_chunk_size=self.args.logits_chunk_size or 2048,
+                rematerialization=resolved_remat,
             ),
             train_dataloader=train_loader,
             eval_dataloader=eval_loader,
@@ -1683,10 +1706,20 @@ class TrainLMTrainer:
             from trainlm.runtime.torchtpu import TorchTPURuntime
 
             precision = "bf16" if self.args.bf16 else "fp16" if self.args.fp16 else "fp32"
+            allow_excess = (
+                True
+                if (self.args.tpu_allow_excess_precision == "auto" and precision == "bf16")
+                else (
+                    self.args.tpu_allow_excess_precision
+                    if isinstance(self.args.tpu_allow_excess_precision, bool)
+                    else None
+                )
+            )
             return TorchTPURuntime(
                 precision=precision,
                 seed=self.args.seed,
                 compile_enabled=self.args.torch_compile,
+                allow_excess_precision=allow_excess,
             )
         if accelerator == "cuda" and not torch.cuda.is_available():
             raise RuntimeError("accelerator='cuda' requested but CUDA is unavailable.")

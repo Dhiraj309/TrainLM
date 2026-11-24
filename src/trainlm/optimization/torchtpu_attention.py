@@ -140,6 +140,10 @@ class TorchTPUKernelInventory:
     def has_splash_attention(self) -> bool:
         return self.splash_attention is not None
 
+    @property
+    def has_flash_attention(self) -> bool:
+        return self.flash_attention is not None
+
 
 def _find_callable_attr(containers: tuple[Any, ...], names: tuple[str, ...]) -> Callable[..., Any] | None:
     for container in containers:
@@ -163,11 +167,21 @@ def probe_torchtpu_kernels() -> TorchTPUKernelInventory:
         tpu_mod = getattr(torch, "tpu", None)
         if tpu_mod is not None:
             containers.extend(
-                [tpu_mod, getattr(tpu_mod, "ops", None), getattr(tpu_mod, "kernels", None)]
+                [
+                    tpu_mod,
+                    getattr(tpu_mod, "ops", None),
+                    getattr(tpu_mod, "kernels", None),
+                    getattr(tpu_mod, "pallas", None),
+                ]
             )
         ops_mod = getattr(torch, "ops", None)
         if ops_mod is not None:
-            containers.append(getattr(ops_mod, "tpu", None))
+            containers.extend(
+                [
+                    getattr(ops_mod, "tpu", None),
+                    getattr(ops_mod, "torch_tpu", None),
+                ]
+            )
     except ImportError:
         pass
 
@@ -180,8 +194,18 @@ def probe_torchtpu_kernels() -> TorchTPUKernelInventory:
                 torch_tpu,
                 getattr(torch_tpu, "ops", None),
                 getattr(torch_tpu, "kernels", None),
+                getattr(torch_tpu, "pallas", None),
             ]
         )
+        internal_mod = getattr(torch_tpu, "_internal", None)
+        if internal_mod is not None:
+            containers.extend(
+                [
+                    getattr(internal_mod, "ops", None),
+                    getattr(internal_mod, "kernels", None),
+                    getattr(internal_mod, "pallas", None),
+                ]
+            )
     except ImportError:
         pass
 
@@ -191,7 +215,9 @@ def probe_torchtpu_kernels() -> TorchTPUKernelInventory:
         splash_attention=_find_callable_attr(
             container_tuple, ("splash_attention", "pallas_splash_attention")
         ),
-        flash_attention=_find_callable_attr(container_tuple, ("flash_attention",)),
+        flash_attention=_find_callable_attr(
+            container_tuple, ("flash_attention", "pallas_flash_attention", "tpu_flash_attention")
+        ),
         rms_norm=_find_callable_attr(container_tuple, ("rms_norm", "fused_rms_norm")),
         cross_entropy=_find_callable_attr(
             container_tuple, ("cross_entropy", "fused_cross_entropy")
@@ -202,7 +228,8 @@ def probe_torchtpu_kernels() -> TorchTPUKernelInventory:
 def probe_torchtpu_splash_kernel() -> Callable[..., Any] | None:
     """Return an explicit Splash Attention callable if exposed by torch_tpu, else None."""
 
-    return probe_torchtpu_kernels().splash_attention
+    inv = probe_torchtpu_kernels()
+    return inv.splash_attention or inv.flash_attention
 
 
 __all__ = [
