@@ -13,6 +13,11 @@ from torch.optim import Optimizer
 from .base import BackendDiagnostics, LogicalMesh, Precision
 
 
+def _compiler_disable(fn):
+    disable = getattr(getattr(torch, "compiler", None), "disable", None)
+    return disable(fn) if callable(disable) else fn
+
+
 class TorchRuntime:
     """CPU/CUDA-capable baseline implementation of ``ExecutionBackend``."""
 
@@ -112,7 +117,7 @@ class TorchRuntime:
         return dataloader
 
     def prepare_batch(self, batch: Any) -> Any:
-        if self.device.type == "cpu":
+        if self.device.type == "cpu" or _all_tensors_on_device(batch, self.device):
             return batch
         return _move_to_device(
             batch,
@@ -133,15 +138,17 @@ class TorchRuntime:
         return torch.autocast(device_type=self.device.type, dtype=dtype)
 
     def compile_model(self, model: nn.Module) -> nn.Module:
-        if not self._compile_enabled:
+        if not self._compile_enabled or getattr(model, "_orig_mod", None) is not None:
             return model
         return torch.compile(model)
 
     def compile_training_step(self, step_fn):
-        """Keep the optional training-step hook backend-compatible."""
+        """Compile single-microbatch step on CUDA when requested."""
 
         if not callable(step_fn):
             raise TypeError("step_fn must be callable.")
+        if self._compile_enabled and self._device.type == "cuda":
+            return torch.compile(step_fn)
         return step_fn
 
     def create_mesh(self, mesh: LogicalMesh) -> LogicalMesh:
@@ -160,6 +167,7 @@ class TorchRuntime:
         del mesh
         return optimizer
 
+    @_compiler_disable
     def backward(self, loss: torch.Tensor) -> None:
         if self._grad_scaler is not None:
             self._grad_scaler.scale(loss).backward()
@@ -215,6 +223,7 @@ class TorchRuntime:
             raise TypeError("value must be a torch.Tensor.")
         return value
 
+    @_compiler_disable
     def optimizer_step(self, optimizer: Optimizer) -> None:
         if self._grad_scaler is not None:
             self._grad_scaler.step(optimizer)
@@ -223,6 +232,7 @@ class TorchRuntime:
             return
         optimizer.step()
 
+    @_compiler_disable
     def zero_grad(self, optimizer: Optimizer) -> None:
         self._unscaled_this_step = False
         optimizer.zero_grad(set_to_none=True)
@@ -282,6 +292,16 @@ def _make_cuda_grad_scaler(device: torch.device, precision: Precision) -> Any:
     cuda_amp = getattr(torch.cuda, "amp", None)
     legacy_cls = getattr(cuda_amp, "GradScaler", None) if cuda_amp is not None else None
     return legacy_cls() if legacy_cls is not None else None
+
+
+def _all_tensors_on_device(value: Any, device: torch.device) -> bool:
+    if isinstance(value, torch.Tensor):
+        return value.device == device
+    if isinstance(value, Mapping):
+        return all(_all_tensors_on_device(item, device) for item in value.values())
+    if isinstance(value, (tuple, list)):
+        return all(_all_tensors_on_device(item, device) for item in value)
+    return True
 
 
 def _move_to_device(

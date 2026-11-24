@@ -664,7 +664,8 @@ class Trainer:
                     self._global_tokens_seen += global_microbatch_tokens
                 step_fn = self._resolve_single_step_fn()
                 task_batch = self.runtime.prepare_batch(task_batch)
-                loss_numerator, grad_norm = step_fn(task_batch, counts)
+                mean_loss, grad_norm = step_fn(task_batch, counts)
+                loss_numerator = mean_loss * token_count
                 observe_accumulation = getattr(
                     self.runtime,
                     "observe_accumulation_steps",
@@ -863,19 +864,13 @@ class Trainer:
                 if self._compiled_single_step_active
                 else self.model
             )
-            self.runtime.zero_grad(self.optimizer)
             result = self.task.training_step_prepared(
                 step_model,
                 task_batch,
                 counts,
                 self.runtime,
             )
-            weighted_loss = result.loss * result.tokens.supervised_tokens
-            self.runtime.backward(weighted_loss)
-            self.runtime.scale_gradients(
-                step_model.parameters(),
-                1.0 / result.tokens.supervised_tokens,
-            )
+            self.runtime.backward(result.loss)
             grad_norm = None
             if self.config.trainer.max_grad_norm > 0:
                 grad_norm = self.runtime.clip_gradients(
@@ -883,7 +878,7 @@ class Trainer:
                     self.config.trainer.max_grad_norm,
                 )
             self.runtime.optimizer_step(self.optimizer)
-            return weighted_loss.detach(), grad_norm
+            return result.loss.detach(), grad_norm
 
         compile_fn = getattr(self.runtime, "compile_training_step", None)
         if callable(compile_fn):
