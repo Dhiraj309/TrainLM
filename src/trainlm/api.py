@@ -1601,15 +1601,10 @@ class TrainLMTrainer:
 
     def _place_model_on_runtime_device(self) -> None:
         runtime_device = getattr(self.runtime, "device", None)
-        if not isinstance(runtime_device, torch.device) or runtime_device.type == "cpu":
+        if not isinstance(runtime_device, torch.device):
             return
         if runtime_device.type == "cuda" and torch.cuda.is_available():
             self.model = self.model.to(runtime_device)
-        elif getattr(self.runtime, "name", None) == "torchtpu":
-            if getattr(self.runtime, "precision", "fp32") == "bf16":
-                self.model = self.model.to(device=runtime_device, dtype=torch.bfloat16)
-            else:
-                self.model = self.model.to(runtime_device)
 
     def _apply_kernel_and_attention_plan(self, *, optimizer_injected: bool) -> None:
         from trainlm.optimization import (

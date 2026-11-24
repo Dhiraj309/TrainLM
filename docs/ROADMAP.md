@@ -1,5 +1,13 @@
 # TrainLM Roadmap
 
+**Restore Compiled TPU Optimizer Performance & Init Order (2026-11-23):**
+on branch `fix/54-restore-tpu-40pct-mfu` (from `main` `04b5be6`): removed
+`@_compiler_disable` from `AdamWStateDtype.step` (which forced eager
+single-tensor execution in `STRICT` mode for every step, regressing
+`SmolLM2-135M` eager/compiled to `9.94%` / `16.12%` MFU) and scoped
+`_place_model_on_runtime_device()` to CUDA only so `torchtpu` keeps its
+`453a1c0` init order (`39.46%` MFU on `SmolLM2-360M`).
+
 **Fix Compiled Backward Graph Break Regression (2026-11-23):** on branch
 `fix/53-remove-compiler-disable-from-backward` (from `main` `2472116`):
 removed `@_compiler_disable` from `TorchRuntime.backward`, `optimizer_step`,

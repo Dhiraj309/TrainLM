@@ -26,11 +26,6 @@ class OptimizerStatePolicy:
     nu_dtype: torch.dtype
 
 
-def _compiler_disable(fn):
-    disable = getattr(getattr(torch, "compiler", None), "disable", None)
-    return disable(fn) if callable(disable) else fn
-
-
 class AdamWStateDtype(torch.optim.AdamW):
     """AdamW that keeps moment tensors in an explicit state dtype policy."""
 
@@ -77,7 +72,6 @@ class AdamWStateDtype(torch.optim.AdamW):
                     ):
                         state[key] = value.to(dtype=gradient.dtype)
 
-    @_compiler_disable
     def step(self, closure=None):
         if (
             self.defaults.get("fused", False)
