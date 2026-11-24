@@ -28,15 +28,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            constraints/*.txt
 
-      - name: Install dependencies
+      - name: Set up Python & install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]" -c "${{ matrix.constraints }}"
+          uv venv --seed --python "${{ matrix.python-version }}" .venv
+          uv pip install --python .venv/bin/python \
+            -e ".[dev]" pytest-xdist \
+            -c "${{ matrix.constraints }}" \
+            --extra-index-url https://download.pytorch.org/whl/cpu \
+            --index-strategy unsafe-best-match
 
       - name: Run tests
-        run: python -m pytest -v
+        run: .venv/bin/python -m pytest -n auto -q
