@@ -3395,7 +3395,7 @@ validation remains owner-run.
 `probe_torchtpu_kernels()` / `TorchTPUKernelInventory` now probe `torch.tpu` and
 `torch_tpu` kernel namespaces, and `TrainLMTrainer` auto-wires Splash Attention
 when `attn_implementation="auto"` on TPU (if a Splash kernel is present and
-`pack_sequences=False`). `src/trainlm/optimization/alignment.py` adds
+`packing=False`). `src/trainlm/optimization/alignment.py` adds
 `inspect_model_alignment` and `pad_vocab_to_multiple`, exposed via
 `TrainLMTrainingArguments.pad_vocab_to_multiple` (`None`, `"auto"`, or integer).
 Hardware TPU/CUDA validation remains owner-run.

@@ -2545,7 +2545,7 @@ is pending.
 and `torch_tpu` namespaces. In `TrainLMTrainer._apply_kernel_and_attention_plan`,
 `attn_implementation="auto"` on TPU probes for a Splash Attention kernel and
 auto-wires `TorchTPUSplashAttentionRuntime` when available and
-`pack_sequences=False`. `src/trainlm/optimization/alignment.py` adds
+`packing=False`. `src/trainlm/optimization/alignment.py` adds
 `inspect_model_alignment()` and `pad_vocab_to_multiple()`, wired to
 `TrainLMTrainingArguments.pad_vocab_to_multiple` (default `None` for checkpoint
 compatibility; `"auto"` or `128` pads unaligned vocabularies). Verified with

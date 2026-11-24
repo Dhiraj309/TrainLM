@@ -1791,7 +1791,7 @@ class TrainLMTrainer:
         elif (
             attn_choice == "auto"
             and device_type == "tpu"
-            and not getattr(self.args, "pack_sequences", False)
+            and not getattr(self.args, "packing", False)
         ):
             kernel = probe_torchtpu_splash_kernel()
             if kernel is not None:
@@ -3697,7 +3697,16 @@ def _maybe_pack_token_dataset(
             return source
         if not tokens:
             continue
-        doc_tokens = [int(t) for t in tokens]
+        attn_mask = row.get("attention_mask")
+        if isinstance(attn_mask, torch.Tensor) and attn_mask.ndim == 1 and len(attn_mask) == len(tokens):
+            mask_list = attn_mask.tolist()
+            doc_tokens = [int(t) for t, m in zip(tokens, mask_list) if m]
+        elif isinstance(attn_mask, (list, tuple)) and len(attn_mask) == len(tokens):
+            doc_tokens = [int(t) for t, m in zip(tokens, attn_mask) if m]
+        else:
+            doc_tokens = [int(t) for t in tokens]
+        if not doc_tokens:
+            continue
         if eos_token_id is not None and doc_tokens[-1] != eos_token_id:
             doc_tokens.append(int(eos_token_id))
         token_buf.extend(doc_tokens)
