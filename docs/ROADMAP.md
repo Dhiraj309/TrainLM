@@ -1,5 +1,12 @@
 # TrainLM Roadmap
 
+**Built-In Console Step Logging (2026-11-23):** on branch
+`feat/55-builtin-console-step-logging` (from `main` `c76b758`): added
+`_ConsoleLoggingCallback` to `TrainLMTrainer` (`src/trainlm/api.py`) so
+`trainer.train()` automatically prints `step X/N | loss=... | ... tok/s | MFU ...% | wait ...%`
+at `logging_steps` intervals whenever `logging_verbosity != "quiet"`, without
+requiring custom callback classes in user notebooks.
+
 **Restore Compiled TPU Optimizer Performance & Init Order (2026-11-23):**
 on branch `fix/54-restore-tpu-40pct-mfu` (from `main` `04b5be6`): removed
 `@_compiler_disable` from `AdamWStateDtype.step` (which forced eager
