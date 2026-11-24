@@ -48,7 +48,12 @@ def test_triton_kernels_fallback_cleanly_on_cpu() -> None:
 
 
 def test_pallas_splash_fallback_and_bridge_probe(monkeypatch: pytest.MonkeyPatch) -> None:
+    from trainlm.kernels.pallas.splash_attention import probe_pallas_bridge_spec
+
     def _fake_custom_jax(fn, name=""):
+        return fn
+
+    def _fake_jax_op(qualname, fn, /):
         return fn
 
     fake_torch_tpu = SimpleNamespace(
@@ -58,6 +63,7 @@ def test_pallas_splash_fallback_and_bridge_probe(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setitem(sys.modules, "torch_tpu", fake_torch_tpu)
 
     assert probe_pallas_bridge() is _fake_custom_jax
+    assert probe_pallas_bridge_spec() == ("custom_jax_kernel", _fake_custom_jax)
     inv = probe_torchtpu_kernels()
     assert inv.has_pallas_bridge is True
     assert isinstance(is_pallas_splash_available(), bool)
@@ -65,9 +71,25 @@ def test_pallas_splash_fallback_and_bridge_probe(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setitem(
         sys.modules,
         "torch_tpu",
-        SimpleNamespace(__version__="0.2.0", pallas=SimpleNamespace(jax_op=lambda name: name)),
+        SimpleNamespace(__version__="0.2.0", libtpu=None, pathlib=None),
+    )
+    monkeypatch.setattr(
+        torch,
+        "tpu",
+        SimpleNamespace(pallas=SimpleNamespace(jax_op=_fake_jax_op)),
+        raising=False,
+    )
+    assert probe_pallas_bridge() is _fake_jax_op
+    assert probe_pallas_bridge_spec() == ("jax_op", _fake_jax_op)
+
+    monkeypatch.setattr(torch, "tpu", None, raising=False)
+    monkeypatch.setitem(
+        sys.modules,
+        "torch_tpu",
+        SimpleNamespace(__version__="0.2.0"),
     )
     assert probe_pallas_bridge() is None
+    assert probe_pallas_bridge_spec() is None
 
     q = torch.randn(1, 4, 16, 8)
     k = torch.randn(1, 2, 16, 8)
@@ -189,6 +211,7 @@ def test_pallas_cross_entropy_autograd_handles_none_grad_z(monkeypatch) -> None:
     import types
     import torch
     from trainlm.kernels.pallas import cross_entropy as ce_mod
+    from trainlm.kernels.pallas import splash_attention as sa_mod
 
     ce_mod._CE_OP_CACHE.clear()
     seen_bwd_grads: list[tuple[torch.dtype, torch.dtype]] = []
@@ -217,7 +240,11 @@ def test_pallas_cross_entropy_autograd_handles_none_grad_z(monkeypatch) -> None:
     fake_jnp = types.ModuleType("jax.numpy")
     monkeypatch.setitem(sys.modules, "jax", fake_jax)
     monkeypatch.setitem(sys.modules, "jax.numpy", fake_jnp)
-    monkeypatch.setattr(ce_mod, "probe_pallas_bridge", lambda: fake_custom_jax_kernel)
+    monkeypatch.setattr(
+        sa_mod,
+        "probe_pallas_bridge_spec",
+        lambda: ("custom_jax_kernel", fake_custom_jax_kernel),
+    )
 
     hidden = torch.randn(4, 8, dtype=torch.bfloat16, requires_grad=True)
     weight = torch.randn(16, 8, dtype=torch.bfloat16, requires_grad=True)
@@ -229,3 +256,83 @@ def test_pallas_cross_entropy_autograd_handles_none_grad_z(monkeypatch) -> None:
     assert hidden.grad is not None
     assert weight.grad is not None
     assert seen_bwd_grads == [(torch.float32, torch.float32)]
+
+
+def test_pallas_jax_op_020_registration_and_autograd(monkeypatch) -> None:
+    import sys
+    import types
+    import torch
+    from trainlm.kernels.pallas import cross_entropy as ce_mod
+    from trainlm.kernels.pallas import splash_attention as sa_mod
+
+    ce_mod._CE_OP_CACHE.clear()
+    registered_qualnames: list[str] = []
+
+    def fake_jax_op(qualname: str, fn, /):
+        del fn
+        registered_qualnames.append(qualname)
+        if "_fwd_" in qualname:
+            def _fwd(h, w, b, tgt):
+                del w, b, tgt
+                return (
+                    h.sum().to(dtype=torch.float32),
+                    torch.tensor(0.0, dtype=torch.float32, device=h.device),
+                    torch.tensor(float(h.shape[0]), dtype=torch.float32, device=h.device),
+                )
+
+            op = torch.library.custom_op(
+                f"{qualname}_test020",
+                _fwd,
+                mutates_args=(),
+                schema="(Tensor h, Tensor w, Tensor b, Tensor tgt) -> (Tensor, Tensor, Tensor)",
+            )
+            op.register_fake(
+                lambda h, w, b, tgt: (
+                    torch.empty((), dtype=torch.float32, device=h.device),
+                    torch.empty((), dtype=torch.float32, device=h.device),
+                    torch.empty((), dtype=torch.float32, device=h.device),
+                )
+            )
+            return op
+
+        def _bwd(h, w, b, tgt, grad_loss, grad_z):
+            del tgt, grad_loss, grad_z
+            return torch.ones_like(h), torch.zeros_like(w), torch.zeros_like(b)
+
+        op = torch.library.custom_op(
+            f"{qualname}_test020",
+            _bwd,
+            mutates_args=(),
+            schema="(Tensor h, Tensor w, Tensor b, Tensor tgt, Tensor grad_loss, Tensor grad_z) -> (Tensor, Tensor, Tensor)",
+        )
+        op.register_fake(
+            lambda h, w, b, tgt, grad_loss, grad_z: (
+                torch.empty_like(h),
+                torch.empty_like(w),
+                torch.empty_like(b),
+            )
+        )
+        return op
+
+    fake_jax = types.ModuleType("jax")
+    fake_jax.jit = lambda fn: fn
+    fake_jnp = types.ModuleType("jax.numpy")
+    monkeypatch.setitem(sys.modules, "jax", fake_jax)
+    monkeypatch.setitem(sys.modules, "jax.numpy", fake_jnp)
+    monkeypatch.setattr(
+        sa_mod,
+        "probe_pallas_bridge_spec",
+        lambda: ("jax_op", fake_jax_op),
+    )
+
+    hidden = torch.randn(4, 12, dtype=torch.bfloat16, requires_grad=True)
+    weight = torch.randn(20, 12, dtype=torch.bfloat16, requires_grad=True)
+    labels = torch.tensor([0, 1, 2, -100], dtype=torch.int64)
+
+    loss, z_loss = ce_mod.pallas_chunked_linear_cross_entropy(hidden, weight, labels)
+    assert z_loss is None
+    assert len(registered_qualnames) == 2
+    assert all(q.startswith("trainlm_pallas::trainlm_ce_") for q in registered_qualnames)
+    loss.backward()
+    assert hidden.grad is not None
+    assert weight.grad is not None
