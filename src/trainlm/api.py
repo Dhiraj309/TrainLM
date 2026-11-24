@@ -3529,17 +3529,58 @@ def _try_set_attn_implementation(
 
 
 class _PackedTokenDataset(Dataset):
-    """Constant-length packed token dataset for padding-free pretraining."""
+    """Constant-length packed token dataset with document-isolated position_ids."""
 
-    def __init__(self, chunks: list[torch.Tensor]) -> None:
+    def __init__(
+        self,
+        chunks: list[torch.Tensor],
+        position_chunks: list[torch.Tensor] | None = None,
+        label_chunks: list[torch.Tensor] | None = None,
+    ) -> None:
         self._chunks = chunks
+        self._position_chunks = position_chunks
+        self._label_chunks = label_chunks
 
     def __len__(self) -> int:
         return len(self._chunks)
 
     def __getitem__(self, index: int) -> dict[str, torch.Tensor]:
         ids = self._chunks[index]
-        return {"input_ids": ids, "labels": ids.clone()}
+        labels = (
+            self._label_chunks[index].clone()
+            if self._label_chunks is not None
+            else ids.clone()
+        )
+        item: dict[str, torch.Tensor] = {"input_ids": ids, "labels": labels}
+        if self._position_chunks is not None:
+            item["position_ids"] = self._position_chunks[index]
+        return item
+
+
+def compute_varlen_cu_seqlens(
+    position_ids: torch.Tensor,
+) -> tuple[torch.Tensor, int]:
+    """Compute FlashAttention-style ``cu_seqlens`` and ``max_seqlen`` from ``position_ids``."""
+
+    if position_ids.ndim == 1:
+        position_ids = position_ids.unsqueeze(0)
+    if position_ids.ndim != 2:
+        raise ValueError("position_ids must be 1D or 2D.")
+    batch_size, seq_len = position_ids.shape
+    starts: list[int] = [0]
+    for b in range(batch_size):
+        base = b * seq_len
+        if b > 0:
+            starts.append(base)
+        row = position_ids[b]
+        # Any position_ids == 0 after index 0 marks a new packed document boundary.
+        resets = torch.nonzero(row[1:] == 0, as_tuple=False).reshape(-1).tolist()
+        for offset in resets:
+            starts.append(base + int(offset) + 1)
+    starts.append(batch_size * seq_len)
+    cu_seqlens = torch.tensor(starts, dtype=torch.int32, device=position_ids.device)
+    max_seqlen = int((cu_seqlens[1:] - cu_seqlens[:-1]).max().item()) if seq_len > 0 else 0
+    return cu_seqlens, max_seqlen
 
 
 def _maybe_pack_token_dataset(
@@ -3557,8 +3598,11 @@ def _maybe_pack_token_dataset(
     first = source[0]
     if not isinstance(first, Mapping) or "input_ids" not in first:
         return source
-    buffer: list[int] = []
+    token_buf: list[int] = []
+    pos_buf: list[int] = []
     chunks: list[torch.Tensor] = []
+    position_chunks: list[torch.Tensor] = []
+    label_chunks: list[torch.Tensor] = []
     for idx in range(total):
         row = source[idx]
         if not isinstance(row, Mapping) or "input_ids" not in row:
@@ -3574,15 +3618,27 @@ def _maybe_pack_token_dataset(
             return source
         if not tokens:
             continue
-        buffer.extend(int(t) for t in tokens)
-        if eos_token_id is not None and buffer[-1] != eos_token_id:
-            buffer.append(int(eos_token_id))
-        while len(buffer) >= sequence_length:
-            chunks.append(torch.tensor(buffer[:sequence_length], dtype=torch.long))
-            del buffer[:sequence_length]
+        doc_tokens = [int(t) for t in tokens]
+        if eos_token_id is not None and doc_tokens[-1] != eos_token_id:
+            doc_tokens.append(int(eos_token_id))
+        token_buf.extend(doc_tokens)
+        pos_buf.extend(range(len(doc_tokens)))
+        while len(token_buf) >= sequence_length:
+            tok_slice = token_buf[:sequence_length]
+            pos_slice = pos_buf[:sequence_length]
+            # Mask cross-document boundary target (token at pos==0 after index 0).
+            lbl_slice = [
+                -100 if (i > 0 and pos_slice[i] == 0) else tok_slice[i]
+                for i in range(sequence_length)
+            ]
+            chunks.append(torch.tensor(tok_slice, dtype=torch.long))
+            position_chunks.append(torch.tensor(pos_slice, dtype=torch.long))
+            label_chunks.append(torch.tensor(lbl_slice, dtype=torch.long))
+            del token_buf[:sequence_length]
+            del pos_buf[:sequence_length]
     if not chunks:
         return source
-    return _PackedTokenDataset(chunks)
+    return _PackedTokenDataset(chunks, position_chunks, label_chunks)
 
 
 __all__ = [
