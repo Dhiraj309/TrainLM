@@ -1,5 +1,12 @@
 # TrainLM implementation context
 
+**Document-Isolated Varlen Sequence Packing (2026-11-23):** on branch
+`perf/58-varlen-document-packing` (from `main` `daef79c`): updated
+`_PackedTokenDataset` and `_maybe_pack_token_dataset` in `src/trainlm/api.py`
+to emit `position_ids` resets and boundary `-100` label masking, and added
+`compute_varlen_cu_seqlens(position_ids)`. Added
+`tests/optimization/test_varlen_packing.py`.
+
 **CI Speedup (`uv` + CPU PyTorch + `pytest-xdist`) (2026-11-23):** on branch
 `ci/57-fast-uv-cpu-torch-and-xdist` (from `main` `1766f4b`): updated
 `.github/workflows/ci.yml` to install dependencies via `uv` with cache,

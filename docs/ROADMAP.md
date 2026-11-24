@@ -1,5 +1,12 @@
 # TrainLM Roadmap
 
+**Document-Isolated Varlen Sequence Packing (2026-11-23):** on branch
+`perf/58-varlen-document-packing` (from `main` `daef79c`): upgraded
+`_PackedTokenDataset` and `_maybe_pack_token_dataset` in `src/trainlm/api.py`
+to emit per-document `position_ids` resets (`0..L_i-1`), mask cross-document
+boundary targets (`labels == -100` at `position_ids == 0` after index 0), and
+provide `compute_varlen_cu_seqlens` for `flash_attention_2` varlen kernels.
+
 **CI Speedup (`uv` + CPU PyTorch + `pytest-xdist`) (2026-11-23):** on branch
 `ci/57-fast-uv-cpu-torch-and-xdist` (from `main` `1766f4b`): updated
 `.github/workflows/ci.yml` to use `astral-sh/setup-uv@v5` with dependency
