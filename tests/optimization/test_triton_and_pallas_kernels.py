@@ -403,8 +403,8 @@ def test_pallas_runtime_health_fallback_and_splash_contiguous_output(monkeypatch
                 del k, v
                 assert q.is_contiguous()
                 return (
-                    torch.zeros(q.shape, dtype=q.dtype, device=q.device),
-                    torch.zeros(q.shape[0], q.shape[1], q.shape[2], dtype=torch.float32, device=q.device),
+                    torch.zeros(q.shape, dtype=q.dtype),
+                    torch.zeros(q.shape[0], q.shape[1], q.shape[2], dtype=torch.float32),
                 )
 
             op = torch.library.custom_op(
@@ -415,15 +415,15 @@ def test_pallas_runtime_health_fallback_and_splash_contiguous_output(monkeypatch
             )
             op.register_fake(
                 lambda q, k, v: (
-                    torch.empty(q.shape, dtype=q.dtype, device=q.device),
-                    torch.empty(q.shape[0], q.shape[1], q.shape[2], dtype=torch.float32, device=q.device),
+                    torch.empty(q.shape, dtype=q.dtype),
+                    torch.empty(q.shape[0], q.shape[1], q.shape[2], dtype=torch.float32),
                 )
             )
             return op
 
         def _bwd(q, k, v, out, lse, grad_out):
             del out, lse, grad_out
-            return torch.zeros_like(q), torch.zeros_like(k), torch.zeros_like(v)
+            return torch.zeros(q.shape, dtype=q.dtype), torch.zeros(k.shape, dtype=k.dtype), torch.zeros(v.shape, dtype=v.dtype)
 
         op = torch.library.custom_op(
             qualname,
@@ -433,9 +433,9 @@ def test_pallas_runtime_health_fallback_and_splash_contiguous_output(monkeypatch
         )
         op.register_fake(
             lambda q, k, v, out, lse, grad_out: (
-                torch.empty(q.shape, dtype=q.dtype, device=q.device),
-                torch.empty(k.shape, dtype=k.dtype, device=k.device),
-                torch.empty(v.shape, dtype=v.dtype, device=v.device),
+                torch.empty(q.shape, dtype=q.dtype),
+                torch.empty(k.shape, dtype=k.dtype),
+                torch.empty(v.shape, dtype=v.dtype),
             )
         )
         return op
