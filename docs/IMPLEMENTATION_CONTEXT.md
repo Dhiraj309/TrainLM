@@ -1,5 +1,10 @@
 # TrainLM implementation context
 
+**CI Speedup (`uv` + CPU PyTorch + `pytest-xdist`) (2026-11-23):** on branch
+`ci/57-fast-uv-cpu-torch-and-xdist` (from `main` `1766f4b`): updated
+`.github/workflows/ci.yml` to install dependencies via `uv` with cache,
+CPU-only PyTorch wheels, and `pytest -n auto`.
+
 **Liger-Kernel Auto-Wiring & `torch_compile_mode` (2026-11-23):** on branch
 `perf/56-liger-kernel-and-compile-mode` (from `main` `c554749`): (1) added
 `src/trainlm/optimization/liger.py` (`apply_liger_kernels`,

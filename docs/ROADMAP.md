@@ -1,5 +1,11 @@
 # TrainLM Roadmap
 
+**CI Speedup (`uv` + CPU PyTorch + `pytest-xdist`) (2026-11-23):** on branch
+`ci/57-fast-uv-cpu-torch-and-xdist` (from `main` `1766f4b`): updated
+`.github/workflows/ci.yml` to use `astral-sh/setup-uv@v5` with dependency
+caching, CPU-only PyTorch wheels (`https://download.pytorch.org/whl/cpu`),
+and parallel test execution (`pytest -n auto`).
+
 **Liger-Kernel Auto-Wiring & `torch_compile_mode` (2026-11-23):** on branch
 `perf/56-liger-kernel-and-compile-mode` (from `main` `c554749`): added
 `use_liger_kernel: bool | Literal["auto"] = "auto"` and
