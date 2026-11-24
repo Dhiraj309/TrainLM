@@ -1761,6 +1761,22 @@ class TrainLMTrainer:
             return
         if runtime_device.type == "cuda" and torch.cuda.is_available():
             self.model = self.model.to(runtime_device)
+        elif runtime_device.type == "tpu":
+            tpu_mod = getattr(torch, "tpu", None)
+            is_avail = getattr(tpu_mod, "is_available", None)
+            if callable(is_avail) and is_avail():
+                if getattr(self.runtime, "precision", "fp32") == "bf16":
+                    self.model = self.model.to(
+                        device=runtime_device, dtype=torch.bfloat16
+                    )
+                else:
+                    self.model = self.model.to(device=runtime_device)
+                if getattr(
+                    getattr(self.model, "config", None), "tie_word_embeddings", False
+                ):
+                    tie_fn = getattr(self.model, "tie_weights", None)
+                    if callable(tie_fn):
+                        tie_fn()
 
     def _apply_kernel_and_attention_plan(self, *, optimizer_injected: bool) -> None:
         from trainlm.optimization import (
@@ -1783,7 +1799,10 @@ class TrainLMTrainer:
             _pad_vocab(self.model, self.args.pad_vocab_to_multiple)
         self._alignment_report = inspect_model_alignment(
             self.model,
-            sequence_length=getattr(self.args, "max_seq_length", None),
+            sequence_length=(
+                getattr(self.args, "sequence_length", None)
+                or getattr(self.args, "max_seq_length", None)
+            ),
             alignment=128,
         )
 
@@ -1833,6 +1852,11 @@ class TrainLMTrainer:
                 from trainlm.optimization import apply_fused_rms_norm
 
                 self._rms_norm_result = apply_fused_rms_norm(self.model)
+
+        if device_type == "tpu":
+            from trainlm.kernels.pallas.splash_attention import verify_pallas_bridge_runtime
+
+            verify_pallas_bridge_runtime(compiled=bool(self.args.torch_compile))
 
         # 2. Splash Attention (explicit or TPU auto-probe via Pallas) + Gated MLP packing.
         splash_runtime: TorchTPUSplashAttentionRuntime | None = None
@@ -1887,7 +1911,11 @@ class TrainLMTrainer:
         ):
             should_pack_mlp = False
         else:
-            should_pack_mlp = device_type in {"cuda", "tpu"}
+            # On TPU (StableHLO has no strided views), .chunk(2, dim=-1) on a
+            # packed [B, S, 2*I] projection emits two slice copies in forward and
+            # a full concatenate copy in backward per layer; leaving gate/up
+            # separate lets XLA fuse SwiGLU/GeGLU in VMEM without HBM copies.
+            should_pack_mlp = device_type == "cuda"
 
         if splash_runtime is not None or should_pack_mlp:
             try:

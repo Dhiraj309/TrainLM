@@ -104,6 +104,7 @@ class Trainer:
         self._compiled_single_step_fn = None
         self._compiled_single_step_active = False
         self._lr_tensors: list[torch.Tensor] | None = None
+        self._lr_values: list[float] | None = None
         self._performance_model = model
         self._performance_window_started: float | None = None
         self._performance_window_tokens = 0
@@ -561,6 +562,9 @@ class Trainer:
     def _current_learning_rate(self) -> float:
         """Return the current learning rate."""
 
+        lr_values = getattr(self, "_lr_values", None)
+        if lr_values:
+            return float(lr_values[0])
         lr = self.scheduler.get_last_lr()[0]
         return float(lr.item() if isinstance(lr, torch.Tensor) else lr)
 
@@ -703,7 +707,6 @@ class Trainer:
                 step_fn = self._resolve_single_step_fn()
                 task_batch = self.runtime.prepare_batch(task_batch)
                 mean_loss, grad_norm = step_fn(task_batch, counts)
-                loss_numerator = mean_loss * token_count
                 observe_accumulation = getattr(
                     self.runtime,
                     "observe_accumulation_steps",
@@ -714,8 +717,8 @@ class Trainer:
                 self._update_accumulated_state(
                     total_tokens=token_count,
                     total_sequences=counts.sequences,
-                    loss_numerator=loss_numerator,
-                    exact_tokens=True,
+                    loss_numerator=mean_loss,
+                    exact_tokens=False,
                     grad_norm=grad_norm,
                 )
                 self._advance_scheduler(total_tokens=token_count)
@@ -938,8 +941,10 @@ class Trainer:
         if not param_groups:
             return
         is_adamw = isinstance(self.optimizer, torch.optim.AdamW)
-        if self._lr_tensors is None:
+        if getattr(self, "_lr_tensors", None) is None:
             self._lr_tensors = []
+        if getattr(self, "_lr_values", None) is None:
+            self._lr_values = []
         default_device = getattr(self.runtime, "device", None) or torch.device("cpu")
         for idx, group in enumerate(param_groups):
             if is_adamw and "capturable" in group:
@@ -947,9 +952,14 @@ class Trainer:
             current_lr = group.get("lr")
             if current_lr is None:
                 continue
-            lr_value = float(
-                current_lr.item() if isinstance(current_lr, torch.Tensor) else current_lr
-            )
+            if idx < len(self._lr_tensors) and current_lr is self._lr_tensors[idx]:
+                lr_value = self._lr_values[idx]
+            else:
+                lr_value = float(
+                    current_lr.item()
+                    if isinstance(current_lr, torch.Tensor)
+                    else current_lr
+                )
             if idx >= len(self._lr_tensors):
                 target_device = default_device
                 for param in group.get("params", ()):
@@ -959,12 +969,27 @@ class Trainer:
                 self._lr_tensors.append(
                     torch.tensor(lr_value, dtype=torch.float32, device=target_device)
                 )
-            elif current_lr is not self._lr_tensors[idx]:
+                self._lr_values.append(lr_value)
+            elif lr_value != self._lr_values[idx]:
                 self._lr_tensors[idx].fill_(lr_value)
+                self._lr_values[idx] = lr_value
             group["lr"] = self._lr_tensors[idx]
 
     def _advance_scheduler(self, *, total_tokens: int) -> None:
         """Advance token-indexed schedules by cumulative consumed tokens."""
+
+        if (
+            getattr(self, "_compiled_single_step_active", False)
+            and getattr(self, "_lr_values", None)
+            and getattr(self, "_lr_tensors", None)
+        ):
+            param_groups = getattr(self.optimizer, "param_groups", None) or ()
+            for idx, group in enumerate(param_groups):
+                if (
+                    idx < len(self._lr_values)
+                    and group.get("lr") is self._lr_tensors[idx]
+                ):
+                    group["lr"] = self._lr_values[idx]
 
         step_tokens = getattr(self.scheduler, "step_tokens", None)
         if callable(step_tokens):

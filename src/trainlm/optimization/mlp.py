@@ -245,7 +245,7 @@ class PackedGatedMLPProjection(nn.Module):
 
     def forward(self, hidden_states: Tensor) -> Tensor:
         gate, up = F.linear(hidden_states, self.weight, self.bias).chunk(2, dim=-1)
-        if self.spec.activation == "silu" and gate.is_cuda:
+        if self.spec.activation == "swiglu" and gate.is_cuda:
             from trainlm.kernels.triton import is_triton_available, triton_swiglu
 
             if is_triton_available():

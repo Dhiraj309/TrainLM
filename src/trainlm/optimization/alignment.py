@@ -106,4 +106,8 @@ def pad_vocab_to_multiple(model: nn.Module, multiple: int = 128) -> int | None:
         return None
     target_vocab = _round_up(report.vocab_size, multiple)
     resize_fn(target_vocab)
+    if getattr(getattr(model, "config", None), "tie_word_embeddings", False):
+        tie_fn = getattr(model, "tie_weights", None)
+        if callable(tie_fn):
+            tie_fn()
     return target_vocab

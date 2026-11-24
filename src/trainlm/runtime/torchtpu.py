@@ -127,6 +127,10 @@ class TorchTPURuntime(TorchRuntime):
             model = model.to(device=self.device, dtype=torch.bfloat16)
         else:
             model = model.to(self.device)
+        if getattr(getattr(model, "config", None), "tie_word_embeddings", False):
+            tie_fn = getattr(model, "tie_weights", None)
+            if callable(tie_fn):
+                tie_fn()
         return self.compile_model(model)
 
     def compile_model(self, model: nn.Module) -> nn.Module:
@@ -152,6 +156,7 @@ class TorchTPURuntime(TorchRuntime):
         path.mkdir(parents=True, exist_ok=True)
         resolved = str(path)
         os.environ.setdefault("TORCH_TPU_CACHE_DIR", resolved)
+        os.environ.setdefault("TORCH_TPU_TIER3_COMPILATION_CACHE_ROOT", resolved)
         os.environ.setdefault("XLA_COMPILATION_CACHE_PATH", resolved)
         tpu_mod = getattr(torch, "tpu", None)
         for attr in ("set_compile_cache_dir", "set_compilation_cache_dir"):
