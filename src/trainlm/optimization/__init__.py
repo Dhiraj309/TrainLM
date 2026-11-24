@@ -152,6 +152,11 @@ from .torchtpu_kernels import (
     TorchTPUKernelPlanResult,
     apply_torchtpu_kernel_plan,
 )
+from .quantized_training import (
+    QuantizedTrainingMode,
+    QuantizedTrainingResult,
+    apply_quantized_training,
+)
 
 __all__ = [
     "CapabilityFact",
@@ -269,4 +274,7 @@ __all__ = [
     "apply_torchtpu_kernel_plan",
     "probe_torchtpu_splash_kernel",
     "torchtpu_splash_attention_provider",
+    "QuantizedTrainingMode",
+    "QuantizedTrainingResult",
+    "apply_quantized_training",
 ]

@@ -536,10 +536,15 @@ class TrainLMTrainingArguments:
         "paged_adamw_8bit",
         "torchao_adamw_8bit",
     ] = "adamw"
+    quantized_training: Literal["none", "fp8", "int8"] = "none"
 
     def __post_init__(self) -> None:
         if isinstance(self.betas, list):
             object.__setattr__(self, "betas", tuple(self.betas))
+        if self.quantized_training not in {"none", "fp8", "int8"}:
+            raise ValueError(
+                f"Unsupported quantized_training mode: {self.quantized_training}"
+            )
         if self.optim not in {
             "adamw",
             "adamw_torch",
@@ -1636,7 +1641,11 @@ class TrainLMTrainer:
 
         if self.args.pack_gated_mlp is True:
             should_pack_mlp = True
-        elif self.args.pack_gated_mlp is False or optimizer_injected:
+        elif (
+            self.args.pack_gated_mlp is False
+            or optimizer_injected
+            or self.args.quantized_training != "none"
+        ):
             should_pack_mlp = False
         else:
             should_pack_mlp = device_type in {"cuda", "tpu"}
@@ -1653,6 +1662,14 @@ class TrainLMTrainer:
             except (TypeError, ValueError, RuntimeError):
                 if self.args.pack_gated_mlp is True or splash_runtime is not None:
                     raise
+
+        if self.args.quantized_training != "none":
+            from trainlm.optimization import apply_quantized_training
+
+            self._quantized_training_result = apply_quantized_training(
+                self.model,
+                mode=self.args.quantized_training,
+            )
 
     def _make_loader(
         self,
