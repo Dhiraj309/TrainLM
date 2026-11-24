@@ -2610,3 +2610,14 @@ and TPU Pallas execution remain owner-validated.
   bridged via `custom_jax_kernel` + `torch.library.custom_op`) and wires into
   `chunked_linear_causal_cross_entropy` on TPU when `jax` is installed.
 Verified on CPU/CI; Colab TPU validation is pending.
+
+
+## Pallas `custom_jax_kernel` & Dynamo guard fix
+
+In `src/trainlm/kernels/pallas/`, `probe_pallas_bridge()` now resolves
+`custom_jax_kernel` (`torch_tpu._internal.pallas.custom_jax_kernel`) rather
+than matching positional-only `torch.tpu.pallas.jax_op`, and both
+`_build_splash_ops()` and `_build_pallas_ce_ops()` use
+`@torch._dynamo.assume_constant_result` so `make_splash_mha` and custom-op
+registration execute outside TorchDynamo tracing. Verified on CPU/CI; Colab
+TPU re-run is pending.

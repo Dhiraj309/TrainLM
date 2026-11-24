@@ -3445,3 +3445,11 @@ CUDA/TPU), persistent `TorchTPURuntime` compile cache setup
 (`src/trainlm/kernels/pallas/cross_entropy.py`, wired into
 `chunked_linear_causal_cross_entropy` on TPU when `jax` and `torch_tpu` are
 present). Hardware validation on Colab TPU remains owner-run.
+
+
+**Pallas `custom_jax_kernel` bridge & Dynamo guard fix.** Updated
+`probe_pallas_bridge()` to resolve `torch_tpu._internal.pallas.custom_jax_kernel`
+strictly before any positional-only `jax_op` symbol, and decorated
+`_build_splash_ops` / `_build_pallas_ce_ops` with
+`@torch._dynamo.assume_constant_result` so TorchDynamo never traces JAX setup
+or `torch.library.custom_op` registration inside `torch.compile`.

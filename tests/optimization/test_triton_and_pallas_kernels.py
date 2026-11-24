@@ -62,6 +62,13 @@ def test_pallas_splash_fallback_and_bridge_probe(monkeypatch: pytest.MonkeyPatch
     assert inv.has_pallas_bridge is True
     assert isinstance(is_pallas_splash_available(), bool)
 
+    monkeypatch.setitem(
+        sys.modules,
+        "torch_tpu",
+        SimpleNamespace(__version__="0.2.0", pallas=SimpleNamespace(jax_op=lambda name: name)),
+    )
+    assert probe_pallas_bridge() is None
+
     q = torch.randn(1, 4, 16, 8)
     k = torch.randn(1, 2, 16, 8)
     v = torch.randn(1, 2, 16, 8)
