@@ -847,6 +847,43 @@ class _MetricsReporterCallback(TrainerCallback):
             self.wandb_run.finish()
 
 
+class _ConsoleLoggingCallback(TrainerCallback):
+    """Print sparse step loss, throughput, and MFU when verbosity != 'quiet'."""
+
+    def __init__(self, *, total_steps: int | None) -> None:
+        self._total_steps = total_steps
+        self._last_logged_step: int | None = None
+
+    def on_metrics(self, state, control, metrics: Mapping[str, float]) -> None:
+        del control
+        if state.phase == TrainerPhase.EVALUATING:
+            parts = [f"eval step {int(state.step)}"]
+            if "eval_loss" in metrics:
+                parts.append(f"eval_loss={metrics['eval_loss']:.4f}")
+            if "eval_perplexity" in metrics:
+                parts.append(f"ppl={metrics['eval_perplexity']:.2f}")
+            print(" | ".join(parts), flush=True)
+            return
+        if "loss" not in metrics:
+            return
+        step = int(state.step)
+        if step == self._last_logged_step:
+            return
+        self._last_logged_step = step
+        step_label = f"step {step}/{self._total_steps}" if self._total_steps else f"step {step}"
+        parts = [step_label, f"loss={metrics['loss']:.4f}"]
+        tps = metrics.get("train_tokens_per_second")
+        if tps is not None:
+            parts.append(f"{tps:,.1f} tok/s")
+        mfu = metrics.get("non_embedding_mfu")
+        if mfu is not None:
+            parts.append(f"MFU {mfu:.2%}")
+        wait = metrics.get("dataloader_wait_fraction")
+        if wait is not None:
+            parts.append(f"wait {wait:.1%}")
+        print(" | ".join(parts), flush=True)
+
+
 class _BestModelSelectionCallback(TrainerCallback):
     """Select best weights, save their checkpoint, and stop after a plateau."""
 
@@ -1504,6 +1541,9 @@ class TrainLMTrainer:
             eval_dataloader=eval_loader,
             callbacks=(
                 self.callbacks
+                + ((_ConsoleLoggingCallback(total_steps=self._effective_max_steps),)
+                   if self.args.logging_verbosity != "quiet" and self.runtime.is_primary_process
+                   else ())
                 + ((_MetricsReporterCallback(
                     Path(self.args.output_dir),
                     (self.args.report_to,) if isinstance(self.args.report_to, str)
