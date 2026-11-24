@@ -336,3 +336,133 @@ def test_pallas_jax_op_020_registration_and_autograd(monkeypatch) -> None:
     loss.backward()
     assert hidden.grad is not None
     assert weight.grad is not None
+
+
+def test_pallas_runtime_health_fallback_and_splash_contiguous_output(monkeypatch) -> None:
+    import sys
+    import types
+    import torch
+    from trainlm.kernels.pallas import cross_entropy as ce_mod
+    from trainlm.kernels.pallas import splash_attention as sa_mod
+
+    sa_mod._DISABLED_PALLAS_BRIDGES.clear()
+    sa_mod._VERIFIED_PALLAS_BRIDGES.clear()
+
+    # 1. Failing TPU bridge is disabled cleanly by verify_pallas_bridge_runtime().
+    fake_jax = types.ModuleType("jax")
+    fake_jax.jit = lambda fn: fn
+    fake_jnp = types.ModuleType("jax.numpy")
+    monkeypatch.setitem(sys.modules, "jax", fake_jax)
+    monkeypatch.setitem(sys.modules, "jax.numpy", fake_jnp)
+    monkeypatch.setattr(sa_mod, "_tpu_runtime_initialized", lambda: True)
+
+    def _failing_jax_op(qualname: str, fn, /):
+        del fn
+        def _raise(*args, **kwargs):
+            del args, kwargs
+            raise RuntimeError(f"call_custom_kernel() failed for {qualname}")
+        return _raise
+
+    monkeypatch.setattr(
+        torch,
+        "tpu",
+        types.SimpleNamespace(pallas=types.SimpleNamespace(jax_op=_failing_jax_op)),
+        raising=False,
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "torch_tpu",
+        types.SimpleNamespace(__version__="0.2.0"),
+    )
+
+    assert sa_mod.verify_pallas_bridge_runtime(compiled=False) is False
+    assert "jax_op" in sa_mod._DISABLED_PALLAS_BRIDGES
+    assert sa_mod.probe_pallas_bridge_spec() is None
+    assert ce_mod.is_pallas_ce_available() is False
+
+    # Reset probe state so subsequent tests keep a clean module global state.
+    sa_mod._DISABLED_PALLAS_BRIDGES.clear()
+    sa_mod._VERIFIED_PALLAS_BRIDGES.clear()
+
+    # 2. Transposed (non-contiguous) Q/K/V through Splash fake_impl produces contiguous
+    #    [B, S, H, D] output so downstream .reshape(B, S, -1) / .view() succeeds.
+    class _FakeTPUTensor(torch.Tensor):
+        @property
+        def device(self):  # type: ignore[override]
+            return types.SimpleNamespace(type="tpu")
+
+    monkeypatch.setattr(sa_mod, "_tpu_runtime_initialized", lambda: False)
+    monkeypatch.setattr(sa_mod, "is_pallas_splash_available", lambda: True)
+    sa_mod._SPLASH_OP_CACHE.clear()
+    sa_mod._UNSUPPORTED_SPLASH_SPECS.clear()
+
+    def fake_jax_op_splash(qualname: str, fn, /):
+        del fn
+        if "_fwd_" in qualname:
+            def _fwd(q, k, v):
+                del k, v
+                assert q.is_contiguous()
+                return (
+                    torch.zeros(q.shape, dtype=q.dtype, device=q.device),
+                    torch.zeros(q.shape[0], q.shape[1], q.shape[2], dtype=torch.float32, device=q.device),
+                )
+
+            op = torch.library.custom_op(
+                qualname,
+                _fwd,
+                mutates_args=(),
+                schema="(Tensor q, Tensor k, Tensor v) -> (Tensor, Tensor)",
+            )
+            op.register_fake(
+                lambda q, k, v: (
+                    torch.empty(q.shape, dtype=q.dtype, device=q.device),
+                    torch.empty(q.shape[0], q.shape[1], q.shape[2], dtype=torch.float32, device=q.device),
+                )
+            )
+            return op
+
+        def _bwd(q, k, v, out, lse, grad_out):
+            del out, lse, grad_out
+            return torch.zeros_like(q), torch.zeros_like(k), torch.zeros_like(v)
+
+        op = torch.library.custom_op(
+            qualname,
+            _bwd,
+            mutates_args=(),
+            schema="(Tensor q, Tensor k, Tensor v, Tensor out, Tensor lse, Tensor grad_out) -> (Tensor, Tensor, Tensor)",
+        )
+        op.register_fake(
+            lambda q, k, v, out, lse, grad_out: (
+                torch.empty(q.shape, dtype=q.dtype, device=q.device),
+                torch.empty(k.shape, dtype=k.dtype, device=k.device),
+                torch.empty(v.shape, dtype=v.dtype, device=v.device),
+            )
+        )
+        return op
+
+    fake_jax_op_splash("trainlm_pallas::trainlm_splash_fwd_contigtest", None)
+    fake_jax_op_splash("trainlm_pallas::trainlm_splash_bwd_contigtest", None)
+    monkeypatch.setattr(
+        sa_mod,
+        "_iter_pallas_bridge_candidates",
+        lambda: [("jax_op", fake_jax_op_splash)],
+    )
+    monkeypatch.setattr(
+        sa_mod,
+        "_build_splash_ops",
+        lambda **kwargs: (
+            "trainlm_splash_fwd_contigtest",
+            "trainlm_splash_bwd_contigtest",
+        ),
+    )
+
+    q_t = torch.randn(2, 128, 4, 128).transpose(1, 2).as_subclass(_FakeTPUTensor)
+    k_t = torch.randn(2, 128, 2, 128).transpose(1, 2).as_subclass(_FakeTPUTensor)
+    v_t = torch.randn(2, 128, 2, 128).transpose(1, 2).as_subclass(_FakeTPUTensor)
+    assert not q_t.is_contiguous()
+
+    out = sa_mod.pallas_splash_attention(q_t, k_t, v_t)
+    assert out.shape == (2, 128, 4, 128)
+    assert out.is_contiguous()
+    reshaped = out.view(2, 128, -1)
+    assert reshaped.shape == (2, 128, 512)
