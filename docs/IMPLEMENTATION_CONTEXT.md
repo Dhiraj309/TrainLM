@@ -2594,3 +2594,19 @@ and `torch.library.custom_op` (`register_fake` + `register_autograd`), integrate
 into `probe_torchtpu_kernels()` and `TrainLMTrainer` for 128-multiple TPU sequences
 when `jax` and `torch_tpu` are both installed. Verified on CPU/CI; real CUDA Triton
 and TPU Pallas execution remain owner-validated.
+
+
+## Single-chip TPU optimizations (`adamw_bf16`, prefetch, compile cache, Pallas CE)
+
+- `OptimizerConfig` / `AdamWStateDtype` now support `optim="adamw_bf16"` with a
+  zero-cast fast path when parameter gradients and both moments are `bfloat16`.
+- `src/trainlm/runtime/prefetch.py` (`AsyncBatchPrefetcher`) overlaps host
+  batch loading with step execution via `TrainLMTrainingArguments.prefetch_batches`.
+- `TorchTPURuntime` configures persistent compile cache directories via
+  `tpu_compile_cache_dir="auto"` (`TORCH_TPU_CACHE_DIR`,
+  `XLA_COMPILATION_CACHE_PATH`, and `torch.tpu` cache setters when exposed).
+- `src/trainlm/kernels/pallas/cross_entropy.py` implements
+  `pallas_chunked_linear_cross_entropy` (`jax.lax.scan` forward+backward
+  bridged via `custom_jax_kernel` + `torch.library.custom_op`) and wires into
+  `chunked_linear_causal_cross_entropy` on TPU when `jax` is installed.
+Verified on CPU/CI; Colab TPU validation is pending.

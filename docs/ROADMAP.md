@@ -3433,3 +3433,15 @@ bridging `jax.experimental.pallas.ops.tpu.splash_attention` via
 `torch_tpu._internal.pallas.custom_jax_kernel` / `torch.tpu.pallas.jax_op` and
 `torch.library.custom_op` with `register_fake` and `register_autograd`).
 Hardware GPU Triton & TPU Pallas validation remains owner-run.
+
+
+**Single-chip TPU optimizations (`adamw_bf16`, prefetching, compile cache, Pallas CE).**
+Added `optim="adamw_bf16"` (skipping redundant `fp32 <-> bf16` moment casts when
+BF16 parameters/gradients match BF16 states), `AsyncBatchPrefetcher`
+(`src/trainlm/runtime/prefetch.py`, enabled via `prefetch_batches=True` on
+CUDA/TPU), persistent `TorchTPURuntime` compile cache setup
+(`tpu_compile_cache_dir="auto"` setting `TORCH_TPU_CACHE_DIR` /
+`XLA_COMPILATION_CACHE_PATH`), and Pallas/JAX scan chunked cross-entropy
+(`src/trainlm/kernels/pallas/cross_entropy.py`, wired into
+`chunked_linear_causal_cross_entropy` on TPU when `jax` and `torch_tpu` are
+present). Hardware validation on Colab TPU remains owner-run.
