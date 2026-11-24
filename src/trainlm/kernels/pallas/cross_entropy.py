@@ -17,6 +17,9 @@ import torch
 from .splash_attention import probe_pallas_bridge
 
 _CE_OP_CACHE: dict[tuple[Any, ...], tuple[str, str]] = {}
+_assume_constant_result = getattr(
+    getattr(torch, "_dynamo", None), "assume_constant_result", lambda fn: fn
+)
 
 
 def is_pallas_ce_available() -> bool:
@@ -31,6 +34,7 @@ def is_pallas_ce_available() -> bool:
     return jax is not None and jnp is not None
 
 
+@_assume_constant_result
 def _build_pallas_ce_ops(
     *,
     num_tokens: int,

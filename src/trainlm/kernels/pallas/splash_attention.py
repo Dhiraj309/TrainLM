@@ -18,33 +18,34 @@ import torch
 import torch.nn.functional as F
 
 _SPLASH_OP_CACHE: dict[tuple[Any, ...], tuple[str, str]] = {}
+_assume_constant_result = getattr(
+    getattr(torch, "_dynamo", None), "assume_constant_result", lambda fn: fn
+)
 
 
 def probe_pallas_bridge() -> Callable[..., Any] | None:
-    """Return TorchTPU's JAX->PyTorch Pallas bridge decorator if available."""
-    tpu_mod = getattr(torch, "tpu", None)
-    pallas_pub = getattr(tpu_mod, "pallas", None) if tpu_mod is not None else None
-    for mod in (pallas_pub,):
-        if mod is None:
-            continue
-        for attr in ("jax_op", "custom_jax_kernel"):
-            fn = getattr(mod, attr, None)
-            if callable(fn):
-                return fn
+    """Return TorchTPU's ``custom_jax_kernel`` bridge if available."""
     try:
         import torch_tpu  # type: ignore[import-not-found]
     except Exception:
-        return None
-    for mod in (
-        getattr(torch_tpu, "pallas", None),
-        getattr(getattr(torch_tpu, "_internal", None), "pallas", None),
-    ):
-        if mod is None:
-            continue
-        for attr in ("custom_jax_kernel", "jax_op"):
-            fn = getattr(mod, attr, None)
-            if callable(fn):
-                return fn
+        torch_tpu = None  # type: ignore[assignment]
+
+    if torch_tpu is not None:
+        for mod in (
+            getattr(getattr(torch_tpu, "_internal", None), "pallas", None),
+            getattr(torch_tpu, "pallas", None),
+        ):
+            if mod is not None:
+                fn = getattr(mod, "custom_jax_kernel", None)
+                if callable(fn):
+                    return fn
+
+    tpu_mod = getattr(torch, "tpu", None)
+    pallas_pub = getattr(tpu_mod, "pallas", None) if tpu_mod is not None else None
+    if pallas_pub is not None:
+        fn = getattr(pallas_pub, "custom_jax_kernel", None)
+        if callable(fn):
+            return fn
     return None
 
 
@@ -73,6 +74,7 @@ def _resolve_block_size(seq_len: int, max_block: int = 512, min_block: int = 128
     return 0
 
 
+@_assume_constant_result
 def _build_splash_ops(
     *,
     seq_len: int,
