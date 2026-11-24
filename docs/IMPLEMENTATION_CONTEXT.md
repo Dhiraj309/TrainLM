@@ -2610,3 +2610,29 @@ and TPU Pallas execution remain owner-validated.
   bridged via `custom_jax_kernel` + `torch.library.custom_op`) and wires into
   `chunked_linear_causal_cross_entropy` on TPU when `jax` is installed.
 Verified on CPU/CI; Colab TPU validation is pending.
+
+
+## Pallas `custom_jax_kernel` & Dynamo guard fix
+
+In `src/trainlm/kernels/pallas/`, `probe_pallas_bridge()` now resolves
+`custom_jax_kernel` (`torch_tpu._internal.pallas.custom_jax_kernel`) rather
+than matching positional-only `torch.tpu.pallas.jax_op`, and both
+`_build_splash_ops()` and `_build_pallas_ce_ops()` use
+`@torch._dynamo.assume_constant_result` so `make_splash_mha` and custom-op
+registration execute outside TorchDynamo tracing. Verified on CPU/CI; Colab
+TPU re-run is pending.
+
+
+- `src/trainlm/kernels/pallas/splash_attention.py`: `pallas_splash_attention()`
+  now requires `head_dim >= 128 and head_dim % 128 == 0`, repeats KV heads when
+  `1 < n_kv_heads < n_heads` so GQA tensors match `make_splash_mha`, and caches
+  any `_build_splash_ops()` failures in `_UNSUPPORTED_SPLASH_SPECS` with clean
+  SDPA fallback.
+- `src/trainlm/kernels/pallas/cross_entropy.py`:
+  `pallas_chunked_linear_cross_entropy()` now casts non-`int32` labels (such as
+  PyTorch `int64` tokens) to `torch.int32` before calling the JAX/Pallas op.
+- `src/trainlm/kernels/pallas/cross_entropy.py` & `splash_attention.py`:
+  `_backward` hooks now coerce unused `None` autograd grad outputs
+  (`grad_z`, `grad_loss`, `grad_out`) to scalar/zero tensors before invoking
+  `bwd_op`, and `ce_bwd` returns `jnp.zeros_like(b)` when `has_bias=False`
+  instead of aliasing input `b`.
