@@ -3465,3 +3465,13 @@ consistent with JAX's default `x64=False` mode.
 - Guarded `None` autograd outputs (`grad_loss` / `grad_z` in Pallas CE
   `_backward`, `grad_out` in Splash `_backward`) and removed input aliasing
   when `has_bias=False` in `ce_bwd` (`jnp.zeros_like(b)`).
+
+
+**TorchTPU 0.2.0 `jax_op` bridge fix & `v5e-1` benchmark tuning.** Updated
+`probe_pallas_bridge()` / `probe_pallas_bridge_spec()` and added
+`register_pallas_jax_op()` so TorchTPU 0.2.0's positional
+`torch.tpu.pallas.jax_op(qualname, fn)` API works alongside internal
+`custom_jax_kernel(fn, name=...)`. Tuned Splash block size to 256 for 2K
+sequences and updated `notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb` to test
+larger microbatches (`bs=8` / `bs=4`) enabled by `pallas_ce` plus `Qwen/Qwen3-0.6B`
+(`head_dim=128` for full MXU width and `pallas_splash`).

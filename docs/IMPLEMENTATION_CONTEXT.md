@@ -2636,3 +2636,21 @@ TPU re-run is pending.
   (`grad_z`, `grad_loss`, `grad_out`) to scalar/zero tensors before invoking
   `bwd_op`, and `ce_bwd` returns `jnp.zeros_like(b)` when `has_bias=False`
   instead of aliasing input `b`.
+
+
+## TorchTPU 0.2.0 `torch.tpu.pallas.jax_op` bridge & `v5e-1` tuning
+
+- `src/trainlm/kernels/pallas/splash_attention.py`: Added
+  `probe_pallas_bridge_spec()` and `register_pallas_jax_op()` supporting both
+  `custom_jax_kernel(fn, name=...)` (internal/nightly TorchTPU) and
+  `torch.tpu.pallas.jax_op(qualname, fn)` (TorchTPU 0.2.0 PyPI release, which
+  requires positional qualname-first arguments and returns a `CustomOpDef`
+  compatible with `.register_autograd()`).
+- `src/trainlm/kernels/pallas/cross_entropy.py`: Routed `_build_pallas_ce_ops()`
+  and `pallas_chunked_linear_cross_entropy()` through `register_pallas_jax_op()`
+  and `_resolve_pallas_op()` so `pallas_ce` activates on `torch-tpu==0.2.0`.
+- `src/trainlm/api.py`: Switched Splash block heuristic to `256` on 256-multiple
+  sequences to avoid VMEM spill vs `512`.
+- `notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb`: Updated per-device batch sizes
+  (`bs=8` for `135M`, `bs=4` for `360M`/`0.5B`) and added `Qwen/Qwen3-0.6B`
+  (`head_dim=128`) to validate full `128x128` MXU and `pallas_splash`.

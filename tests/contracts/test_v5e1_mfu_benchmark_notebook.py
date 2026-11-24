@@ -15,7 +15,7 @@ def test_v5e1_mfu_benchmark_notebook_is_runnable_and_focused():
         for cell in notebook["cells"]
     )
     code_cells = [cell for cell in notebook["cells"] if cell["cell_type"] == "code"]
-    assert len(code_cells) == 7
+    assert len(code_cells) == 8
     assert all(cell.get("execution_count") is None for cell in code_cells)
     assert all(not cell.get("outputs") for cell in code_cells)
 
@@ -30,6 +30,7 @@ def test_v5e1_mfu_benchmark_notebook_is_runnable_and_focused():
         "HuggingFaceTB/SmolLM2-135M",
         "HuggingFaceTB/SmolLM2-360M",
         "Qwen/Qwen2.5-0.5B",
+        "Qwen/Qwen3-0.6B",
         "RUN_EAGER",
         "RUN_COMPILED",
         "RUN_PROFILER",

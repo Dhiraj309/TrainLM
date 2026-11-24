@@ -1837,7 +1837,7 @@ class TrainLMTrainer:
         # 2. Splash Attention (explicit or TPU auto-probe via Pallas) + Gated MLP packing.
         splash_runtime: TorchTPUSplashAttentionRuntime | None = None
         seq_len_hint = int(getattr(self.args, "sequence_length", 1024) or 1024)
-        splash_block = 512 if seq_len_hint >= 512 and seq_len_hint % 512 == 0 else 128
+        splash_block = 256 if seq_len_hint >= 256 and seq_len_hint % 256 == 0 else 128
         if attn_choice == "splash":
             kernel = probe_torchtpu_splash_kernel()
             if kernel is None:
