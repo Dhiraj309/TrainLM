@@ -1,5 +1,12 @@
 # TrainLM implementation context
 
+**Simplify MFU Benchmark Notebook UX (2026-11-23):** on branch
+`refactor/50-simplify-mfu-benchmark-notebook` (from `main` `453a1c0`):
+simplified `notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb` to remove custom
+`_FixedShapeDataset`, `_LiveMFUPrinter`, `_summarize`, `_bottleneck_causes`,
+and manual TPU/HBM helper wrappers, calling `TrainLMTrainer`, `trainer.train()`,
+and `trainer.performance_summary()` directly with `accelerator="auto"`.
+
 **Opt-In 8-Bit Compute Pretraining (`fp8` / experimental `int8`) (2026-11-23):**
 on branch `feat/49-opt-in-8bit-compute-pretraining` (from `main` `1ca87b5`): (1)
 added `src/trainlm/optimization/quantized_training.py` (`apply_quantized_training`,
