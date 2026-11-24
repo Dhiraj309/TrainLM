@@ -1834,6 +1834,11 @@ class TrainLMTrainer:
 
                 self._rms_norm_result = apply_fused_rms_norm(self.model)
 
+        if device_type == "tpu":
+            from trainlm.kernels.pallas.splash_attention import verify_pallas_bridge_runtime
+
+            verify_pallas_bridge_runtime(compiled=bool(self.args.torch_compile))
+
         # 2. Splash Attention (explicit or TPU auto-probe via Pallas) + Gated MLP packing.
         splash_runtime: TorchTPUSplashAttentionRuntime | None = None
         seq_len_hint = int(getattr(self.args, "sequence_length", 1024) or 1024)

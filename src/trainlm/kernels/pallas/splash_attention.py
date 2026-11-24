@@ -19,52 +19,64 @@ import torch.nn.functional as F
 
 _SPLASH_OP_CACHE: dict[tuple[Any, ...], tuple[str, str]] = {}
 _REGISTERED_PALLAS_OPS: dict[str, Any] = {}
+_DISABLED_PALLAS_BRIDGES: set[str] = set()
+_VERIFIED_PALLAS_BRIDGES: set[tuple[str, bool]] = set()
 _assume_constant_result = getattr(
     getattr(torch, "_dynamo", None), "assume_constant_result", lambda fn: fn
 )
 
 
-def probe_pallas_bridge_spec() -> tuple[str, Callable[..., Any]] | None:
-    """Return ``(bridge_kind, fn)`` for TorchTPU's JAX-to-PyTorch bridge.
+def _iter_pallas_bridge_candidates() -> list[tuple[str, Callable[..., Any]]]:
+    """Discover candidate JAX-to-PyTorch bridge callables in preference order."""
+    candidates: list[tuple[str, Callable[..., Any]]] = []
+    seen_ids: set[int] = set()
 
-    Prefers ``custom_jax_kernel(fn, name=...)`` when exposed on internal builds,
-    and falls back to TorchTPU >=0.2.0's public positional
-    ``torch.tpu.pallas.jax_op(qualname, fn)`` API.
-    """
+    def _add(kind: str, fn: Any) -> None:
+        if callable(fn) and id(fn) not in seen_ids:
+            seen_ids.add(id(fn))
+            candidates.append((kind, fn))
+
     try:
         import torch_tpu  # type: ignore[import-not-found]
     except Exception:
         torch_tpu = None  # type: ignore[assignment]
 
-    if torch_tpu is not None:
-        for mod in (
-            getattr(getattr(torch_tpu, "_internal", None), "pallas", None),
-            getattr(torch_tpu, "pallas", None),
-        ):
-            if mod is not None:
-                fn = getattr(mod, "custom_jax_kernel", None)
-                if callable(fn):
-                    return ("custom_jax_kernel", fn)
-
     tpu_mod = getattr(torch, "tpu", None)
     pallas_pub = getattr(tpu_mod, "pallas", None) if tpu_mod is not None else None
     if pallas_pub is not None:
-        fn = getattr(pallas_pub, "custom_jax_kernel", None)
-        if callable(fn):
-            return ("custom_jax_kernel", fn)
-        fn = getattr(pallas_pub, "jax_op", None)
-        if callable(fn):
-            return ("jax_op", fn)
+        _add("jax_op", getattr(pallas_pub, "jax_op", None))
 
     if torch_tpu is not None:
+        for mod in (
+            getattr(torch_tpu, "pallas", None),
+            getattr(getattr(torch_tpu, "_internal", None), "pallas", None),
+        ):
+            if mod is not None:
+                _add("jax_op", getattr(mod, "jax_op", None))
+
         for mod in (
             getattr(getattr(torch_tpu, "_internal", None), "pallas", None),
             getattr(torch_tpu, "pallas", None),
         ):
             if mod is not None:
-                fn = getattr(mod, "jax_op", None)
-                if callable(fn):
-                    return ("jax_op", fn)
+                _add("custom_jax_kernel", getattr(mod, "custom_jax_kernel", None))
+
+    if pallas_pub is not None:
+        _add("custom_jax_kernel", getattr(pallas_pub, "custom_jax_kernel", None))
+
+    return candidates
+
+
+def probe_pallas_bridge_spec() -> tuple[str, Callable[..., Any]] | None:
+    """Return ``(bridge_kind, fn)`` for TorchTPU's active JAX-to-PyTorch bridge.
+
+    Prefers TorchTPU >=0.2.0's public positional ``torch.tpu.pallas.jax_op``
+    and falls back to ``custom_jax_kernel(fn, name=...)``, skipping any bridge
+    kind that failed live TPU verification in ``_DISABLED_PALLAS_BRIDGES``.
+    """
+    for kind, fn in _iter_pallas_bridge_candidates():
+        if kind not in _DISABLED_PALLAS_BRIDGES:
+            return (kind, fn)
     return None
 
 
@@ -80,9 +92,10 @@ def register_pallas_jax_op(
     *,
     schema: str,
     fake_impl: Callable[..., Any],
+    bridge_spec: tuple[str, Callable[..., Any]] | None = None,
 ) -> Any:
     """Register ``jax_fn`` as a PyTorch custom op via the active TorchTPU bridge."""
-    spec = probe_pallas_bridge_spec()
+    spec = bridge_spec if bridge_spec is not None else probe_pallas_bridge_spec()
     if spec is None:
         raise RuntimeError("TorchTPU Pallas bridge is unavailable.")
     kind, bridge_fn = spec
@@ -118,6 +131,84 @@ def _resolve_pallas_op(op_name: str) -> Any:
     raise RuntimeError(f"Registered Pallas op trainlm_pallas::{op_name} was not found.")
 
 
+def _tpu_runtime_initialized() -> bool:
+    tpu_mod = getattr(torch, "tpu", None)
+    if tpu_mod is None:
+        return False
+    checker = getattr(tpu_mod, "is_initialized", None)
+    if not callable(checker):
+        return False
+    try:
+        return bool(checker())
+    except Exception:
+        return False
+
+
+def verify_pallas_bridge_runtime(*, compiled: bool = False) -> bool:
+    """Verify the active Pallas bridge lowers and executes cleanly on initialized TPU.
+
+    On CPU/CUDA or before TPU initialization this is a fast non-blocking True once
+    a bridge symbol is present. When TPU is initialized, runs a tiny cached 2-arg
+    ``jax.lax.scan`` op (and optional ``torch.compile``) so incompatible
+    ``torch_tpu``/JAX MLIR bridges fall back cleanly instead of crashing training.
+    """
+    is_compiling = getattr(getattr(torch, "compiler", None), "is_compiling", None)
+    if callable(is_compiling) and is_compiling():
+        return probe_pallas_bridge_spec() is not None
+    if not _tpu_runtime_initialized():
+        return probe_pallas_bridge_spec() is not None
+
+    try:
+        import jax  # type: ignore[import-not-found]
+        import jax.numpy as jnp  # type: ignore[import-not-found]
+    except Exception:
+        return False
+
+    for kind, fn in _iter_pallas_bridge_candidates():
+        if kind in _DISABLED_PALLAS_BRIDGES:
+            continue
+        if (kind, compiled) in _VERIFIED_PALLAS_BRIDGES:
+            return True
+        probe_name = f"trainlm_probe_{kind}"
+        qualname = f"trainlm_pallas::{probe_name}"
+        try:
+            op = _REGISTERED_PALLAS_OPS.get(probe_name)
+            if op is None:
+                @jax.jit
+                def _probe_scan(x: Any, idx: Any) -> Any:
+                    def _body(acc: Any, row: Any) -> tuple[Any, None]:
+                        return acc + jnp.sum(row.astype(jnp.float32)), None
+
+                    tot, _ = jax.lax.scan(_body, jnp.array(0.0, dtype=jnp.float32), x)
+                    mask_sum = jnp.sum((idx >= 0).astype(jnp.float32))
+                    return tot + mask_sum
+
+                op = register_pallas_jax_op(
+                    qualname,
+                    _probe_scan,
+                    schema="(Tensor x, Tensor idx) -> Tensor",
+                    fake_impl=lambda x, idx: torch.empty((), dtype=torch.float32, device=x.device),
+                    bridge_spec=(kind, fn),
+                )
+            caller = _resolve_pallas_op(probe_name)
+            x = torch.ones((2, 4), dtype=torch.bfloat16, device="tpu")
+            idx = torch.tensor([0, 1], dtype=torch.int32, device="tpu")
+            out = caller(x, idx)
+            if compiled:
+                compiled_fn = torch.compile(lambda a, b: caller(a, b), backend="tpu", dynamic=False)
+                out = compiled_fn(x, idx)
+            accel = getattr(torch, "accelerator", None)
+            sync = getattr(accel, "synchronize", None)
+            if callable(sync):
+                sync()
+            _ = float(out.detach().cpu().item())
+            _VERIFIED_PALLAS_BRIDGES.add((kind, compiled))
+            return True
+        except Exception:
+            _DISABLED_PALLAS_BRIDGES.add(kind)
+    return False
+
+
 def _has_jax_splash() -> bool:
     try:
         from jax.experimental.pallas.ops.tpu.splash_attention import (  # type: ignore[import-not-found]
@@ -130,8 +221,10 @@ def _has_jax_splash() -> bool:
 
 
 def is_pallas_splash_available() -> bool:
-    """Return True when both TorchTPU's Pallas bridge and JAX Splash Attention exist."""
-    return probe_pallas_bridge() is not None and _has_jax_splash()
+    """Return True when a working TorchTPU Pallas bridge and JAX Splash exist."""
+    if not _has_jax_splash():
+        return False
+    return verify_pallas_bridge_runtime(compiled=False)
 
 
 def _resolve_block_size(seq_len: int, max_block: int = 512, min_block: int = 128) -> int:
@@ -279,7 +372,7 @@ def _build_splash_ops(
         splash_fwd,
         schema="(Tensor q, Tensor k, Tensor v) -> (Tensor, Tensor)",
         fake_impl=lambda q, k, v: (
-            torch.empty_like(q),
+            torch.empty(q.shape, dtype=q.dtype, device=q.device),
             torch.empty(q.shape[0], q.shape[1], q.shape[2], dtype=torch.float32, device=q.device),
         ),
     )
@@ -288,9 +381,9 @@ def _build_splash_ops(
         splash_bwd,
         schema="(Tensor q, Tensor k, Tensor v, Tensor out, Tensor lse, Tensor grad_out) -> (Tensor, Tensor, Tensor)",
         fake_impl=lambda q, k, v, out, lse, grad_out: (
-            torch.empty_like(q),
-            torch.empty_like(k),
-            torch.empty_like(v),
+            torch.empty(q.shape, dtype=q.dtype, device=q.device),
+            torch.empty(k.shape, dtype=k.dtype, device=k.device),
+            torch.empty(v.shape, dtype=v.dtype, device=v.device),
         ),
     )
 
@@ -407,6 +500,9 @@ def pallas_splash_attention(
     else:
         k_in = key
         v_in = value
+    q_in = q_in.contiguous()
+    k_in = k_in.contiguous()
+    v_in = v_in.contiguous()
     out, _ = fwd_op(q_in, k_in, v_in)
     if out.dtype != query.dtype:
         out = out.to(dtype=query.dtype)

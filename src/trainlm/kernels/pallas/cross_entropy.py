@@ -18,6 +18,7 @@ from .splash_attention import (
     _resolve_pallas_op,
     probe_pallas_bridge,
     register_pallas_jax_op,
+    verify_pallas_bridge_runtime,
 )
 
 _CE_OP_CACHE: dict[tuple[Any, ...], tuple[str, str]] = {}
@@ -27,15 +28,15 @@ _assume_constant_result = getattr(
 
 
 def is_pallas_ce_available() -> bool:
-    """Return True when TorchTPU's Pallas/JAX bridge and JAX are both importable."""
-    if probe_pallas_bridge() is None:
-        return False
+    """Return True when a working TorchTPU Pallas bridge and JAX exist."""
     try:
         import jax  # type: ignore[import-not-found]
         import jax.numpy as jnp  # type: ignore[import-not-found]
     except Exception:
         return False
-    return jax is not None and jnp is not None
+    if jax is None or jnp is None:
+        return False
+    return verify_pallas_bridge_runtime(compiled=False)
 
 
 @_assume_constant_result
@@ -172,9 +173,9 @@ def _build_pallas_ce_ops(
         ce_bwd,
         schema="(Tensor h, Tensor w, Tensor b, Tensor tgt, Tensor grad_loss, Tensor grad_z) -> (Tensor, Tensor, Tensor)",
         fake_impl=lambda h, w, b, tgt, grad_loss, grad_z: (
-            torch.empty_like(h),
-            torch.empty_like(w),
-            torch.empty_like(b),
+            torch.empty(h.shape, dtype=h.dtype, device=h.device),
+            torch.empty(w.shape, dtype=w.dtype, device=w.device),
+            torch.empty(b.shape, dtype=b.dtype, device=b.device),
         ),
     )
 
@@ -236,5 +237,10 @@ def pallas_chunked_linear_cross_entropy(
         if shifted_labels.dtype == torch.int32
         else shifted_labels.to(dtype=torch.int32)
     )
-    mean_loss, mean_z, _ = fwd_op(shifted_hidden, output_weight, dummy_bias, targets)
+    mean_loss, mean_z, _ = fwd_op(
+        shifted_hidden.contiguous(),
+        output_weight.contiguous(),
+        dummy_bias.contiguous(),
+        targets.contiguous(),
+    )
     return mean_loss, (mean_z if z_loss else None)
