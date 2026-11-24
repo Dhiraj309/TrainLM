@@ -201,6 +201,39 @@ def build_performance_summary(
             device_count=world_size,
         ),
     })
+    windows = result["recent_windows"]
+    if len(windows) >= 2:
+        steady_windows = windows[1:]
+        steady_wall = sum(
+            float(w.get("train_wall_seconds", 0.0)) for w in steady_windows
+        )
+        steady_tokens = sum(
+            float(w.get("supervised_tokens", 0.0)) for w in steady_windows
+        )
+        steady_wait = sum(
+            float(w.get("dataloader_wait_seconds", 0.0)) for w in steady_windows
+        )
+        if steady_wall > 0 and steady_tokens > 0:
+            steady_tps = steady_tokens / steady_wall
+            result["steady_state"] = {
+                "measured_windows": len(steady_windows),
+                "supervised_tokens": int(steady_tokens),
+                "wall_seconds": steady_wall,
+                "tokens_per_second": steady_tps,
+                "dataloader_wait_fraction": steady_wait / steady_wall,
+                "non_embedding_mfu": calculate_mfu(
+                    tokens_per_second=steady_tps,
+                    flops_per_token=flops.non_embedding_flops_per_token,
+                    peak_flops_per_device=peak,
+                    device_count=world_size,
+                ),
+                "logits_inclusive_mfu": calculate_mfu(
+                    tokens_per_second=steady_tps,
+                    flops_per_token=flops.logits_inclusive_flops_per_token,
+                    peak_flops_per_device=peak,
+                    device_count=world_size,
+                ),
+            }
     hardware["peak_flops_per_device"] = peak
     hardware["peak_source"] = peak_source
     return result
