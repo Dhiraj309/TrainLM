@@ -40,3 +40,5 @@ def test_v5e1_mfu_benchmark_notebook_is_runnable_and_focused():
     ):
         assert required in source, f"Missing {required!r} in {NOTEBOOK}"
     assert "LinearCausalLMTrainingView" not in source
+    assert 'accelerator="auto"' not in source
+    assert "native_tpu" in source
