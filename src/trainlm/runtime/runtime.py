@@ -88,12 +88,47 @@ class TorchRuntime:
 
     def on_train_begin(self) -> None:
         """Handle the start of a training lifecycle."""
+        self._previous_cuda_flags: dict[str, Any] = {}
         if self._device.type == "cuda":
             getter = getattr(torch, "get_float32_matmul_precision", None)
             setter = getattr(torch, "set_float32_matmul_precision", None)
             if callable(getter) and callable(setter):
                 self._previous_matmul_precision = getter()
                 setter("high")
+            cuda_backends = getattr(torch.backends, "cuda", None)
+            matmul_mod = getattr(cuda_backends, "matmul", None)
+            if hasattr(matmul_mod, "allow_tf32"):
+                self._previous_cuda_flags["cuda_matmul_tf32"] = matmul_mod.allow_tf32
+                matmul_mod.allow_tf32 = True
+            cudnn_mod = getattr(torch.backends, "cudnn", None)
+            if hasattr(cudnn_mod, "allow_tf32"):
+                self._previous_cuda_flags["cudnn_tf32"] = cudnn_mod.allow_tf32
+                cudnn_mod.allow_tf32 = True
+            if callable(getattr(cuda_backends, "flash_sdp_enabled", None)) and callable(
+                getattr(cuda_backends, "enable_flash_sdp", None)
+            ):
+                self._previous_cuda_flags["flash_sdp"] = cuda_backends.flash_sdp_enabled()
+                cuda_backends.enable_flash_sdp(True)
+            if callable(getattr(cuda_backends, "mem_efficient_sdp_enabled", None)) and callable(
+                getattr(cuda_backends, "enable_mem_efficient_sdp", None)
+            ):
+                self._previous_cuda_flags["mem_efficient_sdp"] = cuda_backends.mem_efficient_sdp_enabled()
+                cuda_backends.enable_mem_efficient_sdp(True)
+            if self._compile_enabled:
+                inductor_cfg = getattr(getattr(torch, "_inductor", None), "config", None)
+                if inductor_cfg is not None:
+                    if hasattr(inductor_cfg, "epilogue_fusion"):
+                        self._previous_cuda_flags["epilogue_fusion"] = inductor_cfg.epilogue_fusion
+                        inductor_cfg.epilogue_fusion = True
+                    if (
+                        getattr(self, "_compile_mode", "default")
+                        in {"max-autotune", "max-autotune-no-cudagraphs"}
+                        and hasattr(inductor_cfg, "coordinate_descent_tuning")
+                    ):
+                        self._previous_cuda_flags["coord_descent"] = (
+                            inductor_cfg.coordinate_descent_tuning
+                        )
+                        inductor_cfg.coordinate_descent_tuning = True
 
     def on_train_end(self) -> None:
         """Handle the end of a training lifecycle."""
@@ -102,6 +137,29 @@ class TorchRuntime:
             if callable(setter):
                 setter(self._previous_matmul_precision)
             self._previous_matmul_precision = None
+        prev_flags = getattr(self, "_previous_cuda_flags", {})
+        if prev_flags:
+            cuda_backends = getattr(torch.backends, "cuda", None)
+            matmul_mod = getattr(cuda_backends, "matmul", None)
+            if "cuda_matmul_tf32" in prev_flags and hasattr(matmul_mod, "allow_tf32"):
+                matmul_mod.allow_tf32 = prev_flags["cuda_matmul_tf32"]
+            cudnn_mod = getattr(torch.backends, "cudnn", None)
+            if "cudnn_tf32" in prev_flags and hasattr(cudnn_mod, "allow_tf32"):
+                cudnn_mod.allow_tf32 = prev_flags["cudnn_tf32"]
+            if "flash_sdp" in prev_flags and callable(
+                getattr(cuda_backends, "enable_flash_sdp", None)
+            ):
+                cuda_backends.enable_flash_sdp(prev_flags["flash_sdp"])
+            if "mem_efficient_sdp" in prev_flags and callable(
+                getattr(cuda_backends, "enable_mem_efficient_sdp", None)
+            ):
+                cuda_backends.enable_mem_efficient_sdp(prev_flags["mem_efficient_sdp"])
+            inductor_cfg = getattr(getattr(torch, "_inductor", None), "config", None)
+            if "epilogue_fusion" in prev_flags and hasattr(inductor_cfg, "epilogue_fusion"):
+                inductor_cfg.epilogue_fusion = prev_flags["epilogue_fusion"]
+            if "coord_descent" in prev_flags and hasattr(inductor_cfg, "coordinate_descent_tuning"):
+                inductor_cfg.coordinate_descent_tuning = prev_flags["coord_descent"]
+            self._previous_cuda_flags = {}
 
     def on_step_begin(self, step: int) -> None:
         del step

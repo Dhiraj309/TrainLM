@@ -2565,3 +2565,18 @@ ranks when `world_size > 1`, enabling `build_performance_summary()` to report
 cluster-wide `non_embedding_mfu` and `logits_inclusive_mfu` for `v5e-8` and
 multi-GPU runs. Verified with CPU/CI unit tests; multi-device hardware
 validation is pending.
+
+
+## SOTA GPU/TPU kernel runtime tuning and 2K sequence-length defaults
+
+`TorchRuntime.on_train_begin()` / `on_train_end()` now reversibly manage CUDA
+TF32 (`cuda.matmul.allow_tf32`, `cudnn.allow_tf32`), Flash/Mem-Efficient SDP,
+and `torch._inductor.config` (`epilogue_fusion`, `coordinate_descent_tuning`
+in autotune modes). `TrainLMTrainer` resolves `loss_rematerialization="per_chunk"`
+by default when `loss_implementation="chunked_linear"` and `sequence_length >= 1024`
+to keep peak 2K logits HBM bounded to `O(chunk_size * vocab)`, and enables
+`allow_excess_precision=True` on BF16 `TorchTPURuntime` when
+`tpu_allow_excess_precision="auto"`. `probe_torchtpu_kernels()` now checks
+`pallas` and `torch_tpu._internal` containers alongside `ops`/`kernels`, and
+`notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb` runs at `seq_len=2048` across all
+models and prints `torch.tpu` / `torch_tpu` / `torch.ops.tpu` kernel entrypoints.

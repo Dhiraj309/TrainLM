@@ -3410,3 +3410,15 @@ Hardware TPU/CUDA validation remains owner-run.
 now report cluster-wide MFU for `world_size > 1` when `global_tokens_per_second`
 is measured. Multi-device hardware (`v5e-8`, multi-GPU) validation remains
 owner-run.
+
+
+**SOTA GPU/TPU kernel runtime tuning and 2K sequence-length rematerialization.**
+`TorchRuntime` reversibly enables CUDA TF32, Flash/Mem-Efficient SDP, and
+Inductor fusion flags (`epilogue_fusion`, `coordinate_descent_tuning` in
+`max-autotune`) across `on_train_begin`/`on_train_end`. `TrainLMTrainingArguments`
+adds `loss_rematerialization` (auto-enabling `"per_chunk"` for
+`chunked_linear` at `sequence_length >= 1024`, saving peak HBM at 2K) and
+`tpu_allow_excess_precision` (auto-enabling on BF16 native TPU), while
+`probe_torchtpu_kernels` probes `pallas` / `_internal` namespaces and
+`notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb` defaults to 2K (`2048`) sequence
+lengths with `chunked_linear`.
