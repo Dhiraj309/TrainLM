@@ -3378,3 +3378,14 @@ an optional private upload cell after a successful local export. It is disabled
 by default, uses Hugging Face's standard login flow, and prints only the
 repository URL and commit SHA. A real upload still must be run and reviewed by
 the owner in Colab or Kaggle.
+
+
+**Zero-recompile compiled optimizer and fused `F.rms_norm` (Step 8).** `Trainer`
+now keeps `group["lr"]` as a persistent 0-D `torch.Tensor` updated in-place via
+`.fill_()` (and enables `capturable=True` on `torch.optim.AdamW`) whenever
+compiled single-step execution is active, eliminating per-step Dynamo `lr`
+recompiles. `src/trainlm/optimization/rmsnorm.py` adds reversible `F.rms_norm`
+patching (`apply_fused_rms_norm` / `restore_rms_norm`) for standard HF RMSNorm
+modules when Liger-Kernel RMSNorm is not active, controlled by
+`TrainLMTrainingArguments.use_fused_rms_norm` (default `True`). Hardware TPU/CUDA
+validation remains owner-run.
