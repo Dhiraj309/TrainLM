@@ -38,7 +38,7 @@ jobs:
 
       - name: Set up Python & install dependencies
         run: |
-          uv venv --python "${{ matrix.python-version }}" .venv
+          uv venv --seed --python "${{ matrix.python-version }}" .venv
           uv pip install --python .venv/bin/python \
             -e ".[dev]" pytest-xdist \
             -c "${{ matrix.constraints }}" \
