@@ -107,26 +107,54 @@ def chunked_linear_causal_cross_entropy(
     supervised = shifted_labels.ne(ignore_index)
     denominator: torch.Tensor = supervised.sum()
     is_compiling = getattr(getattr(torch, "compiler", None), "is_compiling", None)
-    if loss_mask is not None and not (callable(is_compiling) and is_compiling()):
+    compiling_now = bool(callable(is_compiling) and is_compiling())
+    if (
+        loss_mask is not None
+        and hidden_states.device.type == "cpu"
+        and not compiling_now
+    ):
         if not bool(denominator.item()):
             raise ValueError("Causal loss contains no supervised target tokens.")
 
     if hidden_states.device.type == "tpu":
+        from trainlm.kernels.pallas import cross_entropy as ce_mod
         from trainlm.kernels.pallas import (
             is_pallas_ce_available,
             pallas_chunked_linear_cross_entropy,
         )
 
         if is_pallas_ce_available():
-            return pallas_chunked_linear_cross_entropy(
-                shifted_hidden,
-                output_weight,
-                shifted_labels,
-                bias=bias,
-                chunk_size=chunk_size,
-                ignore_index=ignore_index,
-                z_loss=float(z_loss),
-            )
+            if compiling_now:
+                return pallas_chunked_linear_cross_entropy(
+                    shifted_hidden,
+                    output_weight,
+                    shifted_labels,
+                    bias=bias,
+                    chunk_size=chunk_size,
+                    ignore_index=ignore_index,
+                    z_loss=float(z_loss),
+                )
+            try:
+                return pallas_chunked_linear_cross_entropy(
+                    shifted_hidden,
+                    output_weight,
+                    shifted_labels,
+                    bias=bias,
+                    chunk_size=chunk_size,
+                    ignore_index=ignore_index,
+                    z_loss=float(z_loss),
+                )
+            except (RuntimeError, ValueError, TypeError, NotImplementedError):
+                ce_mod._PALLAS_CE_DISABLED = True
+
+    if (
+        hidden_states.device.type in {"tpu", "xla"}
+        and shifted_hidden.shape[0] > chunk_size
+        and shifted_hidden.shape[0] % chunk_size != 0
+    ):
+        pad_rows = (-shifted_hidden.shape[0]) % chunk_size
+        shifted_hidden = F.pad(shifted_hidden, (0, 0, 0, pad_rows))
+        shifted_labels = F.pad(shifted_labels, (0, pad_rows), value=ignore_index)
 
     loss_sum = hidden_states.new_zeros((), dtype=torch.float32)
     z_sum = hidden_states.new_zeros((), dtype=torch.float32)

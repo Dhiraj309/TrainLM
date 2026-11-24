@@ -197,11 +197,21 @@ class CausalLMTask:
             raise ValueError("Prepared batches require exact TokenCounts.")
         if counts.supervised_tokens <= 0:
             raise ValueError("Prepared batches require supervised tokens.")
+        skip_chunk_loss_mask = (
+            self.loss_implementation == "chunked_linear"
+            and counts.ignored_tokens == 0
+        )
+        if skip_chunk_loss_mask and "loss_mask" in task_batch:
+            task_batch = {
+                key: value
+                for key, value in task_batch.items()
+                if key != "loss_mask"
+            }
         task_batch = backend.prepare_batch(task_batch)
 
         model_labels = task_batch["labels"]
         labels = model_labels[..., 1:]
-        loss_mask = task_batch["loss_mask"]
+        loss_mask = task_batch.get("loss_mask")
         model_inputs = {
             key: value
             for key, value in task_batch.items()
@@ -209,15 +219,10 @@ class CausalLMTask:
         }
         if self.loss_implementation == "chunked_linear":
             assert self.training_view is not None
-            # Packed TPU batches are explicitly all-supervised. Avoid sending
-            # a denominator reduction to the host once per microstep in this
-            # hot path; the chunked loss can use the static target geometry.
-            chunk_loss_mask = (
-                None
-                if self.assume_all_supervised and counts.ignored_tokens == 0
-                else loss_mask
-            )
-            hidden_state_fn = self._resolve_compiled_hidden_fn(model)
+            # When host preparation already proved ignored_tokens == 0, omit the
+            # mask tensor transfer, device torch.where, and denominator sync.
+            chunk_loss_mask = None if skip_chunk_loss_mask else loss_mask
+            hidden_state_fn = self._resolve_compiled_hidden_fn(model, backend)
             with backend.autocast():
                 loss, z_loss_value = self.training_view.loss(
                     model_inputs,
@@ -238,6 +243,7 @@ class CausalLMTask:
                 metrics=metrics,
                 loss_source="trainlm_chunked_linear",
             )
+        assert loss_mask is not None
         if self._dispatcher is None or self._dispatcher_model is not model:
             self._dispatcher = ForwardBatchDispatcher.from_model(model)
             self._dispatcher_model = model
@@ -288,17 +294,24 @@ class CausalLMTask:
             loss_source=loss_source,
         )
 
-    def _resolve_compiled_hidden_fn(self, model: nn.Module):
+    def _resolve_compiled_hidden_fn(
+        self, model: nn.Module, backend: ExecutionBackend | None = None
+    ):
         if self.training_view is None:
             return None
         if getattr(model, "_orig_mod", None) is None:
             return None
-        key = (id(model), id(self.training_view))
+        dev_type = getattr(getattr(backend, "device", None), "type", None)
+        key = (id(model), id(self.training_view), dev_type)
         if self._compiled_hidden_key != key:
             provider = self.training_view.hidden_state_provider
-            self._compiled_hidden_fn = torch.compile(
-                lambda cur, inputs: provider(cur, inputs)
-            )
+            fn = lambda cur, inputs: provider(cur, inputs)
+            if dev_type == "tpu":
+                self._compiled_hidden_fn = torch.compile(
+                    fn, backend="tpu", dynamic=False
+                )
+            else:
+                self._compiled_hidden_fn = torch.compile(fn)
             self._compiled_hidden_key = key
         return self._compiled_hidden_fn
 
@@ -329,46 +342,52 @@ class CausalLMTask:
         if not isinstance(labels, torch.Tensor) or labels.shape != input_ids.shape:
             raise ValueError("'labels' must be a tensor matching 'input_ids'.")
 
-        model_labels = labels.clone()
-        effective_labels = model_labels[..., 1:]
-        target_mask = torch.ones_like(effective_labels, dtype=torch.bool)
-
         attention_mask = batch.get("attention_mask")
-        if attention_mask is not None:
-            if not isinstance(attention_mask, torch.Tensor):
-                raise ValueError("'attention_mask' must be a tensor.")
-            if attention_mask.shape != input_ids.shape:
-                raise ValueError("'attention_mask' must match 'input_ids'.")
-            attention_mask = attention_mask.to(dtype=torch.bool)
-            # A target needs both a real target token and a real preceding
-            # token. The latter matters for left-padded batches: otherwise the
-            # first real token would be trained as a continuation of padding.
-            target_mask &= attention_mask[..., 1:]
-            target_mask &= attention_mask[..., :-1]
-
         loss_mask = batch.get("loss_mask")
-        if loss_mask is not None:
-            if not isinstance(loss_mask, torch.Tensor):
-                raise ValueError("'loss_mask' must be a tensor.")
-            if loss_mask.shape != input_ids.shape:
-                raise ValueError("'loss_mask' must match 'input_ids'.")
-            target_mask &= loss_mask[..., 1:].to(dtype=torch.bool)
-
-        if not self.assume_all_supervised:
-            target_mask &= effective_labels.ne(self.ignore_index)
-        effective_labels.masked_fill_(~target_mask, self.ignore_index)
-        # Keep labels handed to models that own their causal loss consistent
-        # with the same shifted target mask used by TrainLM's loss path.
-        model_labels[..., 1:].masked_fill_(~target_mask, self.ignore_index)
-
-        targets = effective_labels.numel()
-        # Raw packed streams have a fixed, fully supervised geometry. Avoid a
-        # device-to-host reduction on every microbatch in that path; the
-        # caller's explicit flag is only valid when no masks are supplied.
-        if self.assume_all_supervised and attention_mask is None and loss_mask is None:
-            supervised = targets
+        if attention_mask is None and loss_mask is None:
+            model_labels = labels
+            effective_labels = model_labels[..., 1:]
+            targets = effective_labels.numel()
+            if self.assume_all_supervised:
+                supervised = targets
+                target_mask: torch.Tensor | None = None
+            else:
+                target_mask = effective_labels.ne(self.ignore_index)
+                supervised = int(target_mask.sum().item())
         else:
+            model_labels = labels.clone()
+            effective_labels = model_labels[..., 1:]
+            target_mask = torch.ones_like(effective_labels, dtype=torch.bool)
+
+            if attention_mask is not None:
+                if not isinstance(attention_mask, torch.Tensor):
+                    raise ValueError("'attention_mask' must be a tensor.")
+                if attention_mask.shape != input_ids.shape:
+                    raise ValueError("'attention_mask' must match 'input_ids'.")
+                attention_mask = attention_mask.to(dtype=torch.bool)
+                # A target needs both a real target token and a real preceding
+                # token. The latter matters for left-padded batches: otherwise the
+                # first real token would be trained as a continuation of padding.
+                target_mask &= attention_mask[..., 1:]
+                target_mask &= attention_mask[..., :-1]
+
+            if loss_mask is not None:
+                if not isinstance(loss_mask, torch.Tensor):
+                    raise ValueError("'loss_mask' must be a tensor.")
+                if loss_mask.shape != input_ids.shape:
+                    raise ValueError("'loss_mask' must match 'input_ids'.")
+                target_mask &= loss_mask[..., 1:].to(dtype=torch.bool)
+
+            if not self.assume_all_supervised:
+                target_mask &= effective_labels.ne(self.ignore_index)
+            effective_labels.masked_fill_(~target_mask, self.ignore_index)
+            # Keep labels handed to models that own their causal loss consistent
+            # with the same shifted target mask used by TrainLM's loss path.
+            model_labels[..., 1:].masked_fill_(~target_mask, self.ignore_index)
+
+            targets = effective_labels.numel()
             supervised = int(target_mask.sum().item())
+
         counts = TokenCounts(
             sequences=input_ids.numel() // input_ids.shape[-1],
             input_tokens=input_ids.numel(),
@@ -381,7 +400,15 @@ class CausalLMTask:
 
         task_batch = dict(batch)
         task_batch["labels"] = model_labels
-        task_batch["loss_mask"] = target_mask
+        if (
+            self.loss_implementation == "chunked_linear"
+            and counts.ignored_tokens == 0
+        ):
+            task_batch.pop("loss_mask", None)
+        else:
+            if target_mask is None:
+                target_mask = torch.ones_like(effective_labels, dtype=torch.bool)
+            task_batch["loss_mask"] = target_mask
         return task_batch, counts
 
     def _loss(
