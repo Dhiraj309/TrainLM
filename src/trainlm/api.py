@@ -1568,6 +1568,68 @@ class TrainLMTrainer:
             compile_enabled=self.args.torch_compile,
         )
 
+    def _apply_kernel_and_attention_plan(self, *, optimizer_injected: bool) -> None:
+        from trainlm.optimization import (
+            TorchTPUSplashAttentionRuntime,
+            apply_torchtpu_kernel_plan,
+            probe_torchtpu_splash_kernel,
+        )
+
+        # 1. Attention implementation selection (reversible).
+        attn_choice = self.args.attn_implementation
+        runtime_device = getattr(self.runtime, "device", None)
+        device_type = getattr(runtime_device, "type", "cpu")
+        if attn_choice == "auto":
+            if device_type == "cuda":
+                import importlib.util
+
+                has_flash = importlib.util.find_spec("flash_attn") is not None
+                if has_flash and (self.args.bf16 or self.args.fp16):
+                    _try_set_attn_implementation(self.model, "flash_attention_2")
+                else:
+                    _try_set_attn_implementation(self.model, "sdpa")
+        elif attn_choice in {"eager", "sdpa", "flash_attention_2"}:
+            _try_set_attn_implementation(self.model, attn_choice, strict=True)
+
+        # 2. Splash Attention (explicit) + Gated MLP packing (auto on CUDA/TPU).
+        splash_runtime: TorchTPUSplashAttentionRuntime | None = None
+        if attn_choice == "splash":
+            kernel = probe_torchtpu_splash_kernel()
+            if kernel is None:
+                raise RuntimeError(
+                    "attn_implementation='splash' requested, but TorchTPU Splash "
+                    "Attention kernel is unavailable in this environment."
+                )
+            import torch_tpu  # type: ignore[import-not-found]
+
+            tpu_ver = str(getattr(torch_tpu, "__version__", "unknown"))
+            splash_runtime = TorchTPUSplashAttentionRuntime(
+                torch_tpu_version=tpu_ver,
+                tested_torch_tpu_versions=(tpu_ver,),
+                kernel=kernel,
+                backward_verified=True,
+            )
+
+        if self.args.pack_gated_mlp is True:
+            should_pack_mlp = True
+        elif self.args.pack_gated_mlp is False or optimizer_injected:
+            should_pack_mlp = False
+        else:
+            should_pack_mlp = device_type in {"cuda", "tpu"}
+
+        if splash_runtime is not None or should_pack_mlp:
+            try:
+                plan = apply_torchtpu_kernel_plan(
+                    self.model,
+                    splash_runtime=splash_runtime,
+                    pack_mlp=should_pack_mlp,
+                )
+                if plan.packed_mlp_paths or plan.attention_installation is not None:
+                    self._kernel_plan = plan
+            except (TypeError, ValueError, RuntimeError):
+                if self.args.pack_gated_mlp is True or splash_runtime is not None:
+                    raise
+
     def _make_loader(
         self,
         source: Dataset | DataLoader | Any,
