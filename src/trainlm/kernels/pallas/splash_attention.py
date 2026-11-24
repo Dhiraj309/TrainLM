@@ -92,6 +92,7 @@ def register_pallas_jax_op(
     *,
     schema: str,
     fake_impl: Callable[..., Any],
+    jax_annotations: dict[str, Any] | None = None,
     bridge_spec: tuple[str, Callable[..., Any]] | None = None,
 ) -> Any:
     """Register ``jax_fn`` as a PyTorch custom op via the active TorchTPU bridge."""
@@ -102,8 +103,18 @@ def register_pallas_jax_op(
     _, _, op_name = qualname.partition("::")
     short_name = op_name or qualname
 
+    if jax_annotations is not None:
+        jax_fn.__annotations__ = dict(jax_annotations)
+
     if kind == "custom_jax_kernel":
-        wrapped = bridge_fn(jax_fn, name=short_name)
+        try:
+            import jax  # type: ignore[import-not-found]
+
+            jit_fn = getattr(jax, "jit", None)
+            target_fn = jit_fn(jax_fn) if callable(jit_fn) else jax_fn
+        except Exception:
+            target_fn = jax_fn
+        wrapped = bridge_fn(target_fn, name=short_name)
         op_def = torch.library.custom_op(
             qualname,
             wrapped,
@@ -113,10 +124,30 @@ def register_pallas_jax_op(
         op_def.register_fake(fake_impl)
     else:
         # TorchTPU 0.2.0+: positional torch.tpu.pallas.jax_op(qualname, jax_fn)
+        # infers the PyTorch custom op schema from runtime jax.Array annotations
+        # on a plain Python function (must not be pre-wrapped in @jax.jit).
         op_def = bridge_fn(qualname, jax_fn)
 
     _REGISTERED_PALLAS_OPS[short_name] = op_def
     return op_def
+
+
+def _register_pallas_autograd(
+    qualname: str,
+    op_def: Any,
+    backward: Callable[..., Any],
+    *,
+    setup_context: Callable[..., Any],
+) -> None:
+    reg_method = getattr(op_def, "register_autograd", None)
+    if callable(reg_method):
+        reg_method(backward, setup_context=setup_context)
+        return
+    lib_reg = getattr(torch.library, "register_autograd", None)
+    if callable(lib_reg):
+        lib_reg(qualname, backward, setup_context=setup_context)
+        return
+    raise RuntimeError(f"Unable to register autograd for Pallas op {qualname}.")
 
 
 def _resolve_pallas_op(op_name: str) -> Any:
@@ -159,10 +190,13 @@ def verify_pallas_bridge_runtime(*, compiled: bool = False) -> bool:
         return probe_pallas_bridge_spec() is not None
 
     try:
+        import gc
         import jax  # type: ignore[import-not-found]
         import jax.numpy as jnp  # type: ignore[import-not-found]
     except Exception:
         return False
+
+    jax_array_cls = getattr(jax, "Array", Any)
 
     for kind, fn in _iter_pallas_bridge_candidates():
         if kind in _DISABLED_PALLAS_BRIDGES:
@@ -171,23 +205,32 @@ def verify_pallas_bridge_runtime(*, compiled: bool = False) -> bool:
             return True
         probe_name = f"trainlm_probe_{kind}"
         qualname = f"trainlm_pallas::{probe_name}"
+        x = None
+        idx = None
+        out = None
         try:
             op = _REGISTERED_PALLAS_OPS.get(probe_name)
             if op is None:
-                @jax.jit
                 def _probe_scan(x: Any, idx: Any) -> Any:
                     def _body(acc: Any, row: Any) -> tuple[Any, None]:
                         return acc + jnp.sum(row.astype(jnp.float32)), None
 
                     tot, _ = jax.lax.scan(_body, jnp.array(0.0, dtype=jnp.float32), x)
                     mask_sum = jnp.sum((idx >= 0).astype(jnp.float32))
-                    return tot + mask_sum
+                    return jnp.reshape(tot + mask_sum, (1,))
 
                 op = register_pallas_jax_op(
                     qualname,
                     _probe_scan,
                     schema="(Tensor x, Tensor idx) -> Tensor",
-                    fake_impl=lambda x, idx: torch.empty((), dtype=torch.float32, device=x.device),
+                    fake_impl=lambda x, idx: torch.empty(
+                        (1,), dtype=torch.float32, device=x.device
+                    ),
+                    jax_annotations={
+                        "x": jax_array_cls,
+                        "idx": jax_array_cls,
+                        "return": jax_array_cls,
+                    },
                     bridge_spec=(kind, fn),
                 )
             caller = _resolve_pallas_op(probe_name)
@@ -195,16 +238,20 @@ def verify_pallas_bridge_runtime(*, compiled: bool = False) -> bool:
             idx = torch.tensor([0, 1], dtype=torch.int32, device="tpu")
             out = caller(x, idx)
             if compiled:
-                compiled_fn = torch.compile(lambda a, b: caller(a, b), backend="tpu", dynamic=False)
+                compiled_fn = torch.compile(
+                    lambda a, b: caller(a, b), backend="tpu", dynamic=False
+                )
                 out = compiled_fn(x, idx)
             accel = getattr(torch, "accelerator", None)
             sync = getattr(accel, "synchronize", None)
             if callable(sync):
                 sync()
-            _ = float(out.detach().cpu().item())
+            _ = float(out.detach().cpu().reshape(()).item())
             _VERIFIED_PALLAS_BRIDGES.add((kind, compiled))
             return True
         except Exception:
+            del x, idx, out
+            gc.collect()
             _DISABLED_PALLAS_BRIDGES.add(kind)
     return False
 
@@ -307,7 +354,8 @@ def _build_splash_ops(
     res_ckpt = splash_kernel.kwargs.get("residual_checkpoint_name", None)
     interpret = splash_kernel.kwargs.get("interpret", False)
 
-    @jax.jit
+    jax_array_cls = getattr(jax, "Array", Any)
+
     def splash_fwd(q: Any, k: Any, v: Any) -> tuple[Any, Any]:
         scale = jnp.array(1.0 / math.sqrt(q.shape[-1]), dtype=q.dtype)
         q_scaled = q * scale
@@ -329,12 +377,13 @@ def _build_splash_ops(
                 attn_logits_soft_cap=soft_cap,
                 interpret=interpret,
             )
-            return out_b, lse_b
+            return out_b, lse_b.astype(jnp.float32)
 
         return jax.vmap(_single_fwd)(q_scaled, k, v)
 
-    @jax.jit
-    def splash_bwd(q: Any, k: Any, v: Any, out: Any, lse: Any, grad_out: Any) -> tuple[Any, Any, Any]:
+    def splash_bwd(
+        q: Any, k: Any, v: Any, out: Any, lse: Any, grad_out: Any
+    ) -> tuple[Any, Any, Any]:
         scale = jnp.array(1.0 / math.sqrt(q.shape[-1]), dtype=q.dtype)
         q_scaled = q * scale
 
@@ -360,24 +409,36 @@ def _build_splash_ops(
             q_b, k_b, v_b, out_b, lse_b, g_b = args
             return carry, _single_bwd(q_b, k_b, v_b, out_b, lse_b, g_b)
 
-        _, (dq_scaled, dk, dv) = jax.lax.scan(_scan_body, None, (q_scaled, k, v, out, lse, grad_out))
+        _, (dq_scaled, dk, dv) = jax.lax.scan(
+            _scan_body, None, (q_scaled, k, v, out, lse, grad_out)
+        )
         return dq_scaled * scale, dk, dv
 
     digest = hashlib.sha256(str(cache_key).encode("utf-8")).hexdigest()[:16]
     fwd_name = f"trainlm_splash_fwd_{digest}"
     bwd_name = f"trainlm_splash_bwd_{digest}"
+    fwd_qualname = f"trainlm_pallas::{fwd_name}"
+    bwd_qualname = f"trainlm_pallas::{bwd_name}"
 
     fwd_op = register_pallas_jax_op(
-        f"trainlm_pallas::{fwd_name}",
+        fwd_qualname,
         splash_fwd,
         schema="(Tensor q, Tensor k, Tensor v) -> (Tensor, Tensor)",
         fake_impl=lambda q, k, v: (
             torch.empty(q.shape, dtype=q.dtype, device=q.device),
-            torch.empty(q.shape[0], q.shape[1], q.shape[2], dtype=torch.float32, device=q.device),
+            torch.empty(
+                q.shape[0], q.shape[1], q.shape[2], dtype=torch.float32, device=q.device
+            ),
         ),
+        jax_annotations={
+            "q": jax_array_cls,
+            "k": jax_array_cls,
+            "v": jax_array_cls,
+            "return": tuple[jax_array_cls, jax_array_cls],
+        },
     )
     bwd_op = register_pallas_jax_op(
-        f"trainlm_pallas::{bwd_name}",
+        bwd_qualname,
         splash_bwd,
         schema="(Tensor q, Tensor k, Tensor v, Tensor out, Tensor lse, Tensor grad_out) -> (Tensor, Tensor, Tensor)",
         fake_impl=lambda q, k, v, out, lse, grad_out: (
@@ -385,6 +446,15 @@ def _build_splash_ops(
             torch.empty(k.shape, dtype=k.dtype, device=k.device),
             torch.empty(v.shape, dtype=v.dtype, device=v.device),
         ),
+        jax_annotations={
+            "q": jax_array_cls,
+            "k": jax_array_cls,
+            "v": jax_array_cls,
+            "out": jax_array_cls,
+            "lse": jax_array_cls,
+            "grad_out": jax_array_cls,
+            "return": tuple[jax_array_cls, jax_array_cls, jax_array_cls],
+        },
     )
 
     def _setup_ctx(ctx: Any, inputs: Any, output: Any) -> None:
@@ -397,10 +467,15 @@ def _build_splash_ops(
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         del grad_lse
         q, k, v, out, lse = ctx.saved_tensors
-        safe_grad_out = torch.zeros_like(out) if grad_out is None else grad_out
-        return bwd_op(q, k, v, out, lse, safe_grad_out)
+        safe_grad_out = (
+            torch.zeros(out.shape, dtype=out.dtype, device=out.device)
+            if grad_out is None
+            else grad_out.contiguous()
+        )
+        bwd_caller = _resolve_pallas_op(bwd_name) if bwd_op is None else bwd_op
+        return bwd_caller(q, k, v, out, lse, safe_grad_out)
 
-    fwd_op.register_autograd(_backward, setup_context=_setup_ctx)
+    _register_pallas_autograd(fwd_qualname, fwd_op, _backward, setup_context=_setup_ctx)
     _SPLASH_OP_CACHE[cache_key] = (fwd_name, bwd_name)
     return fwd_name, bwd_name
 
@@ -423,9 +498,10 @@ def pallas_splash_attention(
 ) -> torch.Tensor:
     """Compute TPU Splash Attention in HF ``(B, H, S, D)`` -> ``(B, S, H, D)`` layout.
 
-    Falls back to ``F.scaled_dot_product_attention`` on CPU, for sequences or
-    head dimensions unsupported by Pallas Splash (such as ``head_dim % 128 != 0``),
-    or when JAX Splash is absent.
+    Supports native GQA (``n_heads % n_kv_heads == 0``) without KV head
+    replication. Falls back to ``F.scaled_dot_product_attention`` on CPU, for
+    sequences or head dimensions unsupported by Pallas Splash (such as
+    ``head_dim % 128 != 0``), or when JAX Splash is absent.
     """
     del query_heads, key_value_heads
     n_heads = query.shape[1]
@@ -434,12 +510,11 @@ def pallas_splash_attention(
     kv_seq_len = key.shape[2]
     head_dim = query.shape[3]
     block = _resolve_block_size(seq_len, max_block=max(128, min(block_q, block_k)))
-    effective_kv_heads = 1 if n_kv_heads == 1 else n_heads
     spec_key = (
         seq_len,
         kv_seq_len,
         n_heads,
-        effective_kv_heads,
+        n_kv_heads,
         head_dim,
         causal,
         block,
@@ -475,7 +550,7 @@ def pallas_splash_attention(
             seq_len=seq_len,
             kv_seq_len=kv_seq_len,
             n_heads=n_heads,
-            n_kv_heads=effective_kv_heads,
+            n_kv_heads=n_kv_heads,
             is_causal=causal,
             block_size=block,
             sliding_window=sliding_window,
@@ -493,17 +568,22 @@ def pallas_splash_attention(
     if n_kv_heads == 1:
         k_in = key.squeeze(1)
         v_in = value.squeeze(1)
-    elif n_kv_heads != n_heads:
-        repeat_factor = n_heads // n_kv_heads
-        k_in = key.repeat_interleave(repeat_factor, dim=1)
-        v_in = value.repeat_interleave(repeat_factor, dim=1)
     else:
         k_in = key
         v_in = value
     q_in = q_in.contiguous()
     k_in = k_in.contiguous()
     v_in = v_in.contiguous()
-    out, _ = fwd_op(q_in, k_in, v_in)
+
+    is_compiling = getattr(getattr(torch, "compiler", None), "is_compiling", None)
+    if callable(is_compiling) and is_compiling():
+        out, _ = fwd_op(q_in, k_in, v_in)
+    else:
+        try:
+            out, _ = fwd_op(q_in, k_in, v_in)
+        except (RuntimeError, ValueError, TypeError, NotImplementedError):
+            _UNSUPPORTED_SPLASH_SPECS.add(spec_key)
+            return _sdpa_fallback()
     if out.dtype != query.dtype:
         out = out.to(dtype=query.dtype)
     return out.transpose(1, 2).contiguous()
