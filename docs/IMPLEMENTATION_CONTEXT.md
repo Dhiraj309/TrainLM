@@ -2674,3 +2674,7 @@ TPU re-run is pending.
   - Omitted `loss_mask` device transfer and masking on all-supervised `chunked_linear` batches (`ignored_tokens == 0`), eliminated the mid-step accelerator `denominator.item()` host sync in `chunked_loss.py`, guarded eager `pallas_chunked_linear_cross_entropy` with fallback to XLA `chunked_linear`, padded TPU/XLA tail chunks to uniform `chunk_size` shapes, and passed `backend="tpu"` in `_resolve_compiled_hidden_fn`.
   - Eliminated per-step uncompiled `mean_loss * token_count` multiply on single-microbatch steps and kept multiplicative LR scheduler updates (`LinearLR`, `CosineAnnealingLR`) in host Python floats so non-logging compiled steps run with zero device `.item()` syncs and zero idle `.fill_()` launches.
 - `notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb`: Set `qwen3-0.6b` `batch_size=2` to fit cleanly within 16 GB `v5e-1` HBM with `grad_ckpt=False`, and routed the eager CPU profiler snippet through `trainer.engine.task.training_step` (`chunked_linear`) instead of materializing full `fp32` logits.
+
+### TorchTPU 0.2.0 `torch.tpu.is_available` guard
+
+- `TrainLMTrainer._place_model_on_runtime_device()` now uses public `torch.accelerator.is_available()`; `torch.tpu.is_available()` is internal-only in TorchTPU 0.2.0 and raised on the Colab v5e-1 benchmark. Audited `src/trainlm/`: no other call. Regression test added (CPU-only; not TPU validation).

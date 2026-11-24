@@ -3493,3 +3493,7 @@ packing, placed TPU BF16 models and re-tied embeddings before optimizer init, se
 uniformly, and eliminated per-step accelerator `denominator.item()` / `lr.item()`
 host syncs and uncompiled scalar multiplies. Owner Colab `TPU v5e-1` validation
 remains pending.
+
+### TorchTPU 0.2.0 `torch.tpu.is_available` guard
+
+- `TrainLMTrainer._place_model_on_runtime_device()` now uses public `torch.accelerator.is_available()`; `torch.tpu.is_available()` is internal-only in TorchTPU 0.2.0 and raised on the Colab v5e-1 benchmark. Audited `src/trainlm/`: no other call. Regression test added (CPU-only; not TPU validation).

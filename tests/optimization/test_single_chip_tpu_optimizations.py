@@ -192,3 +192,40 @@ def test_compiled_lr_sync_skips_idle_fills_and_multiplicative_scheduler_item_syn
     assert fill_calls[0] == pytest.approx(0.875e-3)
     assert tr._current_learning_rate() == pytest.approx(0.875e-3)
     assert opt.param_groups[0]["lr"] is lr_tensor
+
+
+def test_place_model_on_tpu_uses_torch_accelerator_not_torch_tpu_is_available(monkeypatch):
+    """TorchTPU 0.2.0 forbids third-party torch.tpu.is_available() calls."""
+    import types
+
+    import pytest
+    import torch
+
+    from trainlm.api import TrainLMTrainer
+
+    try:
+        tpu_device = torch.device("tpu")
+    except RuntimeError:
+        pytest.skip("torch.device('tpu') unavailable without TorchTPU backend")
+
+    def _forbidden():
+        raise RuntimeError("is_available is internal to TorchTPU")
+
+    monkeypatch.setattr(torch, "tpu", types.SimpleNamespace(is_available=_forbidden), raising=False)
+    monkeypatch.setattr(
+        torch, "accelerator", types.SimpleNamespace(is_available=lambda: True), raising=False
+    )
+
+    class _Model:
+        config = types.SimpleNamespace(tie_word_embeddings=False)
+        moved = None
+
+        def to(self, **kwargs):
+            self.moved = kwargs
+            return self
+
+    trainer = object.__new__(TrainLMTrainer)
+    trainer.runtime = types.SimpleNamespace(device=tpu_device, precision="bf16")
+    trainer.model = _Model()
+    trainer._place_model_on_runtime_device()
+    assert trainer.model.moved is not None
