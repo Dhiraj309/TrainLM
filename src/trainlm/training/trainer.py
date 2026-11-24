@@ -525,7 +525,8 @@ class Trainer:
     def _current_learning_rate(self) -> float:
         """Return the current learning rate."""
 
-        return self.scheduler.get_last_lr()[0]
+        lr = self.scheduler.get_last_lr()[0]
+        return float(lr.item() if isinstance(lr, torch.Tensor) else lr)
 
     def _update_state(
         self,
@@ -949,7 +950,9 @@ class Trainer:
         else:
             del total_tokens
             self.scheduler.step()
-        self._sync_optimizer_lr_tensors()
+        sync_lr = getattr(self, "_sync_optimizer_lr_tensors", None)
+        if callable(sync_lr):
+            sync_lr()
 
     def _evaluation_step(self, batch) -> TaskResult:
         """Dispatch one evaluation batch through the selected task."""
