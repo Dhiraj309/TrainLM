@@ -143,8 +143,11 @@ def build_performance_summary(
         "peak_source": None,
     }
     result["hardware"] = hardware
-    if world_size != 1:
-        result["mfu_unavailable_reason"] = "MFU currently requires a single-device measured window."
+    global_tps = measurements.get("global_tokens_per_second")
+    if world_size != 1 and global_tps is None:
+        result["mfu_unavailable_reason"] = (
+            "MFU currently requires a single-device measured window or explicit global_tokens_per_second."
+        )
         return result
     peak, peak_source = _resolve_hardware_peak(
         device_type=device_type,
@@ -177,7 +180,11 @@ def build_performance_summary(
         result["mfu_unavailable_reason"] = "Model geometry is not valid for the dense causal-LM FLOPs formula."
         return result
 
-    tokens_per_second = result["tokens_per_second"]
+    tokens_per_second = (
+        float(global_tps)
+        if (world_size != 1 and global_tps is not None)
+        else result["tokens_per_second"]
+    )
     if tokens_per_second <= 0:
         result["mfu_unavailable_reason"] = "Measured token throughput is not positive."
         return result
@@ -215,20 +222,23 @@ def build_performance_summary(
         )
         if steady_wall > 0 and steady_tokens > 0:
             steady_tps = steady_tokens / steady_wall
+            steady_mfu_tps = (
+                steady_tps * world_size if world_size != 1 else steady_tps
+            )
             result["steady_state"] = {
                 "measured_windows": len(steady_windows),
                 "supervised_tokens": int(steady_tokens),
                 "wall_seconds": steady_wall,
-                "tokens_per_second": steady_tps,
+                "tokens_per_second": steady_mfu_tps,
                 "dataloader_wait_fraction": steady_wait / steady_wall,
                 "non_embedding_mfu": calculate_mfu(
-                    tokens_per_second=steady_tps,
+                    tokens_per_second=steady_mfu_tps,
                     flops_per_token=flops.non_embedding_flops_per_token,
                     peak_flops_per_device=peak,
                     device_count=world_size,
                 ),
                 "logits_inclusive_mfu": calculate_mfu(
-                    tokens_per_second=steady_tps,
+                    tokens_per_second=steady_mfu_tps,
                     flops_per_token=flops.logits_inclusive_flops_per_token,
                     peak_flops_per_device=peak,
                     device_count=world_size,

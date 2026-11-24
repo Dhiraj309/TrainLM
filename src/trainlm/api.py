@@ -540,6 +540,8 @@ class TrainLMTrainingArguments:
     use_liger_kernel: bool | Literal["auto"] = "auto"
     use_fused_rms_norm: bool = True
     pad_vocab_to_multiple: int | Literal["auto"] | None = None
+    distributed_strategy: Literal["auto", "ddp", "fsdp2", "none"] = "auto"
+    ddp_bucket_cap_mb: int = 50
     torch_compile_mode: Literal[
         "default",
         "reduce-overhead",
@@ -565,6 +567,16 @@ class TrainLMTrainingArguments:
             raise ValueError(
                 "pad_vocab_to_multiple must be None, 'auto', or a positive integer."
             )
+        if self.distributed_strategy not in {"auto", "ddp", "fsdp2", "none"}:
+            raise ValueError(
+                f"Unsupported distributed_strategy: {self.distributed_strategy}"
+            )
+        if (
+            isinstance(self.ddp_bucket_cap_mb, bool)
+            or not isinstance(self.ddp_bucket_cap_mb, int)
+            or self.ddp_bucket_cap_mb < 1
+        ):
+            raise ValueError("ddp_bucket_cap_mb must be a positive integer.")
         if self.torch_compile_mode not in {
             "default",
             "reduce-overhead",
@@ -1527,6 +1539,18 @@ class TrainLMTrainer:
         self._apply_kernel_and_attention_plan(optimizer_injected=optimizer is not None)
         if optimizer is None:
             self._place_model_on_runtime_device()
+        self._distributed_wrap_result = None
+        if self.args.distributed_strategy in {"ddp", "fsdp2"} or (
+            self.args.distributed_strategy == "auto" and self.runtime.is_distributed
+        ):
+            from trainlm.runtime import prepare_distributed_model
+
+            self.model, self._distributed_wrap_result = prepare_distributed_model(
+                self.model,
+                strategy=self.args.distributed_strategy,
+                device=getattr(self.runtime, "device", None),
+                bucket_cap_mb=self.args.ddp_bucket_cap_mb,
+            )
         self.optimizer = optimizer or self._make_optimizer()
         self.scheduler = scheduler or self._make_scheduler()
         train_loader = self._make_loader(
