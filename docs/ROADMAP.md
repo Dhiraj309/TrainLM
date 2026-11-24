@@ -1,5 +1,19 @@
 # TrainLM Roadmap
 
+**Fix Dynamo `lr`/Token-Count Recompiles, CUDA Optimizer Placement, & Steady-State MFU (2026-11-23):**
+on branch `fix/51-compile-step-recompiles-and-cuda-device-placement` (from
+`main` `c515ca1`): Colab `TPU v5e-1` run on `453a1c0` achieved `39.46%`
+non-emb MFU (`44.19%` logits-incl) on `SmolLM2-360M` and `38.17%` non-emb MFU
+(`48.25%` logits-incl) on `Qwen2.5-0.5B`, while revealing `AdamWStateDtype.step`
+hitting Dynamo `recompile_limit (8)` on Python float `lr` updates (`11,998.7`
+tok/s in Window 2 -> `61,588.1` tok/s after fallback). Audit also identified
+redundant `zero_grad` and `loss*T`/`grad/T` scaling inside `_single_step_tensors`,
+optimizer construction running before model device placement for CUDA `fused=True`,
+missing `compile_training_step` on CUDA, and cold Window 1 skewing
+`performance_summary()`. Fixed all five and updated
+`TrainLM_v5e1_MFU_Benchmark.ipynb` to print `steady_state` metrics. CPU/mocked
+tests updated; Colab rerun pending.
+
 **Simplify MFU Benchmark Notebook UX (2026-11-23):** on branch
 `refactor/50-simplify-mfu-benchmark-notebook` (from `main` `453a1c0`):
 removed custom `Dataset`, `TrainerCallback`, `_summarize`, and HBM/TPU

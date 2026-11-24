@@ -93,3 +93,25 @@ def test_adamw_state_dtype_skips_redundant_cast_when_matching():
     optimizer._cast_moment_state()
     assert optimizer.state[parameter]["exp_avg"] is exp_avg_before
     assert optimizer.state[parameter]["exp_avg_sq"] is exp_avg_sq_before
+
+
+def test_adamw_state_dtype_step_does_not_recompile_on_lr_changes():
+    parameter = nn.Parameter(torch.ones(4, dtype=torch.bfloat16))
+    optimizer = create_optimizer(
+        [parameter],
+        OptimizerConfig(mu_dtype="bfloat16", nu_dtype="float32", fused=False),
+    )
+    compiled_calls = []
+
+    def fn():
+        parameter.grad = torch.ones_like(parameter)
+        optimizer.step()
+        return parameter.sum()
+
+    compiled = torch.compile(fn)
+    #Vary lr across > 8 steps (above default recompile_limit=8) without error.
+    for step in range(1, 12):
+        optimizer.param_groups[0]["lr"] = 1e-4 / step
+        compiled_calls.append(float(compiled().item()))
+    assert len(compiled_calls) == 11
+

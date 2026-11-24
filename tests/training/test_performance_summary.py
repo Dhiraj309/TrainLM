@@ -116,3 +116,33 @@ def test_summary_reports_measurement_missing_without_fabricating_throughput():
     assert summary["status"] == "not_measured"
     assert summary["tokens_per_second"] == 0.0
     assert summary["mfu_status"] == "unavailable"
+
+
+def test_summary_computes_steady_state_excluding_warmup_window():
+    summary = build_performance_summary(
+        measurements={
+            "measured_optimizer_steps": 15,
+            "supervised_tokens": 300,
+            "wall_seconds": 12.0,
+            "tokens_per_second": 25.0,
+            "dataloader_wait_seconds": 0.3,
+            "dataloader_wait_fraction": 0.025,
+            "recent_windows": [
+                {"step": 5.0, "supervised_tokens": 100.0, "train_wall_seconds": 10.0, "dataloader_wait_seconds": 0.1},
+                {"step": 10.0, "supervised_tokens": 100.0, "train_wall_seconds": 1.0, "dataloader_wait_seconds": 0.1},
+                {"step": 15.0, "supervised_tokens": 100.0, "train_wall_seconds": 1.0, "dataloader_wait_seconds": 0.1},
+            ],
+        },
+        model=TinyDenseLM(),
+        runtime=FakeRuntime(),
+        sequence_length=8,
+    )
+
+    assert summary["tokens_per_second"] == pytest.approx(25.0)
+    steady = summary["steady_state"]
+    assert steady["measured_windows"] == 2
+    assert steady["supervised_tokens"] == 200
+    assert steady["wall_seconds"] == pytest.approx(2.0)
+    assert steady["tokens_per_second"] == pytest.approx(100.0)
+    assert steady["non_embedding_mfu"] == pytest.approx(4.0 * summary["non_embedding_mfu"])
+
