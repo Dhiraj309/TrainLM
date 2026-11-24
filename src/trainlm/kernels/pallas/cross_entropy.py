@@ -14,7 +14,11 @@ from typing import Any
 
 import torch
 
-from .splash_attention import probe_pallas_bridge
+from .splash_attention import (
+    _resolve_pallas_op,
+    probe_pallas_bridge,
+    register_pallas_jax_op,
+)
 
 _CE_OP_CACHE: dict[tuple[Any, ...], tuple[str, str]] = {}
 _assume_constant_result = getattr(
@@ -50,9 +54,8 @@ def _build_pallas_ce_ops(
     if cached is not None:
         return cached
 
-    custom_jax_kernel = probe_pallas_bridge()
-    if custom_jax_kernel is None:
-        raise RuntimeError("TorchTPU Pallas custom_jax_kernel bridge is unavailable.")
+    if probe_pallas_bridge() is None:
+        raise RuntimeError("TorchTPU Pallas bridge is unavailable.")
 
     import jax  # type: ignore[import-not-found]
     import jax.numpy as jnp  # type: ignore[import-not-found]
@@ -154,32 +157,25 @@ def _build_pallas_ce_ops(
     fwd_name = f"trainlm_ce_fwd_{digest}"
     bwd_name = f"trainlm_ce_bwd_{digest}"
 
-    fwd_op = torch.library.custom_op(
+    fwd_op = register_pallas_jax_op(
         f"trainlm_pallas::{fwd_name}",
-        custom_jax_kernel(ce_fwd, name=fwd_name),
-        mutates_args=(),
+        ce_fwd,
         schema="(Tensor h, Tensor w, Tensor b, Tensor tgt) -> (Tensor, Tensor, Tensor)",
+        fake_impl=lambda h, w, b, tgt: (
+            torch.empty((), dtype=torch.float32, device=h.device),
+            torch.empty((), dtype=torch.float32, device=h.device),
+            torch.empty((), dtype=torch.float32, device=h.device),
+        ),
     )
-    fwd_op.register_fake(
-        lambda h, w, b, tgt: (
-            torch.empty((), dtype=torch.float32, device=h.device),
-            torch.empty((), dtype=torch.float32, device=h.device),
-            torch.empty((), dtype=torch.float32, device=h.device),
-        )
-    )
-
-    bwd_op = torch.library.custom_op(
+    bwd_op = register_pallas_jax_op(
         f"trainlm_pallas::{bwd_name}",
-        custom_jax_kernel(ce_bwd, name=bwd_name),
-        mutates_args=(),
+        ce_bwd,
         schema="(Tensor h, Tensor w, Tensor b, Tensor tgt, Tensor grad_loss, Tensor grad_z) -> (Tensor, Tensor, Tensor)",
-    )
-    bwd_op.register_fake(
-        lambda h, w, b, tgt, grad_loss, grad_z: (
+        fake_impl=lambda h, w, b, tgt, grad_loss, grad_z: (
             torch.empty_like(h),
             torch.empty_like(w),
             torch.empty_like(b),
-        )
+        ),
     )
 
     def _setup_ctx(ctx: Any, inputs: Any, output: Any) -> None:
@@ -233,7 +229,7 @@ def pallas_chunked_linear_cross_entropy(
         z_loss=float(z_loss),
         has_bias=bias is not None,
     )
-    fwd_op = getattr(torch.ops.trainlm_pallas, fwd_name)
+    fwd_op = _resolve_pallas_op(fwd_name)
     dummy_bias = bias if bias is not None else shifted_hidden.new_zeros((1,))
     targets = (
         shifted_labels
