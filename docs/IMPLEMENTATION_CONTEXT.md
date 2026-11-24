@@ -2656,17 +2656,21 @@ TPU re-run is pending.
   (`head_dim=128`) to validate full `128x128` MXU and `pallas_splash`.
 
 
-## Splash contiguous `fake_impl` & TPU bridge health probe
+## Splash contiguous `fake_impl`, `jax_op` `jax.Array` annotations, BF16 MXU Pallas CE, & single-chip TPU MFU audit
 
-- `src/trainlm/kernels/pallas/splash_attention.py`: Fixed `_build_splash_ops`
-  `fake_impl` to return contiguous `torch.empty(q.shape, ...)` instead of
-  `torch.empty_like(q)` (preventing `torch.compile` from eliding
-  `.transpose(1, 2).contiguous()` when `q` is transposed `[B, H, S, D]`), made
-  `q_in`/`k_in`/`v_in` contiguous before `fwd_op`, reordered bridge preference to
-  `torch.tpu.pallas.jax_op` before `custom_jax_kernel`, and added
-  `verify_pallas_bridge_runtime()` so failing `call_custom_kernel()` MLIR bridges
-  disable cleanly and fall back to XLA SDPA / `chunked_linear`.
-- `src/trainlm/kernels/pallas/cross_entropy.py` & `src/trainlm/api.py`: Wired
-  `verify_pallas_bridge_runtime()` into `is_pallas_ce_available()` and TPU plan
-  setup (`_apply_kernel_and_attention_plan`), and made Pallas CE `fake_impl` and
-  forward inputs contiguous.
+- `src/trainlm/kernels/pallas/splash_attention.py`:
+  - Fixed `_build_splash_ops` `fake_impl` to return contiguous `torch.empty(q.shape, ...)` instead of `torch.empty_like(q)` (preventing `AOTAutograd` from eliding `.transpose(1, 2).contiguous()` on transposed `[B, H, S, D]` `q`), and made backward `grad_out` contiguous before calling `bwd_op`.
+  - Updated `register_pallas_jax_op()` to attach runtime `jax.Array` / `tuple[jax.Array, ...]` `__annotations__` to plain Python JAX functions for `torch.tpu.pallas.jax_op(qualname, fn)` (applying `jax.jit` only inside the `custom_jax_kernel` fallback) and added `_register_pallas_autograd()`.
+  - Enabled native GQA (`1 < n_kv_heads < n_heads`) in `pallas_splash_attention()` without KV `repeat_interleave`, halving KV HBM traffic and saved activations on GQA models (`Qwen3-0.6B`).
+  - Added `verify_pallas_bridge_runtime()` and runtime fallback to `_sdpa_fallback()` so incompatible MLIR custom-kernel builds disable cleanly without crashing training.
+- `src/trainlm/kernels/pallas/cross_entropy.py`:
+  - Split `has_bias=False` (`(h, w, tgt)`) vs `has_bias=True` (`(h, w, b, tgt)`) to eliminate the unused `dummy_bias` operand (`%arg2`), switched scalar outputs/cotangents across custom-op boundaries to 1-D `(1,)` `float32` tensors, and fixed `grad_loss is None` fallback from `ones` to `zeros`.
+  - Saved forward `logsumexp` (`[num_tokens]`, `float32`) and replaced `jax.grad` inside `jax.lax.scan` (which promoted backward vocab GEMMs to emulated FP32) with an explicit BF16 MXU analytical backward (`preferred_element_type=jnp.float32`) that keeps per-token logit cotangents at O(1) dynamic range before BF16 cast and scales in FP32 after the GEMMs.
+- `src/trainlm/optimization/mlp.py`, `src/trainlm/optimization/alignment.py`, `src/trainlm/api.py`, `src/trainlm/runtime/torchtpu.py`:
+  - Fixed `PackedGatedMLPProjection.forward` checking `"silu"` instead of `"swiglu"` for CUDA `triton_swiglu`.
+  - Changed `"auto"` `pack_gated_mlp` to `device_type == "cuda"` so TPU avoids per-layer `.chunk(2, dim=-1)` slice/concat HBM copies.
+  - Placed TPU BF16 models and re-tied `tie_word_embeddings` before `_make_optimizer()`, fixed `_alignment_report` reading `sequence_length`, and set `TORCH_TPU_TIER3_COMPILATION_CACHE_ROOT` in `TorchTPURuntime._configure_compile_cache()`.
+- `src/trainlm/tasks/causal_lm.py`, `src/trainlm/tasks/chunked_loss.py`, `src/trainlm/training/trainer.py`:
+  - Omitted `loss_mask` device transfer and masking on all-supervised `chunked_linear` batches (`ignored_tokens == 0`), eliminated the mid-step accelerator `denominator.item()` host sync in `chunked_loss.py`, guarded eager `pallas_chunked_linear_cross_entropy` with fallback to XLA `chunked_linear`, padded TPU/XLA tail chunks to uniform `chunk_size` shapes, and passed `backend="tpu"` in `_resolve_compiled_hidden_fn`.
+  - Eliminated per-step uncompiled `mean_loss * token_count` multiply on single-microbatch steps and kept multiplicative LR scheduler updates (`LinearLR`, `CosineAnnealingLR`) in host Python floats so non-logging compiled steps run with zero device `.item()` syncs and zero idle `.fill_()` launches.
+- `notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb`: Set `qwen3-0.6b` `batch_size=2` to fit cleanly within 16 GB `v5e-1` HBM with `grad_ckpt=False`, and routed the eager CPU profiler snippet through `trainer.engine.task.training_step` (`chunked_linear`) instead of materializing full `fp32` logits.

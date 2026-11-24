@@ -3477,13 +3477,19 @@ larger microbatches (`bs=8` / `bs=4`) enabled by `pallas_ce` plus `Qwen/Qwen3-0.
 (`head_dim=128` for full MXU width and `pallas_splash`).
 
 
-**Splash contiguous `fake_impl` & Pallas TPU bridge health probe.** Fixed
-`_build_splash_ops` / `_build_pallas_ce_ops` `fake_impl` shapes to emit
-contiguous `torch.empty(shape, ...)` instead of `torch.empty_like(...)` (which
-had copied transposed `[B, H, S, D]` Q strides, causing `AOTAutograd` to elide
-`.transpose(1, 2).contiguous()` and break `Qwen3Attention.reshape`), and ensured
-contiguous inputs before invoking Pallas ops. Reordered bridge selection to prefer
-TorchTPU 0.2.0's public `torch.tpu.pallas.jax_op` before `_internal.pallas.custom_jax_kernel`,
-and added `verify_pallas_bridge_runtime()` so incompatible MLIR custom-kernel builds
-(`call_custom_kernel()` refinement errors) automatically fall back cleanly to
-XLA-compiled SDPA and PyTorch `chunked_linear` loss.
+**Splash contiguous `fake_impl`, `jax_op` `jax.Array` schema annotations, BF16 MXU Pallas CE, & single-chip TPU MFU optimizations.** Fixed
+`_build_splash_ops` / `_build_pallas_ce_ops` `fake_impl` to emit contiguous
+`torch.empty(shape, ...)` instead of `torch.empty_like(...)` (which preserved
+transposed `[B, H, S, D]` Q strides and caused `AOTAutograd` to elide
+`.transpose(1, 2).contiguous()`), ensured contiguous backward `grad_out` in Splash,
+attached runtime `jax.Array` `__annotations__` on plain Python JAX functions for
+`torch.tpu.pallas.jax_op` schema inference, enabled native Splash GQA without KV
+`repeat_interleave`, removed the unused `dummy_bias` operand in no-bias Pallas CE,
+switched Pallas CE to saved `logsumexp` + explicit 197 TFLOP/s BF16 MXU analytical
+backward GEMMs with 1-D `(1,)` scalar boundaries, fixed CUDA `triton_swiglu`
+activation dispatch (`"swiglu"`), disabled default TPU gated-MLP slice/concat
+packing, placed TPU BF16 models and re-tied embeddings before optimizer init, set
+`TORCH_TPU_TIER3_COMPILATION_CACHE_ROOT`, padded TPU/XLA `chunked_loss` tail chunks
+uniformly, and eliminated per-step accelerator `denominator.item()` / `lr.item()`
+host syncs and uncompiled scalar multiplies. Owner Colab `TPU v5e-1` validation
+remains pending.
