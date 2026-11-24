@@ -1,5 +1,13 @@
 # TrainLM Roadmap
 
+**Fix MFU Notebook Accelerator Routing (2026-11-23):** on branch
+`fix/52-notebook-accelerator-routing` (from `main` `8abbf3b`): updated
+`notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb` to pass explicit
+`accelerator="cuda"` (on CUDA), `"native_tpu"` (when `torch_tpu` is installed),
+or `"cpu"` instead of `accelerator="auto"` (which keeps automatic TPU routing
+disabled by policy), and added a contract guard in
+`tests/contracts/test_v5e1_mfu_benchmark_notebook.py`.
+
 **Fix Dynamo `lr`/Token-Count Recompiles, CUDA Optimizer Placement, & Steady-State MFU (2026-11-23):**
 on branch `fix/51-compile-step-recompiles-and-cuda-device-placement` (from
 `main` `c515ca1`): Colab `TPU v5e-1` run on `453a1c0` achieved `39.46%`

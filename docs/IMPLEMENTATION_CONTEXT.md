@@ -1,5 +1,13 @@
 # TrainLM implementation context
 
+**Fix MFU Notebook Accelerator Routing (2026-11-23):** on branch
+`fix/52-notebook-accelerator-routing` (from `main` `8abbf3b`): replaced
+`accelerator="auto"` in `notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb` with
+explicit `"cuda"` / `"native_tpu"` / `"cpu"` selection via `torch.cuda` +
+`importlib.util.find_spec("torch_tpu")` because `select_auto_backend` keeps
+auto TPU opt-in disabled, and added a guard in
+`tests/contracts/test_v5e1_mfu_benchmark_notebook.py`.
+
 **Fix Dynamo `lr`/Token-Count Recompiles, CUDA Optimizer Placement, & Steady-State MFU (2026-11-23):**
 on branch `fix/51-compile-step-recompiles-and-cuda-device-placement` (from
 `main` `c515ca1`): (1) decorated `AdamWStateDtype.step`
