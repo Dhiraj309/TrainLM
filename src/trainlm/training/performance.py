@@ -15,6 +15,12 @@ _TPU_PEAK_FLOPS_PER_DEVICE = {
 
 _CUDA_PEAK_FLOPS_RULES: tuple[tuple[str, tuple[str, ...], float, str], ...] = (
     (
+        "MI300X",
+        ("bf16", "fp16"),
+        1_307_000_000_000_000.0,
+        "https://www.amd.com/en/products/accelerators/instinct/mi300/mi300x.html",
+    ),
+    (
         "H100 PCIE",
         ("bf16", "fp16"),
         756_000_000_000_000.0,

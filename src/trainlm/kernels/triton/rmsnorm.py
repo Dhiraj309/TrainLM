@@ -159,10 +159,12 @@ def triton_rms_norm(
     eps: float = 1e-6,
 ) -> torch.Tensor:
     """Compute fused RMSNorm via Triton on CUDA when available, else F.rms_norm."""
+    is_compiling = getattr(getattr(torch, "compiler", None), "is_compiling", lambda: False)()
     if (
         _HAS_TRITON
         and hidden_states.is_cuda
         and hidden_states.shape[-1] <= 16384
+        and not is_compiling
     ):
         w = weight if weight.dtype == hidden_states.dtype else weight.to(dtype=hidden_states.dtype)
         return _TritonRMSNormFn.apply(hidden_states, w, float(eps))
