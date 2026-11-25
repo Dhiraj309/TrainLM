@@ -1762,8 +1762,10 @@ class TrainLMTrainer:
         if runtime_device.type == "cuda" and torch.cuda.is_available():
             self.model = self.model.to(runtime_device)
         elif runtime_device.type == "tpu":
-            tpu_mod = getattr(torch, "tpu", None)
-            is_avail = getattr(tpu_mod, "is_available", None)
+            # torch.tpu.is_available() is internal to TorchTPU 0.2.0 and raises
+            # for third-party callers; use the public torch.accelerator API.
+            accel_mod = getattr(torch, "accelerator", None)
+            is_avail = getattr(accel_mod, "is_available", None)
             if callable(is_avail) and is_avail():
                 if getattr(self.runtime, "precision", "fp32") == "bf16":
                     self.model = self.model.to(
