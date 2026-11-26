@@ -104,6 +104,8 @@ class PackedBinDataset(IterableDataset):
         *,
         sequence_length: int,
         revision: str | None = None,
+        subfolder: str | None = None,
+        max_shards: int | None = None,
         shard_range: tuple[int, int] | range | None = None,
         filename_template: str = "laughlm-v1/laughlm-v1_shard_{index:05d}.bin",
         header_bytes: int = 1024,
@@ -112,16 +114,17 @@ class PackedBinDataset(IterableDataset):
         local_files_only: bool = False,
         **partition: Any,
     ) -> "PackedBinDataset":
-        """Load manifest-backed shards or a numbered legacy ``.bin`` range.
+        """Load manifest-backed shards, a subfolder of ``.bin`` shards, or a numbered range.
 
-        Passing a repo ID selects the LaughLM-compatible raw layout by default.
-        ``shard_range`` is end-exclusive. A mutable Hub selector is resolved to
-        one commit before files are downloaded, scanned, and staged for workers.
+        Passing ``subfolder`` auto-discovers sorted ``*.bin`` files under that
+        directory (for example ``stage1`` or ``stage2``) and derives each shard's
+        ``token_count`` from ``file_size // 2``. ``max_shards`` limits downloads
+        for single-shard ablations.
         """
         if isinstance(source, HuggingFaceShardSourceConfig):
-            if revision is not None or shard_range is not None:
+            if revision is not None or shard_range is not None or subfolder is not None or max_shards is not None:
                 raise ValueError(
-                    "revision and shard_range are only used with a repo ID."
+                    "revision, subfolder, max_shards, and shard_range are only used with a repo ID."
                 )
             shards = HuggingFacePackedShardSource(source).resolve()
             resolved_revision = source.revision
@@ -129,6 +132,8 @@ class PackedBinDataset(IterableDataset):
             shards, resolved_revision = cls._resolve_hub_bins(
                 source,
                 revision=revision,
+                subfolder=subfolder,
+                max_shards=max_shards,
                 shard_range=shard_range,
                 filename_template=filename_template,
                 header_bytes=header_bytes,
@@ -151,6 +156,8 @@ class PackedBinDataset(IterableDataset):
         repo_id: str,
         *,
         revision: str | None,
+        subfolder: str | None,
+        max_shards: int | None,
         shard_range: tuple[int, int] | range | None,
         filename_template: str,
         header_bytes: int,
@@ -158,20 +165,41 @@ class PackedBinDataset(IterableDataset):
         cache_dir: str | Path | None,
         local_files_only: bool,
     ) -> tuple[tuple[_ResolvedPackedShard, ...], str]:
-        if shard_range is None:
-            raise ValueError("shard_range=(start, stop) is required for raw Hub bins.")
-        indices = cls._shard_indices(shard_range)
+        if max_shards is not None and (
+            isinstance(max_shards, bool) or not isinstance(max_shards, int) or max_shards < 1
+        ):
+            raise ValueError("max_shards must be a positive integer.")
         resolved_revision = _resolve_hub_revision(
             repo_id, revision or "main", local_files_only=local_files_only
         )
-        shards = []
-        for index in indices:
-            try:
-                filename = filename_template.format(index=index)
-            except (IndexError, KeyError, ValueError) as exc:
+        if subfolder is not None:
+            if shard_range is not None:
+                raise ValueError("Specify either subfolder or shard_range, not both.")
+            filenames = discover_hub_subfolder_bins(
+                repo_id,
+                subfolder=subfolder,
+                revision=resolved_revision,
+                max_shards=max_shards,
+            )
+        else:
+            if shard_range is None:
                 raise ValueError(
-                    "filename_template must contain a valid {index} field."
-                ) from exc
+                    "Either subfolder or shard_range=(start, stop) is required for raw Hub bins."
+                )
+            indices = cls._shard_indices(shard_range)
+            if max_shards is not None:
+                indices = indices[:max_shards]
+            resolved_names: list[str] = []
+            for index in indices:
+                try:
+                    resolved_names.append(filename_template.format(index=index))
+                except (IndexError, KeyError, ValueError) as exc:
+                    raise ValueError(
+                        "filename_template must contain a valid {index} field."
+                    ) from exc
+            filenames = tuple(resolved_names)
+        shards = []
+        for filename in filenames:
             data_file = _download_hub_file(
                 repo_id=repo_id,
                 filename=filename,
@@ -434,6 +462,50 @@ def _resolve_hub_revision(
     ):
         raise ValueError("Hugging Face did not resolve the dataset to a commit SHA.")
     return resolved
+
+
+def discover_hub_subfolder_bins(
+    repo_id: str,
+    *,
+    subfolder: str,
+    revision: str = "main",
+    max_shards: int | None = None,
+    list_files_fn: Any = None,
+) -> tuple[str, ...]:
+    """Discover sorted ``*.bin`` shard paths under a Hub dataset subfolder."""
+    clean_sub = subfolder.strip().strip("/")
+    if not clean_sub:
+        raise ValueError("subfolder cannot be empty.")
+    if max_shards is not None and (
+        isinstance(max_shards, bool) or not isinstance(max_shards, int) or max_shards < 1
+    ):
+        raise ValueError("max_shards must be a positive integer.")
+    if list_files_fn is None:
+        from huggingface_hub import HfApi
+
+        api = HfApi()
+        files = api.list_repo_files(
+            repo_id=repo_id,
+            repo_type="dataset",
+            revision=revision,
+        )
+    else:
+        files = list_files_fn(repo_id=repo_id, revision=revision)
+    prefix = f"{clean_sub}/"
+    matched = sorted(
+        path
+        for path in files
+        if isinstance(path, str)
+        and path.startswith(prefix)
+        and path.endswith(".bin")
+    )
+    if not matched:
+        raise FileNotFoundError(
+            f"No *.bin shards found under '{clean_sub}/' in dataset '{repo_id}@{revision}'."
+        )
+    if max_shards is not None:
+        matched = matched[:max_shards]
+    return tuple(matched)
 
 
 def _download_hub_file(**kwargs: Any) -> Path:
