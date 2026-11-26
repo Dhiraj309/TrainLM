@@ -40,9 +40,10 @@ from .reader import (
     PackedReaderLayout,
     PackedShardFile,
 )
-from .public import PackedBinDataset
+from .public import PackedBinDataset, discover_hub_subfolder_bins
 
 __all__ = [
+    "discover_hub_subfolder_bins",
     "AsyncBatchPrefetcher",
     "ByteOrder",
     "BatchPartitionPlan",

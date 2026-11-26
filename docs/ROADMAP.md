@@ -3497,3 +3497,15 @@ remains pending.
 ### TorchTPU 0.2.0 `torch.tpu.is_available` guard
 
 - `TrainLMTrainer._place_model_on_runtime_device()` now uses public `torch.accelerator.is_available()`; `torch.tpu.is_available()` is internal-only in TorchTPU 0.2.0 and raised on the Colab v5e-1 benchmark. Audited `src/trainlm/`: no other call. Regression test added (CPU-only; not TPU validation).
+
+### AMD MI300X MFU peak FLOPs and torch.compile Triton guards
+
+- Added `MI300X` (1,307 TFLOP/s BF16/FP16) to `_CUDA_PEAK_FLOPS_RULES` in `src/trainlm/training/performance.py`.
+- Guarded `triton_rms_norm()` and `triton_swiglu()` to fall back to `F.rms_norm` / `F.silu(gate) * up` when `torch.compiler.is_compiling()` is `True`, avoiding Dynamo graph breaks from custom Triton `autograd.Function` wrappers while keeping FP32 master weights + BF16 autocast intact.
+
+### LaughLM-135M Headerless Subfolder Loader, DPO, and Stage 0–4 Scripts
+
+- Extended `PackedBinDataset.from_hub()` with `discover_hub_subfolder_bins()` (`subfolder`, `max_shards`, headerless `<u2` `token_count = file_size // 2`).
+- Added `wsd_stable_fraction` and `min_lr_ratio` to `TrainLMTrainingArguments`.
+- Added reference-policy DPO support in `src/trainlm/dpo.py` (`DPOConfig`, `DPOTrainer`, `compute_sequence_logps`, `compute_dpo_loss`, `format_dpo_pair`).
+- Added `scripts/laughlm/` (`common.py`, `stage0_benchmark.py`, `stage1_base_30b.py`, `stage2_anneal_5b.py`, `stage3_sft.py`, `stage4_dpo.py`, `watch_and_upload.py`) and contract tests in `tests/contracts/test_laughlm_pipeline_contracts.py`.

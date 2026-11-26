@@ -515,6 +515,8 @@ class TrainLMTrainingArguments:
         "auto", "causal_lm", "model", "chunked_linear"
     ] = "auto"
     logits_chunk_size: int | None = None
+    wsd_stable_fraction: float | None = None
+    min_lr_ratio: float = 0.0
     save_total_limit: int | None = None
     save_strategy: Literal["no", "steps", "epoch"] | None = None
     eval_strategy: Literal["no", "steps", "epoch"] | None = None
@@ -2024,10 +2026,16 @@ class TrainLMTrainer:
             if self.args.warmup_steps > 0 and horizon_steps:
                 warmup_fraction = min(1.0, self.args.warmup_steps / horizon_steps)
                 stable_fraction = max(0.0, 1.0 - warmup_fraction)
+            if self.args.wsd_stable_fraction is not None:
+                stable_fraction = min(
+                    float(self.args.wsd_stable_fraction),
+                    max(0.0, 1.0 - warmup_fraction),
+                )
         return SchedulerConfig(
             name=self.args.lr_scheduler_type,
             horizon_steps=horizon_steps,
             warmup_steps=self.args.warmup_steps,
+            min_lr_ratio=float(self.args.min_lr_ratio),
             horizon_tokens=horizon_tokens,
             warmup_fraction=warmup_fraction,
             stable_fraction=stable_fraction,

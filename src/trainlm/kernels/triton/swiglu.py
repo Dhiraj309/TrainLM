@@ -90,6 +90,7 @@ class _TritonSwiGLUFn(torch.autograd.Function):
 
 def triton_swiglu(gate: torch.Tensor, up: torch.Tensor) -> torch.Tensor:
     """Compute ``F.silu(gate) * up`` using fused Triton on CUDA, else eager PyTorch."""
-    if _HAS_TRITON and gate.is_cuda and up.is_cuda and gate.shape == up.shape:
+    is_compiling = getattr(getattr(torch, "compiler", None), "is_compiling", lambda: False)()
+    if _HAS_TRITON and gate.is_cuda and up.is_cuda and gate.shape == up.shape and not is_compiling:
         return _TritonSwiGLUFn.apply(gate, up)
     return F.silu(gate) * up
