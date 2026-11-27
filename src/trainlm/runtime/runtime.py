@@ -296,6 +296,15 @@ class TorchRuntime:
             for grad in grads:
                 grad.mul_(scale)
 
+    def needs_explicit_grad_all_reduce(
+        self, *, model: nn.Module, has_training_view: bool = False
+    ) -> bool:
+        del model, has_training_view
+        return False
+
+    def all_reduce_gradients(self, grads: Iterable[torch.Tensor]) -> None:
+        del grads
+
     def reduce_sum(self, value: torch.Tensor) -> torch.Tensor:
         """Return a sum reduction; the portable runtime is single-process."""
 

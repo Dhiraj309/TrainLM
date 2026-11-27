@@ -1567,7 +1567,7 @@ class TrainLMTrainer:
         if self.args.distributed_strategy in {"ddp", "fsdp2"} or (
             self.args.distributed_strategy == "auto"
             and self.runtime.is_distributed
-            and getattr(self.runtime, "name", None) == "torch"
+            and getattr(self.runtime, "name", None) in {"torch", "pytorch", "torchtpu"}
         ):
             from trainlm.runtime import prepare_distributed_model
 
@@ -1653,7 +1653,9 @@ class TrainLMTrainer:
                     Path(self.args.output_dir),
                     (self.args.report_to,) if isinstance(self.args.report_to, str)
                     else self.args.report_to,
-                ),) if self.args.report_to != "none" else ())
+                ),) if self.args.report_to != "none"
+                    and getattr(self.runtime, "is_primary_process", True)
+                    else ())
                 + ((self._best_model_callback,)
                    if self._best_model_callback is not None else ())
             ),
@@ -1753,6 +1755,7 @@ class TrainLMTrainer:
                 compile_enabled=self.args.torch_compile,
                 allow_excess_precision=allow_excess,
                 compile_cache_dir=cache_dir,
+                distributed_strategy=self.args.distributed_strategy,
             )
         if accelerator == "cuda" and not torch.cuda.is_available():
             raise RuntimeError("accelerator='cuda' requested but CUDA is unavailable.")
@@ -2889,29 +2892,30 @@ class TrainLMTrainer:
         path = root / str(destination or f"checkpoint-{engine.state.step}")
         if path.is_symlink():
             raise ValueError(f"Checkpoint directory cannot be a symlink: {path}")
-        path.mkdir(parents=True, exist_ok=True)
-        payload = self._training_checkpoint_payload(engine)
-        temporary = path / "trainer_state.pt.tmp"
-        if temporary.is_symlink():
-            raise ValueError(f"Checkpoint temporary file cannot be a symlink: {temporary}")
-        torch.save(payload, temporary)
-        temporary.replace(path / "trainer_state.pt")
-        if self._pending_scratch_run_configuration is not None:
-            manifest_path = (
-                Path(self.pretraining_config.output_dir) / "run_config.json"
-            )
-            if manifest_path.is_symlink():
-                raise ValueError(
-                    f"Run configuration manifest cannot be a symlink: {manifest_path}"
+        if getattr(engine.runtime, "is_primary_process", True):
+            path.mkdir(parents=True, exist_ok=True)
+            payload = self._training_checkpoint_payload(engine)
+            temporary = path / "trainer_state.pt.tmp"
+            if temporary.is_symlink():
+                raise ValueError(f"Checkpoint temporary file cannot be a symlink: {temporary}")
+            torch.save(payload, temporary)
+            temporary.replace(path / "trainer_state.pt")
+            if self._pending_scratch_run_configuration is not None:
+                manifest_path = (
+                    Path(self.pretraining_config.output_dir) / "run_config.json"
                 )
-            self._write_scratch_run_configuration(
-                manifest_path,
-                self._pending_scratch_run_configuration,
-            )
-            self._run_configuration_manifest = (
-                self._pending_scratch_run_configuration
-            )
-            self._pending_scratch_run_configuration = None
+                if manifest_path.is_symlink():
+                    raise ValueError(
+                        f"Run configuration manifest cannot be a symlink: {manifest_path}"
+                    )
+                self._write_scratch_run_configuration(
+                    manifest_path,
+                    self._pending_scratch_run_configuration,
+                )
+                self._run_configuration_manifest = (
+                    self._pending_scratch_run_configuration
+                )
+                self._pending_scratch_run_configuration = None
         if not engine.runtime.is_distributed:
             maintain_local_checkpoints(
                 output_dir=root,
@@ -3561,31 +3565,40 @@ class TrainLMTrainer:
             raise NotImplementedError(
                 "TPU model export will be added with lifecycle parity."
             )
+        export_model = getattr(self.model, "_orig_mod", self.model)
+        export_model = getattr(export_model, "module", export_model)
         if getattr(self, "_kernel_plan", None) is not None:
-            self._kernel_plan.rollback(self.model)
+            self._kernel_plan.rollback(export_model)
             self._kernel_plan = None
         destination = Path(output_dir or self.args.output_dir)
+        is_primary = getattr(self.runtime, "is_primary_process", True) if self.runtime is not None else True
+        if not is_primary:
+            if self.runtime is not None and getattr(self.runtime, "is_distributed", False):
+                self.runtime.barrier("save_model")
+            return destination
         destination.mkdir(parents=True, exist_ok=True)
-        model_config = getattr(self.model, "config", None)
+        model_config = getattr(export_model, "config", None)
         missing = object()
         training_use_cache = missing
         original_use_cache = getattr(
-            self.model, "_trainlm_original_use_cache", missing
+            export_model, "_trainlm_original_use_cache", missing
         )
         if original_use_cache is not missing and hasattr(model_config, "use_cache"):
             training_use_cache = model_config.use_cache
             model_config.use_cache = original_use_cache
         try:
-            if hasattr(self.model, "save_pretrained"):
-                self.model.save_pretrained(destination, safe_serialization=True)
+            if hasattr(export_model, "save_pretrained"):
+                export_model.save_pretrained(destination, safe_serialization=True)
             else:
-                torch.save(self.model.state_dict(), destination / "pytorch_model.bin")
+                torch.save(export_model.state_dict(), destination / "pytorch_model.bin")
             save_processing = getattr(self.processing_class, "save_pretrained", None)
             if callable(save_processing):
                 save_processing(destination)
         finally:
             if training_use_cache is not missing:
                 model_config.use_cache = training_use_cache
+        if self.runtime is not None and getattr(self.runtime, "is_distributed", False):
+            self.runtime.barrier("save_model")
         return destination
 
     def save_state(self, output_dir: str | Path | None = None) -> Path:

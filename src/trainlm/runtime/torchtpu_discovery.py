@@ -82,7 +82,17 @@ def discover_tpu(
 
     if verify_allocation:
         try:
-            torch.empty(1, device=torch.device("tpu")).cpu()
+            import os
+
+            probe_device = torch.device("tpu")
+            local_rank_str = os.environ.get("LOCAL_RANK")
+            world_size_str = os.environ.get("WORLD_SIZE") or os.environ.get("LOCAL_WORLD_SIZE")
+            if local_rank_str is not None and world_size_str is not None and int(world_size_str) > 1:
+                try:
+                    probe_device = torch.device("tpu", int(local_rank_str))
+                except (TypeError, ValueError):
+                    probe_device = torch.device("tpu")
+            torch.empty(1, device=probe_device).cpu()
         except Exception as exc:
             report["status"] = "allocation_failed"
             report["allocation"] = "failed"

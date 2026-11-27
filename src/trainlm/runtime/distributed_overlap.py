@@ -29,18 +29,18 @@ def _is_distributed_ready() -> tuple[bool, int]:
     return world_size > 1, world_size
 
 
-def _find_decoder_blocks(model: nn.Module) -> nn.ModuleList | None:
+def _find_decoder_blocks(model: nn.Module) -> list[nn.Module]:
     """Locate repeated transformer block containers structurally without family name guesses."""
-    for attr in ("layers", "h", "blocks"):
-        candidate = getattr(model, attr, None)
-        if isinstance(candidate, nn.ModuleList) and len(candidate) > 0:
-            return candidate
-    for child in model.children():
-        for attr in ("layers", "h", "blocks"):
-            candidate = getattr(child, attr, None)
+    block_attrs = ("layers", "h", "blocks", "prelude_layers", "core_layers", "coda_layers")
+    found: list[nn.Module] = []
+    for root in (model, *model.children()):
+        for attr in block_attrs:
+            candidate = getattr(root, attr, None)
             if isinstance(candidate, nn.ModuleList) and len(candidate) > 0:
-                return candidate
-    return None
+                found.extend(candidate)
+        if found:
+            return found
+    return found
 
 
 def apply_distributed_data_parallel(
@@ -104,10 +104,9 @@ def apply_fsdp2_fully_shard(
 
     blocks = _find_decoder_blocks(model)
     sharded_blocks = 0
-    if blocks is not None:
-        for block in blocks:
-            fully_shard(block, reshard_after_forward=reshard_after_forward)
-            sharded_blocks += 1
+    for block in blocks:
+        fully_shard(block, reshard_after_forward=reshard_after_forward)
+        sharded_blocks += 1
     fully_shard(model, reshard_after_forward=reshard_after_forward)
     return model, DistributedWrapResult(
         strategy="fsdp2",
