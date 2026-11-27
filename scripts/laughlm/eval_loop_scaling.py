@@ -19,7 +19,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         description="Evaluate validation loss, perplexity, and tok/s across LaughLM-Loop depths."
     )
     parser.add_argument("--checkpoint", default=None, help="Path or HF repo for LaughLMLoopForCausalLM.")
-    parser.add_argument("--repo-id", default=None, help="Optional shard Hub dataset repo for eval.")
+    parser.add_argument("--repo-id", "--dataset-repo", dest="repo_id", default=None, help="Optional shard Hub dataset repo for eval.")
+    parser.add_argument("--gcs-shard-dir", default=None, help="Optional same-region gs://bucket/prefix validation shard directory.")
+    parser.add_argument("--cache-dir", default=None, help="Optional local cache dir for gs:// staging.")
     parser.add_argument("--subfolder", default="stage1")
     parser.add_argument("--max-shards", type=int, default=1)
     parser.add_argument("--seq-len", type=int, default=2048)
@@ -144,7 +146,22 @@ def main(argv: list[str] | None = None) -> int:
     dtype = torch.bfloat16 if device.type in {"cuda", "tpu"} else torch.float32
     model = LaughLMLoopForCausalLM.from_pretrained(args.checkpoint).to(device=device, dtype=dtype)
 
-    if args.repo_id:
+    if args.gcs_shard_dir:
+        ds = PackedBinDataset.from_gcs(
+            args.gcs_shard_dir,
+            cache_dir=args.cache_dir,
+            max_shards=args.max_shards,
+            sequence_length=args.seq_len,
+            header_bytes=0,
+            vocab_size=int(model.config.vocab_size),
+        )
+        loader = torch.utils.data.DataLoader(ds, batch_size=args.batch_size)
+        batches = []
+        for idx, batch in enumerate(loader):
+            batches.append(batch)
+            if idx + 1 >= args.max_eval_batches:
+                break
+    elif args.repo_id:
         ds = PackedBinDataset.from_hub(
             args.repo_id,
             subfolder=args.subfolder,
