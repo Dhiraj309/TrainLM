@@ -138,6 +138,11 @@ class TorchTPURuntime(TorchRuntime):
             return model
         return _compile_with_tpu_options(model)
 
+    @property
+    def compile_optimizer_in_step(self) -> bool:
+        """Avoid tracing Parameter-keyed Optimizer.state dicts in Dynamo on TPU."""
+        return False
+
     def compile_training_step(self, step_fn):
         if not callable(step_fn):
             raise TypeError("step_fn must be callable.")

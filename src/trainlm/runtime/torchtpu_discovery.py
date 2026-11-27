@@ -106,6 +106,18 @@ def discover_tpu(
                     report["device_name" if field == "name" else field] = _property(
                         props, field
                     )
+                if report["hbm_bytes_per_device"] is None:
+                    for alt_field in (
+                        "total_memory",
+                        "hbm_bytes",
+                        "memory_bytes",
+                        "hbm_size",
+                        "memory_size",
+                    ):
+                        alt_val = _property(props, alt_field)
+                        if isinstance(alt_val, (int, float)) and alt_val > 0:
+                            report["hbm_bytes_per_device"] = int(alt_val)
+                            break
             except Exception as exc:
                 report["properties_error_type"] = _error(exc)
     report["status"] = "ready" if verify_allocation else "available_unverified"

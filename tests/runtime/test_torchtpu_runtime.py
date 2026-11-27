@@ -281,3 +281,10 @@ def test_native_runtime_prepares_bf16_model_and_restores_mxu_precision(monkeypat
     runtime.on_train_end()
     assert matmul_precisions[-1] == "high"
     assert tpu_ns.allow_excess_precision is False
+
+
+def test_native_runtime_compile_optimizer_in_step_is_false():
+    runtime = object.__new__(native_runtime.TorchTPURuntime)
+    base = base_runtime.TorchRuntime(device="cpu", precision="fp32")
+    assert runtime.compile_optimizer_in_step is False
+    assert base.compile_optimizer_in_step is True

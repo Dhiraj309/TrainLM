@@ -213,6 +213,11 @@ class TorchRuntime:
             return self._compile_target(step_fn)
         return step_fn
 
+    @property
+    def compile_optimizer_in_step(self) -> bool:
+        """Whether compile_training_step wraps clip_gradients and optimizer_step."""
+        return True
+
     def _compile_target(self, target: Any) -> Any:
         mode = getattr(self, "_compile_mode", "default")
         if mode != "default":
