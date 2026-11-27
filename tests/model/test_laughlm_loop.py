@@ -53,7 +53,8 @@ def test_laughlm_loop_135m_preset_geometry_and_param_budget():
 
 def test_autoconfig_automodel_and_roundtrip_save_load(tmp_path: Path):
     cfg = _tiny_loop_config(use_pallas_recurrent_norm=True)
-    built_cfg = AutoConfig.for_model("trainlm_loop", **cfg.to_dict())
+    cfg_kwargs = {k: v for k, v in cfg.to_dict().items() if k != "model_type"}
+    built_cfg = AutoConfig.for_model("trainlm_loop", **cfg_kwargs)
     assert isinstance(built_cfg, LaughLMLoopConfig)
 
     model = AutoModelForCausalLM.from_config(built_cfg)

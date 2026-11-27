@@ -119,7 +119,7 @@ class LaughLMLoopModel(TrainLMPreTrainedModel):
     ):
         del past_key_values, use_cache, cache_position, kwargs
         return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
+            return_dict if return_dict is not None else getattr(self.config, "return_dict", True)
         )
         output_hidden_states = (
             output_hidden_states
@@ -265,7 +265,7 @@ class LaughLMLoopForCausalLM(TrainLMPreTrainedModel):
         **kwargs,
     ):
         return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
+            return_dict if return_dict is not None else getattr(self.config, "return_dict", True)
         )
         outputs = self.model(
             input_ids=input_ids,
