@@ -22,7 +22,10 @@ partitioning, `world_size` grad accum scaling, rank-0 export) and added
 (6) replaced `zeros.at[0:1, :].set(...)` (`tc: scatter`) with `jnp.broadcast_to`
 in `_pallas_recurrent_norm_bwd_2d` (`src/trainlm/kernels/pallas/recurrent_norm.py`)
 after Colab `TPU v5e-1` run logged `62,873.3 tok/s` / `46.13%` non-logit MFU on
-`laughlm-loop-135m-pallas-off-compiled` (`bs=4`).
+`laughlm-loop-135m-pallas-off-compiled` (`bs=4`), and updated
+`notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb` to `--force-reinstall`
+`feat/laughlm-loop-pallas`, print `remote_revision`/`source_revision`, and
+default `MODELS_TO_RUN` to only the two pending `Pallas-On` runs.
 
 **`LaughLM-Loop` + Custom Pallas Recurrent-Norm + `gs://` Shards (2026-11-27):**
 on branch `feat/laughlm-loop-pallas` (from `main` `db74fef`): (1) added
