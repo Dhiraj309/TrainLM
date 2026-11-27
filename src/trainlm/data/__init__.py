@@ -24,6 +24,7 @@ from .partition import (
     plan_packed_batch_partition,
 )
 from .cursor import PackedDataCursor, PackedDataCursorState
+from .gcs import is_gcs_uri, parse_gcs_uri, stage_gcs_prefix
 from .prefetch import (
     AsyncBatchPrefetcher,
     BackendBatchTransfer,
@@ -44,6 +45,9 @@ from .public import PackedBinDataset, discover_hub_subfolder_bins
 
 __all__ = [
     "discover_hub_subfolder_bins",
+    "is_gcs_uri",
+    "parse_gcs_uri",
+    "stage_gcs_prefix",
     "AsyncBatchPrefetcher",
     "ByteOrder",
     "BatchPartitionPlan",

@@ -46,6 +46,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--grad-clip", type=float, default=1.0)
     parser.add_argument("--logits-chunk-size", type=int, default=16384)
     parser.add_argument("--loss-rematerialization", default="auto")
+    parser.add_argument("--arch", default="dense", choices=("dense", "loop"))
+    parser.add_argument(
+        "--no-pallas-recurrent-norm",
+        action="store_true",
+        help="Disable custom Pallas recurrent_inject_rmsnorm on LaughLM-Loop.",
+    )
     parser.add_argument("--torch-compile-mode", default="default", choices=("default",))
     parser.add_argument("--no-compile", action="store_true")
     parser.add_argument("--dry-run", action="store_true", help="Run a 2-step CPU/synthetic preflight check.")
@@ -125,6 +131,7 @@ def main(argv: list[str] | None = None) -> int:
         atomic_save_model_snapshot,
         detect_accelerator_kind,
         load_or_init_135m_model,
+        load_or_init_loop_135m_model,
         load_tokenizer,
         make_synthetic_dataset,
         resolve_logits_chunk_size,
@@ -132,6 +139,14 @@ def main(argv: list[str] | None = None) -> int:
         resolve_optim,
     )
     del DEFAULT_SHARD_REPO, DEFAULT_TOKENIZER_ID, atomic_save_model_snapshot, make_synthetic_dataset
+
+    def _init_model():
+        if args.arch == "loop":
+            return load_or_init_loop_135m_model(
+                max_position_embeddings=max(4096, args.seq_len),
+                use_pallas_recurrent_norm=not args.no_pallas_recurrent_norm,
+            )
+        return load_or_init_135m_model(max_position_embeddings=max(4096, args.seq_len))
 
     accel_kind = detect_accelerator_kind()
     cuda_avail = accel_kind == "cuda"
@@ -152,7 +167,7 @@ def main(argv: list[str] | None = None) -> int:
             if cuda_avail:
                 torch.cuda.empty_cache()
                 torch.cuda.reset_peak_memory_stats()
-            model = load_or_init_135m_model(max_position_embeddings=max(4096, args.seq_len))
+            model = _init_model()
             t_args = TrainLMTrainingArguments(
                 output_dir=str(Path(args.output_dir) / f"mbs{mbs}_compile_{compiled}"),
                 per_device_train_batch_size=mbs,
@@ -223,7 +238,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.stability_steps > 0:
             if cuda_avail:
                 torch.cuda.empty_cache()
-            model = load_or_init_135m_model(max_position_embeddings=max(4096, args.seq_len))
+            model = _init_model()
             t_args = TrainLMTrainingArguments(
                 output_dir=str(Path(args.output_dir) / "stability"),
                 per_device_train_batch_size=win_mbs,

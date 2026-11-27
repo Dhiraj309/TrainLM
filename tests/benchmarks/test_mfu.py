@@ -92,3 +92,55 @@ def test_mfu_rejects_invalid_inputs(arguments):
 
     with pytest.raises(ValueError):
         calculate_mfu(**values)
+
+
+def test_loop_depth_flops_scale_by_effective_layers_and_truncated_bptt():
+    stored_params = 111_035_008
+    vocab = 49152
+    hidden = 896
+    seq = 2048
+
+    full_bptt = calculate_causal_lm_flops(
+        parameter_count=stored_params,
+        vocabulary_size=vocab,
+        hidden_size=hidden,
+        num_hidden_layers=8,
+        sequence_length=seq,
+        tie_word_embeddings=True,
+        num_prelude_layers=2,
+        num_core_layers=4,
+        num_coda_layers=2,
+        num_loop_iterations=4,
+        truncated_bptt_steps=4,
+    )
+    baseline_stored = calculate_causal_lm_flops(
+        parameter_count=stored_params,
+        vocabulary_size=vocab,
+        hidden_size=hidden,
+        num_hidden_layers=8,
+        sequence_length=seq,
+        tie_word_embeddings=True,
+    )
+    # 20 effective layers / 8 stored layers == 2.5x non-embedding work.
+    assert full_bptt.non_embedding_flops_per_token == pytest.approx(
+        2.5 * baseline_stored.non_embedding_flops_per_token
+    )
+    assert full_bptt.output_projection_flops_per_token == pytest.approx(
+        baseline_stored.output_projection_flops_per_token
+    )
+
+    tbptt = calculate_causal_lm_flops(
+        parameter_count=stored_params,
+        vocabulary_size=vocab,
+        hidden_size=hidden,
+        num_hidden_layers=8,
+        sequence_length=seq,
+        tie_word_embeddings=True,
+        num_prelude_layers=2,
+        num_core_layers=4,
+        num_coda_layers=2,
+        num_loop_iterations=4,
+        truncated_bptt_steps=2,
+    )
+    assert tbptt.non_embedding_flops_per_token < full_bptt.non_embedding_flops_per_token
+

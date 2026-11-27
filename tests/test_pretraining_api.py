@@ -591,7 +591,7 @@ def test_from_scratch_resolves_hub_config_and_sliced_splits_once(tmp_path, monke
     datasets_module.load_dataset = load_dataset
     monkeypatch.setitem(sys.modules, "datasets", datasets_module)
 
-    huggingface_hub = ModuleType("huggingface_hub")
+    import huggingface_hub
 
     class FakeHfApi:
         def dataset_info(self, *, repo_id, revision):
@@ -599,8 +599,7 @@ def test_from_scratch_resolves_hub_config_and_sliced_splits_once(tmp_path, monke
             assert revision == "main"
             return SimpleNamespace(sha="b" * 40)
 
-    huggingface_hub.HfApi = FakeHfApi
-    monkeypatch.setitem(sys.modules, "huggingface_hub", huggingface_hub)
+    monkeypatch.setattr(huggingface_hub, "HfApi", FakeHfApi)
 
     config = _config(
         tmp_path / "hub-config-run",

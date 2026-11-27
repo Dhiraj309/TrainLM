@@ -205,3 +205,49 @@ def test_dpo_loss_and_sequence_logps():
     )
     assert loss.ndim == 0 and float(loss) > 0.0
     assert c_rew.shape == (2,) and r_rew.shape == (2,)
+
+
+def test_laughlm_loop_stage1_presets_and_eval_scaling_contracts():
+    from scripts.laughlm import eval_loop_scaling, stage1_base_30b
+
+    s1_default = stage1_base_30b.parse_args([])
+    assert s1_default.arch == "dense"
+    assert s1_default.max_tokens == 30_000_000_000
+    assert s1_default.save_steps == 2000
+
+    s1_pilot = stage1_base_30b.parse_args(["--loop-preset", "pilot-1b"])
+    assert s1_pilot.arch == "laughlm_loop"
+    assert s1_pilot.seq_len == 2048
+    assert s1_pilot.max_tokens == 1_000_000_000
+    assert s1_pilot.save_steps == 250
+    assert s1_pilot.use_pallas_recurrent_norm is True
+
+    s1_trc = stage1_base_30b.parse_args(
+        ["--loop-preset", "trc-35b-v6e8", "--gcs-shard-dir", "gs://my-bucket/stage1"]
+    )
+    assert s1_trc.arch == "laughlm_loop"
+    assert s1_trc.max_tokens == 35_000_000_000
+    assert s1_trc.gcs_shard_dir == "gs://my-bucket/stage1"
+
+    eval_ns = eval_loop_scaling.parse_args(
+        [
+            "--checkpoint",
+            "runs/pilot",
+            "--dataset-repo",
+            "Dhiraj45/laughlm-135m-shards-v2",
+            "--gcs-shard-dir",
+            "gs://my-bucket/val",
+            "--loops",
+            "1,2,4,6,8",
+        ]
+    )
+    assert eval_ns.repo_id == "Dhiraj45/laughlm-135m-shards-v2"
+    assert eval_ns.gcs_shard_dir == "gs://my-bucket/val"
+    assert eval_ns.loops == "1,2,4,6,8"
+
+    import importlib.util
+
+    if importlib.util.find_spec("torch") is not None and importlib.util.find_spec("transformers") is not None:
+        assert stage1_base_30b.main(["--loop-preset", "pilot-1b", "--dry-run"]) == 0
+        assert eval_loop_scaling.main(["--dry-run", "--loops", "1,2,4"]) == 0
+

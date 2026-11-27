@@ -89,6 +89,48 @@ def load_or_init_135m_model(
     return AutoModelForCausalLM.from_config(cfg)
 
 
+def build_135m_loop_config(
+    *,
+    max_position_embeddings: int = 2048,
+    rope_theta: float = 100000.0,
+    use_pallas_recurrent_norm: bool = True,
+) -> Any:
+    """Return the LaughLM-Loop-135M preset aligned for v5e-1 MXUs."""
+    from trainlm.config import LaughLMLoopConfig
+
+    return LaughLMLoopConfig.laughlm_loop_135m(
+        max_position_embeddings=max_position_embeddings,
+        rope_theta=rope_theta,
+        use_pallas_recurrent_norm=use_pallas_recurrent_norm,
+    )
+
+
+def load_or_init_loop_135m_model(
+    *,
+    init_checkpoint: str | Path | None = None,
+    max_position_embeddings: int = 2048,
+    rope_theta: float = 100000.0,
+    use_pallas_recurrent_norm: bool = True,
+) -> Any:
+    """Initialize a fresh LaughLM-Loop-135M model or load from checkpoint."""
+    from trainlm.model import LaughLMLoopForCausalLM
+
+    if init_checkpoint is not None:
+        ckpt_path = Path(init_checkpoint)
+        model_dir = ckpt_path / "model" if (ckpt_path / "model").is_dir() else ckpt_path
+        model = LaughLMLoopForCausalLM.from_pretrained(str(model_dir))
+        model.config.use_pallas_recurrent_norm = bool(use_pallas_recurrent_norm)
+        model.config.use_cache = False
+        return model
+
+    cfg = build_135m_loop_config(
+        max_position_embeddings=max_position_embeddings,
+        rope_theta=rope_theta,
+        use_pallas_recurrent_norm=use_pallas_recurrent_norm,
+    )
+    return LaughLMLoopForCausalLM(cfg)
+
+
 def load_tokenizer(tokenizer_id: str = DEFAULT_TOKENIZER_ID) -> Any:
     """Load the SmolLM2 tokenizer with verified vocab_size=49152 and eos_token_id=0."""
     from transformers import AutoTokenizer

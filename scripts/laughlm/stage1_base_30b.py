@@ -1,4 +1,4 @@
-"""Stage 1: 30B-token from-scratch base pretraining at seq_len=2048."""
+"""Stage 1: From-scratch base pretraining (Dense 30B or LaughLM-Loop 1B/35B)."""
 
 from __future__ import annotations
 
@@ -17,10 +17,26 @@ from scripts.laughlm.common import (
     VOCAB_SIZE,
     atomic_save_model_snapshot,
     load_or_init_135m_model,
+    load_or_init_loop_135m_model,
     load_tokenizer,
     make_synthetic_dataset,
     resolve_loss_rematerialization,
 )
+
+LOOP_PRESETS: dict[str, dict[str, int | bool]] = {
+    "pilot-1b": {
+        "seq_len": 2048,
+        "max_tokens": 1_000_000_000,
+        "save_steps": 250,
+        "use_pallas_recurrent_norm": True,
+    },
+    "trc-35b-v6e8": {
+        "seq_len": 2048,
+        "max_tokens": 35_000_000_000,
+        "save_steps": 2000,
+        "use_pallas_recurrent_norm": True,
+    },
+}
 
 
 def resolve_grad_accum(micro_batch_size: int, grad_accum: int | None) -> int:
@@ -29,18 +45,32 @@ def resolve_grad_accum(micro_batch_size: int, grad_accum: int | None) -> int:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Stage 1: 30B-token base pretraining.")
-    parser.add_argument("--repo-id", default=DEFAULT_SHARD_REPO)
+    parser = argparse.ArgumentParser(description="Stage 1: Base pretraining (Dense / LaughLM-Loop).")
+    parser.add_argument("--repo-id", "--dataset-repo", dest="repo_id", default=DEFAULT_SHARD_REPO)
+    parser.add_argument("--gcs-shard-dir", default=None, help="Same-region gs://bucket/prefix shard directory.")
+    parser.add_argument("--cache-dir", default=None, help="Optional local cache dir for gs:// staging.")
     parser.add_argument("--subfolder", default="stage1")
     parser.add_argument("--max-shards", type=int, default=None)
     parser.add_argument("--tokenizer-id", default=DEFAULT_TOKENIZER_ID)
-    parser.add_argument("--seq-len", type=int, default=2048)
+    parser.add_argument("--arch", default=None, choices=("dense", "laughlm_loop"))
+    parser.add_argument(
+        "--loop-preset",
+        default=None,
+        choices=tuple(LOOP_PRESETS.keys()),
+        help="Apply a validated LaughLM-Loop preset (defaults --arch to laughlm_loop).",
+    )
+    parser.add_argument(
+        "--no-pallas-recurrent-norm",
+        action="store_true",
+        help="Disable custom Pallas recurrent_inject_rmsnorm kernel for ablations.",
+    )
+    parser.add_argument("--seq-len", type=int, default=None)
     parser.add_argument("--micro-batch-size", type=int, default=128)
     parser.add_argument("--grad-accum", type=int, default=None, help="Defaults to max(1, 256 // micro_batch_size).")
-    parser.add_argument("--max-tokens", type=int, default=30_000_000_000)
+    parser.add_argument("--max-tokens", type=int, default=None)
     parser.add_argument("--peak-lr", type=float, default=3e-3)
     parser.add_argument("--warmup-steps", type=int, default=2000)
-    parser.add_argument("--save-steps", type=int, default=2000)
+    parser.add_argument("--save-steps", type=int, default=None)
     parser.add_argument("--logging-steps", type=int, default=25)
     parser.add_argument("--logits-chunk-size", type=int, default=16384)
     parser.add_argument("--loss-rematerialization", default="auto")
@@ -48,19 +78,54 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--no-compile", action="store_true")
     parser.add_argument("--resume", default=None, help="Checkpoint path or 'latest'.")
     parser.add_argument("--dry-run", action="store_true", help="Run a 2-step CPU/synthetic preflight check.")
-    parser.add_argument("--output-dir", default="runs/stage1_base_30b")
-    return parser.parse_args(argv)
+    parser.add_argument("--output-dir", default=None)
+
+    ns = parser.parse_args(argv)
+    preset = LOOP_PRESETS.get(ns.loop_preset) if ns.loop_preset else None
+    if ns.arch is None:
+        ns.arch = "laughlm_loop" if ns.loop_preset is not None else "dense"
+    if ns.seq_len is None:
+        ns.seq_len = int(preset["seq_len"]) if preset else 2048
+    if ns.max_tokens is None:
+        ns.max_tokens = int(preset["max_tokens"]) if preset else 30_000_000_000
+    if ns.save_steps is None:
+        ns.save_steps = int(preset["save_steps"]) if preset else 2000
+    if ns.output_dir is None:
+        ns.output_dir = (
+            f"runs/stage1_{ns.loop_preset}" if ns.loop_preset else "runs/stage1_base_30b"
+        )
+    ns.use_pallas_recurrent_norm = (
+        False if ns.no_pallas_recurrent_norm else bool(preset["use_pallas_recurrent_norm"] if preset else True)
+    )
+    return ns
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    import torch
     from trainlm import TrainLMTrainer, TrainLMTrainingArguments
 
     if args.dry_run:
         ds = make_synthetic_dataset(8, 64, vocab_size=VOCAB_SIZE)
         with tempfile.TemporaryDirectory() as tmp:
-            model = load_or_init_135m_model(max_position_embeddings=64)
+            if args.arch == "laughlm_loop":
+                from trainlm.config import LaughLMLoopConfig
+                from trainlm.model import LaughLMLoopForCausalLM
+
+                cfg = LaughLMLoopConfig.laughlm_loop_135m(
+                    vocab_size=VOCAB_SIZE,
+                    hidden_size=128,
+                    intermediate_size=256,
+                    num_attention_heads=2,
+                    num_key_value_heads=1,
+                    num_prelude_layers=1,
+                    num_core_layers=1,
+                    num_coda_layers=1,
+                    max_position_embeddings=64,
+                    use_pallas_recurrent_norm=args.use_pallas_recurrent_norm,
+                )
+                model = LaughLMLoopForCausalLM(cfg)
+            else:
+                model = load_or_init_135m_model(max_position_embeddings=64)
             t_args = TrainLMTrainingArguments(
                 output_dir=tmp,
                 accelerator="cpu",
@@ -85,7 +150,7 @@ def main(argv: list[str] | None = None) -> int:
             state = trainer.train()
             snap = atomic_save_model_snapshot(trainer.model, None, Path(tmp) / "final_model")
             assert snap.is_dir() and state.step == 2
-            print(f"[Stage 1 Dry-Run] OK | step={state.step}", flush=True)
+            print(f"[Stage 1 Dry-Run] OK | arch={args.arch} | step={state.step}", flush=True)
         return 0
 
     from scripts.laughlm.common import (
@@ -101,15 +166,31 @@ def main(argv: list[str] | None = None) -> int:
     optim_name = resolve_optim(accel_kind)
     chunk_size = resolve_logits_chunk_size(args.logits_chunk_size, accel_kind=accel_kind)
     tokenizer = load_tokenizer(args.tokenizer_id)
-    dataset = PackedBinDataset.from_hub(
-        args.repo_id,
-        subfolder=args.subfolder,
-        max_shards=args.max_shards,
-        sequence_length=args.seq_len,
-        header_bytes=0,
-        vocab_size=VOCAB_SIZE,
-    )
-    model = load_or_init_135m_model(max_position_embeddings=max(4096, args.seq_len))
+    if args.gcs_shard_dir:
+        dataset = PackedBinDataset.from_gcs(
+            args.gcs_shard_dir,
+            cache_dir=args.cache_dir,
+            max_shards=args.max_shards,
+            sequence_length=args.seq_len,
+            header_bytes=0,
+            vocab_size=VOCAB_SIZE,
+        )
+    else:
+        dataset = PackedBinDataset.from_hub(
+            args.repo_id,
+            subfolder=args.subfolder,
+            max_shards=args.max_shards,
+            sequence_length=args.seq_len,
+            header_bytes=0,
+            vocab_size=VOCAB_SIZE,
+        )
+    if args.arch == "laughlm_loop":
+        model = load_or_init_loop_135m_model(
+            max_position_embeddings=max(4096, args.seq_len),
+            use_pallas_recurrent_norm=args.use_pallas_recurrent_norm,
+        )
+    else:
+        model = load_or_init_135m_model(max_position_embeddings=max(4096, args.seq_len))
     t_args = TrainLMTrainingArguments(
         output_dir=args.output_dir,
         per_device_train_batch_size=args.micro_batch_size,
@@ -143,7 +224,8 @@ def main(argv: list[str] | None = None) -> int:
         trainer.model, tokenizer, Path(args.output_dir) / "final_model"
     )
     print(
-        f"[Stage 1] Complete | step={state.step} loss={state.loss} ga={grad_accum} | export={final_dir}",
+        f"[Stage 1] Complete | arch={args.arch} preset={args.loop_preset} "
+        f"step={state.step} loss={state.loss} ga={grad_accum} | export={final_dir}",
         flush=True,
     )
     return 0

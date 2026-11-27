@@ -14,6 +14,7 @@ import torch
 from torch.utils.data import IterableDataset, get_worker_info
 
 from .cursor import PackedDataCursor, PackedDataCursorState
+from .gcs import is_gcs_uri, stage_gcs_prefix
 from .huggingface import HuggingFacePackedShardSource, HuggingFaceShardSourceConfig
 from .manifest import (
     PackedBinaryShardManifest,
@@ -39,9 +40,10 @@ class _ResolvedPackedShard:
 class PackedBinDataset(IterableDataset):
     """Validated fixed-length causal-LM examples from packed ``.bin`` shards.
 
-    Use :meth:`from_directory` for local manifests or :meth:`from_hub` for a
-    revision-pinned Hugging Face dataset source. Partition parameters describe
-    host/rank ownership and are deterministic for a given seed and epoch.
+    Use :meth:`from_directory` for local manifests, :meth:`from_gcs` for
+    same-region ``gs://`` buckets, or :meth:`from_hub` for a revision-pinned
+    Hugging Face dataset source. Partition parameters describe host/rank
+    ownership and are deterministic for a given seed and epoch.
     """
 
     def __init__(
@@ -83,6 +85,13 @@ class PackedBinDataset(IterableDataset):
         manifest_pattern: str = "*.manifest.json",
         **partition: Any,
     ) -> "PackedBinDataset":
+        if is_gcs_uri(directory):
+            return cls.from_gcs(
+                str(directory),
+                sequence_length=sequence_length,
+                manifest_pattern=manifest_pattern,
+                **partition,
+            )
         root = Path(directory).expanduser().resolve()
         if not root.is_dir():
             raise FileNotFoundError(f"Packed dataset directory does not exist: {root}")
@@ -95,6 +104,75 @@ class PackedBinDataset(IterableDataset):
         cls._require_unique_shards(shards)
         dataset = cls(shards, sequence_length=sequence_length, **partition)
         dataset._manifest_root = root
+        return dataset
+
+    @classmethod
+    def from_gcs(
+        cls,
+        gcs_uri: str,
+        *,
+        sequence_length: int,
+        manifest_pattern: str = "*.manifest.json",
+        cache_dir: str | Path | None = None,
+        max_shards: int | None = None,
+        header_bytes: int = 1024,
+        vocab_size: int = 32011,
+        filesystem: Any = None,
+        runner: Any = None,
+        which: Any = None,
+        **partition: Any,
+    ) -> "PackedBinDataset":
+        """Stage and mmap packed shards from a same-region ``gs://bucket/prefix`` URI."""
+        local_root = stage_gcs_prefix(
+            gcs_uri,
+            cache_dir=cache_dir,
+            max_shards=max_shards,
+            filesystem=filesystem,
+            runner=runner,
+            which=which,
+        )
+        manifest_files = tuple(sorted(local_root.rglob(manifest_pattern)))
+        if manifest_files:
+            if max_shards is not None:
+                manifest_files = manifest_files[:max_shards]
+            shards = tuple(
+                cls._resolve_local_manifest(path.parent, path) for path in manifest_files
+            )
+        else:
+            bin_files = tuple(sorted(local_root.rglob("*.bin")))
+            if max_shards is not None:
+                bin_files = bin_files[:max_shards]
+            if not bin_files:
+                raise FileNotFoundError(
+                    f"No manifests or *.bin shards staged from {gcs_uri!r} in {local_root}"
+                )
+            resolved = []
+            for data_file in bin_files:
+                rel_path = data_file.relative_to(local_root).as_posix()
+                shard_id = data_file.stem
+                manifest, validation = _inspect_legacy_uint16_bin(
+                    data_file,
+                    shard_id=shard_id,
+                    data_path=rel_path,
+                    header_bytes=header_bytes,
+                    vocab_size=vocab_size,
+                )
+                resolved.append(
+                    _ResolvedPackedShard(
+                        shard_id=shard_id,
+                        manifest_file=data_file.with_suffix(".manifest.json"),
+                        data_file=data_file,
+                        document_index_file=None,
+                        target_ids_file=None,
+                        loss_mask_file=None,
+                        manifest=manifest,
+                        validation=validation,
+                    )
+                )
+            shards = tuple(resolved)
+        cls._require_unique_shards(shards)
+        dataset = cls(shards, sequence_length=sequence_length, **partition)
+        dataset._manifest_root = local_root if manifest_files else None
         return dataset
 
     @classmethod
