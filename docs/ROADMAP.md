@@ -1,5 +1,19 @@
 # TrainLM Roadmap
 
+**Multi-Chip `TorchTPU` Distributed Support (`v5e-8`/`v6e-8`), Race-Free GCS & Loop Smoke Tests (2026-11-27):**
+on branch `feat/laughlm-loop-pallas` (from merged `main` `aa91110`): extended
+`TorchTPURuntime` (`src/trainlm/runtime/torchtpu.py`) to initialize multi-rank
+TPU slices when `WORLD_SIZE > 1` or `LOCAL_WORLD_SIZE > 1` (invoking
+`torch.tpu.distributed.set_tpu_launch_env()`, binding `torch.tpu.set_device(local_rank)`,
+querying `torch.tpu.topology_aware_mesh`, supporting DDP, FSDP2 over
+`LaughLMLoop` `prelude`/`core`/`coda` blocks, and compiled stateless `AdamW`
+with explicit ICI gradient averaging across `chunked_linear`), made GCS
+staging (`src/trainlm/data/gcs.py`) race-free via node-local leader atomic
+`.staged.ok` marker + `barrier()`, wired `rank`/`world_size` shard partitioning
+and global batch scaling into `stage1_base_30b.py`, and added
+`scripts/laughlm/launch_tpu_slice.py` + end-to-end Loop smoke tests. Mocked
+CPU & CI tests added; live 8-chip `v5e-8`/`v6e-8` validation remains pending.
+
 **`LaughLM-Loop` + Custom Pallas Recurrent-Norm + `gs://` Shards (2026-11-27):** on
 branch `feat/laughlm-loop-pallas` (from `main` `db74fef`): implemented
 `LaughLMLoopConfig(TrainLMConfig)` (`model_type="trainlm_loop"`, including the

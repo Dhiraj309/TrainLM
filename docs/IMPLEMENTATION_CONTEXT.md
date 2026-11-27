@@ -1,5 +1,25 @@
 # TrainLM implementation context
 
+**Multi-Chip `TorchTPU` Distributed Support (`v5e-8`/`v6e-8`), Race-Free GCS & Loop Smoke Tests (2026-11-27):**
+on branch `feat/laughlm-loop-pallas` (from merged `main` `aa91110`): (1) updated
+`TorchTPURuntime` (`src/trainlm/runtime/torchtpu.py`) and `discover_tpu`
+(`src/trainlm/runtime/torchtpu_discovery.py`) to handle `device_count_visible > 1`
+under `WORLD_SIZE > 1` / `LOCAL_WORLD_SIZE > 1` via `set_tpu_launch_env()`,
+`torch.tpu.set_device(local_rank)`, `torch.distributed.init_process_group(backend="tpu")`,
+`topology_aware_mesh` diagnostics, and `reduce_sum`/`barrier`/`all_reduce_gradients`;
+(2) updated `distributed_overlap.py` (`_find_decoder_blocks` for `prelude_layers`/
+`core_layers`/`coda_layers`), `trainer.py` (allowing compiled distributed
+microbatches and explicit `all_reduce_gradients` before clipping in compiled
+stateless AdamW when `chunked_linear` bypasses DDP forward hooks), and `api.py`
+(enabling `"torchtpu"` in `"auto"` distributed strategy, guarding metrics/checkpoints/
+`save_model` on primary process, unwrapping DDP `.module`); (3) added atomic
+`.staged.ok` leader-only staging + `barrier()` in `src/trainlm/data/gcs.py`;
+(4) updated `scripts/laughlm/stage1_base_30b.py` (`rank`/`world_size` shard
+partitioning, `world_size` grad accum scaling, rank-0 export) and added
+`scripts/laughlm/launch_tpu_slice.py`; (5) added
+`tests/runtime/test_torchtpu_distributed.py`,
+`tests/training/test_loop_end_to_end_smoke.py`, and multi-rank GCS/launcher tests.
+
 **`LaughLM-Loop` + Custom Pallas Recurrent-Norm + `gs://` Shards (2026-11-27):**
 on branch `feat/laughlm-loop-pallas` (from `main` `db74fef`): (1) added
 `LaughLMLoopConfig` (`src/trainlm/config/configuration_trainlm.py`) and
