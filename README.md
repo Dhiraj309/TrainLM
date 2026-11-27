@@ -591,7 +591,7 @@ Measured on **Cloud TPU v5e-1** (`16.0 GiB` HBM, `197 TFLOP/s` BF16 peak, `torch
 | `SmolLM2-360M` | Compiled | 4 | `23,549.2 tok/s` | `31.59%` | `34.98%` |
 | `Qwen2.5-0.5B` | Compiled | 2 | `24,782.6 tok/s` | `33.66%` | `43.94%` |
 | `Qwen3-0.6B` | Compiled | 2 | `11,560.0 tok/s` | `19.64%` | `25.12%` |
-| `LaughLM-Loop-135M` | Compiled (`Pallas Off`, effective 20L) | 4 / 8 | _Pending Colab run_ | _Pending_ | _Pending_ |
-| `LaughLM-Loop-135M` | Compiled (`Pallas On`, `fused_recurrent_inject_rmsnorm` + Splash) | 4 / 8 | _Pending Colab run_ | _Pending_ | _Pending_ |
+| `LaughLM-Loop-135M` | Compiled (`Pallas Off`, effective 20L) | 4 | `62,873.3 tok/s` | `46.13%` | `54.56%` |
+| `LaughLM-Loop-135M` | Compiled (`Pallas On`, `fused_recurrent_inject_rmsnorm` + Splash) | 4 / 8 | _Pending Colab rerun_ | _Pending_ | _Pending_ |
 
 

@@ -11,8 +11,12 @@ with explicit ICI gradient averaging across `chunked_linear`), made GCS
 staging (`src/trainlm/data/gcs.py`) race-free via node-local leader atomic
 `.staged.ok` marker + `barrier()`, wired `rank`/`world_size` shard partitioning
 and global batch scaling into `stage1_base_30b.py`, and added
-`scripts/laughlm/launch_tpu_slice.py` + end-to-end Loop smoke tests. Mocked
-CPU & CI tests added; live 8-chip `v5e-8`/`v6e-8` validation remains pending.
+scripts/laughlm/launch_tpu_slice.py + end-to-end Loop smoke tests. Verified on
+Colab `TPU v5e-1`: `laughlm-loop-135m-pallas-off-compiled` (`bs=4`, `seq=2048`,
+`eff_L=20`) achieved `62,873.3 tok/s` | `46.13%` non-logit MFU (`54.56%` total
+MFU) | `wait=0.0%`; fixed Mosaic Pallas backward `tc: scatter` lowering error in
+`recurrent_norm.py` (replacing `.at[0:1, :].set()` with `jnp.broadcast_to`).
+Live `Pallas On` rerun and 8-chip `v5e-8`/`v6e-8` validation remain pending.
 
 **`LaughLM-Loop` + Custom Pallas Recurrent-Norm + `gs://` Shards (2026-11-27):** on
 branch `feat/laughlm-loop-pallas` (from `main` `db74fef`): implemented

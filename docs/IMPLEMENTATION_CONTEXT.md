@@ -18,7 +18,11 @@ stateless AdamW when `chunked_linear` bypasses DDP forward hooks), and `api.py`
 partitioning, `world_size` grad accum scaling, rank-0 export) and added
 `scripts/laughlm/launch_tpu_slice.py`; (5) added
 `tests/runtime/test_torchtpu_distributed.py`,
-`tests/training/test_loop_end_to_end_smoke.py`, and multi-rank GCS/launcher tests.
+`tests/training/test_loop_end_to_end_smoke.py`, and multi-rank GCS/launcher tests;
+(6) replaced `zeros.at[0:1, :].set(...)` (`tc: scatter`) with `jnp.broadcast_to`
+in `_pallas_recurrent_norm_bwd_2d` (`src/trainlm/kernels/pallas/recurrent_norm.py`)
+after Colab `TPU v5e-1` run logged `62,873.3 tok/s` / `46.13%` non-logit MFU on
+`laughlm-loop-135m-pallas-off-compiled` (`bs=4`).
 
 **`LaughLM-Loop` + Custom Pallas Recurrent-Norm + `gs://` Shards (2026-11-27):**
 on branch `feat/laughlm-loop-pallas` (from `main` `db74fef`): (1) added

@@ -243,9 +243,8 @@ def _pallas_recurrent_norm_bwd_2d(
 
         dw_vec = jnp.sum(dy * x_hat, axis=0, keepdims=True)
         dg_vec = jnp.sum(dz * h0, axis=0, keepdims=True) * s * (1.0 - s)
-        zeros = jnp.zeros((8, padded_h), dtype=jnp.float32)
-        dweight_part_ref[:, :] = zeros.at[0:1, :].set(dw_vec)
-        dgate_part_ref[:, :] = zeros.at[0:1, :].set(dg_vec)
+        dweight_part_ref[:, :] = jnp.broadcast_to(dw_vec, (8, padded_h))
+        dgate_part_ref[:, :] = jnp.broadcast_to(dg_vec, (8, padded_h))
 
     call_kwargs: dict[str, Any] = {}
     if interpret:
