@@ -709,6 +709,13 @@ class Trainer:
                 step_fn = self._resolve_single_step_fn()
                 task_batch = self.runtime.prepare_batch(task_batch)
                 mean_loss, grad_norm = step_fn(task_batch, counts)
+                if not getattr(self.runtime, "compile_optimizer_in_step", True):
+                    if self.config.trainer.max_grad_norm > 0:
+                        grad_norm = self.runtime.clip_gradients(
+                            self.model.parameters(),
+                            self.config.trainer.max_grad_norm,
+                        )
+                    self.runtime.optimizer_step(self.optimizer)
                 observe_accumulation = getattr(
                     self.runtime,
                     "observe_accumulation_steps",
@@ -948,6 +955,10 @@ class Trainer:
         if self._compiled_single_step_fn is not None:
             return self._compiled_single_step_fn
 
+        include_optimizer = bool(
+            getattr(self.runtime, "compile_optimizer_in_step", True)
+        )
+
         def _single_step_tensors(task_batch, counts):
             step_model = (
                 getattr(self.model, "_orig_mod", self.model)
@@ -962,12 +973,13 @@ class Trainer:
             )
             self.runtime.backward(result.loss)
             grad_norm = None
-            if self.config.trainer.max_grad_norm > 0:
-                grad_norm = self.runtime.clip_gradients(
-                    step_model.parameters(),
-                    self.config.trainer.max_grad_norm,
-                )
-            self.runtime.optimizer_step(self.optimizer)
+            if include_optimizer:
+                if self.config.trainer.max_grad_norm > 0:
+                    grad_norm = self.runtime.clip_gradients(
+                        step_model.parameters(),
+                        self.config.trainer.max_grad_norm,
+                    )
+                self.runtime.optimizer_step(self.optimizer)
             return result.loss.detach(), grad_norm
 
         compile_fn = getattr(self.runtime, "compile_training_step", None)
@@ -978,7 +990,7 @@ class Trainer:
         else:
             self._compiled_single_step_active = False
             self._compiled_single_step_fn = _single_step_tensors
-        if self._compiled_single_step_active:
+        if self._compiled_single_step_active and include_optimizer:
             self._sync_optimizer_lr_tensors()
         return self._compiled_single_step_fn
 

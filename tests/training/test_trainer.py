@@ -787,3 +787,64 @@ def test_trainer_uses_compiled_microbatch_step_for_grad_accum_on_cuda():
     assert trainer.state.step == 1
     assert trainer.state.micro_step == 2
 
+
+def test_trainer_keeps_optimizer_outside_compiled_step_when_compile_optimizer_in_step_false():
+    from transformers import GPT2Config, GPT2LMHeadModel
+    from trainlm.tasks import CausalLMTask
+
+    class OutsideOptCompileRuntime(Runtime):
+        def __init__(self):
+            super().__init__(device="cpu", precision="fp32")
+            self.events = []
+
+        @property
+        def compile_optimizer_in_step(self) -> bool:
+            return False
+
+        def compile_training_step(self, step_fn):
+            def wrapped(task_batch, counts):
+                self.events.append("enter_compiled_step")
+                out = step_fn(task_batch, counts)
+                self.events.append("exit_compiled_step")
+                return out
+
+            return wrapped
+
+        def clip_gradients(self, parameters, max_norm):
+            self.events.append("clip_gradients")
+            return super().clip_gradients(parameters, max_norm)
+
+        def optimizer_step(self, optimizer):
+            self.events.append("optimizer_step")
+            return super().optimizer_step(optimizer)
+
+    model = GPT2LMHeadModel(
+        GPT2Config(vocab_size=32, n_positions=16, n_embd=8, n_layer=1, n_head=2)
+    )
+    optimizer = SGD(model.parameters(), lr=0.1)
+    scheduler = LambdaLR(optimizer, lr_lambda=lambda _: 1.0)
+    rows = [{"input_ids": torch.arange(8, dtype=torch.long)} for _ in range(2)]
+    loader = DataLoader(rows, batch_size=2)
+    config = DummyConfig()
+    config.trainer.max_steps = 1
+    runtime = OutsideOptCompileRuntime()
+
+    trainer = Trainer(
+        config=config,
+        model=model,
+        runtime=runtime,
+        optimizer=optimizer,
+        scheduler=scheduler,
+        task=CausalLMTask(),
+        train_dataloader=loader,
+    )
+    trainer.train()
+
+    assert runtime.events == [
+        "enter_compiled_step",
+        "exit_compiled_step",
+        "clip_gradients",
+        "optimizer_step",
+    ]
+    assert trainer.state.step == 1
+
