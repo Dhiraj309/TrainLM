@@ -127,6 +127,22 @@ class DiscoveryTests(unittest.TestCase):
         report["status"] = ["ready"]
         self.assertEqual(NORMALIZE_WORKER(report)["status"], "invalid_report")
 
+    def test_hbm_bytes_fallback_to_total_memory(self):
+        accelerator = SimpleNamespace(
+            current_accelerator=lambda: SimpleNamespace(type="tpu"),
+            is_available=lambda: True,
+            device_count=lambda: 1,
+        )
+        props = SimpleNamespace(name="TPU v5e", total_memory=16 * (1024**3))
+        torch = SimpleNamespace(
+            accelerator=accelerator,
+            device=lambda name: name,
+            tpu=SimpleNamespace(get_device_properties=lambda: props),
+        )
+        report = DISCOVER(torch, verify_allocation=False, include_properties=True)
+        self.assertEqual(report["device_name"], "TPU v5e")
+        self.assertEqual(report["hbm_bytes_per_device"], 16 * (1024**3))
+
 
 if __name__ == "__main__":
     unittest.main()
