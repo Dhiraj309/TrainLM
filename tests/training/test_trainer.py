@@ -861,3 +861,113 @@ def test_trainer_keeps_optimizer_outside_compiled_step_when_compile_optimizer_in
     assert isinstance(optimizer.param_groups[0]["lr"], float)
     assert trainer.state.step == 2
 
+
+def test_trainer_stateless_compiled_optimizer_matches_adamw_over_multiple_steps():
+    from torch.optim.lr_scheduler import LinearLR
+    from transformers import GPT2Config, GPT2LMHeadModel
+    from trainlm.tasks import CausalLMTask
+
+    class StatelessOptCompileRuntime(Runtime):
+        def __init__(self):
+            super().__init__(device="cpu", precision="fp32", compile_enabled=True)
+            self.compile_calls = 0
+            self.clip_calls = 0
+            self.opt_step_calls = 0
+
+        @property
+        def compile_optimizer_in_step(self) -> bool:
+            return False
+
+        @property
+        def compile_stateless_optimizer_step(self) -> bool:
+            return True
+
+        def compile_training_step(self, step_fn):
+            self.compile_calls += 1
+            return torch.compile(step_fn, backend="eager")
+
+        def clip_gradients(self, parameters, max_norm):
+            self.clip_calls += 1
+            return super().clip_gradients(parameters, max_norm)
+
+        def optimizer_step(self, optimizer):
+            self.opt_step_calls += 1
+            return super().optimizer_step(optimizer)
+
+    torch.manual_seed(0)
+    cfg = GPT2Config(vocab_size=32, n_positions=16, n_embd=8, n_layer=1, n_head=2)
+    ref_model = GPT2LMHeadModel(cfg)
+    test_model = deepcopy(ref_model)
+
+    rows = [{"input_ids": torch.randint(0, 32, (8,), dtype=torch.long)} for _ in range(6)]
+    ref_loader = DataLoader(rows, batch_size=2)
+    test_loader = DataLoader(rows, batch_size=2)
+
+    ref_opt = torch.optim.AdamW(ref_model.parameters(), lr=1e-2, weight_decay=0.1)
+    ref_sched = LinearLR(ref_opt, start_factor=1.0, end_factor=0.5, total_iters=3)
+    ref_runtime = Runtime(device="cpu", precision="fp32")
+    ref_cfg = SimpleNamespace(
+        trainer=SimpleNamespace(
+            max_steps=3,
+            max_tokens=None,
+            max_grad_norm=1.0,
+            gradient_accumulation_steps=1,
+        ),
+        logging=SimpleNamespace(log_every_steps=1),
+    )
+    ref_trainer = Trainer(
+        config=ref_cfg,
+        model=ref_model,
+        runtime=ref_runtime,
+        optimizer=ref_opt,
+        scheduler=ref_sched,
+        task=CausalLMTask(),
+        train_dataloader=ref_loader,
+    )
+    ref_trainer.train()
+
+    test_opt = torch.optim.AdamW(test_model.parameters(), lr=1e-2, weight_decay=0.1)
+    test_sched = LinearLR(test_opt, start_factor=1.0, end_factor=0.5, total_iters=3)
+    test_runtime = StatelessOptCompileRuntime()
+    test_cfg = SimpleNamespace(
+        trainer=SimpleNamespace(
+            max_steps=3,
+            max_tokens=None,
+            max_grad_norm=1.0,
+            gradient_accumulation_steps=1,
+        ),
+        logging=SimpleNamespace(log_every_steps=1),
+    )
+    test_trainer = Trainer(
+        config=test_cfg,
+        model=test_model,
+        runtime=test_runtime,
+        optimizer=test_opt,
+        scheduler=test_sched,
+        task=CausalLMTask(),
+        train_dataloader=test_loader,
+    )
+    test_trainer.train()
+
+    assert test_runtime.clip_calls == 0
+    assert test_runtime.opt_step_calls == 0
+    assert test_runtime.compile_calls == 2
+    assert test_trainer.state.step == 3
+    for ref_p, test_p in zip(ref_model.parameters(), test_model.parameters()):
+        torch.testing.assert_close(test_p, ref_p, rtol=1e-5, atol=1e-6)
+        torch.testing.assert_close(
+            test_opt.state[test_p]["exp_avg"],
+            ref_opt.state[ref_p]["exp_avg"],
+            rtol=1e-5,
+            atol=1e-6,
+        )
+        torch.testing.assert_close(
+            test_opt.state[test_p]["exp_avg_sq"],
+            ref_opt.state[ref_p]["exp_avg_sq"],
+            rtol=1e-5,
+            atol=1e-6,
+        )
+        assert float(test_opt.state[test_p]["step"].item()) == float(
+            ref_opt.state[ref_p]["step"].item()
+        )
+
