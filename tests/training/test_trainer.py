@@ -825,8 +825,15 @@ def test_trainer_keeps_optimizer_outside_compiled_step_when_compile_optimizer_in
     scheduler = LambdaLR(optimizer, lr_lambda=lambda _: 1.0)
     rows = [{"input_ids": torch.arange(8, dtype=torch.long)} for _ in range(2)]
     loader = DataLoader(rows, batch_size=2)
-    config = DummyConfig()
-    config.trainer.max_steps = 1
+    config = SimpleNamespace(
+        trainer=SimpleNamespace(
+            max_steps=1,
+            max_tokens=None,
+            max_grad_norm=1.0,
+            gradient_accumulation_steps=1,
+        ),
+        logging=SimpleNamespace(log_every_steps=1),
+    )
     runtime = OutsideOptCompileRuntime()
 
     trainer = Trainer(
