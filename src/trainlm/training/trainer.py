@@ -105,6 +105,9 @@ class Trainer:
         self._compiled_single_step_active = False
         self._compiled_microbatch_step_fn = None
         self._compiled_microbatch_step_active = False
+        self._compiled_stateless_opt_fn = None
+        self._compiled_stateless_opt_active = False
+        self._compiled_stateless_opt_params: tuple[torch.nn.Parameter, ...] = ()
         self._lr_tensors: list[torch.Tensor] | None = None
         self._lr_values: list[float] | None = None
         self._performance_model = model
@@ -710,12 +713,7 @@ class Trainer:
                 task_batch = self.runtime.prepare_batch(task_batch)
                 mean_loss, grad_norm = step_fn(task_batch, counts)
                 if not getattr(self.runtime, "compile_optimizer_in_step", True):
-                    if self.config.trainer.max_grad_norm > 0:
-                        grad_norm = self.runtime.clip_gradients(
-                            self.model.parameters(),
-                            self.config.trainer.max_grad_norm,
-                        )
-                    self.runtime.optimizer_step(self.optimizer)
+                    grad_norm = self._run_clip_and_optimizer_step()
                 observe_accumulation = getattr(
                     self.runtime,
                     "observe_accumulation_steps",
@@ -903,16 +901,7 @@ class Trainer:
                 gradient_scale = 1.0 / total_tokens
             self.runtime.scale_gradients(self.model.parameters(), gradient_scale)
 
-        grad_norm = None
-        if self.config.trainer.max_grad_norm > 0:
-            grad_norm = self.runtime.clip_gradients(
-                self.model.parameters(),
-                self.config.trainer.max_grad_norm,
-            )
-
-        self.runtime.optimizer_step(
-            self.optimizer,
-        )
+        grad_norm = self._run_clip_and_optimizer_step()
 
         # XLA flushes the optimizer update in ``on_step_end`` below. Calling
         # synchronize here as well creates two mark_step boundaries per update
@@ -1024,10 +1013,234 @@ class Trainer:
             self._compiled_microbatch_step_fn = _microbatch_step_tensors
         return self._compiled_microbatch_step_fn
 
+    def _compiled_lr_tensors_active(self) -> bool:
+        return bool(
+            (
+                getattr(self, "_compiled_single_step_active", False)
+                and getattr(self.runtime, "compile_optimizer_in_step", True)
+            )
+            or getattr(self, "_compiled_stateless_opt_active", False)
+        )
+
+    def _resolve_stateless_optimizer_step_fn(self):
+        if not getattr(self.runtime, "compile_stateless_optimizer_step", False):
+            return None
+        compile_fn = getattr(self.runtime, "compile_training_step", None)
+        if not callable(compile_fn):
+            return None
+        if not isinstance(self.optimizer, torch.optim.AdamW):
+            return None
+        param_groups = getattr(self.optimizer, "param_groups", None)
+        if not param_groups:
+            return None
+        for group in param_groups:
+            if (
+                group.get("amsgrad", False)
+                or group.get("maximize", False)
+                or group.get("differentiable", False)
+            ):
+                return None
+
+        active_params: list[torch.nn.Parameter] = []
+        for group in param_groups:
+            for param in group.get("params", ()):
+                if (
+                    isinstance(param, torch.Tensor)
+                    and param.requires_grad
+                    and param.grad is not None
+                ):
+                    active_params.append(param)
+        if not active_params:
+            return None
+        active_tuple = tuple(active_params)
+        clip_max_norm = float(self.config.trainer.max_grad_norm)
+        if (
+            self._compiled_stateless_opt_fn is not None
+            and self._compiled_stateless_opt_params == active_tuple
+            and getattr(self, "_compiled_stateless_opt_clip_norm", None) == clip_max_norm
+        ):
+            return self._compiled_stateless_opt_fn
+
+        state_policy = getattr(self.optimizer, "state_policy", None)
+        mu_dtype = state_policy.mu_dtype if state_policy is not None else torch.float32
+        nu_dtype = state_policy.nu_dtype if state_policy is not None else torch.float32
+
+        group_specs = []
+        with torch.no_grad():
+            for group in param_groups:
+                beta1, beta2 = group.get("betas", (0.9, 0.999))
+                eps = float(group.get("eps", 1e-8))
+                weight_decay = float(group.get("weight_decay", 0.0))
+                g_params = []
+                g_exp_avgs = []
+                g_exp_avg_sqs = []
+                g_steps = []
+                for param in group.get("params", ()):
+                    if not (
+                        isinstance(param, torch.Tensor)
+                        and param.requires_grad
+                        and param.grad is not None
+                    ):
+                        continue
+                    state = self.optimizer.state[param]
+                    step_t = state.get("step")
+                    if (
+                        not isinstance(step_t, torch.Tensor)
+                        or step_t.device != param.device
+                        or step_t.dtype != torch.float32
+                        or step_t.ndim != 0
+                    ):
+                        step_val = (
+                            float(step_t.item())
+                            if isinstance(step_t, torch.Tensor)
+                            else float(step_t or 0.0)
+                        )
+                        step_t = torch.tensor(
+                            step_val, dtype=torch.float32, device=param.device
+                        )
+                        state["step"] = step_t
+                    exp_avg = state.get("exp_avg")
+                    if (
+                        not isinstance(exp_avg, torch.Tensor)
+                        or exp_avg.device != param.device
+                        or exp_avg.dtype != mu_dtype
+                    ):
+                        exp_avg = (
+                            exp_avg.to(device=param.device, dtype=mu_dtype)
+                            if isinstance(exp_avg, torch.Tensor)
+                            else torch.zeros_like(param, dtype=mu_dtype)
+                        )
+                        state["exp_avg"] = exp_avg
+                    exp_avg_sq = state.get("exp_avg_sq")
+                    if (
+                        not isinstance(exp_avg_sq, torch.Tensor)
+                        or exp_avg_sq.device != param.device
+                        or exp_avg_sq.dtype != nu_dtype
+                    ):
+                        exp_avg_sq = (
+                            exp_avg_sq.to(device=param.device, dtype=nu_dtype)
+                            if isinstance(exp_avg_sq, torch.Tensor)
+                            else torch.zeros_like(param, dtype=nu_dtype)
+                        )
+                        state["exp_avg_sq"] = exp_avg_sq
+                    g_params.append(param)
+                    g_exp_avgs.append(exp_avg)
+                    g_exp_avg_sqs.append(exp_avg_sq)
+                    g_steps.append(step_t)
+                group_specs.append(
+                    (
+                        tuple(g_params),
+                        tuple(g_exp_avgs),
+                        tuple(g_exp_avg_sqs),
+                        tuple(g_steps),
+                        float(beta1),
+                        float(beta2),
+                        eps,
+                        weight_decay,
+                    )
+                )
+
+        specs_tuple = tuple(group_specs)
+
+        def _stateless_opt_step(
+            grads: list[torch.Tensor],
+            lr_tensors: list[torch.Tensor],
+        ) -> torch.Tensor | None:
+            with torch.no_grad():
+                total_norm: torch.Tensor | None = None
+                if clip_max_norm > 0.0 and grads:
+                    sq_norms = [torch.sum(g.float() * g.float()) for g in grads]
+                    total_norm = torch.sqrt(torch.stack(sq_norms).sum())
+                    clip_coef = torch.clamp(
+                        clip_max_norm / (total_norm + 1e-6), max=1.0
+                    )
+                    for g in grads:
+                        g.mul_(clip_coef.to(g.dtype))
+
+                grad_offset = 0
+                for idx, (
+                    g_params,
+                    g_exp_avgs,
+                    g_exp_avg_sqs,
+                    g_steps,
+                    beta1,
+                    beta2,
+                    eps,
+                    weight_decay,
+                ) in enumerate(specs_tuple):
+                    n_group = len(g_params)
+                    if n_group == 0:
+                        continue
+                    group_grads = grads[grad_offset : grad_offset + n_group]
+                    grad_offset += n_group
+                    lr_t = lr_tensors[idx]
+                    for s in g_steps:
+                        s.add_(1.0)
+                    step_t = g_steps[0]
+                    bias_correction1 = 1.0 - (beta1 ** step_t)
+                    bias_correction2_sqrt = torch.sqrt(1.0 - (beta2 ** step_t))
+                    neg_step_size = -lr_t / bias_correction1
+                    decay_scale = (
+                        1.0 - lr_t * weight_decay if weight_decay != 0.0 else None
+                    )
+                    for p, g, exp_avg, exp_avg_sq in zip(
+                        g_params, group_grads, g_exp_avgs, g_exp_avg_sqs
+                    ):
+                        if decay_scale is not None:
+                            p.mul_(decay_scale.to(p.dtype))
+                        g_mu = g.to(exp_avg.dtype) if g.dtype != exp_avg.dtype else g
+                        g_nu = (
+                            g.to(exp_avg_sq.dtype)
+                            if g.dtype != exp_avg_sq.dtype
+                            else g
+                        )
+                        exp_avg.lerp_(g_mu, 1.0 - beta1)
+                        exp_avg_sq.mul_(beta2).addcmul_(g_nu, g_nu, value=1.0 - beta2)
+                        denom = (exp_avg_sq.float().sqrt() / bias_correction2_sqrt).add_(
+                            eps
+                        )
+                        update = (exp_avg.float() / denom) * neg_step_size
+                        p.add_(update.to(p.dtype))
+                return total_norm
+
+        self._compiled_stateless_opt_active = True
+        self._sync_optimizer_lr_tensors()
+        compiled = compile_fn(_stateless_opt_step)
+        if compiled is _stateless_opt_step:
+            self._compiled_stateless_opt_active = False
+            self._compiled_stateless_opt_fn = None
+            self._compiled_stateless_opt_params = ()
+            return None
+        self._compiled_stateless_opt_fn = compiled
+        self._compiled_stateless_opt_params = active_tuple
+        self._compiled_stateless_opt_clip_norm = clip_max_norm
+        return compiled
+
+    def _run_clip_and_optimizer_step(self) -> torch.Tensor | None:
+        stateless_fn = self._resolve_stateless_optimizer_step_fn()
+        if stateless_fn is not None:
+            grads = [p.grad for p in self._compiled_stateless_opt_params]
+            lr_tensors = self._lr_tensors or []
+            grad_norm = stateless_fn(grads, lr_tensors)
+            self.optimizer._opt_called = True
+            return grad_norm
+        grad_norm = None
+        if self.config.trainer.max_grad_norm > 0:
+            grad_norm = self.runtime.clip_gradients(
+                self.model.parameters(),
+                self.config.trainer.max_grad_norm,
+            )
+        self.runtime.optimizer_step(self.optimizer)
+        return grad_norm
+
     def _sync_optimizer_lr_tensors(self) -> None:
         """Keep ``group['lr']`` as persistent 0-D tensors when compiled to prevent Dynamo recompiles."""
-        if not self._compiled_single_step_active or not getattr(
-            self.runtime, "compile_optimizer_in_step", True
+        if not (
+            (
+                getattr(self, "_compiled_single_step_active", False)
+                and getattr(getattr(self, "runtime", None), "compile_optimizer_in_step", True)
+            )
+            or getattr(self, "_compiled_stateless_opt_active", False)
         ):
             return
         param_groups = getattr(self.optimizer, "param_groups", None)
@@ -1072,8 +1285,15 @@ class Trainer:
         """Advance token-indexed schedules by cumulative consumed tokens."""
 
         if (
-            getattr(self, "_compiled_single_step_active", False)
-            and getattr(self.runtime, "compile_optimizer_in_step", True)
+            (
+                (
+                    getattr(self, "_compiled_single_step_active", False)
+                    and getattr(
+                        getattr(self, "runtime", None), "compile_optimizer_in_step", True
+                    )
+                )
+                or getattr(self, "_compiled_stateless_opt_active", False)
+            )
             and getattr(self, "_lr_values", None)
             and getattr(self, "_lr_tensors", None)
         ):
@@ -1250,6 +1470,11 @@ class Trainer:
         try:
             self.runtime.before_checkpoint("resume")
             result = self._checkpoint_loader(self, source)
+            self._compiled_stateless_opt_fn = None
+            self._compiled_stateless_opt_active = False
+            self._compiled_stateless_opt_params = ()
+            self._lr_tensors = None
+            self._lr_values = None
             self.callback_handler.on_resume(self.state, self.control)
             self._last_checkpoint_step = self.state.step
             success = True

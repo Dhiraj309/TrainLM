@@ -218,6 +218,11 @@ class TorchRuntime:
         """Whether compile_training_step wraps clip_gradients and optimizer_step."""
         return True
 
+    @property
+    def compile_stateless_optimizer_step(self) -> bool:
+        """Whether clip_gradients and AdamW update run via a compiled stateless graph."""
+        return False
+
     def _compile_target(self, target: Any) -> Any:
         mode = getattr(self, "_compile_mode", "default")
         if mode != "default":

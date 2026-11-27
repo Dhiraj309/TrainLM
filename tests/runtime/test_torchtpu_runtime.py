@@ -285,6 +285,13 @@ def test_native_runtime_prepares_bf16_model_and_restores_mxu_precision(monkeypat
 
 def test_native_runtime_compile_optimizer_in_step_is_false():
     runtime = object.__new__(native_runtime.TorchTPURuntime)
+    runtime._compile_enabled = False
+    compiled_runtime = object.__new__(native_runtime.TorchTPURuntime)
+    compiled_runtime._compile_enabled = True
     base = base_runtime.TorchRuntime(device="cpu", precision="fp32")
     assert runtime.compile_optimizer_in_step is False
+    assert runtime.compile_stateless_optimizer_step is False
+    assert compiled_runtime.compile_optimizer_in_step is False
+    assert compiled_runtime.compile_stateless_optimizer_step is True
     assert base.compile_optimizer_in_step is True
+    assert base.compile_stateless_optimizer_step is False

@@ -143,6 +143,11 @@ class TorchTPURuntime(TorchRuntime):
         """Avoid tracing Parameter-keyed Optimizer.state dicts in Dynamo on TPU."""
         return False
 
+    @property
+    def compile_stateless_optimizer_step(self) -> bool:
+        """Compile clip_gradients and AdamW over flat tensor lists on TPU."""
+        return bool(getattr(self, "_compile_enabled", False))
+
     def compile_training_step(self, step_fn):
         if not callable(step_fn):
             raise TypeError("step_fn must be callable.")
