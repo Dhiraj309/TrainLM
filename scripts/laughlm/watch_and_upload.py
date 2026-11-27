@@ -5,17 +5,22 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import time
-from typing import Iterable
 
-DEFAULT_HF_REPO = "Dhiraj309/laughlm-135m-v2"
+DEFAULT_HF_REPO = "Dhiraj45/laughlm-135m-v2"
+_FINAL_MARKERS = ("trainer_state.pt", "config.json", "model.safetensors", "pytorch_model.bin")
 
 
 def is_completed_checkpoint(path: Path) -> bool:
-    """Return True only for finalized checkpoint directories (never `.tmp`)."""
+    """Return True only for finalized checkpoint directories with no `.tmp` artifacts inside."""
     name = path.name
     if name.startswith(".") or ".tmp" in name or name.endswith(".tmp"):
         return False
-    return path.is_dir()
+    if not path.is_dir():
+        return False
+    entries = list(path.iterdir())
+    if any(".tmp" in child.name or child.name.endswith(".tmp") for child in entries):
+        return False
+    return any((path / marker).is_file() for marker in _FINAL_MARKERS)
 
 
 def scan_completed_checkpoints(checkpoint_dir: Path) -> tuple[Path, ...]:

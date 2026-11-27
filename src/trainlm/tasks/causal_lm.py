@@ -77,6 +77,8 @@ class CausalLMTask:
         self._dispatcher: ForwardBatchDispatcher | None = None
         self._compiled_hidden_key: tuple[int, int] | None = None
         self._compiled_hidden_fn: Any = None
+        self._compiled_loss_key: tuple[Any, ...] | None = None
+        self._compiled_loss_fn: Any = None
 
     def training_step(
         self,
@@ -223,17 +225,27 @@ class CausalLMTask:
             # mask tensor transfer, device torch.where, and denominator sync.
             chunk_loss_mask = None if skip_chunk_loss_mask else loss_mask
             hidden_state_fn = self._resolve_compiled_hidden_fn(model, backend)
+            compiled_loss_fn = self._resolve_compiled_chunked_loss_fn(model, backend)
             with backend.autocast():
-                loss, z_loss_value = self.training_view.loss(
-                    model_inputs,
-                    model_labels,
-                    loss_mask=chunk_loss_mask,
-                    chunk_size=self.logits_chunk_size,
-                    ignore_index=self.ignore_index,
-                    z_loss=self.z_loss,
-                    rematerialization=self.rematerialization,
-                    hidden_state_fn=hidden_state_fn,
-                )
+                if compiled_loss_fn is not None:
+                    hidden = self.training_view.hidden_states(
+                        model_inputs, hidden_state_fn=hidden_state_fn
+                    )
+                    weight, bias = self.training_view.output_projection()
+                    loss, z_loss_value = compiled_loss_fn(
+                        hidden, weight, model_labels, bias, chunk_loss_mask
+                    )
+                else:
+                    loss, z_loss_value = self.training_view.loss(
+                        model_inputs,
+                        model_labels,
+                        loss_mask=chunk_loss_mask,
+                        chunk_size=self.logits_chunk_size,
+                        ignore_index=self.ignore_index,
+                        z_loss=self.z_loss,
+                        rematerialization=self.rematerialization,
+                        hidden_state_fn=hidden_state_fn,
+                    )
             metrics: dict[str, torch.Tensor | float] = {}
             if z_loss_value is not None:
                 metrics["z_loss"] = z_loss_value.detach()
@@ -314,6 +326,50 @@ class CausalLMTask:
                 self._compiled_hidden_fn = torch.compile(fn)
             self._compiled_hidden_key = key
         return self._compiled_hidden_fn
+
+    def _resolve_compiled_chunked_loss_fn(
+        self, model: nn.Module, backend: ExecutionBackend | None = None
+    ):
+        if self.rematerialization != "disabled":
+            return None
+        if getattr(model, "_orig_mod", None) is None:
+            return None
+        dev_type = getattr(getattr(backend, "device", None), "type", None)
+        if dev_type != "cuda":
+            return None
+        is_compiling = getattr(getattr(torch, "compiler", None), "is_compiling", None)
+        if callable(is_compiling) and is_compiling():
+            return None
+        from .chunked_loss import chunked_linear_causal_cross_entropy
+
+        key = (
+            id(model),
+            dev_type,
+            self.logits_chunk_size,
+            self.ignore_index,
+            float(self.z_loss),
+        )
+        if self._compiled_loss_key != key:
+            chunk_size = self.logits_chunk_size
+            ignore_index = self.ignore_index
+            z_loss = float(self.z_loss)
+
+            def _loss_step(hidden, weight, labels, bias, mask):
+                return chunked_linear_causal_cross_entropy(
+                    hidden,
+                    weight,
+                    labels,
+                    bias=bias,
+                    loss_mask=mask,
+                    chunk_size=chunk_size,
+                    ignore_index=ignore_index,
+                    z_loss=z_loss,
+                    rematerialization="disabled",
+                )
+
+            self._compiled_loss_fn = torch.compile(_loss_step)
+            self._compiled_loss_key = key
+        return self._compiled_loss_fn
 
     @property
     def _model_loss_compatible(self) -> bool:

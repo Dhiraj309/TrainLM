@@ -7,8 +7,8 @@ from pathlib import Path
 import shutil
 from typing import Any
 
-DEFAULT_SHARD_REPO = "Dhiraj309/laughlm-135m-shards-v2"
-DEFAULT_OUTPUT_REPO = "Dhiraj309/laughlm-135m-v2"
+DEFAULT_SHARD_REPO = "Dhiraj45/laughlm-135m-shards-v2"
+DEFAULT_OUTPUT_REPO = "Dhiraj45/laughlm-135m-v2"
 DEFAULT_TOKENIZER_ID = "HuggingFaceTB/SmolLM2-135M"
 VOCAB_SIZE = 49152
 EOS_TOKEN_ID = 0
@@ -49,13 +49,29 @@ def load_or_init_135m_model(
     max_position_embeddings: int = 4096,
     rope_theta: float = 100000.0,
 ) -> Any:
-    """Initialize a fresh 135M model or load weights from a prior checkpoint."""
+    """Initialize a fresh 135M model or load weights from a snapshot or TrainLM checkpoint."""
+    import torch
     from transformers import AutoModelForCausalLM
 
     if init_checkpoint is not None:
         ckpt_path = Path(init_checkpoint)
         model_dir = ckpt_path / "model" if (ckpt_path / "model").is_dir() else ckpt_path
-        model = AutoModelForCausalLM.from_pretrained(str(model_dir))
+        trainer_state = ckpt_path / "trainer_state.pt"
+        if (model_dir / "config.json").is_file():
+            model = AutoModelForCausalLM.from_pretrained(str(model_dir))
+        elif trainer_state.is_file():
+            cfg = build_135m_config(
+                max_position_embeddings=max_position_embeddings,
+                rope_theta=rope_theta,
+            )
+            model = AutoModelForCausalLM.from_config(cfg)
+            payload = torch.load(trainer_state, map_location="cpu", weights_only=False)
+            state_dict = {
+                k.removeprefix("_orig_mod."): v for k, v in payload["model"].items()
+            }
+            model.load_state_dict(state_dict, strict=True)
+        else:
+            model = AutoModelForCausalLM.from_pretrained(str(model_dir))
         model.config.max_position_embeddings = max(
             int(getattr(model.config, "max_position_embeddings", 0) or 0),
             max_position_embeddings,
@@ -89,16 +105,39 @@ def load_tokenizer(tokenizer_id: str = DEFAULT_TOKENIZER_ID) -> Any:
     return tok
 
 
-def atomic_save_model_snapshot(model: Any, tokenizer: Any, target_dir: Path) -> Path:
-    """Save model+tokenizer to a `.tmp` directory and atomically rename into place."""
+def make_synthetic_dataset(
+    num_examples: int,
+    seq_len: int,
+    *,
+    vocab_size: int = VOCAB_SIZE,
+) -> list[dict[str, Any]]:
+    """Build deterministic CPU synthetic token batches for zero-cost dry runs."""
+    import torch
+
+    gen = torch.Generator().manual_seed(42)
+    ids = torch.randint(0, vocab_size, (num_examples, seq_len), generator=gen)
+    return [{"input_ids": ids[i], "labels": ids[i]} for i in range(num_examples)]
+
+
+def resolve_loss_rematerialization(requested: str, *, cuda_available: bool) -> str:
+    """Disable per-chunk activation checkpointing on high-VRAM CUDA/ROCm GPUs by default."""
+    if requested != "auto":
+        return requested
+    return "disabled" if cuda_available else "auto"
+
+
+def atomic_save_model_snapshot(model: Any, tokenizer: Any | None, target_dir: Path) -> Path:
+    """Save unwrapped model (+ optional tokenizer) to `.tmp` and atomically rename."""
+    unwrapped = getattr(model, "_orig_mod", model)
     target_dir.parent.mkdir(parents=True, exist_ok=True)
     tmp_dir = target_dir.parent / f".{target_dir.name}.tmp.{os.getpid()}"
     if tmp_dir.exists():
         shutil.rmtree(tmp_dir)
     tmp_dir.mkdir(parents=True, exist_ok=True)
     try:
-        model.save_pretrained(tmp_dir)
-        tokenizer.save_pretrained(tmp_dir)
+        unwrapped.save_pretrained(tmp_dir)
+        if tokenizer is not None:
+            tokenizer.save_pretrained(tmp_dir)
         if target_dir.exists():
             backup = target_dir.parent / f".{target_dir.name}.bak.{os.getpid()}"
             os.replace(target_dir, backup)
