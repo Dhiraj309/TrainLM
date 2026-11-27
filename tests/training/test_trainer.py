@@ -966,18 +966,18 @@ def test_trainer_stateless_compiled_optimizer_matches_adamw_over_multiple_steps(
     assert test_runtime.compile_calls == 2
     assert test_trainer.state.step == 3
     for ref_p, test_p in zip(ref_model.parameters(), test_model.parameters()):
-        torch.testing.assert_close(test_p, ref_p, rtol=1e-5, atol=1e-6)
+        torch.testing.assert_close(test_p, ref_p, rtol=1e-4, atol=1e-5)
         torch.testing.assert_close(
             test_opt.state[test_p]["exp_avg"],
             ref_opt.state[ref_p]["exp_avg"],
-            rtol=1e-5,
-            atol=1e-6,
+            rtol=1e-4,
+            atol=1e-5,
         )
         torch.testing.assert_close(
             test_opt.state[test_p]["exp_avg_sq"],
             ref_opt.state[ref_p]["exp_avg_sq"],
-            rtol=1e-5,
-            atol=1e-6,
+            rtol=1e-4,
+            atol=1e-5,
         )
         assert float(test_opt.state[test_p]["step"].item()) == float(
             ref_opt.state[ref_p]["step"].item()

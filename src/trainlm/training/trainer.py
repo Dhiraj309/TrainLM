@@ -1222,8 +1222,7 @@ class Trainer:
             grads = [p.grad for p in self._compiled_stateless_opt_params]
             lr_tensors = self._lr_tensors or []
             grad_norm = stateless_fn(grads, lr_tensors)
-            if hasattr(self.optimizer, "_opt_called"):
-                self.optimizer._opt_called = True
+            self.optimizer._opt_called = True
             return grad_norm
         grad_norm = None
         if self.config.trainer.max_grad_norm > 0:
