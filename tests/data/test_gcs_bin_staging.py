@@ -162,3 +162,45 @@ def test_gcs_explicit_v1_manifest_deterministic_ordering(tmp_path: Path):
     assert [s.shard_id for s in ds.shards] == ["shard_00001"]
     batch = next(iter(ds))
     assert torch.equal(batch["input_ids"], torch.tensor([1, 2, 3, 4], dtype=torch.long))
+
+
+def test_gcs_distributed_staging_writes_marker_on_rank0_only(tmp_path: Path, monkeypatch):
+    remote = tmp_path / "remote" / "dist"
+    _write_explicit_v1_shard(remote, "shard_00001", [1, 2, 3, 4])
+    fake_fs = _MockGCSFs(tmp_path / "remote", "trainlm-us-central1")
+    cache_dir = tmp_path / "dist_cache"
+
+    barriers = []
+    state = {"rank": 0}
+    fake_dist = SimpleNamespace(
+        is_available=lambda: True,
+        is_initialized=lambda: True,
+        get_world_size=lambda: 8,
+        get_rank=lambda: state["rank"],
+        barrier=lambda: barriers.append(state["rank"]),
+    )
+    monkeypatch.setattr(torch, "distributed", fake_dist, raising=False)
+
+    # Rank 0 downloads/verifies and writes .staged.ok before barrier.
+    monkeypatch.setenv("LOCAL_RANK", "0")
+    local_root = stage_gcs_prefix(
+        "gs://trainlm-us-central1/dist",
+        cache_dir=cache_dir,
+        filesystem=fake_fs,
+    )
+    assert (local_root / ".staged.ok").is_file()
+    assert len(fake_fs.get_calls) == 2
+    assert barriers == [0]
+
+    # Worker rank 3 skips download completely and checks .staged.ok after barrier.
+    state["rank"] = 3
+    monkeypatch.setenv("LOCAL_RANK", "3")
+    worker_root = stage_gcs_prefix(
+        "gs://trainlm-us-central1/dist",
+        cache_dir=cache_dir,
+        filesystem=fake_fs,
+    )
+    assert worker_root == local_root
+    assert len(fake_fs.get_calls) == 2  # zero additional downloads
+    assert barriers == [0, 3]
+
