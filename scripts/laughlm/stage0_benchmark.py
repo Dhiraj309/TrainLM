@@ -23,6 +23,14 @@ from scripts.laughlm.common import (
 )
 
 
+def recommended_stage1_grad_accum(mbs_2k: int) -> int:
+    return max(1, 256 // max(1, mbs_2k))
+
+
+def recommended_stage2_grad_accum(mbs_4k: int) -> int:
+    return max(1, 128 // max(1, mbs_4k))
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Stage 0: MI300X MFU sweep on 1 real shard.")
     parser.add_argument("--repo-id", default=DEFAULT_SHARD_REPO)
@@ -30,8 +38,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--max-shards", type=int, default=1)
     parser.add_argument("--tokenizer-id", default=DEFAULT_TOKENIZER_ID)
     parser.add_argument("--seq-len", type=int, default=2048)
-    parser.add_argument("--micro-batch-sizes", default="32,64,128,256")
-    parser.add_argument("--target-batch-tokens", type=int, default=524_288)
+    parser.add_argument("--micro-batch-sizes", default="32,64,96,128")
     parser.add_argument("--warmup-steps", type=int, default=4)
     parser.add_argument("--measure-steps", type=int, default=8)
     parser.add_argument("--stability-steps", type=int, default=0)
@@ -39,7 +46,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--grad-clip", type=float, default=1.0)
     parser.add_argument("--logits-chunk-size", type=int, default=16384)
     parser.add_argument("--loss-rematerialization", default="auto")
-    parser.add_argument("--torch-compile-mode", default="default")
+    parser.add_argument("--torch-compile-mode", default="default", choices=("default",))
     parser.add_argument("--no-compile", action="store_true")
     parser.add_argument("--dry-run", action="store_true", help="Run a 2-step CPU/synthetic preflight check.")
     parser.add_argument("--output-dir", default="runs/stage0_benchmark")
@@ -117,10 +124,10 @@ def main(argv: list[str] | None = None) -> int:
     compile_modes = (False,) if args.no_compile else (False, True)
     total_steps = args.warmup_steps + args.measure_steps
 
-    best_cfg: tuple[bool, int, int, float] | None = None
+    best_cfg: tuple[bool, int, float] | None = None
     for compiled in compile_modes:
         for mbs in mbs_list:
-            grad_accum = max(1, args.target_batch_tokens // (mbs * args.seq_len))
+            # Stage 0 sweep uses ga=1 so single-step compile and raw microbatch saturation are isolated.
             if cuda_avail:
                 torch.cuda.empty_cache()
                 torch.cuda.reset_peak_memory_stats()
@@ -128,7 +135,7 @@ def main(argv: list[str] | None = None) -> int:
             t_args = TrainLMTrainingArguments(
                 output_dir=str(Path(args.output_dir) / f"mbs{mbs}_compile_{compiled}"),
                 per_device_train_batch_size=mbs,
-                gradient_accumulation_steps=grad_accum,
+                gradient_accumulation_steps=1,
                 sequence_length=args.seq_len,
                 max_steps=total_steps,
                 logging_steps=max(1, args.warmup_steps),
@@ -156,7 +163,7 @@ def main(argv: list[str] | None = None) -> int:
             except RuntimeError as exc:
                 if "out of memory" in str(exc).lower():
                     print(
-                        f"[Stage 0] compile={compiled} mbs={mbs} grad_accum={grad_accum} | OOM — skipped",
+                        f"[Stage 0] compile={compiled} mbs={mbs} ga=1 | OOM — skipped",
                         flush=True,
                     )
                     del model
@@ -173,50 +180,55 @@ def main(argv: list[str] | None = None) -> int:
             mfu = (perf.get("non_embedding_mfu") or 0.0) * 100.0
             tps = float(perf.get("tokens_per_second") or 0.0)
             print(
-                f"[Stage 0] compile={compiled} mbs={mbs} grad_accum={grad_accum} | "
+                f"[Stage 0] compile={compiled} mbs={mbs} ga=1 | "
                 f"{tps:,.1f} tok/s | MFU={mfu:.2f}% | peak_vram={peak_gb:.2f} GiB",
                 flush=True,
             )
-            if best_cfg is None or tps > best_cfg[3]:
-                best_cfg = (compiled, mbs, grad_accum, tps)
+            if best_cfg is None or tps > best_cfg[2]:
+                best_cfg = (compiled, mbs, tps)
 
-    if args.stability_steps > 0 and best_cfg is not None:
-        win_compiled, win_mbs, win_ga, win_tps = best_cfg
+    if best_cfg is not None:
+        win_compiled, win_mbs, win_tps = best_cfg
+        s1_ga = recommended_stage1_grad_accum(win_mbs)
+        s2_mbs = max(1, win_mbs // 2)
+        s2_ga = recommended_stage2_grad_accum(s2_mbs)
         print(
-            f"[Stage 0 Stability] Running {args.stability_steps} steps on winner "
-            f"compile={win_compiled} mbs={win_mbs} grad_accum={win_ga} ({win_tps:,.1f} tok/s)",
+            f"[Stage 0 Winner] compile={win_compiled} mbs={win_mbs} ({win_tps:,.1f} tok/s) -> "
+            f"Stage1(2K): mbs={win_mbs}, ga={s1_ga} ({win_mbs * s1_ga * 2048:,} tok/step) | "
+            f"Stage2(4K): mbs={s2_mbs}, ga={s2_ga} ({s2_mbs * s2_ga * 4096:,} tok/step)",
             flush=True,
         )
-        if cuda_avail:
-            torch.cuda.empty_cache()
-        model = load_or_init_135m_model(max_position_embeddings=max(4096, args.seq_len))
-        t_args = TrainLMTrainingArguments(
-            output_dir=str(Path(args.output_dir) / "stability"),
-            per_device_train_batch_size=win_mbs,
-            gradient_accumulation_steps=win_ga,
-            sequence_length=args.seq_len,
-            max_steps=args.stability_steps,
-            logging_steps=10,
-            save_strategy="no",
-            bf16=True,
-            torch_compile=win_compiled,
-            torch_compile_mode=args.torch_compile_mode,
-            attn_implementation="sdpa",
-            loss_implementation="chunked_linear",
-            logits_chunk_size=args.logits_chunk_size,
-            loss_rematerialization=remat,
-            optim="adamw_torch",
-            learning_rate=args.peak_lr,
-            max_grad_norm=args.grad_clip,
-            lr_scheduler_type="wsd",
-            warmup_steps=min(50, args.stability_steps),
-            report_to="none",
-        )
-        trainer = TrainLMTrainer(
-            model=model, args=t_args, train_dataset=dataset, processing_class=tokenizer
-        )
-        state = trainer.train()
-        print(f"[Stage 0 Stability] step={state.step} final_loss={state.loss}", flush=True)
+        if args.stability_steps > 0:
+            if cuda_avail:
+                torch.cuda.empty_cache()
+            model = load_or_init_135m_model(max_position_embeddings=max(4096, args.seq_len))
+            t_args = TrainLMTrainingArguments(
+                output_dir=str(Path(args.output_dir) / "stability"),
+                per_device_train_batch_size=win_mbs,
+                gradient_accumulation_steps=s1_ga,
+                sequence_length=args.seq_len,
+                max_steps=args.stability_steps,
+                logging_steps=10,
+                save_strategy="no",
+                bf16=True,
+                torch_compile=win_compiled,
+                torch_compile_mode=args.torch_compile_mode,
+                attn_implementation="sdpa",
+                loss_implementation="chunked_linear",
+                logits_chunk_size=args.logits_chunk_size,
+                loss_rematerialization=remat,
+                optim="adamw_torch",
+                learning_rate=args.peak_lr,
+                max_grad_norm=args.grad_clip,
+                lr_scheduler_type="wsd",
+                warmup_steps=min(50, args.stability_steps),
+                report_to="none",
+            )
+            trainer = TrainLMTrainer(
+                model=model, args=t_args, train_dataset=dataset, processing_class=tokenizer
+            )
+            state = trainer.train()
+            print(f"[Stage 0 Stability] step={state.step} final_loss={state.loss}", flush=True)
     return 0
 
 

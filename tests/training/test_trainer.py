@@ -721,3 +721,69 @@ def test_trainer_uses_compile_training_step_for_single_microbatch_causal_lm():
     assert runtime.compiled_invocations == 2
     assert runtime.events[:2] == ["prepare_batch", "compiled_step"]
     assert trainer.state.step == 2
+
+
+def test_trainer_uses_compiled_microbatch_step_for_grad_accum_on_cuda():
+    from transformers import GPT2Config, GPT2LMHeadModel
+    from trainlm.tasks import CausalLMTask
+
+    class CudaCompileAccumRuntime(Runtime):
+        def __init__(self):
+            super().__init__(device="cpu", precision="fp32", compile_enabled=True)
+            self._device = torch.device("cuda", 0)
+            self.compile_step_calls = 0
+            self.compiled_invocations = 0
+
+        @property
+        def device(self):
+            return self._device
+
+        def prepare_model(self, model):
+            return model
+
+        def prepare_batch(self, batch):
+            return {
+                k: v.to("cpu") if isinstance(v, torch.Tensor) else v
+                for k, v in batch.items()
+            }
+
+        def synchronize(self):
+            pass
+
+        def compile_training_step(self, step_fn):
+            self.compile_step_calls += 1
+
+            def wrapped(task_batch, counts):
+                self.compiled_invocations += 1
+                return step_fn(task_batch, counts)
+
+            return wrapped
+
+    model = GPT2LMHeadModel(
+        GPT2Config(vocab_size=32, n_positions=16, n_embd=8, n_layer=1, n_head=2)
+    )
+    optimizer = SGD(model.parameters(), lr=0.1)
+    scheduler = LambdaLR(optimizer, lr_lambda=lambda _: 1.0)
+    rows = [{"input_ids": torch.arange(8, dtype=torch.long)} for _ in range(4)]
+    loader = DataLoader(rows, batch_size=2)
+    config = DummyConfig()
+    config.trainer.max_steps = 1
+    config.trainer.gradient_accumulation_steps = 2
+    runtime = CudaCompileAccumRuntime()
+
+    trainer = Trainer(
+        config=config,
+        model=model,
+        runtime=runtime,
+        optimizer=optimizer,
+        scheduler=scheduler,
+        task=CausalLMTask(),
+        train_dataloader=loader,
+    )
+    trainer.train()
+
+    assert runtime.compile_step_calls == 1
+    assert runtime.compiled_invocations == 2
+    assert trainer.state.step == 1
+    assert trainer.state.micro_step == 2
+

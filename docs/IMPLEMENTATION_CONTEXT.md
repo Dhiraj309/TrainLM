@@ -2697,3 +2697,5 @@ TPU re-run is pending.
 - Updated `scripts/laughlm/` defaults from `Dhiraj309` to `Dhiraj45`, replaced invalid `adamw_torch_fused` with `adamw_torch` across Stages 0–3, added `--logits-chunk-size 16384`, `--loss-rematerialization` (`"disabled"` on CUDA/ROCm), `--torch-compile-mode`, unwrapped `_orig_mod` exports, `trainer_state.pt` support in `load_or_init_135m_model`, and `--dry-run` on Stages 0–4.
 - Fixed `watch_and_upload.py` to wait for finalized checkpoint markers without `.tmp` artifacts inside.
 - Added `_resolve_compiled_chunked_loss_fn()` in `src/trainlm/tasks/causal_lm.py` for CUDA/ROCm `grad_accum > 1` runs, `[rocm]` extra in `pyproject.toml`, and `test_laughlm_dry_runs_end_to_end_cpu`.
+
+- Guardrails enforced: added compiled multi-microbatch `_resolve_microbatch_step_fn()` in `src/trainlm/training/trainer.py` for CUDA/ROCm `gradient_accumulation_steps > 1`, locked `stage0_benchmark.py` sweep to `ga=1` over `[32,64,96,128]` with OOM safety, auto-computed `ga = max(1, 256 // mbs)` (Stage 1 2K) / `max(1, 128 // mbs)` (Stage 2 4K) to preserve 524,288 tokens/step, and enforced `torch_compile_mode='default'` across Stages 0–3.

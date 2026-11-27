@@ -78,7 +78,26 @@ def test_laughlm_stage_cli_parsers_and_defaults():
         assert ns is not None
 
     from scripts.laughlm.common import DEFAULT_OUTPUT_REPO, DEFAULT_SHARD_REPO
+    from scripts.laughlm.stage0_benchmark import (
+        parse_args as parse_s0,
+        recommended_stage1_grad_accum,
+        recommended_stage2_grad_accum,
+    )
+    from scripts.laughlm.stage1_base_30b import resolve_grad_accum as s1_ga
+    from scripts.laughlm.stage2_anneal_5b import resolve_grad_accum as s2_ga
     from scripts.laughlm.watch_and_upload import DEFAULT_HF_REPO
+
+    s0_defaults = parse_s0([])
+    assert s0_defaults.micro_batch_sizes == "32,64,96,128"
+    assert s0_defaults.torch_compile_mode == "default"
+    assert recommended_stage1_grad_accum(128) == 2
+    assert recommended_stage1_grad_accum(64) == 4
+    assert recommended_stage2_grad_accum(64) == 2
+    assert recommended_stage2_grad_accum(32) == 4
+    assert s1_ga(128, None) == 2
+    assert s1_ga(64, None) == 4
+    assert s2_ga(64, None) == 2
+    assert s2_ga(128, None) == 1
 
     assert DEFAULT_SHARD_REPO == "Dhiraj45/laughlm-135m-shards-v2"
     assert DEFAULT_OUTPUT_REPO == "Dhiraj45/laughlm-135m-v2"

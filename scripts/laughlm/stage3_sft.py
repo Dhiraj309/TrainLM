@@ -40,7 +40,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--logging-steps", type=int, default=10)
     parser.add_argument("--logits-chunk-size", type=int, default=16384)
     parser.add_argument("--loss-rematerialization", default="auto")
-    parser.add_argument("--torch-compile-mode", default="default")
+    parser.add_argument("--torch-compile-mode", default="default", choices=("default",))
     parser.add_argument("--no-compile", action="store_true")
     parser.add_argument("--resume", default=None)
     parser.add_argument("--dry-run", action="store_true", help="Run a 2-step CPU/synthetic preflight check.")
