@@ -1,5 +1,19 @@
 # TrainLM Roadmap
 
+**`LaughLM-Loop` + Custom Pallas Recurrent-Norm + `gs://` Shards (2026-11-27):** on
+branch `feat/laughlm-loop-pallas` (from `main` `db74fef`): implemented
+`LaughLMLoopConfig(TrainLMConfig)` (`model_type="trainlm_loop"`, including the
+128-aligned `LaughLMLoopConfig.laughlm_loop_135m()` preset),
+`LaughLMLoopModel`/`LaughLMLoopForCausalLM` (Prelude + shared Recurrent Core +
+Coda, anchor `h_0` residual gate, `truncated_bptt_steps` detachment, static
+compiled loop bounds, and `AutoConfig`/`AutoModelForCausalLM` registration),
+VME-fused `fused_recurrent_inject_rmsnorm` Pallas forward+backward kernel +
+PyTorch reference fallback, effective-depth + truncated-BPTT MFU accounting,
+`eval_loop_scaling.py` depth sweep CLI, zero-egress `gs://` staging in
+`PackedBinDataset.from_gcs`/`from_directory`, and `v5e-1` benchmark entries in
+`TrainLM_v5e1_MFU_Benchmark.ipynb` and `stage0_benchmark.py`. CPU/CI tests added;
+live `TPU v5e-1` benchmark and hardware kernel validation remain pending.
+
 **Document-Isolated Varlen Sequence Packing (2026-11-23):** on branch
 `perf/58-varlen-document-packing` (from `main` `daef79c`): upgraded
 `_PackedTokenDataset` and `_maybe_pack_token_dataset` in `src/trainlm/api.py`

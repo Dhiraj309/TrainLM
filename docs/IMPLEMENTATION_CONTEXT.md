@@ -1,5 +1,25 @@
 # TrainLM implementation context
 
+**`LaughLM-Loop` + Custom Pallas Recurrent-Norm + `gs://` Shards (2026-11-27):**
+on branch `feat/laughlm-loop-pallas` (from `main` `db74fef`): (1) added
+`LaughLMLoopConfig` (`src/trainlm/config/configuration_trainlm.py`) and
+`LaughLMLoopModel` / `LaughLMLoopForCausalLM` (`src/trainlm/model/trainlm/loop.py`),
+gated `_assert_finite` on `not torch.compiler.is_compiling()` and wired
+`AttentionInterface` dispatch into `TrainLMAttention`; (2) implemented
+`fused_recurrent_inject_rmsnorm` (`src/trainlm/kernels/pallas/recurrent_norm.py`)
+with JAX/Pallas VMEM forward+backward kernels, `TorchTPU` bridge registration,
+PyTorch FP32-accumulated fallback, and `TorchTPUKernelInventory.recurrent_norm`;
+(3) updated `calculate_causal_lm_flops` (`src/trainlm/benchmark/mfu.py`) and
+`_model_geometry` (`src/trainlm/training/performance.py`) for effective depth
+and truncated BPTT FLOP accounting; (4) added `scripts/laughlm/eval_loop_scaling.py`,
+`--arch loop` in `stage0_benchmark.py`, and `laughlm-loop-135m` entries in
+`notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb`; (5) added `src/trainlm/data/gcs.py`
+and `PackedBinDataset.from_gcs` / `gs://` delegation in `from_directory`. CPU/mocked
+tests added (`tests/kernels/test_recurrent_norm_pallas.py`,
+`tests/model/test_laughlm_loop.py`, `tests/data/test_gcs_shards.py`, plus MFU
+and summary suites); live `TPU v5e-1` run and Pallas TPU compilation remain
+pending owner hardware execution.
+
 **Document-Isolated Varlen Sequence Packing (2026-11-23):** on branch
 `perf/58-varlen-document-packing` (from `main` `daef79c`): updated
 `_PackedTokenDataset` and `_maybe_pack_token_dataset` in `src/trainlm/api.py`
