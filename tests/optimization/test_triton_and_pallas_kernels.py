@@ -402,6 +402,24 @@ def test_pallas_cross_entropy_analytical_backward_matches_reference(
         def astype(self, dtype):
             return self.to(dtype=dtype)
 
+        @property
+        def at(self):
+            outer = self
+
+            class _AtIndexer:
+                def __getitem__(self, idx):
+                    class _AtOps:
+                        def add(self, val):
+                            cloned = outer.as_subclass(torch.Tensor).clone()
+                            rows = _unwrap(idx[0]).to(torch.long)
+                            cols = _unwrap(idx[1]).to(torch.long)
+                            cloned[rows, cols] = cloned[rows, cols] + val
+                            return cloned.as_subclass(_JnpArray)
+
+                    return _AtOps()
+
+            return _AtIndexer()
+
     def _to_jnp(x):
         return x.as_subclass(_JnpArray) if isinstance(x, torch.Tensor) else x
 
@@ -688,6 +706,7 @@ def test_packed_gated_mlp_checks_swiglu_activation_spec() -> None:
 
 def test_splash_bwd_uses_vmap_and_compiled_tpu_prefers_xla_chunked_loss(monkeypatch) -> None:
     import inspect
+    import types
 
     from trainlm.kernels.pallas import cross_entropy as ce_mod
     from trainlm.kernels.pallas import splash_attention as sa_mod
