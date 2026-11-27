@@ -220,6 +220,7 @@ def resolve_loss_rematerialization(
 def atomic_save_model_snapshot(model: Any, tokenizer: Any | None, target_dir: Path) -> Path:
     """Save unwrapped model (+ optional tokenizer) to `.tmp` and atomically rename."""
     unwrapped = getattr(model, "_orig_mod", model)
+    unwrapped = getattr(unwrapped, "module", unwrapped)
     target_dir.parent.mkdir(parents=True, exist_ok=True)
     tmp_dir = target_dir.parent / f".{target_dir.name}.tmp.{os.getpid()}"
     if tmp_dir.exists():

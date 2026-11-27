@@ -1,8 +1,9 @@
-"""Stage 1: From-scratch base pretraining (Dense 30B or LaughLM-Loop 1B/35B)."""
+"""Stage 1: From-scratch base pretraining (Dense 30B or LaughLM-Loop 1B/35B, single or multi-chip)."""
 
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 import sys
 import tempfile
@@ -39,9 +40,46 @@ LOOP_PRESETS: dict[str, dict[str, int | bool]] = {
 }
 
 
-def resolve_grad_accum(micro_batch_size: int, grad_accum: int | None) -> int:
-    """Keep global batch at ~524,288 tokens/step for seq_len=2048."""
-    return grad_accum if grad_accum is not None else max(1, 256 // max(1, micro_batch_size))
+def resolve_grad_accum(
+    micro_batch_size: int,
+    grad_accum: int | None,
+    *,
+    world_size: int = 1,
+) -> int:
+    """Keep global batch at ~524,288 tokens/step across all ``world_size`` ranks."""
+    per_step_seqs = max(1, micro_batch_size * max(1, world_size))
+    return grad_accum if grad_accum is not None else max(1, 256 // per_step_seqs)
+
+
+def resolve_global_batch_sequences(
+    *,
+    micro_batch_size: int,
+    grad_accum: int,
+    world_size: int,
+) -> int:
+    """Return total global batch sequences across microbatches and ranks."""
+    return max(1, int(micro_batch_size)) * max(1, int(grad_accum)) * max(1, int(world_size))
+
+
+def _resolve_distributed_coords() -> tuple[int, int]:
+    """Return ``(rank, world_size)`` from ``torch.distributed`` or launch env vars."""
+    try:
+        import torch  # noqa: PLC0415
+
+        dist_mod = getattr(torch, "distributed", None)
+        if (
+            dist_mod is not None
+            and callable(getattr(dist_mod, "is_initialized", None))
+            and dist_mod.is_initialized()
+        ):
+            return int(dist_mod.get_rank()), int(dist_mod.get_world_size())
+    except Exception:
+        pass
+    rank = int(os.environ.get("RANK", "0") or "0")
+    world_size = int(
+        os.environ.get("WORLD_SIZE", os.environ.get("LOCAL_WORLD_SIZE", "1")) or "1"
+    )
+    return max(0, rank), max(1, world_size)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -64,9 +102,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Disable custom Pallas recurrent_inject_rmsnorm kernel for ablations.",
     )
+    parser.add_argument("--distributed-strategy", default="auto", choices=("auto", "ddp", "fsdp2", "none"))
     parser.add_argument("--seq-len", type=int, default=None)
     parser.add_argument("--micro-batch-size", type=int, default=128)
-    parser.add_argument("--grad-accum", type=int, default=None, help="Defaults to max(1, 256 // micro_batch_size).")
+    parser.add_argument("--grad-accum", type=int, default=None, help="Defaults to max(1, 256 // (micro_batch_size * world_size)).")
     parser.add_argument("--max-tokens", type=int, default=None)
     parser.add_argument("--peak-lr", type=float, default=3e-3)
     parser.add_argument("--warmup-steps", type=int, default=2000)
@@ -161,7 +200,15 @@ def main(argv: list[str] | None = None) -> int:
     from trainlm.data import PackedBinDataset
 
     accel_kind = detect_accelerator_kind()
-    grad_accum = resolve_grad_accum(args.micro_batch_size, args.grad_accum)
+    rank, world_size = _resolve_distributed_coords()
+    grad_accum = resolve_grad_accum(
+        args.micro_batch_size, args.grad_accum, world_size=world_size
+    )
+    global_batch_seqs = resolve_global_batch_sequences(
+        micro_batch_size=args.micro_batch_size,
+        grad_accum=grad_accum,
+        world_size=world_size,
+    )
     remat = resolve_loss_rematerialization(args.loss_rematerialization, accel_kind=accel_kind)
     optim_name = resolve_optim(accel_kind)
     chunk_size = resolve_logits_chunk_size(args.logits_chunk_size, accel_kind=accel_kind)
@@ -174,6 +221,8 @@ def main(argv: list[str] | None = None) -> int:
             sequence_length=args.seq_len,
             header_bytes=0,
             vocab_size=VOCAB_SIZE,
+            rank=rank,
+            world_size=world_size,
         )
     else:
         dataset = PackedBinDataset.from_hub(
@@ -183,6 +232,8 @@ def main(argv: list[str] | None = None) -> int:
             sequence_length=args.seq_len,
             header_bytes=0,
             vocab_size=VOCAB_SIZE,
+            rank=rank,
+            world_size=world_size,
         )
     if args.arch == "laughlm_loop":
         model = load_or_init_loop_135m_model(
@@ -193,6 +244,8 @@ def main(argv: list[str] | None = None) -> int:
         model = load_or_init_135m_model(max_position_embeddings=max(4096, args.seq_len))
     t_args = TrainLMTrainingArguments(
         output_dir=args.output_dir,
+        accelerator="native_tpu" if accel_kind == "tpu" else ("cuda" if accel_kind == "cuda" else "cpu"),
+        distributed_strategy=args.distributed_strategy,
         per_device_train_batch_size=args.micro_batch_size,
         gradient_accumulation_steps=grad_accum,
         sequence_length=args.seq_len,
@@ -203,7 +256,7 @@ def main(argv: list[str] | None = None) -> int:
         max_grad_norm=1.0,
         lr_scheduler_type="wsd",
         wsd_stable_fraction=1.0,
-        save_strategy="steps",
+        save_strategy="steps" if rank == 0 else "no",
         save_steps=args.save_steps,
         logging_steps=args.logging_steps,
         bf16=True,
@@ -220,14 +273,19 @@ def main(argv: list[str] | None = None) -> int:
         model=model, args=t_args, train_dataset=dataset, processing_class=tokenizer
     )
     state = trainer.train(resume_from_checkpoint=args.resume)
-    final_dir = atomic_save_model_snapshot(
-        trainer.model, tokenizer, Path(args.output_dir) / "final_model"
-    )
-    print(
-        f"[Stage 1] Complete | arch={args.arch} preset={args.loop_preset} "
-        f"step={state.step} loss={state.loss} ga={grad_accum} | export={final_dir}",
-        flush=True,
-    )
+    is_primary = getattr(getattr(trainer, "runtime", None), "is_primary_process", rank == 0)
+    final_dir = Path(args.output_dir) / "final_model"
+    if is_primary:
+        final_dir = atomic_save_model_snapshot(trainer.model, tokenizer, final_dir)
+    if trainer.runtime is not None and getattr(trainer.runtime, "is_distributed", False):
+        trainer.runtime.barrier("stage1-final-export")
+    if is_primary:
+        print(
+            f"[Stage 1] Complete | arch={args.arch} preset={args.loop_preset} "
+            f"world_size={world_size} global_batch={global_batch_seqs} "
+            f"step={state.step} loss={state.loss} ga={grad_accum} | export={final_dir}",
+            flush=True,
+        )
     return 0
 
 
