@@ -189,6 +189,11 @@ def build_performance_summary(
             num_hidden_layers=geometry["num_hidden_layers"],
             sequence_length=sequence_length,
             tie_word_embeddings=geometry["tie_word_embeddings"],
+            num_prelude_layers=geometry.get("num_prelude_layers"),
+            num_core_layers=geometry.get("num_core_layers"),
+            num_coda_layers=geometry.get("num_coda_layers"),
+            num_loop_iterations=geometry.get("num_loop_iterations"),
+            truncated_bptt_steps=geometry.get("truncated_bptt_steps"),
         )
     except (TypeError, ValueError):
         result["mfu_unavailable_reason"] = "Model geometry is not valid for the dense causal-LM FLOPs formula."
@@ -284,13 +289,45 @@ def _model_geometry(model: Any, config: Any) -> dict[str, Any] | None:
         or parameter_count <= 0
     ):
         return None
-    return {
+    geometry: dict[str, Any] = {
         "parameter_count": parameter_count,
+        "stored_params": parameter_count,
         "vocabulary_size": vocabulary_size,
         "hidden_size": hidden_size,
         "num_hidden_layers": layers,
         "tie_word_embeddings": tied,
     }
+    num_core = _first_positive_int(config, "num_core_layers")
+    num_loops = _first_positive_int(config, "num_loop_iterations")
+    if num_core is not None and num_loops is not None:
+        prelude = getattr(config, "num_prelude_layers", 0)
+        coda = getattr(config, "num_coda_layers", 0)
+        if not isinstance(prelude, int) or isinstance(prelude, bool) or prelude < 0:
+            prelude = 0
+        if not isinstance(coda, int) or isinstance(coda, bool) or coda < 0:
+            coda = 0
+        stored_layers = prelude + num_core + coda
+        effective_layers = prelude + num_loops * num_core + coda
+        emb_params = vocabulary_size * hidden_size + (0 if tied else vocabulary_size * hidden_size)
+        non_emb = max(0, parameter_count - emb_params)
+        effective_params = (
+            emb_params + round(non_emb * (effective_layers / stored_layers))
+            if stored_layers > 0
+            else parameter_count
+        )
+        truncated_bptt = _first_positive_int(config, "truncated_bptt_steps")
+        geometry.update(
+            {
+                "num_prelude_layers": prelude,
+                "num_core_layers": num_core,
+                "num_coda_layers": coda,
+                "num_loop_iterations": num_loops,
+                "effective_layers": effective_layers,
+                "effective_params": effective_params,
+                "truncated_bptt_steps": truncated_bptt,
+            }
+        )
+    return geometry
 
 
 def _first_positive_int(value: Any, *names: str) -> int | None:

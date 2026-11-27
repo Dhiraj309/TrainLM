@@ -181,3 +181,43 @@ def test_summary_computes_steady_state_excluding_warmup_window():
     assert steady["tokens_per_second"] == pytest.approx(100.0)
     assert steady["non_embedding_mfu"] == pytest.approx(4.0 * summary["non_embedding_mfu"])
 
+
+def test_summary_reports_effective_depth_mfu_for_looped_model():
+    class TinyLoopedLM(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.embedding = nn.Embedding(16, 8)
+            self.blocks = nn.ModuleList([nn.Linear(8, 8, bias=False) for _ in range(4)])
+            self.config = SimpleNamespace(
+                vocab_size=16,
+                hidden_size=8,
+                num_hidden_layers=4,
+                num_prelude_layers=1,
+                num_core_layers=2,
+                num_coda_layers=1,
+                num_loop_iterations=3,
+                truncated_bptt_steps=3,
+                tie_word_embeddings=True,
+                is_encoder_decoder=False,
+            )
+
+    model = TinyLoopedLM()
+    stored_params = sum(p.numel() for p in model.parameters())
+    summary = build_performance_summary(
+        measurements={
+            "measured_optimizer_steps": 4,
+            "supervised_tokens": 128,
+            "wall_seconds": 1.0,
+            "tokens_per_second": 128.0,
+        },
+        model=model,
+        runtime=FakeRuntime(),
+        sequence_length=16,
+    )
+    geom = summary["model_geometry"]
+    assert geom["stored_params"] == stored_params
+    assert geom["effective_layers"] == 8  # 1 + 3*2 + 1
+    assert geom["effective_params"] > stored_params
+    assert summary["mfu_status"] == "measured"
+
+

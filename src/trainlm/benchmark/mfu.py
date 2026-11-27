@@ -49,15 +49,20 @@ def calculate_causal_lm_flops(
     num_hidden_layers: int,
     sequence_length: int,
     tie_word_embeddings: bool,
+    num_prelude_layers: int | None = None,
+    num_core_layers: int | None = None,
+    num_coda_layers: int | None = None,
+    num_loop_iterations: int | None = None,
+    truncated_bptt_steps: int | None = None,
 ) -> CausalLMFlopBreakdown:
-    """Calculate dense causal-LM training FLOPs per supervised token.
+    """Calculate dense or looped causal-LM training FLOPs per supervised token.
 
-    The non-embedding estimate uses the common ``6 * parameters`` training
-    approximation and adds the quadratic attention work that is not represented
-    by parameter count. Input embeddings are excluded from that parameter term.
-    The logits-inclusive value adds output projection work even when its weight
-    is tied to the input embedding, because tying removes parameters but not the
-    projection computation.
+    For looped-depth models (when ``num_core_layers`` and
+    ``num_loop_iterations`` are provided), scales non-embedding and quadratic
+    attention work by the active unrolled layer depth
+    (``num_prelude_layers + num_loop_iterations * num_core_layers + num_coda_layers``),
+    accounting for forward-only iterations when ``truncated_bptt_steps`` <
+    ``num_loop_iterations``.
     """
 
     if not isinstance(tie_word_embeddings, bool):
@@ -85,10 +90,35 @@ def calculate_causal_lm_flops(
             "parameters."
         )
 
-    parameter_flops = 6 * non_embedding_parameters
-    attention_flops = (
-        12 * num_hidden_layers * sequence_length * hidden_size
-    )
+    if num_core_layers is not None and num_loop_iterations is not None:
+        prelude = 0 if num_prelude_layers is None else int(num_prelude_layers)
+        coda = 0 if num_coda_layers is None else int(num_coda_layers)
+        core = int(num_core_layers)
+        loops = int(num_loop_iterations)
+        if prelude < 0 or coda < 0 or core <= 0 or loops <= 0:
+            raise ValueError("Invalid loop layer counts for causal-LM FLOPs calculation.")
+        stored_layers = prelude + core + coda
+        if stored_layers <= 0:
+            raise ValueError("stored_layers must be positive.")
+        bptt_loops = loops if truncated_bptt_steps is None else min(loops, int(truncated_bptt_steps))
+        if bptt_loops <= 0:
+            raise ValueError("truncated_bptt_steps must be positive.")
+        fwd_only_layers = (loops - bptt_loops) * core
+        bwd_layers = prelude + bptt_loops * core + coda
+        per_layer_params = non_embedding_parameters / stored_layers
+        parameter_flops = (
+            6.0 * bwd_layers * per_layer_params
+            + 2.0 * fwd_only_layers * per_layer_params
+        )
+        attention_flops = (
+            12.0 * bwd_layers * sequence_length * hidden_size
+            + 4.0 * fwd_only_layers * sequence_length * hidden_size
+        )
+    else:
+        parameter_flops = 6 * non_embedding_parameters
+        attention_flops = (
+            12 * num_hidden_layers * sequence_length * hidden_size
+        )
     output_projection_flops = 6 * embedding_parameters
 
     return CausalLMFlopBreakdown(
