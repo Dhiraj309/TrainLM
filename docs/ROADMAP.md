@@ -3533,3 +3533,10 @@ remains pending.
 
 - Exported `discover_tpu` from `src/trainlm/runtime/__init__.py` (fixing `ImportError` in `notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb`, `scripts/laughlm/common.py`, and `src/trainlm/dpo.py`).
 - Updated `notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb`, `scripts/laughlm/common.py`, and `src/trainlm/dpo.py` to read dict keys (`device_name`, `hbm_bytes_per_device`, `device_type`, `status`) from `discover_tpu()` instead of attributes.
+
+### TorchTPU compiled-step optimizer isolation and v5e-1 OOM fix
+
+- Observed on Colab `TPU v5e` (`torch-tpu==0.2.0`, `libtpu==0.0.50`, `torch==2.14.1+cpu`): `smollm2-135m-eager` (`seq=2048, bs=8, optim=adamw_bf16`) completed cleanly at `29,694.3 tok/s` steady state (`16.01%` non-embedding MFU / `18.57%` logits-inclusive MFU), while `smollm2-135m-compiled` hit Dynamo `DICT_KEYS_MATCH` on `Optimizer.state` (`Parameter.__repr__()` -> `to_copy()`) plus XLA HBM exhaustion (`RuntimeProgramAllocationFailure`: `2.82G` requested with `2.76G` free).
+- Added `TorchRuntime.compile_optimizer_in_step` (`True` default, `False` on `TorchTPURuntime`) and updated `EngineTrainer` (`src/trainlm/training/trainer.py`) so compiled TPU steps wrap forward + loss + backward while `clip_gradients` and `optimizer_step` run outside Dynamo.
+- Added common HBM property fallbacks (`total_memory`, `hbm_bytes`, `memory_bytes`, `hbm_size`, `memory_size`) in `discover_tpu()`.
+- Updated `notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb` to use `loss_rematerialization="auto"` on v5e-1 (`per_chunk` when Pallas CE falls back under compile), enable `TRAINLM_SPLASH_PAD_HEAD_DIM=1`, and clear profiler locals + `torch._dynamo.reset()` between runs. Compiled v5e-1 run pending owner re-verification on Colab.

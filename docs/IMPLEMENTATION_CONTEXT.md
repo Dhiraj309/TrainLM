@@ -2714,3 +2714,10 @@ TPU re-run is pending.
 
 - Exported `discover_tpu` from `src/trainlm/runtime/__init__.py` (fixing `ImportError` in `notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb`, `scripts/laughlm/common.py`, and `src/trainlm/dpo.py`).
 - Updated `notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb`, `scripts/laughlm/common.py`, and `src/trainlm/dpo.py` to read dict keys (`device_name`, `hbm_bytes_per_device`, `device_type`, `status`) from `discover_tpu()` instead of attributes.
+
+### TorchTPU compiled-step optimizer isolation and v5e-1 OOM fix
+
+- Observed on Colab `TPU v5e` (`torch-tpu==0.2.0`, `libtpu==0.0.50`, `torch==2.14.1+cpu`): `smollm2-135m-eager` (`seq=2048, bs=8, optim=adamw_bf16`) completed cleanly at `29,694.3 tok/s` steady state (`16.01%` non-embedding MFU / `18.57%` logits-inclusive MFU), while `smollm2-135m-compiled` failed during `[5/1_1]` Dynamo guard generation (`DICT_KEYS_MATCH` on `Optimizer.state`, calling `Parameter.__repr__()` -> `.tolist()`) with `RuntimeProgramAllocationFailure` (`2.82G` requested, `2.76G` free).
+- `src/trainlm/runtime/runtime.py`, `src/trainlm/runtime/torchtpu.py`, `src/trainlm/training/trainer.py`: Added `compile_optimizer_in_step` (`True` default for CPU/CUDA, `False` for `TorchTPURuntime`) so compiled TPU steps keep `clip_gradients` and `optimizer_step` outside Dynamo while keeping forward + loss + backward in one compiled graph.
+- `src/trainlm/runtime/torchtpu_discovery.py`: Added HBM fallback property lookups (`total_memory`, `hbm_bytes`, `memory_bytes`, `hbm_size`, `memory_size`) when `hbm_bytes_per_device` is `None`.
+- `notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb`: Changed `smollm2-135m` from forced `loss_rematerialization="disabled"` to `"auto"` on v5e-1 (enabling `per_chunk` remat for the compiled XLA fallback), enabled `TRAINLM_SPLASH_PAD_HEAD_DIM=1` for `head_dim=64` models, and cleared profiler locals + `torch._dynamo.reset()` between benchmark runs. Compiled v5e-1 validation remains owner-run on Colab.
