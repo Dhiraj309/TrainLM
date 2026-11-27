@@ -88,11 +88,18 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[Stage 1 Dry-Run] OK | step={state.step}", flush=True)
         return 0
 
+    from scripts.laughlm.common import (
+        detect_accelerator_kind,
+        resolve_logits_chunk_size,
+        resolve_optim,
+    )
     from trainlm.data import PackedBinDataset
 
+    accel_kind = detect_accelerator_kind()
     grad_accum = resolve_grad_accum(args.micro_batch_size, args.grad_accum)
-    cuda_avail = torch.cuda.is_available()
-    remat = resolve_loss_rematerialization(args.loss_rematerialization, cuda_available=cuda_avail)
+    remat = resolve_loss_rematerialization(args.loss_rematerialization, accel_kind=accel_kind)
+    optim_name = resolve_optim(accel_kind)
+    chunk_size = resolve_logits_chunk_size(args.logits_chunk_size, accel_kind=accel_kind)
     tokenizer = load_tokenizer(args.tokenizer_id)
     dataset = PackedBinDataset.from_hub(
         args.repo_id,
@@ -121,11 +128,11 @@ def main(argv: list[str] | None = None) -> int:
         bf16=True,
         torch_compile=not args.no_compile,
         torch_compile_mode=args.torch_compile_mode,
-        attn_implementation="sdpa",
+        attn_implementation="sdpa" if accel_kind != "tpu" else "auto",
         loss_implementation="chunked_linear",
-        logits_chunk_size=args.logits_chunk_size,
+        logits_chunk_size=chunk_size,
         loss_rematerialization=remat,
-        optim="adamw_torch",
+        optim=optim_name,
         report_to="none",
     )
     trainer = TrainLMTrainer(

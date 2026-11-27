@@ -3518,3 +3518,11 @@ remains pending.
 - Added `_resolve_compiled_chunked_loss_fn()` in `src/trainlm/tasks/causal_lm.py` for CUDA/ROCm `grad_accum > 1` runs, `[rocm]` extra in `pyproject.toml`, and `test_laughlm_dry_runs_end_to_end_cpu`.
 
 - Guardrails enforced: added compiled multi-microbatch `_resolve_microbatch_step_fn()` in `src/trainlm/training/trainer.py` for CUDA/ROCm `gradient_accumulation_steps > 1`, locked `stage0_benchmark.py` sweep to `ga=1` over `[32,64,96,128]` with OOM safety, auto-computed `ga = max(1, 256 // mbs)` (Stage 1 2K) / `max(1, 128 // mbs)` (Stage 2 4K) to preserve 524,288 tokens/step, and enforced `torch_compile_mode='default'` across Stages 0–3.
+
+### TPU Splash Backward vmap, Compiled XLA Chunked CE, and LaughLM TPU Presets
+
+- Vectorized `splash_bwd()` in `src/trainlm/kernels/pallas/splash_attention.py` using `jax.vmap(_single_bwd)` (replacing `jax.lax.scan`) so backward Splash Attention runs in parallel across batch items matching `splash_fwd`.
+- Replaced the `O(chunk * vocab)` broadcast comparison in `src/trainlm/kernels/pallas/cross_entropy.py` (`_bwd_body`) with `probs.at[row_ids, safe_tgt].add(-1.0)` scatter updates.
+- Updated `src/trainlm/tasks/chunked_loss.py` so compiled TPU steps (`torch.compile(backend="tpu")`) default to XLA-fused `chunked_linear` instead of opaque `jax_op` scan CE (`TRAINLM_ENABLE_PALLAS_CE=1` opts compiled steps back into Pallas CE; eager TPU still uses Pallas CE).
+- Added TPU device detection, BF16 autocast, and sparse host syncs to `src/trainlm/dpo.py`, plus automatic TPU-safe presets (`adamw_bf16`, `logits_chunk_size=2048`, `loss_rematerialization="per_chunk"`, and `mbs=4,8` sweep in `stage0_benchmark.py`) across `scripts/laughlm/`.
+- Added unit tests in `tests/optimization/test_triton_and_pallas_kernels.py` and updated `notebooks/README.md` (CPU/CI checks only; live TPU v5e-1/v5e-8 re-benchmark pending).

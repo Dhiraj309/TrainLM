@@ -684,3 +684,46 @@ def test_packed_gated_mlp_checks_swiglu_activation_spec() -> None:
     packed = PackedGatedMLPProjection.from_separate(spec, g, u, torch.nn.functional.silu)
     x = torch.randn(2, 4, 8)
     torch.testing.assert_close(packed(x), torch.nn.functional.silu(g(x)) * u(x))
+
+
+def test_splash_bwd_uses_vmap_and_compiled_tpu_prefers_xla_chunked_loss(monkeypatch) -> None:
+    import inspect
+
+    from trainlm.kernels.pallas import cross_entropy as ce_mod
+    from trainlm.kernels.pallas import splash_attention as sa_mod
+    from trainlm.tasks import chunked_loss as cl_mod
+
+    # 1. splash_bwd source should vectorize over batch with jax.vmap, not jax.lax.scan.
+    src = inspect.getsource(sa_mod._build_splash_ops)
+    bwd_section = src[src.index("def splash_bwd") : src.index("fwd_qualname")]
+    assert "jax.vmap(_single_bwd)" in bwd_section
+    assert "jax.lax.scan" not in bwd_section
+
+    # 2. Compiled TPU prefers XLA chunked_linear unless TRAINLM_ENABLE_PALLAS_CE=1.
+    class _FakeTPUTensor(torch.Tensor):
+        @property
+        def device(self):  # type: ignore[override]
+            return types.SimpleNamespace(type="tpu")
+
+    pallas_calls: list[bool] = []
+    monkeypatch.setattr(ce_mod, "is_pallas_ce_available", lambda: True)
+    monkeypatch.setattr(
+        ce_mod,
+        "pallas_chunked_linear_cross_entropy",
+        lambda *args, **kwargs: (pallas_calls.append(True) or (torch.tensor(0.0), None)),
+    )
+    monkeypatch.setattr(torch.compiler, "is_compiling", lambda: True)
+    monkeypatch.delenv("TRAINLM_ENABLE_PALLAS_CE", raising=False)
+
+    h = torch.randn(1, 4, 8).as_subclass(_FakeTPUTensor)
+    w = torch.randn(16, 8).as_subclass(_FakeTPUTensor)
+    labels = torch.tensor([[1, 2, 3, -100]], dtype=torch.long).as_subclass(_FakeTPUTensor)
+
+    loss, _ = cl_mod.chunked_linear_causal_cross_entropy(h, w, labels, chunk_size=2)
+    assert float(loss) > 0.0
+    assert pallas_calls == []
+
+    monkeypatch.setenv("TRAINLM_ENABLE_PALLAS_CE", "1")
+    cl_mod.chunked_linear_causal_cross_entropy(h, w, labels, chunk_size=2)
+    assert pallas_calls == [True]
+

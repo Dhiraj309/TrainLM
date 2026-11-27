@@ -405,13 +405,7 @@ def _build_splash_ops(
             )
             return all_grads[3], all_grads[4], all_grads[5]
 
-        def _scan_body(carry: Any, args: Any) -> tuple[Any, tuple[Any, Any, Any]]:
-            q_b, k_b, v_b, out_b, lse_b, g_b = args
-            return carry, _single_bwd(q_b, k_b, v_b, out_b, lse_b, g_b)
-
-        _, (dq_scaled, dk, dv) = jax.lax.scan(
-            _scan_body, None, (q_scaled, k, v, out, lse, grad_out)
-        )
+        dq_scaled, dk, dv = jax.vmap(_single_bwd)(q_scaled, k, v, out, lse, grad_out)
         return dq_scaled * scale, dk, dv
 
     digest = hashlib.sha256(str(cache_key).encode("utf-8")).hexdigest()[:16]

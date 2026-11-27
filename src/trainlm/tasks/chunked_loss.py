@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import os
 from typing import Literal
 
 import torch
@@ -117,35 +118,39 @@ def chunked_linear_causal_cross_entropy(
             raise ValueError("Causal loss contains no supervised target tokens.")
 
     if hidden_states.device.type == "tpu":
-        from trainlm.kernels.pallas import cross_entropy as ce_mod
-        from trainlm.kernels.pallas import (
-            is_pallas_ce_available,
-            pallas_chunked_linear_cross_entropy,
+        pallas_ce_allowed = (not compiling_now) or (
+            os.environ.get("TRAINLM_ENABLE_PALLAS_CE", "") == "1"
         )
+        if pallas_ce_allowed:
+            from trainlm.kernels.pallas import cross_entropy as ce_mod
+            from trainlm.kernels.pallas import (
+                is_pallas_ce_available,
+                pallas_chunked_linear_cross_entropy,
+            )
 
-        if is_pallas_ce_available():
-            if compiling_now:
-                return pallas_chunked_linear_cross_entropy(
-                    shifted_hidden,
-                    output_weight,
-                    shifted_labels,
-                    bias=bias,
-                    chunk_size=chunk_size,
-                    ignore_index=ignore_index,
-                    z_loss=float(z_loss),
-                )
-            try:
-                return pallas_chunked_linear_cross_entropy(
-                    shifted_hidden,
-                    output_weight,
-                    shifted_labels,
-                    bias=bias,
-                    chunk_size=chunk_size,
-                    ignore_index=ignore_index,
-                    z_loss=float(z_loss),
-                )
-            except (RuntimeError, ValueError, TypeError, NotImplementedError):
-                ce_mod._PALLAS_CE_DISABLED = True
+            if is_pallas_ce_available():
+                if compiling_now:
+                    return pallas_chunked_linear_cross_entropy(
+                        shifted_hidden,
+                        output_weight,
+                        shifted_labels,
+                        bias=bias,
+                        chunk_size=chunk_size,
+                        ignore_index=ignore_index,
+                        z_loss=float(z_loss),
+                    )
+                try:
+                    return pallas_chunked_linear_cross_entropy(
+                        shifted_hidden,
+                        output_weight,
+                        shifted_labels,
+                        bias=bias,
+                        chunk_size=chunk_size,
+                        ignore_index=ignore_index,
+                        z_loss=float(z_loss),
+                    )
+                except (RuntimeError, ValueError, TypeError, NotImplementedError):
+                    ce_mod._PALLAS_CE_DISABLED = True
 
     if (
         hidden_states.device.type in {"tpu", "xla"}
