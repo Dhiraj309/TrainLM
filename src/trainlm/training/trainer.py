@@ -1026,7 +1026,9 @@ class Trainer:
 
     def _sync_optimizer_lr_tensors(self) -> None:
         """Keep ``group['lr']`` as persistent 0-D tensors when compiled to prevent Dynamo recompiles."""
-        if not self._compiled_single_step_active:
+        if not self._compiled_single_step_active or not getattr(
+            self.runtime, "compile_optimizer_in_step", True
+        ):
             return
         param_groups = getattr(self.optimizer, "param_groups", None)
         if not param_groups:
@@ -1071,6 +1073,7 @@ class Trainer:
 
         if (
             getattr(self, "_compiled_single_step_active", False)
+            and getattr(self.runtime, "compile_optimizer_in_step", True)
             and getattr(self, "_lr_values", None)
             and getattr(self, "_lr_tensors", None)
         ):
