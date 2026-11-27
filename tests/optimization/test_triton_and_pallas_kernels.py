@@ -708,6 +708,7 @@ def test_splash_bwd_uses_vmap_and_compiled_tpu_prefers_xla_chunked_loss(monkeypa
     import inspect
     import types
 
+    from trainlm.kernels import pallas as pallas_pkg
     from trainlm.kernels.pallas import cross_entropy as ce_mod
     from trainlm.kernels.pallas import splash_attention as sa_mod
     from trainlm.tasks import chunked_loss as cl_mod
@@ -725,12 +726,11 @@ def test_splash_bwd_uses_vmap_and_compiled_tpu_prefers_xla_chunked_loss(monkeypa
             return types.SimpleNamespace(type="tpu")
 
     pallas_calls: list[bool] = []
+    fake_ce = lambda *args, **kwargs: (pallas_calls.append(True) or (torch.tensor(0.0), None))
     monkeypatch.setattr(ce_mod, "is_pallas_ce_available", lambda: True)
-    monkeypatch.setattr(
-        ce_mod,
-        "pallas_chunked_linear_cross_entropy",
-        lambda *args, **kwargs: (pallas_calls.append(True) or (torch.tensor(0.0), None)),
-    )
+    monkeypatch.setattr(pallas_pkg, "is_pallas_ce_available", lambda: True)
+    monkeypatch.setattr(ce_mod, "pallas_chunked_linear_cross_entropy", fake_ce)
+    monkeypatch.setattr(pallas_pkg, "pallas_chunked_linear_cross_entropy", fake_ce)
     monkeypatch.setattr(torch.compiler, "is_compiling", lambda: True)
     monkeypatch.delenv("TRAINLM_ENABLE_PALLAS_CE", raising=False)
 
