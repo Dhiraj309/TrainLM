@@ -16,7 +16,10 @@ and truncated BPTT FLOP accounting; (4) wired `--arch laughlm_loop` /
 `scripts/laughlm/stage1_base_30b.py`, added `scripts/laughlm/eval_loop_scaling.py`
 (supporting `--dataset-repo` & `--gcs-shard-dir`), `--arch loop` in
 `stage0_benchmark.py`, and `laughlm-loop-135m` entries in
-`notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb`; (5) added `src/trainlm/data/gcs.py`
+`notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb` (defaulting `BRANCH="feat/laughlm-loop-pallas"`,
+`MODELS_TO_RUN` to compiled `laughlm-loop-135m-pallas-off`/`-on`/`-on-bs8` with
+`RUN_EAGER=False`/`RUN_PROFILER=False`, and `v6e` `bs=8`/`16` scaling); (5) added
+`src/trainlm/data/gcs.py`
 (`gcloud storage cp`/`gsutil`/`gcsfs` staging, `.sha256` & manifest validation,
 same-region Single-Region `$0.00` egress notice) and `PackedBinDataset.from_gcs` /
 `gs://` delegation in `from_directory`; (6) documented `v5e-1` benchmarks in

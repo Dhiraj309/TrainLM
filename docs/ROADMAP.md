@@ -14,7 +14,9 @@ in `stage1_base_30b.py`, `eval_loop_scaling.py` depth sweep CLI, zero-egress
 `gs://` staging (`gcloud storage`/`gsutil`/`gcsfs` fallback, `.sha256` +
 `explicit_v1` manifest checks, same-region Single-Region notice) in
 `PackedBinDataset.from_gcs`/`from_directory`, and `v5e-1` benchmark entries in
-`TrainLM_v5e1_MFU_Benchmark.ipynb`, `stage0_benchmark.py`, and `README.md`.
+`TrainLM_v5e1_MFU_Benchmark.ipynb` (defaulting `BRANCH="feat/laughlm-loop-pallas"`
+and `MODELS_TO_RUN` to the compiled `LaughLM-Loop-135M` Pallas Off/On variants
+with `v6e-1` batch scaling), `stage0_benchmark.py`, and `README.md`.
 CPU/CI tests added; live `TPU v5e-1` benchmark and hardware kernel validation
 remain pending.
 
