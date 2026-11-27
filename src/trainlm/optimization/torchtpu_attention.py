@@ -143,6 +143,7 @@ class TorchTPUKernelInventory:
     flash_attention: Callable[..., Any] | None = None
     rms_norm: Callable[..., Any] | None = None
     cross_entropy: Callable[..., Any] | None = None
+    recurrent_norm: Callable[..., Any] | None = None
     pallas_bridge: Callable[..., Any] | None = None
 
     @property
@@ -152,6 +153,10 @@ class TorchTPUKernelInventory:
     @property
     def has_flash_attention(self) -> bool:
         return self.flash_attention is not None
+
+    @property
+    def has_recurrent_norm(self) -> bool:
+        return self.recurrent_norm is not None
 
     @property
     def has_pallas_bridge(self) -> bool:
@@ -223,6 +228,8 @@ def probe_torchtpu_kernels() -> TorchTPUKernelInventory:
         pass
 
     from trainlm.kernels.pallas import (
+        fused_recurrent_inject_rmsnorm,
+        is_pallas_recurrent_norm_available,
         is_pallas_splash_available,
         pallas_splash_attention,
         probe_pallas_bridge,
@@ -234,6 +241,7 @@ def probe_torchtpu_kernels() -> TorchTPUKernelInventory:
     )
     if splash is None and is_pallas_splash_available():
         splash = pallas_splash_attention
+    rec_norm = fused_recurrent_inject_rmsnorm if is_pallas_recurrent_norm_available() else None
 
     return TorchTPUKernelInventory(
         torch_tpu_version=version,
@@ -245,6 +253,7 @@ def probe_torchtpu_kernels() -> TorchTPUKernelInventory:
         cross_entropy=_find_callable_attr(
             container_tuple, ("cross_entropy", "fused_cross_entropy")
         ),
+        recurrent_norm=rec_norm,
         pallas_bridge=probe_pallas_bridge(),
     )
 
