@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import inspect
+import os
 from typing import Any, Callable
 
 from .attention import CanonicalAttentionSpec
@@ -80,6 +82,12 @@ def torchtpu_splash_attention_provider(
         raise ValueError("TorchTPU Splash Attention does not support ALiBi slopes.")
 
     mapping = KVHeadMapping(spec.query_heads, spec.key_value_heads)
+    supports_pad_head_dim = False
+    try:
+        supports_pad_head_dim = "pad_head_dim" in inspect.signature(runtime.kernel).parameters
+    except (TypeError, ValueError):
+        supports_pad_head_dim = False
+    pad_head_dim = os.environ.get("TRAINLM_SPLASH_PAD_HEAD_DIM", "") == "1"
 
     def attention_forward(
         module: Any,
@@ -98,18 +106,18 @@ def torchtpu_splash_attention_provider(
             )
         if dropout != 0.0:
             raise ValueError("TorchTPU Splash Attention dropout is not implemented.")
-        output = runtime.kernel(
-            query,
-            key,
-            value,
-            causal=True,
-            scale=spec.effective_scale if scaling is None else scaling,
-            query_heads=mapping.query_heads,
-            key_value_heads=mapping.key_value_heads,
-            sliding_window=spec.mask.sliding_window,
-            block_q=runtime.block_q,
-            block_k=runtime.block_k,
-        )
+        kernel_kwargs: dict[str, Any] = {
+            "causal": True,
+            "scale": spec.effective_scale if scaling is None else scaling,
+            "query_heads": mapping.query_heads,
+            "key_value_heads": mapping.key_value_heads,
+            "sliding_window": spec.mask.sliding_window,
+            "block_q": runtime.block_q,
+            "block_k": runtime.block_k,
+        }
+        if supports_pad_head_dim and pad_head_dim:
+            kernel_kwargs["pad_head_dim"] = True
+        output = runtime.kernel(query, key, value, **kernel_kwargs)
         return output, None
 
     def causal_mask_factory(*args: Any, **kwargs: Any) -> None:

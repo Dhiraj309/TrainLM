@@ -8,8 +8,15 @@ from typing import Any
 from trainlm.benchmark.mfu import calculate_causal_lm_flops, calculate_mfu
 
 
-_TPU_PEAK_FLOPS_PER_DEVICE = {
+_TPU_PEAK_FLOPS_RULES: tuple[tuple[str, tuple[str, ...], float, str], ...] = (
+    # Google Cloud TPU v6e (Trillium) specifications, peak BF16 compute per chip.
+    ("TPU V6E", ("bf16",), 918_000_000_000_000.0, "https://cloud.google.com/tpu/docs/v6e"),
     # Google Cloud TPU v5e specifications, peak BF16 compute per chip.
+    ("TPU V5E", ("bf16",), 197_000_000_000_000.0, "https://docs.cloud.google.com/tpu/docs/v5e"),
+)
+
+_TPU_PEAK_FLOPS_PER_DEVICE = {
+    ("TPU v6e", "bf16"): 918_000_000_000_000.0,
     ("TPU v5e", "bf16"): 197_000_000_000_000.0,
 }
 
@@ -71,14 +78,15 @@ def _resolve_hardware_peak(
     device_name: Any,
     precision: Any,
 ) -> tuple[float | None, str | None]:
-    tpu_peak = _TPU_PEAK_FLOPS_PER_DEVICE.get((device_name, precision))
-    if tpu_peak is not None:
-        return tpu_peak, "https://docs.cloud.google.com/tpu/docs/v5e"
-    if device_type == "cuda" and isinstance(device_name, str):
+    if isinstance(device_name, str):
         normalized = device_name.upper()
-        for token, supported_precisions, peak, source in _CUDA_PEAK_FLOPS_RULES:
+        for token, supported_precisions, peak, source in _TPU_PEAK_FLOPS_RULES:
             if token in normalized and precision in supported_precisions:
                 return peak, source
+        if device_type == "cuda":
+            for token, supported_precisions, peak, source in _CUDA_PEAK_FLOPS_RULES:
+                if token in normalized and precision in supported_precisions:
+                    return peak, source
     return None, None
 
 

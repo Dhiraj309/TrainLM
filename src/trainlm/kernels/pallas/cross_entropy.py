@@ -155,7 +155,7 @@ def _build_pallas_ce_ops(
         safe_scale = jnp.where(scale_out > 0.0, scale_out, 1.0)
         w_loss = jnp.where(scale_out > 0.0, s_loss / safe_scale, 0.0)
         w_z = jnp.where(scale_out > 0.0, s_z / safe_scale, 0.0)
-        vocab_ids = jnp.arange(vocab_size, dtype=jnp.int32)[None, :]
+        row_ids = jnp.arange(eff_chunk, dtype=jnp.int32)
 
         def _bwd_body(
             carry: tuple[Any, Any], inputs: tuple[Any, Any, Any]
@@ -168,8 +168,7 @@ def _build_pallas_ce_ops(
             probs = jnp.exp(logits.astype(jnp.float32) - lse_c[:, None])
             active = t_c != ignore_index
             safe_tgt = jnp.where(active, t_c, 0)
-            is_target = vocab_ids == safe_tgt[:, None]
-            ce_grad = jnp.where(is_target, probs - 1.0, probs)
+            ce_grad = probs.at[row_ids, safe_tgt].add(-1.0)
             if z_loss > 0.0:
                 u = w_loss * ce_grad + w_z * (2.0 * lse_c[:, None] * probs)
             else:

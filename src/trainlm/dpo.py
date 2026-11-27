@@ -277,12 +277,26 @@ class DPOTrainer:
             if torch.cuda.is_available():
                 device = torch.device("cuda")
             else:
-                device = torch.device("cpu")
+                try:
+                    import torch_tpu  # noqa: F401
+                except ModuleNotFoundError:
+                    torch_tpu = None
+                if torch_tpu is not None:
+                    from trainlm.runtime import discover_tpu
+
+                    if discover_tpu(torch, verify_allocation=False, include_properties=False).available:
+                        device = torch.device("tpu")
+                if device is None:
+                    device = torch.device("cpu")
         self.device = device
-        self.model = model.to(self.device)
+        tpu_bf16 = self.config.bf16 and self.device.type == "tpu"
+        self.model = model.to(
+            device=self.device,
+            dtype=torch.bfloat16 if tpu_bf16 else None,
+        )
         self.ref_model = ref_model.to(
             device=self.device,
-            dtype=torch.bfloat16 if self.config.bf16 and self.device.type == "cuda" else None,
+            dtype=torch.bfloat16 if self.config.bf16 and self.device.type in {"cuda", "tpu"} else None,
         )
         self.ref_model.eval()
         for param in self.ref_model.parameters():
@@ -338,14 +352,15 @@ class DPOTrainer:
         micro_step = 0
         seen_examples = skip_examples
         accum = self.config.gradient_accumulation_steps
-        use_amp = self.config.bf16 and self.device.type == "cuda"
+        use_amp = self.config.bf16 and self.device.type in {"cuda", "tpu"}
         amp_ctx = (
             torch.autocast(device_type=self.device.type, dtype=torch.bfloat16)
             if use_amp
-            else torch.no_grad.__self__ if False else __import__("contextlib").nullcontext()
+            else __import__("contextlib").nullcontext()
         )
         self.optimizer.zero_grad(set_to_none=True)
         last_loss = 0.0
+        last_loss_tensor: torch.Tensor | None = None
         t0 = time.monotonic()
 
         for batch in loader:
@@ -374,7 +389,7 @@ class DPOTrainer:
                 )
             (loss / accum).backward()
             micro_step += 1
-            last_loss = float(loss.detach().item())
+            last_loss_tensor = loss.detach()
 
             if micro_step % accum == 0:
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.config.max_grad_norm)
@@ -385,6 +400,7 @@ class DPOTrainer:
 
                 if step % self.logging_steps == 0 or step == 1:
                     elapsed = max(1e-6, time.monotonic() - t0)
+                    last_loss = float(last_loss_tensor.item())
                     margin = float((c_rew - r_rew).mean().item())
                     print(
                         f"[DPO] step={step} | loss={last_loss:.4f} | reward_margin={margin:.4f} | elapsed={elapsed:.1f}s",
@@ -403,6 +419,8 @@ class DPOTrainer:
                 if self.max_steps is not None and step >= self.max_steps:
                     break
 
+        if last_loss_tensor is not None:
+            last_loss = float(last_loss_tensor.item())
         final_ckpt = _atomic_save_checkpoint(
             self.output_dir / f"checkpoint-{step:06d}",
             model=self.model,

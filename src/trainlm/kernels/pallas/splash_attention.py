@@ -405,13 +405,7 @@ def _build_splash_ops(
             )
             return all_grads[3], all_grads[4], all_grads[5]
 
-        def _scan_body(carry: Any, args: Any) -> tuple[Any, tuple[Any, Any, Any]]:
-            q_b, k_b, v_b, out_b, lse_b, g_b = args
-            return carry, _single_bwd(q_b, k_b, v_b, out_b, lse_b, g_b)
-
-        _, (dq_scaled, dk, dv) = jax.lax.scan(
-            _scan_body, None, (q_scaled, k, v, out, lse, grad_out)
-        )
+        dq_scaled, dk, dv = jax.vmap(_single_bwd)(q_scaled, k, v, out, lse, grad_out)
         return dq_scaled * scale, dk, dv
 
     digest = hashlib.sha256(str(cache_key).encode("utf-8")).hexdigest()[:16]
@@ -495,13 +489,15 @@ def pallas_splash_attention(
     sliding_window: int | None = None,
     block_q: int = 512,
     block_k: int = 512,
+    pad_head_dim: bool = False,
 ) -> torch.Tensor:
     """Compute TPU Splash Attention in HF ``(B, H, S, D)`` -> ``(B, S, H, D)`` layout.
 
     Supports native GQA (``n_heads % n_kv_heads == 0``) without KV head
     replication. Falls back to ``F.scaled_dot_product_attention`` on CPU, for
-    sequences or head dimensions unsupported by Pallas Splash (such as
-    ``head_dim % 128 != 0``), or when JAX Splash is absent.
+    sequences or head dimensions unsupported by Pallas Splash (unless
+    ``pad_head_dim=True`` zero-pads ``head_dim`` to a 128-multiple), or when
+    JAX Splash is absent.
     """
     del query_heads, key_value_heads
     n_heads = query.shape[1]
@@ -509,13 +505,15 @@ def pallas_splash_attention(
     seq_len = query.shape[2]
     kv_seq_len = key.shape[2]
     head_dim = query.shape[3]
+    head_dim_pad = ((-head_dim) % 128) if pad_head_dim and head_dim > 0 else 0
+    padded_head_dim = head_dim + head_dim_pad
     block = _resolve_block_size(seq_len, max_block=max(128, min(block_q, block_k)))
     spec_key = (
         seq_len,
         kv_seq_len,
         n_heads,
         n_kv_heads,
-        head_dim,
+        padded_head_dim,
         causal,
         block,
         sliding_window,
@@ -537,8 +535,8 @@ def pallas_splash_attention(
         or seq_len < 128
         or block == 0
         or kv_seq_len != seq_len
-        or head_dim < 128
-        or head_dim % 128 != 0
+        or padded_head_dim < 128
+        or padded_head_dim % 128 != 0
         or (n_kv_heads != 1 and n_heads % n_kv_heads != 0)
         or spec_key in _UNSUPPORTED_SPLASH_SPECS
         or not is_pallas_splash_available()
@@ -561,16 +559,21 @@ def pallas_splash_attention(
     fwd_op = _resolve_pallas_op(fwd_name)
 
     q_in = query
-    if scale is not None:
-        default_scale = 1.0 / math.sqrt(head_dim)
-        if abs(scale - default_scale) > 1e-6:
-            q_in = q_in * (scale / default_scale)
+    # splash_fwd scales by 1/sqrt(padded_head_dim); preserve exact 1/sqrt(head_dim).
+    effective_scale = (1.0 / math.sqrt(head_dim)) if scale is None else scale
+    splash_default_scale = 1.0 / math.sqrt(padded_head_dim)
+    if abs(effective_scale - splash_default_scale) > 1e-6:
+        q_in = q_in * (effective_scale / splash_default_scale)
     if n_kv_heads == 1:
         k_in = key.squeeze(1)
         v_in = value.squeeze(1)
     else:
         k_in = key
         v_in = value
+    if head_dim_pad > 0:
+        q_in = F.pad(q_in, (0, head_dim_pad))
+        k_in = F.pad(k_in, (0, head_dim_pad))
+        v_in = F.pad(v_in, (0, head_dim_pad))
     q_in = q_in.contiguous()
     k_in = k_in.contiguous()
     v_in = v_in.contiguous()
@@ -584,6 +587,8 @@ def pallas_splash_attention(
         except (RuntimeError, ValueError, TypeError, NotImplementedError):
             _UNSUPPORTED_SPLASH_SPECS.add(spec_key)
             return _sdpa_fallback()
+    if head_dim_pad > 0:
+        out = out[..., :head_dim]
     if out.dtype != query.dtype:
         out = out.to(dtype=query.dtype)
     return out.transpose(1, 2).contiguous()

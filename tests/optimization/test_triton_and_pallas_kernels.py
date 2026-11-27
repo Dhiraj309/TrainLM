@@ -402,6 +402,24 @@ def test_pallas_cross_entropy_analytical_backward_matches_reference(
         def astype(self, dtype):
             return self.to(dtype=dtype)
 
+        @property
+        def at(self):
+            outer = self
+
+            class _AtIndexer:
+                def __getitem__(self, idx):
+                    class _AtOps:
+                        def add(self, val):
+                            cloned = outer.as_subclass(torch.Tensor).clone()
+                            rows = _unwrap(idx[0]).to(torch.long)
+                            cols = _unwrap(idx[1]).to(torch.long)
+                            cloned[rows, cols] = cloned[rows, cols] + val
+                            return cloned.as_subclass(_JnpArray)
+
+                    return _AtOps()
+
+            return _AtIndexer()
+
     def _to_jnp(x):
         return x.as_subclass(_JnpArray) if isinstance(x, torch.Tensor) else x
 
@@ -684,3 +702,68 @@ def test_packed_gated_mlp_checks_swiglu_activation_spec() -> None:
     packed = PackedGatedMLPProjection.from_separate(spec, g, u, torch.nn.functional.silu)
     x = torch.randn(2, 4, 8)
     torch.testing.assert_close(packed(x), torch.nn.functional.silu(g(x)) * u(x))
+
+
+def test_splash_bwd_uses_vmap_and_compiled_tpu_prefers_xla_chunked_loss(monkeypatch) -> None:
+    import inspect
+    import types
+
+    from trainlm.kernels import pallas as pallas_pkg
+    from trainlm.kernels.pallas import cross_entropy as ce_mod
+    from trainlm.kernels.pallas import splash_attention as sa_mod
+    from trainlm.tasks import chunked_loss as cl_mod
+
+    # 1. splash_bwd source should vectorize over batch with jax.vmap, not jax.lax.scan.
+    src = inspect.getsource(sa_mod._build_splash_ops)
+    bwd_section = src[src.index("def splash_bwd") : src.index("fwd_qualname")]
+    assert "jax.vmap(_single_bwd)" in bwd_section
+    assert "jax.lax.scan" not in bwd_section
+
+    # 2. Compiled TPU prefers XLA chunked_linear unless TRAINLM_ENABLE_PALLAS_CE=1.
+    class _FakeTPUTensor(torch.Tensor):
+        @property
+        def device(self):  # type: ignore[override]
+            return types.SimpleNamespace(type="tpu")
+
+    pallas_calls: list[bool] = []
+    fake_ce = lambda *args, **kwargs: (pallas_calls.append(True) or (torch.tensor(0.0), None))
+    monkeypatch.setattr(ce_mod, "is_pallas_ce_available", lambda: True)
+    monkeypatch.setattr(pallas_pkg, "is_pallas_ce_available", lambda: True)
+    monkeypatch.setattr(ce_mod, "pallas_chunked_linear_cross_entropy", fake_ce)
+    monkeypatch.setattr(pallas_pkg, "pallas_chunked_linear_cross_entropy", fake_ce)
+    monkeypatch.setattr(torch.compiler, "is_compiling", lambda: True)
+    monkeypatch.delenv("TRAINLM_ENABLE_PALLAS_CE", raising=False)
+
+    h = torch.randn(1, 4, 8).as_subclass(_FakeTPUTensor)
+    w = torch.randn(16, 8).as_subclass(_FakeTPUTensor)
+    labels = torch.tensor([[1, 2, 3, -100]], dtype=torch.long).as_subclass(_FakeTPUTensor)
+
+    loss, _ = cl_mod.chunked_linear_causal_cross_entropy(h, w, labels, chunk_size=2)
+    assert float(loss) > 0.0
+    assert pallas_calls == []
+
+    monkeypatch.setenv("TRAINLM_ENABLE_PALLAS_CE", "1")
+    cl_mod.chunked_linear_causal_cross_entropy(h, w, labels, chunk_size=2)
+    assert pallas_calls == [True]
+
+    # 3. pad_head_dim=True pads head_dim=64 -> 128, rescales Q, and slices back to 64.
+    monkeypatch.setattr(sa_mod, "is_pallas_splash_available", lambda: True)
+    seen_shapes: list[tuple[tuple[int, ...], float]] = []
+
+    def fake_fwd_pad(q, k, v):
+        del k, v
+        seen_shapes.append((tuple(q.shape), float(q.abs().mean().item())))
+        return q.clone(), torch.zeros(q.shape[0], q.shape[1], q.shape[2], dtype=torch.float32)
+
+    monkeypatch.setattr(sa_mod, "_build_splash_ops", lambda **kwargs: ("fake_fwd_pad", "fake_bwd_pad"))
+    monkeypatch.setattr(sa_mod, "_resolve_pallas_op", lambda name: fake_fwd_pad)
+
+    q64 = torch.ones(1, 4, 128, 64, dtype=torch.float32).as_subclass(_FakeTPUTensor)
+    k64 = torch.ones(1, 2, 128, 64, dtype=torch.float32).as_subclass(_FakeTPUTensor)
+    v64 = torch.ones(1, 2, 128, 64, dtype=torch.float32).as_subclass(_FakeTPUTensor)
+    out64 = sa_mod.pallas_splash_attention(q64, k64, v64, pad_head_dim=True)
+    assert out64.shape == (1, 128, 4, 64)
+    assert seen_shapes[0][0] == (1, 4, 128, 128)
+    # Only first 64 cols are non-zero sqrt(2), remaining 64 zero-padded -> mean = sqrt(2) / 2.
+    assert abs(seen_shapes[0][1] - (2.0 ** 0.5) / 2.0) < 1e-4
+

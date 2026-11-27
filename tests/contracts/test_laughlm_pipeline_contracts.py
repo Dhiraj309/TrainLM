@@ -77,7 +77,13 @@ def test_laughlm_stage_cli_parsers_and_defaults():
         ns = mod.parse_args(argv)
         assert ns is not None
 
-    from scripts.laughlm.common import DEFAULT_OUTPUT_REPO, DEFAULT_SHARD_REPO
+    from scripts.laughlm.common import (
+        DEFAULT_OUTPUT_REPO,
+        DEFAULT_SHARD_REPO,
+        resolve_logits_chunk_size,
+        resolve_loss_rematerialization,
+        resolve_optim,
+    )
     from scripts.laughlm.stage0_benchmark import (
         parse_args as parse_s0,
         recommended_stage1_grad_accum,
@@ -90,6 +96,12 @@ def test_laughlm_stage_cli_parsers_and_defaults():
     s0_defaults = parse_s0([])
     assert s0_defaults.micro_batch_sizes == "32,64,96,128"
     assert s0_defaults.torch_compile_mode == "default"
+    assert resolve_optim("tpu") == "adamw_bf16"
+    assert resolve_optim("cuda") == "adamw_torch"
+    assert resolve_logits_chunk_size(16384, accel_kind="tpu") == 2048
+    assert resolve_logits_chunk_size(16384, accel_kind="cuda") == 16384
+    assert resolve_loss_rematerialization("auto", accel_kind="tpu") == "per_chunk"
+    assert resolve_loss_rematerialization("auto", accel_kind="cuda") == "disabled"
     assert recommended_stage1_grad_accum(128) == 2
     assert recommended_stage1_grad_accum(64) == 4
     assert recommended_stage2_grad_accum(64) == 2

@@ -118,9 +118,30 @@ def main(argv: list[str] | None = None) -> int:
         flush=True,
     )
 
-    cuda_avail = torch.cuda.is_available()
-    remat = resolve_loss_rematerialization(args.loss_rematerialization, cuda_available=cuda_avail)
-    mbs_list = [int(x.strip()) for x in args.micro_batch_sizes.split(",") if x.strip()]
+    from scripts.laughlm.common import (
+        DEFAULT_SHARD_REPO,
+        DEFAULT_TOKENIZER_ID,
+        VOCAB_SIZE,
+        atomic_save_model_snapshot,
+        detect_accelerator_kind,
+        load_or_init_135m_model,
+        load_tokenizer,
+        make_synthetic_dataset,
+        resolve_logits_chunk_size,
+        resolve_loss_rematerialization,
+        resolve_optim,
+    )
+    del DEFAULT_SHARD_REPO, DEFAULT_TOKENIZER_ID, atomic_save_model_snapshot, make_synthetic_dataset
+
+    accel_kind = detect_accelerator_kind()
+    cuda_avail = accel_kind == "cuda"
+    remat = resolve_loss_rematerialization(args.loss_rematerialization, accel_kind=accel_kind)
+    optim_name = resolve_optim(accel_kind)
+    chunk_size = resolve_logits_chunk_size(args.logits_chunk_size, accel_kind=accel_kind)
+    raw_mbs = args.micro_batch_sizes
+    if accel_kind == "tpu" and raw_mbs == "32,64,96,128":
+        raw_mbs = "4,8"
+    mbs_list = [int(x.strip()) for x in raw_mbs.split(",") if x.strip()]
     compile_modes = (False,) if args.no_compile else (False, True)
     total_steps = args.warmup_steps + args.measure_steps
 
@@ -143,11 +164,11 @@ def main(argv: list[str] | None = None) -> int:
                 bf16=True,
                 torch_compile=compiled,
                 torch_compile_mode=args.torch_compile_mode,
-                attn_implementation="sdpa",
+                attn_implementation="sdpa" if accel_kind != "tpu" else "auto",
                 loss_implementation="chunked_linear",
-                logits_chunk_size=args.logits_chunk_size,
+                logits_chunk_size=chunk_size,
                 loss_rematerialization=remat,
-                optim="adamw_torch",
+                optim=optim_name,
                 learning_rate=args.peak_lr,
                 max_grad_norm=args.grad_clip,
                 lr_scheduler_type="wsd",
@@ -161,7 +182,8 @@ def main(argv: list[str] | None = None) -> int:
                 trainer.train()
                 summary = trainer.performance_summary()
             except RuntimeError as exc:
-                if "out of memory" in str(exc).lower():
+                msg = str(exc).lower()
+                if "out of memory" in msg or "resource exhausted" in msg:
                     print(
                         f"[Stage 0] compile={compiled} mbs={mbs} ga=1 | OOM — skipped",
                         flush=True,
@@ -180,7 +202,7 @@ def main(argv: list[str] | None = None) -> int:
             mfu = (perf.get("non_embedding_mfu") or 0.0) * 100.0
             tps = float(perf.get("tokens_per_second") or 0.0)
             print(
-                f"[Stage 0] compile={compiled} mbs={mbs} ga=1 | "
+                f"[Stage 0] accel={accel_kind} compile={compiled} mbs={mbs} ga=1 | "
                 f"{tps:,.1f} tok/s | MFU={mfu:.2f}% | peak_vram={peak_gb:.2f} GiB",
                 flush=True,
             )
@@ -213,11 +235,11 @@ def main(argv: list[str] | None = None) -> int:
                 bf16=True,
                 torch_compile=win_compiled,
                 torch_compile_mode=args.torch_compile_mode,
-                attn_implementation="sdpa",
+                attn_implementation="sdpa" if accel_kind != "tpu" else "auto",
                 loss_implementation="chunked_linear",
-                logits_chunk_size=args.logits_chunk_size,
+                logits_chunk_size=chunk_size,
                 loss_rematerialization=remat,
-                optim="adamw_torch",
+                optim=optim_name,
                 learning_rate=args.peak_lr,
                 max_grad_norm=args.grad_clip,
                 lr_scheduler_type="wsd",

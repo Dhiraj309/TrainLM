@@ -736,7 +736,7 @@ class Trainer:
         micro_steps = 0
         runtime_dev_type = getattr(getattr(self.runtime, "device", None), "type", None)
         use_compiled_microbatch = (
-            runtime_dev_type == "cuda"
+            runtime_dev_type in {"cuda", "tpu"}
             and bool(getattr(self.runtime, "_compile_enabled", False))
             and not self.runtime.is_distributed
             and callable(getattr(self.task, "prepare_batch_on_host", None))

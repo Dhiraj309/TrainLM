@@ -125,9 +125,16 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     from datasets import concatenate_datasets, get_dataset_split_names, load_dataset
+    from scripts.laughlm.common import (
+        detect_accelerator_kind,
+        resolve_logits_chunk_size,
+        resolve_optim,
+    )
 
-    cuda_avail = torch.cuda.is_available()
-    remat = resolve_loss_rematerialization(args.loss_rematerialization, cuda_available=cuda_avail)
+    accel_kind = detect_accelerator_kind()
+    remat = resolve_loss_rematerialization(args.loss_rematerialization, accel_kind=accel_kind)
+    optim_name = resolve_optim(accel_kind)
+    chunk_size = resolve_logits_chunk_size(args.logits_chunk_size, accel_kind=accel_kind)
     tokenizer = load_tokenizer(args.tokenizer_id)
     split_names = [
         s
@@ -175,11 +182,11 @@ def main(argv: list[str] | None = None) -> int:
         bf16=True,
         torch_compile=not args.no_compile,
         torch_compile_mode=args.torch_compile_mode,
-        attn_implementation="sdpa",
+        attn_implementation="sdpa" if accel_kind != "tpu" else "auto",
         loss_implementation="chunked_linear",
-        logits_chunk_size=args.logits_chunk_size,
+        logits_chunk_size=chunk_size,
         loss_rematerialization=remat,
-        optim="adamw_torch",
+        optim=optim_name,
         report_to="none",
     )
     trainer = TrainLMTrainer(

@@ -119,11 +119,56 @@ def make_synthetic_dataset(
     return [{"input_ids": ids[i], "labels": ids[i]} for i in range(num_examples)]
 
 
-def resolve_loss_rematerialization(requested: str, *, cuda_available: bool) -> str:
-    """Disable per-chunk activation checkpointing on high-VRAM CUDA/ROCm GPUs by default."""
+def detect_accelerator_kind() -> str:
+    """Return 'cuda', 'tpu', or 'cpu' without calling internal TorchTPU APIs."""
+    import torch
+
+    if torch.cuda.is_available():
+        return "cuda"
+    try:
+        import torch_tpu  # noqa: F401
+    except ModuleNotFoundError:
+        torch_tpu = None
+    if torch_tpu is not None:
+        try:
+            from trainlm.runtime import discover_tpu
+
+            if discover_tpu(torch, verify_allocation=False, include_properties=False).available:
+                return "tpu"
+        except Exception:
+            pass
+    return "cpu"
+
+
+def resolve_optim(accel_kind: str) -> str:
+    """Select the fastest validated optimizer for the active accelerator."""
+    if accel_kind == "tpu":
+        return "adamw_bf16"
+    return "adamw_torch"
+
+
+def resolve_logits_chunk_size(requested: int, *, accel_kind: str) -> int:
+    """Bound per-chunk logits memory on 16 GB TPUs while keeping large chunks on GPUs."""
+    if accel_kind == "tpu" and requested >= 16384:
+        return 2048
+    return requested
+
+
+def resolve_loss_rematerialization(
+    requested: str,
+    *,
+    cuda_available: bool = False,
+    accel_kind: str | None = None,
+) -> str:
+    """Disable per-chunk remat on high-VRAM CUDA/ROCm GPUs; keep per_chunk on TPU."""
     if requested != "auto":
         return requested
-    return "disabled" if cuda_available else "auto"
+    kind = accel_kind or ("cuda" if cuda_available else "cpu")
+    if kind == "cuda":
+        return "disabled"
+    if kind == "tpu":
+        return "per_chunk"
+    return "auto"
 
 
 def atomic_save_model_snapshot(model: Any, tokenizer: Any | None, target_dir: Path) -> Path:

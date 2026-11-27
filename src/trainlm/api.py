@@ -1610,11 +1610,20 @@ class TrainLMTrainer:
                 )
             self._train_batches_per_epoch = batches_per_epoch
         if self.args.loss_rematerialization == "auto":
+            tpu_v6e = False
+            try:
+                diag_name = str(
+                    self.runtime.diagnostics().values.get("device_name", "")
+                ).upper()
+                tpu_v6e = "V6E" in diag_name
+            except Exception:
+                tpu_v6e = False
             resolved_remat = (
                 "per_chunk"
                 if (
                     self.args.loss_implementation == "chunked_linear"
                     and int(getattr(self.args, "sequence_length", 1024)) >= 1024
+                    and not tpu_v6e
                 )
                 else "disabled"
             )
@@ -1865,7 +1874,17 @@ class TrainLMTrainer:
         # 2. Splash Attention (explicit or TPU auto-probe via Pallas) + Gated MLP packing.
         splash_runtime: TorchTPUSplashAttentionRuntime | None = None
         seq_len_hint = int(getattr(self.args, "sequence_length", 1024) or 1024)
-        splash_block = 256 if seq_len_hint >= 256 and seq_len_hint % 256 == 0 else 128
+        diag_dev = ""
+        try:
+            diag_dev = str(self.runtime.diagnostics().values.get("device_name", "")).upper()
+        except Exception:
+            diag_dev = ""
+        if "V6E" in diag_dev and seq_len_hint >= 512 and seq_len_hint % 512 == 0:
+            splash_block = 512
+        elif seq_len_hint >= 256 and seq_len_hint % 256 == 0:
+            splash_block = 256
+        else:
+            splash_block = 128
         if attn_choice == "splash":
             kernel = probe_torchtpu_splash_kernel()
             if kernel is None:

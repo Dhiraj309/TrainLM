@@ -40,9 +40,11 @@
 - [v5e-1 LLM MFU benchmark](TrainLM_v5e1_MFU_Benchmark.ipynb)
   ([open in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb))
   runs a focused, standalone LLM training and MFU bottleneck check across
-  `SmolLM2-135M`, `SmolLM2-360M`, and `Qwen2.5-0.5B` on a single `TPU v5e-1`,
-  separating cold Window 1 from steady-state MFU and capturing `torch.profiler`
-  host ops.
+  `SmolLM2-135M`, `SmolLM2-360M`, `Qwen2.5-0.5B`, and `Qwen3-0.6B` on a single
+  `TPU v5e-1`, separating cold Window 1 from steady-state MFU, capturing
+  `torch.profiler` host ops, using `jax.vmap` for Splash backward, and
+  preferring XLA-fused `chunked_linear` during `torch.compile(backend="tpu")`
+  (`TRAINLM_ENABLE_PALLAS_CE=1` opts compiled TPU steps into Pallas CE).
 
 These notebooks collect evidence for their stated scope; CPU runs and
 standalone probes do not certify end-to-end TPU training or performance.

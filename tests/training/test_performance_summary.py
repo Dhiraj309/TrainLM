@@ -80,6 +80,41 @@ def test_summary_uses_measured_tokens_and_documented_v5e_peak_for_mfu():
     assert summary["hardware"]["peak_source"].endswith("/v5e")
 
 
+def test_summary_supports_tpu_v6e_peak_for_mfu():
+    model = TinyDenseLM()
+    measurements = {
+        "measured_optimizer_steps": 5,
+        "supervised_tokens": 100,
+        "wall_seconds": 2.0,
+        "tokens_per_second": 50.0,
+    }
+    summary = build_performance_summary(
+        measurements=measurements,
+        model=model,
+        runtime=FakeRuntime(device_name="TPU v6e", precision="bf16"),
+        sequence_length=8,
+    )
+    flops = calculate_causal_lm_flops(
+        parameter_count=sum(parameter.numel() for parameter in model.parameters()),
+        vocabulary_size=10,
+        hidden_size=4,
+        num_hidden_layers=1,
+        sequence_length=8,
+        tie_word_embeddings=False,
+    )
+    assert summary["mfu_status"] == "measured"
+    assert summary["hardware"]["peak_flops_per_device"] == 918_000_000_000_000.0
+    assert summary["hardware"]["peak_source"].endswith("/v6e")
+    assert summary["non_embedding_mfu"] == pytest.approx(
+        calculate_mfu(
+            tokens_per_second=50.0,
+            flops_per_token=flops.non_embedding_flops_per_token,
+            peak_flops_per_device=918_000_000_000_000.0,
+            device_count=1,
+        )
+    )
+
+
 @pytest.mark.parametrize(
     "runtime,reason",
     [
