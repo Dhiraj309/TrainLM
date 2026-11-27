@@ -119,6 +119,7 @@ class PackedBinDataset(IterableDataset):
         vocab_size: int = 32011,
         filesystem: Any = None,
         runner: Any = None,
+        which: Any = None,
         **partition: Any,
     ) -> "PackedBinDataset":
         """Stage and mmap packed shards from a same-region ``gs://bucket/prefix`` URI."""
@@ -128,6 +129,7 @@ class PackedBinDataset(IterableDataset):
             max_shards=max_shards,
             filesystem=filesystem,
             runner=runner,
+            which=which,
         )
         manifest_files = tuple(sorted(local_root.rglob(manifest_pattern)))
         if manifest_files:
