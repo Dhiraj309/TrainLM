@@ -103,6 +103,8 @@ class Trainer:
         self._epoch_end_pending = False
         self._compiled_single_step_fn = None
         self._compiled_single_step_active = False
+        self._compiled_microbatch_step_fn = None
+        self._compiled_microbatch_step_active = False
         self._lr_tensors: list[torch.Tensor] | None = None
         self._lr_values: list[float] | None = None
         self._performance_model = model
@@ -732,8 +734,55 @@ class Trainer:
         loss_numerator: torch.Tensor | None = None
         exact_tokens = True
         micro_steps = 0
+        runtime_dev_type = getattr(getattr(self.runtime, "device", None), "type", None)
+        use_compiled_microbatch = (
+            runtime_dev_type == "cuda"
+            and bool(getattr(self.runtime, "_compile_enabled", False))
+            and not self.runtime.is_distributed
+            and callable(getattr(self.task, "prepare_batch_on_host", None))
+            and callable(getattr(self.task, "training_step_prepared", None))
+            and callable(getattr(self.runtime, "compile_training_step", None))
+        )
 
         for _ in range(microbatch_limit):
+            if use_compiled_microbatch:
+                raw_batch = self._next_batch()
+                if self._can_prepare_on_host(raw_batch):
+                    task_batch, counts = self.task.prepare_batch_on_host(raw_batch)
+                    if counts.exact and counts.supervised_tokens > 0:
+                        self.state.micro_step += 1
+                        if self._train_batches_per_epoch:
+                            self.state.epoch = (
+                                self.state.micro_step // self._train_batches_per_epoch
+                            )
+                        micro_steps += 1
+                        token_count = counts.supervised_tokens
+                        stop_after_microbatch = False
+                        max_tokens = self.config.trainer.max_tokens
+                        if max_tokens is not None:
+                            global_microbatch_tokens = self._global_microbatch_tokens(
+                                local_tokens=token_count,
+                                exact=counts.exact,
+                            )
+                            if self._global_tokens_seen is None:
+                                raise RuntimeError("Global token budget was not initialized.")
+                            self._global_tokens_seen += global_microbatch_tokens
+                            stop_after_microbatch = self._global_tokens_seen >= max_tokens
+                        microbatch_fn = self._resolve_microbatch_step_fn()
+                        task_batch = self.runtime.prepare_batch(task_batch)
+                        detached_weighted_loss = microbatch_fn(task_batch, counts)
+                        total_tokens += token_count
+                        total_sequences += counts.sequences
+                        loss_numerator = (
+                            detached_weighted_loss
+                            if loss_numerator is None
+                            else loss_numerator + detached_weighted_loss
+                        )
+                        if stop_after_microbatch:
+                            break
+                        continue
+                self._train_iterator = self._prepend_batch(raw_batch)
+
             result = self.task.training_step(
                 self.model,
                 self._next_batch(),
@@ -932,6 +981,36 @@ class Trainer:
         if self._compiled_single_step_active:
             self._sync_optimizer_lr_tensors()
         return self._compiled_single_step_fn
+
+    def _resolve_microbatch_step_fn(self):
+        if self._compiled_microbatch_step_fn is not None:
+            return self._compiled_microbatch_step_fn
+
+        def _microbatch_step_tensors(task_batch, counts):
+            step_model = (
+                getattr(self.model, "_orig_mod", self.model)
+                if self._compiled_microbatch_step_active
+                else self.model
+            )
+            result = self.task.training_step_prepared(
+                step_model,
+                task_batch,
+                counts,
+                self.runtime,
+            )
+            weighted_loss = result.loss * counts.supervised_tokens
+            self.runtime.backward(weighted_loss)
+            return weighted_loss.detach()
+
+        compile_fn = getattr(self.runtime, "compile_training_step", None)
+        if callable(compile_fn):
+            compiled = compile_fn(_microbatch_step_tensors)
+            self._compiled_microbatch_step_active = compiled is not _microbatch_step_tensors
+            self._compiled_microbatch_step_fn = compiled
+        else:
+            self._compiled_microbatch_step_active = False
+            self._compiled_microbatch_step_fn = _microbatch_step_tensors
+        return self._compiled_microbatch_step_fn
 
     def _sync_optimizer_lr_tensors(self) -> None:
         """Keep ``group['lr']`` as persistent 0-D tensors when compiled to prevent Dynamo recompiles."""

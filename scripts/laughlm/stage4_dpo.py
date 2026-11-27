@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import sys
+import tempfile
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
@@ -38,14 +39,50 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--save-steps", type=int, default=200)
     parser.add_argument("--logging-steps", type=int, default=10)
     parser.add_argument("--resume", default=None)
+    parser.add_argument("--dry-run", action="store_true", help="Run a 2-step CPU/synthetic preflight check.")
     parser.add_argument("--output-dir", default="runs/stage4_dpo")
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    from datasets import load_dataset
+    import torch
     from trainlm.dpo import DPOConfig, DPOTrainer, format_dpo_pair
+
+    if args.dry_run:
+        with tempfile.TemporaryDirectory() as tmp:
+            init_arg = None if args.init_checkpoint == "synthetic" else args.init_checkpoint
+            policy_model = load_or_init_135m_model(init_checkpoint=init_arg, max_position_embeddings=64)
+            ref_model = load_or_init_135m_model(init_checkpoint=init_arg, max_position_embeddings=64)
+            pairs = [
+                {
+                    "chosen_input_ids": [10, 11, 12, 13, EOS_TOKEN_ID],
+                    "chosen_labels": [-100, -100, 12, 13, EOS_TOKEN_ID],
+                    "rejected_input_ids": [10, 11, 20, 21, EOS_TOKEN_ID],
+                    "rejected_labels": [-100, -100, 20, 21, EOS_TOKEN_ID],
+                }
+                for _ in range(4)
+            ]
+            cfg = DPOConfig(beta=args.beta, max_length=64, bf16=False, gradient_accumulation_steps=1)
+            trainer = DPOTrainer(
+                model=policy_model,
+                ref_model=ref_model,
+                tokenizer=type("_T", (), {"pad_token_id": EOS_TOKEN_ID, "eos_token_id": EOS_TOKEN_ID})(),
+                train_dataset=pairs,
+                output_dir=tmp,
+                config=cfg,
+                per_device_batch_size=2,
+                max_steps=2,
+                save_steps=2,
+                logging_steps=1,
+                device=torch.device("cpu"),
+            )
+            res = trainer.train()
+            assert res["step"] == 2
+            print(f"[Stage 4 Dry-Run] OK | {res}", flush=True)
+        return 0
+
+    from datasets import load_dataset
 
     tokenizer = load_tokenizer(args.tokenizer_id)
     raw_ds = load_dataset(args.dataset_id, args.dataset_config, split=args.split)

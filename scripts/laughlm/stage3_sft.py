@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import sys
+import tempfile
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -14,9 +15,12 @@ if str(REPO_ROOT) not in sys.path:
 from scripts.laughlm.common import (
     DEFAULT_TOKENIZER_ID,
     EOS_TOKEN_ID,
+    VOCAB_SIZE,
     atomic_save_model_snapshot,
     load_or_init_135m_model,
     load_tokenizer,
+    make_synthetic_dataset,
+    resolve_loss_rematerialization,
 )
 
 
@@ -34,8 +38,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--max-examples", type=int, default=None)
     parser.add_argument("--save-steps", type=int, default=500)
     parser.add_argument("--logging-steps", type=int, default=10)
+    parser.add_argument("--logits-chunk-size", type=int, default=16384)
+    parser.add_argument("--loss-rematerialization", default="auto")
+    parser.add_argument("--torch-compile-mode", default="default", choices=("default",))
     parser.add_argument("--no-compile", action="store_true")
     parser.add_argument("--resume", default=None)
+    parser.add_argument("--dry-run", action="store_true", help="Run a 2-step CPU/synthetic preflight check.")
     parser.add_argument("--output-dir", default="runs/stage3_sft")
     return parser.parse_args(argv)
 
@@ -82,9 +90,44 @@ def _tokenize_sft_messages(
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     import torch
-    from datasets import concatenate_datasets, get_dataset_split_names, load_dataset
     from trainlm import TrainLMTrainer, TrainLMTrainingArguments
 
+    if args.dry_run:
+        ds = make_synthetic_dataset(4, 64, vocab_size=VOCAB_SIZE)
+        for ex in ds:
+            ex["loss_mask"] = torch.tensor([0] * 16 + [1] * 48, dtype=torch.long)
+            ex["attention_mask"] = torch.ones(64, dtype=torch.long)
+        with tempfile.TemporaryDirectory() as tmp:
+            init_arg = None if args.init_checkpoint == "synthetic" else args.init_checkpoint
+            model = load_or_init_135m_model(init_checkpoint=init_arg, max_position_embeddings=64)
+            t_args = TrainLMTrainingArguments(
+                output_dir=tmp,
+                accelerator="cpu",
+                per_device_train_batch_size=2,
+                gradient_accumulation_steps=1,
+                sequence_length=64,
+                max_steps=2,
+                logging_steps=1,
+                save_strategy="no",
+                bf16=False,
+                torch_compile=False,
+                loss_implementation="chunked_linear",
+                logits_chunk_size=64,
+                optim="adamw_torch",
+                lr_scheduler_type="cosine",
+                warmup_steps=1,
+                report_to="none",
+            )
+            trainer = TrainLMTrainer(model=model, args=t_args, train_dataset=ds)
+            state = trainer.train()
+            assert state.step == 2
+            print(f"[Stage 3 Dry-Run] OK | step={state.step}", flush=True)
+        return 0
+
+    from datasets import concatenate_datasets, get_dataset_split_names, load_dataset
+
+    cuda_avail = torch.cuda.is_available()
+    remat = resolve_loss_rematerialization(args.loss_rematerialization, cuda_available=cuda_avail)
     tokenizer = load_tokenizer(args.tokenizer_id)
     split_names = [
         s
@@ -131,19 +174,22 @@ def main(argv: list[str] | None = None) -> int:
         logging_steps=args.logging_steps,
         bf16=True,
         torch_compile=not args.no_compile,
+        torch_compile_mode=args.torch_compile_mode,
         attn_implementation="sdpa",
         loss_implementation="chunked_linear",
-        optim="adamw_torch_fused" if torch.cuda.is_available() else "adamw_torch",
+        logits_chunk_size=args.logits_chunk_size,
+        loss_rematerialization=remat,
+        optim="adamw_torch",
         report_to="none",
     )
     trainer = TrainLMTrainer(
         model=model, args=t_args, train_dataset=examples, processing_class=tokenizer
     )
-    result = trainer.train(resume_from_checkpoint=args.resume)
+    state = trainer.train(resume_from_checkpoint=args.resume)
     final_dir = atomic_save_model_snapshot(
         trainer.model, tokenizer, Path(args.output_dir) / "final_model"
     )
-    print(f"[Stage 3] Complete | metrics={result.metrics} | export={final_dir}", flush=True)
+    print(f"[Stage 3] Complete | step={state.step} loss={state.loss} | export={final_dir}", flush=True)
     return 0
 
 

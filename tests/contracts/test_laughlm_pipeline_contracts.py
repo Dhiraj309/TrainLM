@@ -22,7 +22,7 @@ def test_discover_hub_subfolder_bins_sorted_1_indexed_and_max_shards():
         "stage1/notes.txt",
     ]
     found = discover_hub_subfolder_bins(
-        "Dhiraj309/laughlm-135m-shards-v2",
+        "Dhiraj45/laughlm-135m-shards-v2",
         subfolder="stage1",
         max_shards=1,
         list_files_fn=lambda **_: fake_files,
@@ -30,7 +30,7 @@ def test_discover_hub_subfolder_bins_sorted_1_indexed_and_max_shards():
     assert found == ("stage1/stream_stage1_w00_shard_00001.bin",)
 
     all_stage1 = discover_hub_subfolder_bins(
-        "Dhiraj309/laughlm-135m-shards-v2",
+        "Dhiraj45/laughlm-135m-shards-v2",
         subfolder="stage1",
         list_files_fn=lambda **_: fake_files,
     )
@@ -63,13 +63,13 @@ def test_headerless_u2_token_count_from_file_size(tmp_path: Path):
     assert manifest.token_id_max == 49151
 
 
-def test_laughlm_stage_cli_parsers():
+def test_laughlm_stage_cli_parsers_and_defaults():
     mods = (
-        ("scripts.laughlm.stage0_benchmark", ["--max-shards", "1", "--no-compile"]),
-        ("scripts.laughlm.stage1_base_30b", ["--resume", "latest"]),
-        ("scripts.laughlm.stage2_anneal_5b", ["--init-checkpoint", "ckpt1"]),
-        ("scripts.laughlm.stage3_sft", ["--init-checkpoint", "ckpt2"]),
-        ("scripts.laughlm.stage4_dpo", ["--init-checkpoint", "ckpt3"]),
+        ("scripts.laughlm.stage0_benchmark", ["--max-shards", "1", "--no-compile", "--dry-run"]),
+        ("scripts.laughlm.stage1_base_30b", ["--resume", "latest", "--dry-run"]),
+        ("scripts.laughlm.stage2_anneal_5b", ["--init-checkpoint", "synthetic", "--dry-run"]),
+        ("scripts.laughlm.stage3_sft", ["--init-checkpoint", "synthetic", "--dry-run"]),
+        ("scripts.laughlm.stage4_dpo", ["--init-checkpoint", "synthetic", "--dry-run"]),
         ("scripts.laughlm.watch_and_upload", ["--checkpoint-dir", "runs/s1", "--once"]),
     )
     for mod_name, argv in mods:
@@ -77,15 +77,75 @@ def test_laughlm_stage_cli_parsers():
         ns = mod.parse_args(argv)
         assert ns is not None
 
+    from scripts.laughlm.common import DEFAULT_OUTPUT_REPO, DEFAULT_SHARD_REPO
+    from scripts.laughlm.stage0_benchmark import (
+        parse_args as parse_s0,
+        recommended_stage1_grad_accum,
+        recommended_stage2_grad_accum,
+    )
+    from scripts.laughlm.stage1_base_30b import resolve_grad_accum as s1_ga
+    from scripts.laughlm.stage2_anneal_5b import resolve_grad_accum as s2_ga
+    from scripts.laughlm.watch_and_upload import DEFAULT_HF_REPO
 
-def test_watch_and_upload_skips_tmp_dirs(tmp_path: Path):
+    s0_defaults = parse_s0([])
+    assert s0_defaults.micro_batch_sizes == "32,64,96,128"
+    assert s0_defaults.torch_compile_mode == "default"
+    assert recommended_stage1_grad_accum(128) == 2
+    assert recommended_stage1_grad_accum(64) == 4
+    assert recommended_stage2_grad_accum(64) == 2
+    assert recommended_stage2_grad_accum(32) == 4
+    assert s1_ga(128, None) == 2
+    assert s1_ga(64, None) == 4
+    assert s2_ga(64, None) == 2
+    assert s2_ga(128, None) == 1
+
+    assert DEFAULT_SHARD_REPO == "Dhiraj45/laughlm-135m-shards-v2"
+    assert DEFAULT_OUTPUT_REPO == "Dhiraj45/laughlm-135m-v2"
+    assert DEFAULT_HF_REPO == "Dhiraj45/laughlm-135m-v2"
+
+    scripts_dir = Path(__file__).resolve().parents[2] / "scripts" / "laughlm"
+    for py_file in scripts_dir.glob("*.py"):
+        text = py_file.read_text(encoding="utf-8")
+        assert "adamw_torch_fused" not in text, py_file
+        assert "Dhiraj309/laughlm" not in text, py_file
+        assert "result.performance" not in text, py_file
+
+
+def test_watch_and_upload_skips_tmp_and_incomplete_dirs(tmp_path: Path):
     from scripts.laughlm.watch_and_upload import scan_completed_checkpoints
 
     (tmp_path / ".checkpoint-001.tmp.123").mkdir()
     (tmp_path / "checkpoint-001.tmp").mkdir()
-    (tmp_path / "checkpoint-001").mkdir()
+    (tmp_path / "checkpoint-002-empty").mkdir()
+    partial = tmp_path / "checkpoint-003-saving"
+    partial.mkdir()
+    (partial / "trainer_state.pt").write_bytes(b"old")
+    (partial / "trainer_state.pt.tmp").write_bytes(b"in-flight")
+
+    ready = tmp_path / "checkpoint-004"
+    ready.mkdir()
+    (ready / "trainer_state.pt").write_bytes(b"final")
+
     found = scan_completed_checkpoints(tmp_path)
-    assert [p.name for p in found] == ["checkpoint-001"]
+    assert [p.name for p in found] == ["checkpoint-004"]
+
+
+def test_laughlm_dry_runs_end_to_end_cpu():
+    pytest.importorskip("torch")
+    pytest.importorskip("transformers")
+    from scripts.laughlm import (
+        stage0_benchmark,
+        stage1_base_30b,
+        stage2_anneal_5b,
+        stage3_sft,
+        stage4_dpo,
+    )
+
+    assert stage0_benchmark.main(["--dry-run"]) == 0
+    assert stage1_base_30b.main(["--dry-run"]) == 0
+    assert stage2_anneal_5b.main(["--init-checkpoint", "synthetic", "--dry-run"]) == 0
+    assert stage3_sft.main(["--init-checkpoint", "synthetic", "--dry-run"]) == 0
+    assert stage4_dpo.main(["--init-checkpoint", "synthetic", "--dry-run"]) == 0
 
 
 def test_dpo_loss_and_sequence_logps():

@@ -70,6 +70,18 @@ tpu-pallas = [
 profiling = [
     "tensorboard>=2.18,<3",
 ]
+rocm = [
+    "accelerate>=1,<2",
+    "datasets>=3,<5",
+    "huggingface-hub>=1.5,<2",
+    "protobuf>=4",
+    "PyYAML>=6,<7",
+    "safetensors>=0.4",
+    "sentencepiece>=0.2",
+    "tokenizers>=0.21,<1",
+    "tqdm>=4.66",
+    "transformers>=5.15,<6",
+]
 dev = [
     "jsonschema>=4.23,<5",
     "pytest>=8,<10",
