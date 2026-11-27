@@ -115,12 +115,38 @@ def test_laughlm_stage_cli_parsers_and_defaults():
     assert DEFAULT_OUTPUT_REPO == "Dhiraj45/laughlm-135m-v2"
     assert DEFAULT_HF_REPO == "Dhiraj45/laughlm-135m-v2"
 
+
     scripts_dir = Path(__file__).resolve().parents[2] / "scripts" / "laughlm"
     for py_file in scripts_dir.glob("*.py"):
         text = py_file.read_text(encoding="utf-8")
         assert "adamw_torch_fused" not in text, py_file
         assert "Dhiraj309/laughlm" not in text, py_file
         assert "result.performance" not in text, py_file
+
+
+def test_discover_tpu_exported_and_dict_handled_in_detect_accelerator_kind(monkeypatch):
+    import sys
+    import types
+
+    torch = pytest.importorskip("torch")
+    from trainlm.runtime import discover_tpu
+    import trainlm.runtime as runtime_pkg
+    from scripts.laughlm.common import detect_accelerator_kind
+
+    assert callable(discover_tpu)
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    monkeypatch.setitem(sys.modules, "torch_tpu", types.ModuleType("torch_tpu"))
+    monkeypatch.setattr(
+        runtime_pkg,
+        "discover_tpu",
+        lambda *_a, **_k: {
+            "status": "available_unverified",
+            "device_type": "tpu",
+            "device_name": "TPU v5e",
+            "hbm_bytes_per_device": 16 * (1024**3),
+        },
+    )
+    assert detect_accelerator_kind() == "tpu"
 
 
 def test_watch_and_upload_skips_tmp_and_incomplete_dirs(tmp_path: Path):

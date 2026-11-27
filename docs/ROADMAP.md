@@ -3528,3 +3528,8 @@ remains pending.
 - Added unit tests in `tests/optimization/test_triton_and_pallas_kernels.py` and updated `notebooks/README.md` (CPU/CI checks only; live TPU v5e-1/v5e-8 re-benchmark pending).
 
 - Additional v5e-1/v6e-1 optimizations: registered `TPU v6e` (`918 TFLOP/s` BF16) peak + normalized TPU lookup in `performance.py`; cached `AdamWStateDtype._fast_path_verified` across steps to skip per-step Python param loops; added opt-in `pad_head_dim` (`TRAINLM_SPLASH_PAD_HEAD_DIM=1`) in `pallas_splash_attention`; enabled compiled `grad_accum > 1` microbatches on `tpu` in `trainer.py`; disabled `per_chunk` remat and enabled 512 Splash blocks on `TPU v6e` in `api.py`; updated `notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb` for both `v5e-1` and `v6e-1` (CPU/CI verified; live TPU v5e-1/v6e-1 benchmark pending).
+
+### Export `discover_tpu` from `trainlm.runtime` and fix dict access
+
+- Exported `discover_tpu` from `src/trainlm/runtime/__init__.py` (fixing `ImportError` in `notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb`, `scripts/laughlm/common.py`, and `src/trainlm/dpo.py`).
+- Updated `notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb`, `scripts/laughlm/common.py`, and `src/trainlm/dpo.py` to read dict keys (`device_name`, `hbm_bytes_per_device`, `device_type`, `status`) from `discover_tpu()` instead of attributes.

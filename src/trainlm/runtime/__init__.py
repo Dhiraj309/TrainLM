@@ -1,6 +1,7 @@
 from .base import BackendDiagnostics, ExecutionBackend, LogicalMesh, Precision
 from .runtime import Runtime, TorchRuntime
 from .torchtpu import TorchTPURuntime
+from .torchtpu_discovery import discover_tpu
 from .xla import XlaMesh, XlaRuntime
 from .accumulation import (
     AccumulationEvidence,
@@ -46,6 +47,7 @@ __all__ = [
     "AccumulationPlan",
     "AccumulationRequest",
     "AccumulationStrategy",
+    "discover_tpu",
     "select_accumulation_plan",
     "XlaDiagnostics",
     "apply_distributed_data_parallel",
