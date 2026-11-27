@@ -578,19 +578,20 @@ construction, TPU checkpoint parity, and automatic capability-based kernel
 planning remain in progress. Structured worker metrics are delivered through
 public callbacks; worker scripts and stage logs are internal details.
 
-## Verified `TPU v5e-1` Benchmarks (`db74fef`)
+## Native `TorchTPU` + Pallas Benchmarks (`TPU v5e-1`, `seq=2048`, `torch-tpu==0.2.0`)
 
-Measured on **Cloud TPU v5e-1** (`16.0 GiB` HBM, `197 TFLOP/s` BF16 peak,
-`torch==2.14.1+cpu`, `torch-tpu==0.2.0`, `libtpu==0.0.50`, `transformers==5.22.1`,
-`seq=2048`, `loss_implementation="chunked_linear"`, `optim="adamw_bf16"`,
-steady-state Windows 2+, synchronized host wait = `0.0%`):
+`LaughLM-Loop` combines a shallow Prelude + shared 4-layer Recurrent Core (looped `R=4` times for 20 effective layers with truncated BPTT) + Coda over 128-aligned geometry (`hidden_size=896`, `head_dim=128`, `vocab_size=49152`), using our custom VMEM-fused Pallas kernel `fused_recurrent_inject_rmsnorm` (`RMSNorm(h_t + sigmoid(gate) * h_0)`) and `pallas_splash_attention` to avoid the un-fused norm overhead observed on `Qwen3-0.6B`.
 
-| Model | Mode / Geometry | Batch Size | Throughput | Non-Emb MFU | Total (Logits) MFU | Status |
-| :--- | :--- | :---: | :---: | :---: | :---: | :--- |
-| `HuggingFaceTB/SmolLM2-135M` | Eager (`hidden=576`, `head_dim=64`) | 8 | `28,881.3 tok/s` | `15.57%` | `18.06%` | Verified |
-| `HuggingFaceTB/SmolLM2-135M` | Compiled (`hidden=576`, `head_dim=64`) | 8 | `54,645.4 tok/s` | `29.46%` | `34.17%` | Verified |
-| `HuggingFaceTB/SmolLM2-360M` | Compiled (`hidden=960`, `head_dim=64`) | 4 | `23,549.2 tok/s` | `31.59%` | `34.98%` | Verified |
-| `Qwen/Qwen2.5-0.5B` | Compiled (`hidden=896`, `head_dim=128`) | 2 | `24,782.6 tok/s` | `33.66%` | `43.94%` | Verified |
-| `Qwen/Qwen3-0.6B` | Compiled (`fused_rms_norm=113`, un-fused QK norm) | 2 | `11,560.0 tok/s` | `19.64%` | `25.12%` | Verified |
-| `LaughLM-Loop-135M` | Compiled (`2+4x4+2=20L`, `hidden=896`, `head_dim=128`, Pallas RecNorm + Splash) | 4 / 8 | _Pending v5e-1 run_ | _Pending_ | _Pending_ | Pending TPU run |
+Measured on **Cloud TPU v5e-1** (`16.0 GiB` HBM, `197 TFLOP/s` BF16 peak, `torch==2.14.1+cpu`, `torch-tpu==0.2.0`, `libtpu==0.0.50`, `transformers==5.22.1`, `loss_implementation="chunked_linear"`, `optim="adamw_bf16"`, steady-state Windows 2+, `wait=0.0%`):
+
+| Model | Mode | Batch Size | Throughput | Non-Logit MFU | Total MFU |
+| :--- | :--- | :---: | :---: | :---: | :---: |
+| `SmolLM2-135M` | Eager | 8 | `28,881.3 tok/s` | `15.57%` | `18.06%` |
+| `SmolLM2-135M` | Compiled | 8 | `54,645.4 tok/s` | `29.46%` | `34.17%` |
+| `SmolLM2-360M` | Compiled | 4 | `23,549.2 tok/s` | `31.59%` | `34.98%` |
+| `Qwen2.5-0.5B` | Compiled | 2 | `24,782.6 tok/s` | `33.66%` | `43.94%` |
+| `Qwen3-0.6B` | Compiled | 2 | `11,560.0 tok/s` | `19.64%` | `25.12%` |
+| `LaughLM-Loop-135M` | Compiled (`Pallas Off`, effective 20L) | 4 / 8 | _Pending Colab run_ | _Pending_ | _Pending_ |
+| `LaughLM-Loop-135M` | Compiled (`Pallas On`, `fused_recurrent_inject_rmsnorm` + Splash) | 4 / 8 | _Pending Colab run_ | _Pending_ | _Pending_ |
+
 

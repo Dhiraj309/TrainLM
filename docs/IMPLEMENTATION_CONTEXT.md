@@ -11,14 +11,20 @@ with JAX/Pallas VMEM forward+backward kernels, `TorchTPU` bridge registration,
 PyTorch FP32-accumulated fallback, and `TorchTPUKernelInventory.recurrent_norm`;
 (3) updated `calculate_causal_lm_flops` (`src/trainlm/benchmark/mfu.py`) and
 `_model_geometry` (`src/trainlm/training/performance.py`) for effective depth
-and truncated BPTT FLOP accounting; (4) added `scripts/laughlm/eval_loop_scaling.py`,
-`--arch loop` in `stage0_benchmark.py`, and `laughlm-loop-135m` entries in
+and truncated BPTT FLOP accounting; (4) wired `--arch laughlm_loop` /
+`--loop-preset {pilot-1b,trc-35b-v6e8}` / `--gcs-shard-dir` into
+`scripts/laughlm/stage1_base_30b.py`, added `scripts/laughlm/eval_loop_scaling.py`
+(supporting `--dataset-repo` & `--gcs-shard-dir`), `--arch loop` in
+`stage0_benchmark.py`, and `laughlm-loop-135m` entries in
 `notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb`; (5) added `src/trainlm/data/gcs.py`
-and `PackedBinDataset.from_gcs` / `gs://` delegation in `from_directory`. CPU/mocked
-tests added (`tests/kernels/test_recurrent_norm_pallas.py`,
-`tests/model/test_laughlm_loop.py`, `tests/data/test_gcs_shards.py`, plus MFU
-and summary suites); live `TPU v5e-1` run and Pallas TPU compilation remain
-pending owner hardware execution.
+(`gcloud storage cp`/`gsutil`/`gcsfs` staging, `.sha256` & manifest validation,
+same-region Single-Region `$0.00` egress notice) and `PackedBinDataset.from_gcs` /
+`gs://` delegation in `from_directory`; (6) documented `v5e-1` benchmarks in
+`README.md`. CPU/mocked tests added (`tests/kernels/test_recurrent_norm_pallas.py`,
+`tests/model/test_laughlm_loop.py`, `tests/data/test_gcs_shards.py`,
+`tests/data/test_gcs_bin_staging.py`, plus MFU, summary, and pipeline contract
+suites); live `TPU v5e-1` run and Pallas TPU compilation remain pending owner
+hardware execution.
 
 **Document-Isolated Varlen Sequence Packing (2026-11-23):** on branch
 `perf/58-varlen-document-packing` (from `main` `daef79c`): updated

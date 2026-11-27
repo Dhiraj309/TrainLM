@@ -9,10 +9,14 @@ Coda, anchor `h_0` residual gate, `truncated_bptt_steps` detachment, static
 compiled loop bounds, and `AutoConfig`/`AutoModelForCausalLM` registration),
 VME-fused `fused_recurrent_inject_rmsnorm` Pallas forward+backward kernel +
 PyTorch reference fallback, effective-depth + truncated-BPTT MFU accounting,
-`eval_loop_scaling.py` depth sweep CLI, zero-egress `gs://` staging in
+Stage-1 `--arch laughlm_loop` / `--loop-preset {pilot-1b,trc-35b-v6e8}` wiring
+in `stage1_base_30b.py`, `eval_loop_scaling.py` depth sweep CLI, zero-egress
+`gs://` staging (`gcloud storage`/`gsutil`/`gcsfs` fallback, `.sha256` +
+`explicit_v1` manifest checks, same-region Single-Region notice) in
 `PackedBinDataset.from_gcs`/`from_directory`, and `v5e-1` benchmark entries in
-`TrainLM_v5e1_MFU_Benchmark.ipynb` and `stage0_benchmark.py`. CPU/CI tests added;
-live `TPU v5e-1` benchmark and hardware kernel validation remain pending.
+`TrainLM_v5e1_MFU_Benchmark.ipynb`, `stage0_benchmark.py`, and `README.md`.
+CPU/CI tests added; live `TPU v5e-1` benchmark and hardware kernel validation
+remain pending.
 
 **Document-Isolated Varlen Sequence Packing (2026-11-23):** on branch
 `perf/58-varlen-document-packing` (from `main` `daef79c`): upgraded
