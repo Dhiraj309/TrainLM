@@ -1221,7 +1221,10 @@ class Trainer:
         if stateless_fn is not None:
             grads = [p.grad for p in self._compiled_stateless_opt_params]
             lr_tensors = self._lr_tensors or []
-            return stateless_fn(grads, lr_tensors)
+            grad_norm = stateless_fn(grads, lr_tensors)
+            if hasattr(self.optimizer, "_opt_called"):
+                self.optimizer._opt_called = True
+            return grad_norm
         grad_norm = None
         if self.config.trainer.max_grad_norm > 0:
             grad_norm = self.runtime.clip_gradients(
@@ -1233,7 +1236,13 @@ class Trainer:
 
     def _sync_optimizer_lr_tensors(self) -> None:
         """Keep ``group['lr']`` as persistent 0-D tensors when compiled to prevent Dynamo recompiles."""
-        if not self._compiled_lr_tensors_active():
+        if not (
+            (
+                getattr(self, "_compiled_single_step_active", False)
+                and getattr(getattr(self, "runtime", None), "compile_optimizer_in_step", True)
+            )
+            or getattr(self, "_compiled_stateless_opt_active", False)
+        ):
             return
         param_groups = getattr(self.optimizer, "param_groups", None)
         if not param_groups:
@@ -1277,7 +1286,15 @@ class Trainer:
         """Advance token-indexed schedules by cumulative consumed tokens."""
 
         if (
-            self._compiled_lr_tensors_active()
+            (
+                (
+                    getattr(self, "_compiled_single_step_active", False)
+                    and getattr(
+                        getattr(self, "runtime", None), "compile_optimizer_in_step", True
+                    )
+                )
+                or getattr(self, "_compiled_stateless_opt_active", False)
+            )
             and getattr(self, "_lr_values", None)
             and getattr(self, "_lr_tensors", None)
         ):

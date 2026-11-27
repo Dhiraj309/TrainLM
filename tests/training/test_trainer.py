@@ -882,6 +882,9 @@ def test_trainer_stateless_compiled_optimizer_matches_adamw_over_multiple_steps(
         def compile_stateless_optimizer_step(self) -> bool:
             return True
 
+        def prepare_model(self, model):
+            return model
+
         def compile_training_step(self, step_fn):
             self.compile_calls += 1
             return torch.compile(step_fn, backend="eager")
@@ -895,7 +898,16 @@ def test_trainer_stateless_compiled_optimizer_matches_adamw_over_multiple_steps(
             return super().optimizer_step(optimizer)
 
     torch.manual_seed(0)
-    cfg = GPT2Config(vocab_size=32, n_positions=16, n_embd=8, n_layer=1, n_head=2)
+    cfg = GPT2Config(
+        vocab_size=32,
+        n_positions=16,
+        n_embd=8,
+        n_layer=1,
+        n_head=2,
+        resid_pdrop=0.0,
+        embd_pdrop=0.0,
+        attn_pdrop=0.0,
+    )
     ref_model = GPT2LMHeadModel(cfg)
     test_model = deepcopy(ref_model)
 
