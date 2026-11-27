@@ -338,17 +338,26 @@ class TrainLMAttention(nn.Module):
                 self.num_key_value_groups,
             )
 
+            sdpa_mask = attention_mask
+            if sdpa_mask is not None and sdpa_mask.ndim == 2:
+                causal_mask = torch.ones(
+                    (sequence_length, sequence_length),
+                    dtype=torch.bool,
+                    device=query_states.device,
+                ).tril()
+                sdpa_mask = causal_mask[None, None, :, :] & sdpa_mask.bool()[:, None, None, :]
+
             attn_output = F.scaled_dot_product_attention(
                 query_states,
                 key_states,
                 value_states,
-                attn_mask=attention_mask,
+                attn_mask=sdpa_mask,
                 dropout_p=(
                     self.attention_dropout
                     if self.training
                     else 0.0
                 ),
-                is_causal=attention_mask is None,
+                is_causal=sdpa_mask is None,
             )
             _assert_finite(attn_output, "attention.sdpa")
 

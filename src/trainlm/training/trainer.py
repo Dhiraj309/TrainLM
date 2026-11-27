@@ -743,13 +743,12 @@ class Trainer:
         use_compiled_microbatch = (
             runtime_dev_type in {"cuda", "tpu"}
             and bool(getattr(self.runtime, "_compile_enabled", False))
-            and not self.runtime.is_distributed
             and callable(getattr(self.task, "prepare_batch_on_host", None))
             and callable(getattr(self.task, "training_step_prepared", None))
             and callable(getattr(self.runtime, "compile_training_step", None))
         )
 
-        for _ in range(microbatch_limit):
+        for micro_idx in range(microbatch_limit):
             if use_compiled_microbatch:
                 raw_batch = self._next_batch()
                 if self._can_prepare_on_host(raw_batch):
@@ -1141,12 +1140,27 @@ class Trainer:
                 )
 
         specs_tuple = tuple(group_specs)
+        needs_explicit_all_reduce = callable(
+            getattr(self.runtime, "needs_explicit_grad_all_reduce", None)
+        ) and bool(
+            self.runtime.needs_explicit_grad_all_reduce(
+                model=self.model,
+                has_training_view=getattr(self.task, "training_view", None) is not None,
+            )
+        )
+        all_reduce_fn = (
+            getattr(self.runtime, "all_reduce_gradients", None)
+            if needs_explicit_all_reduce
+            else None
+        )
 
         def _stateless_opt_step(
             grads: list[torch.Tensor],
             lr_tensors: list[torch.Tensor],
         ) -> torch.Tensor | None:
             with torch.no_grad():
+                if callable(all_reduce_fn) and grads:
+                    all_reduce_fn(grads)
                 total_norm: torch.Tensor | None = None
                 if clip_max_norm > 0.0 and grads:
                     sq_norms = [torch.sum(g.float() * g.float()) for g in grads]
@@ -1224,6 +1238,21 @@ class Trainer:
             grad_norm = stateless_fn(grads, lr_tensors)
             self.optimizer._opt_called = True
             return grad_norm
+        if callable(
+            getattr(self.runtime, "needs_explicit_grad_all_reduce", None)
+        ) and self.runtime.needs_explicit_grad_all_reduce(
+            model=self.model,
+            has_training_view=getattr(self.task, "training_view", None) is not None,
+        ):
+            all_reduce_fn = getattr(self.runtime, "all_reduce_gradients", None)
+            if callable(all_reduce_fn):
+                all_reduce_fn(
+                    [
+                        p.grad
+                        for p in self.model.parameters()
+                        if p.requires_grad and p.grad is not None
+                    ]
+                )
         grad_norm = None
         if self.config.trainer.max_grad_norm > 0:
             grad_norm = self.runtime.clip_gradients(

@@ -251,3 +251,19 @@ def test_laughlm_loop_stage1_presets_and_eval_scaling_contracts():
         assert stage1_base_30b.main(["--loop-preset", "pilot-1b", "--dry-run"]) == 0
         assert eval_loop_scaling.main(["--dry-run", "--loops", "1,2,4"]) == 0
 
+    assert stage1_base_30b.resolve_grad_accum(8, None, world_size=8) == 4
+    assert stage1_base_30b.resolve_global_batch_sequences(
+        micro_batch_size=8, grad_accum=4, world_size=8
+    ) == 256
+
+    from scripts.laughlm import launch_tpu_slice
+
+    slice_args = launch_tpu_slice.parse_args(
+        ["--gcs-shard-dir", "gs://bucket/shards"]
+    )
+    assert slice_args.nproc_per_node == 8
+    assert slice_args.arch == "laughlm_loop"
+    assert slice_args.loop_preset == "trc-35b-v6e8"
+    assert slice_args.gcs_shard_dir == "gs://bucket/shards"
+    assert launch_tpu_slice.main(["--gcs-shard-dir", "gs://bucket/shards", "--dry-run"]) == 0
+

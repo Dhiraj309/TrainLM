@@ -139,3 +139,16 @@ def test_jax_pallas_forward_and_backward_math_parity_when_jax_installed():
         np.testing.assert_allclose(np.asarray(y_pal), np.asarray(y_ref), atol=1e-5, rtol=1e-5)
         for g_pal, g_ref in zip(bwd_pal, grads_ref, strict=True):
             np.testing.assert_allclose(np.asarray(g_pal), np.asarray(g_ref), atol=1e-4, rtol=1e-4)
+
+
+def test_pallas_recurrent_norm_avoids_unsupported_scatter_primitive():
+    import inspect
+    from trainlm.kernels.pallas import recurrent_norm
+
+    for fn in (
+        recurrent_norm._pallas_recurrent_norm_fwd_2d,
+        recurrent_norm._pallas_recurrent_norm_bwd_2d,
+    ):
+        src = inspect.getsource(fn)
+        assert ".at[" not in src
+
