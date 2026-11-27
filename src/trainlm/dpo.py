@@ -284,7 +284,11 @@ class DPOTrainer:
                 if torch_tpu is not None:
                     from trainlm.runtime import discover_tpu
 
-                    if discover_tpu(torch, verify_allocation=False, include_properties=False).available:
+                    report = discover_tpu(torch, verify_allocation=False, include_properties=False)
+                    if report.get("device_type") == "tpu" and report.get("status") in {
+                        "ready",
+                        "available_unverified",
+                    }:
                         device = torch.device("tpu")
                 if device is None:
                     device = torch.device("cpu")
