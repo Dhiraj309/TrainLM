@@ -32,6 +32,8 @@ from .huggingface import (
 from .outputs import CausalLMOutput, normalize_causal_lm_output
 from .position import PositionKind, PositionSemantics, detect_position_semantics
 from .trainlm import (
+    LaughLMLoopForCausalLM,
+    LaughLMLoopModel,
     TrainLMForCausalLM,
     TrainLMModel,
     TrainLMPreTrainedModel,
@@ -48,6 +50,8 @@ __all__ = [
     "ForwardSignatureError",
     "HuggingFaceCausalLMProvider",
     "HuggingFaceModelMetadata",
+    "LaughLMLoopForCausalLM",
+    "LaughLMLoopModel",
     "LoadedCausalLM",
     "ModelCompatibilityExplanation",
     "SupportLevel",

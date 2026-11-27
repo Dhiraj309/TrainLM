@@ -3,7 +3,7 @@ Configuration package for TrainLM.
 """
 
 from .checkpoint import CheckpointConfig
-from .configuration_trainlm import TrainLMConfig
+from .configuration_trainlm import LaughLMLoopConfig, TrainLMConfig
 from .dataset import DatasetConfig, DatasetSource
 from .evaluation import EvaluationConfig
 from .loss import LossConfig
@@ -20,6 +20,7 @@ from .trainer import TrainerConfig
 from .loader import load_config
 
 __all__ = [
+    "LaughLMLoopConfig",
     "TrainLMConfig",
     "TrainConfig",
     "DatasetSource",

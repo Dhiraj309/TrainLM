@@ -23,6 +23,9 @@ def _assert_finite(
     """
     Raise an error if a floating-point tensor contains non-finite values.
     """
+    is_compiling = getattr(getattr(torch, "compiler", None), "is_compiling", None)
+    if callable(is_compiling) and is_compiling():
+        return
     if torch.is_floating_point(tensor) and not torch.isfinite(tensor).all():
         raise RuntimeError(f"Non-finite values detected in {name}.")
 

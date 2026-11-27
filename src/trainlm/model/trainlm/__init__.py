@@ -1,3 +1,7 @@
+from .loop import (
+    LaughLMLoopForCausalLM,
+    LaughLMLoopModel,
+)
 from .modeling_trainlm import (
     TrainLMForCausalLM,
     TrainLMModel,
@@ -5,6 +9,8 @@ from .modeling_trainlm import (
 )
 
 __all__ = [
+    "LaughLMLoopForCausalLM",
+    "LaughLMLoopModel",
     "TrainLMPreTrainedModel",
     "TrainLMModel",
     "TrainLMForCausalLM",

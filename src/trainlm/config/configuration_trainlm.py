@@ -203,3 +203,104 @@ class TrainLMConfig(PretrainedConfig):
             raise ValueError(
                 "TrainLM v1 requires 'hidden_act=\"silu\"'."
             )
+
+
+class LaughLMLoopConfig(TrainLMConfig):
+    """Configuration for looped-depth Prelude + Recurrent Core + Coda Causal LM."""
+
+    model_type = "trainlm_loop"
+
+    def __init__(
+        self,
+        *,
+        num_prelude_layers: int = 2,
+        num_core_layers: int = 4,
+        num_coda_layers: int = 2,
+        num_loop_iterations: int = 4,
+        train_min_loops: int = 2,
+        train_max_loops: int = 4,
+        truncated_bptt_steps: int = 4,
+        use_pallas_recurrent_norm: bool = True,
+        **kwargs,
+    ):
+        self.num_prelude_layers = int(num_prelude_layers)
+        self.num_core_layers = int(num_core_layers)
+        self.num_coda_layers = int(num_coda_layers)
+        self.num_loop_iterations = int(num_loop_iterations)
+        self.train_min_loops = int(train_min_loops)
+        self.train_max_loops = int(train_max_loops)
+        self.truncated_bptt_steps = int(truncated_bptt_steps)
+        if not isinstance(use_pallas_recurrent_norm, bool):
+            raise ValueError("'use_pallas_recurrent_norm' must be a boolean.")
+        self.use_pallas_recurrent_norm = use_pallas_recurrent_norm
+        kwargs.setdefault(
+            "num_hidden_layers",
+            self.num_prelude_layers + self.num_core_layers + self.num_coda_layers,
+        )
+        super().__init__(**kwargs)
+
+    def _validate(self) -> None:
+        super()._validate()
+        if self.num_prelude_layers < 0:
+            raise ValueError("'num_prelude_layers' must be >= 0.")
+        if self.num_core_layers <= 0:
+            raise ValueError("'num_core_layers' must be > 0.")
+        if self.num_coda_layers < 0:
+            raise ValueError("'num_coda_layers' must be >= 0.")
+        if self.num_loop_iterations <= 0:
+            raise ValueError("'num_loop_iterations' must be > 0.")
+        if self.train_min_loops <= 0:
+            raise ValueError("'train_min_loops' must be > 0.")
+        if self.train_max_loops < self.train_min_loops:
+            raise ValueError("'train_max_loops' must be >= 'train_min_loops'.")
+        if self.truncated_bptt_steps <= 0:
+            raise ValueError("'truncated_bptt_steps' must be > 0.")
+
+    def effective_num_layers(self, active_loops: int | None = None) -> int:
+        """Return total executed transformer layers for ``active_loops`` recurrent passes."""
+        loops = self.num_loop_iterations if active_loops is None else int(active_loops)
+        return self.num_prelude_layers + loops * self.num_core_layers + self.num_coda_layers
+
+    @classmethod
+    def laughlm_loop_135m(cls, **overrides) -> "LaughLMLoopConfig":
+        """111M stored / 167M non-embedding (211M total) effective-active preset for TPU v5e-1.
+
+        All projection, intermediate, vocab, and head dimensions are multiples of
+        128 (``hidden_size=896``, ``intermediate_size=2432``, ``head_dim=128``,
+        ``vocab_size=49152``) to saturate v5e-1 MXUs and activate unpadded
+        Pallas Splash Attention.
+        """
+        defaults = {
+            "vocab_size": 49152,
+            "hidden_size": 896,
+            "intermediate_size": 2432,
+            "num_attention_heads": 7,
+            "num_key_value_heads": 1,
+            "num_prelude_layers": 2,
+            "num_core_layers": 4,
+            "num_coda_layers": 2,
+            "num_loop_iterations": 4,
+            "train_min_loops": 2,
+            "train_max_loops": 4,
+            "truncated_bptt_steps": 4,
+            "use_pallas_recurrent_norm": True,
+            "max_position_embeddings": 2048,
+            "rope_theta": 100000.0,
+            "rms_norm_eps": 1e-5,
+            "tie_word_embeddings": True,
+            "use_cache": False,
+        }
+        defaults.update(overrides)
+        return cls(**defaults)
+
+
+def _register_laughlm_loop_config() -> None:
+    try:
+        from transformers import AutoConfig
+
+        AutoConfig.register(LaughLMLoopConfig.model_type, LaughLMLoopConfig, exist_ok=True)
+    except Exception:
+        pass
+
+
+_register_laughlm_loop_config()

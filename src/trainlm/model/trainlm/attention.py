@@ -17,6 +17,9 @@ def _assert_finite(
     """
     Raise an error if a floating-point tensor contains non-finite values.
     """
+    is_compiling = getattr(getattr(torch, "compiler", None), "is_compiling", None)
+    if callable(is_compiling) and is_compiling():
+        return
     if not torch.is_floating_point(tensor):
         return
 
@@ -165,6 +168,7 @@ class TrainLMAttention(nn.Module):
     ) -> None:
         super().__init__()
 
+        self.config = config
         self.hidden_size = config.hidden_size
         self.num_attention_heads = config.num_attention_heads
         self.num_key_value_heads = config.num_key_value_heads
@@ -293,37 +297,69 @@ class TrainLMAttention(nn.Module):
         _assert_finite(query_states, "attention.rotary.query")
         _assert_finite(key_states, "attention.rotary.key")
 
-        key_states = _repeat_kv(
-            key_states,
-            self.num_key_value_groups,
-        )
-        value_states = _repeat_kv(
-            value_states,
-            self.num_key_value_groups,
-        )
+        attn_impl = getattr(self.config, "_attn_implementation", None)
+        custom_attn_fn = None
+        if attention_mask is None and isinstance(attn_impl, str) and attn_impl not in {
+            "",
+            "auto",
+            "eager",
+            "sdpa",
+        }:
+            try:
+                from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
 
-        attn_output = F.scaled_dot_product_attention(
-            query_states,
-            key_states,
-            value_states,
-            attn_mask=attention_mask,
-            dropout_p=(
-                self.attention_dropout
-                if self.training
-                else 0.0
-            ),
-            is_causal=attention_mask is None,
-        )
-        _assert_finite(attn_output, "attention.sdpa")
+                custom_attn_fn = ALL_ATTENTION_FUNCTIONS.get(attn_impl)
+            except Exception:
+                custom_attn_fn = None
 
-        attn_output = (
-            attn_output.transpose(1, 2)
-            .reshape(
+        if callable(custom_attn_fn):
+            attn_output, _ = custom_attn_fn(
+                self,
+                query_states,
+                key_states,
+                value_states,
+                attention_mask=None,
+                dropout=self.attention_dropout if self.training else 0.0,
+                scaling=None,
+            )
+            _assert_finite(attn_output, "attention.custom")
+            attn_output = attn_output.reshape(
                 batch_size,
                 sequence_length,
                 self.hidden_size,
             )
-        )
+        else:
+            key_states = _repeat_kv(
+                key_states,
+                self.num_key_value_groups,
+            )
+            value_states = _repeat_kv(
+                value_states,
+                self.num_key_value_groups,
+            )
+
+            attn_output = F.scaled_dot_product_attention(
+                query_states,
+                key_states,
+                value_states,
+                attn_mask=attention_mask,
+                dropout_p=(
+                    self.attention_dropout
+                    if self.training
+                    else 0.0
+                ),
+                is_causal=attention_mask is None,
+            )
+            _assert_finite(attn_output, "attention.sdpa")
+
+            attn_output = (
+                attn_output.transpose(1, 2)
+                .reshape(
+                    batch_size,
+                    sequence_length,
+                    self.hidden_size,
+                )
+            )
 
         attn_output = self.o_proj(
             attn_output,
