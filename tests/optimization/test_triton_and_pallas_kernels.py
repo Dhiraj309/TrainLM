@@ -746,3 +746,24 @@ def test_splash_bwd_uses_vmap_and_compiled_tpu_prefers_xla_chunked_loss(monkeypa
     cl_mod.chunked_linear_causal_cross_entropy(h, w, labels, chunk_size=2)
     assert pallas_calls == [True]
 
+    # 3. pad_head_dim=True pads head_dim=64 -> 128, rescales Q, and slices back to 64.
+    monkeypatch.setattr(sa_mod, "is_pallas_splash_available", lambda: True)
+    seen_shapes: list[tuple[tuple[int, ...], float]] = []
+
+    def fake_fwd_pad(q, k, v):
+        del k, v
+        seen_shapes.append((tuple(q.shape), float(q.abs().mean().item())))
+        return q.clone(), torch.zeros(q.shape[0], q.shape[1], q.shape[2], dtype=torch.float32)
+
+    monkeypatch.setattr(sa_mod, "_build_splash_ops", lambda **kwargs: ("fake_fwd_pad", "fake_bwd_pad"))
+    monkeypatch.setattr(sa_mod, "_resolve_pallas_op", lambda name: fake_fwd_pad)
+
+    q64 = torch.ones(1, 4, 128, 64, dtype=torch.float32).as_subclass(_FakeTPUTensor)
+    k64 = torch.ones(1, 2, 128, 64, dtype=torch.float32).as_subclass(_FakeTPUTensor)
+    v64 = torch.ones(1, 2, 128, 64, dtype=torch.float32).as_subclass(_FakeTPUTensor)
+    out64 = sa_mod.pallas_splash_attention(q64, k64, v64, pad_head_dim=True)
+    assert out64.shape == (1, 128, 4, 64)
+    assert seen_shapes[0][0] == (1, 4, 128, 128)
+    # Only first 64 cols are non-zero sqrt(2), remaining 64 zero-padded -> mean = sqrt(2) / 2.
+    assert abs(seen_shapes[0][1] - (2.0 ** 0.5) / 2.0) < 1e-4
+

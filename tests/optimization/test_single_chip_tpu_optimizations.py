@@ -30,6 +30,13 @@ def test_adamw_bf16_zero_cast_fast_path() -> None:
     assert opt.state[param]["exp_avg"].dtype is torch.bfloat16
     assert opt.state[param]["exp_avg_sq"].dtype is torch.bfloat16
     assert opt._moments_match_grads_and_policy() is True
+    assert opt._fast_path_verified is False
+
+    param.grad = torch.ones_like(param)
+    opt.step()
+    assert opt._fast_path_verified is True
+    opt.load_state_dict(opt.state_dict())
+    assert opt._fast_path_verified is False
 
 
 def test_single_chip_tpu_training_args_validation() -> None:

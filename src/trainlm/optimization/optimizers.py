@@ -31,7 +31,12 @@ class AdamWStateDtype(torch.optim.AdamW):
 
     def __init__(self, *args: Any, state_policy: OptimizerStatePolicy, **kwargs: Any):
         self.state_policy = state_policy
+        self._fast_path_verified = False
         super().__init__(*args, **kwargs)
+
+    def load_state_dict(self, state_dict: dict[str, Any]) -> None:
+        self._fast_path_verified = False
+        super().load_state_dict(state_dict)
 
     def _cast_moment_state(self) -> None:
         for state in self.state.values():
@@ -97,8 +102,14 @@ class AdamWStateDtype(torch.optim.AdamW):
             and self.state_policy.nu_dtype == torch.float32
         ):
             return super().step(closure)
-        if self._moments_match_grads_and_policy():
+        if self._fast_path_verified:
             return super().step(closure)
+        if self._moments_match_grads_and_policy():
+            had_state = bool(self.state)
+            result = super().step(closure)
+            if had_state and self.state:
+                self._fast_path_verified = True
+            return result
         self._cast_moment_state()
         self._prepare_step_dtypes()
         result = super().step(closure)
