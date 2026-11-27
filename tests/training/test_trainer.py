@@ -821,13 +821,13 @@ def test_trainer_keeps_optimizer_outside_compiled_step_when_compile_optimizer_in
     model = GPT2LMHeadModel(
         GPT2Config(vocab_size=32, n_positions=16, n_embd=8, n_layer=1, n_head=2)
     )
-    optimizer = SGD(model.parameters(), lr=0.1)
-    scheduler = LambdaLR(optimizer, lr_lambda=lambda _: 1.0)
-    rows = [{"input_ids": torch.arange(8, dtype=torch.long)} for _ in range(2)]
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.1, capturable=False)
+    scheduler = LambdaLR(optimizer, lr_lambda=lambda step: 0.9**step)
+    rows = [{"input_ids": torch.arange(8, dtype=torch.long)} for _ in range(4)]
     loader = DataLoader(rows, batch_size=2)
     config = SimpleNamespace(
         trainer=SimpleNamespace(
-            max_steps=1,
+            max_steps=2,
             max_tokens=None,
             max_grad_norm=1.0,
             gradient_accumulation_steps=1,
@@ -852,6 +852,12 @@ def test_trainer_keeps_optimizer_outside_compiled_step_when_compile_optimizer_in
         "exit_compiled_step",
         "clip_gradients",
         "optimizer_step",
+        "enter_compiled_step",
+        "exit_compiled_step",
+        "clip_gradients",
+        "optimizer_step",
     ]
-    assert trainer.state.step == 1
+    assert optimizer.param_groups[0]["capturable"] is False
+    assert isinstance(optimizer.param_groups[0]["lr"], float)
+    assert trainer.state.step == 2
 
