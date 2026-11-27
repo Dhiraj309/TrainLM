@@ -1145,7 +1145,7 @@ class Trainer:
         ) and bool(
             self.runtime.needs_explicit_grad_all_reduce(
                 model=self.model,
-                has_training_view=self.task.training_view is not None,
+                has_training_view=getattr(self.task, "training_view", None) is not None,
             )
         )
         all_reduce_fn = (
@@ -1242,7 +1242,7 @@ class Trainer:
             getattr(self.runtime, "needs_explicit_grad_all_reduce", None)
         ) and self.runtime.needs_explicit_grad_all_reduce(
             model=self.model,
-            has_training_view=self.task.training_view is not None,
+            has_training_view=getattr(self.task, "training_view", None) is not None,
         ):
             all_reduce_fn = getattr(self.runtime, "all_reduce_gradients", None)
             if callable(all_reduce_fn):

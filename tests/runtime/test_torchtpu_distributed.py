@@ -67,10 +67,11 @@ def test_torchtpu_multichip_launch_init_device_and_mesh_diagnostics(monkeypatch)
     )
 
     fake_torch = SimpleNamespace(
+        Tensor=torch.Tensor,
         tpu=tpu_mod,
         distributed=dist_mod,
         accelerator=SimpleNamespace(synchronize=lambda: events.append(("synchronize",))),
-        device=lambda kind, idx=None: (kind, idx) if idx is not None else kind,
+        device=lambda kind, idx=None: SimpleNamespace(type=kind, index=idx),
         manual_seed=lambda s: events.append(("seed", s)),
     )
 
@@ -84,7 +85,7 @@ def test_torchtpu_multichip_launch_init_device_and_mesh_diagnostics(monkeypatch)
     assert events.index(("set_tpu_launch_env",)) < events.index(
         ("init_process_group", "tpu", 8, 3)
     )
-    assert runtime.device == ("tpu", 3)
+    assert runtime.device.type == "tpu" and runtime.device.index == 3
     assert runtime.world_size == 8
     assert runtime.rank == 3
     assert runtime.local_rank == 3
@@ -110,6 +111,7 @@ def test_torchtpu_explicit_grad_all_reduce_and_resume_validation(monkeypatch):
         native_runtime,
         "torch",
         SimpleNamespace(
+            Tensor=torch.Tensor,
             tpu=SimpleNamespace(set_rng_state=lambda _s: None),
             distributed=SimpleNamespace(
                 ReduceOp=SimpleNamespace(SUM="SUM"),
