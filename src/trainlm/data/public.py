@@ -115,6 +115,7 @@ class PackedBinDataset(IterableDataset):
         manifest_pattern: str = "*.manifest.json",
         cache_dir: str | Path | None = None,
         max_shards: int | None = None,
+        shard_range: tuple[int, int] | range | None = None,
         header_bytes: int = 1024,
         vocab_size: int = 32011,
         filesystem: Any = None,
@@ -123,16 +124,27 @@ class PackedBinDataset(IterableDataset):
         **partition: Any,
     ) -> "PackedBinDataset":
         """Stage and mmap packed shards from a same-region ``gs://bucket/prefix`` URI."""
+        indices = cls._shard_indices(shard_range) if shard_range is not None else None
+        stage_limit = max_shards
+        if indices is not None:
+            needed = max(indices) + 1
+            stage_limit = needed if stage_limit is None else max(stage_limit, needed)
         local_root = stage_gcs_prefix(
             gcs_uri,
             cache_dir=cache_dir,
-            max_shards=max_shards,
+            max_shards=stage_limit,
             filesystem=filesystem,
             runner=runner,
             which=which,
         )
         manifest_files = tuple(sorted(local_root.rglob(manifest_pattern)))
         if manifest_files:
+            if indices is not None:
+                if max(indices) >= len(manifest_files):
+                    raise ValueError(
+                        f"shard_range {shard_range!r} out of bounds for {len(manifest_files)} staged shards."
+                    )
+                manifest_files = tuple(manifest_files[i] for i in indices)
             if max_shards is not None:
                 manifest_files = manifest_files[:max_shards]
             shards = tuple(
@@ -140,6 +152,12 @@ class PackedBinDataset(IterableDataset):
             )
         else:
             bin_files = tuple(sorted(local_root.rglob("*.bin")))
+            if indices is not None:
+                if max(indices) >= len(bin_files):
+                    raise ValueError(
+                        f"shard_range {shard_range!r} out of bounds for {len(bin_files)} staged shards."
+                    )
+                bin_files = tuple(bin_files[i] for i in indices)
             if max_shards is not None:
                 bin_files = bin_files[:max_shards]
             if not bin_files:
@@ -197,7 +215,8 @@ class PackedBinDataset(IterableDataset):
         Passing ``subfolder`` auto-discovers sorted ``*.bin`` files under that
         directory (for example ``stage1`` or ``stage2``) and derives each shard's
         ``token_count`` from ``file_size // 2``. ``max_shards`` limits downloads
-        for single-shard ablations.
+        for single-shard ablations, and ``shard_range`` selects an end-exclusive
+        slice of discovered or templated shards.
         """
         if isinstance(source, HuggingFaceShardSourceConfig):
             if revision is not None or shard_range is not None or subfolder is not None or max_shards is not None:
@@ -252,13 +271,26 @@ class PackedBinDataset(IterableDataset):
         )
         if subfolder is not None:
             if shard_range is not None:
-                raise ValueError("Specify either subfolder or shard_range, not both.")
-            filenames = discover_hub_subfolder_bins(
-                repo_id,
-                subfolder=subfolder,
-                revision=resolved_revision,
-                max_shards=max_shards,
-            )
+                all_bins = discover_hub_subfolder_bins(
+                    repo_id,
+                    subfolder=subfolder,
+                    revision=resolved_revision,
+                    max_shards=None,
+                )
+                indices = cls._shard_indices(shard_range)
+                if max(indices) >= len(all_bins):
+                    raise ValueError(
+                        f"shard_range {shard_range!r} out of bounds for {len(all_bins)} shards under '{subfolder}'."
+                    )
+                selected = tuple(all_bins[i] for i in indices)
+                filenames = selected[:max_shards] if max_shards is not None else selected
+            else:
+                filenames = discover_hub_subfolder_bins(
+                    repo_id,
+                    subfolder=subfolder,
+                    revision=resolved_revision,
+                    max_shards=max_shards,
+                )
         else:
             if shard_range is None:
                 raise ValueError(

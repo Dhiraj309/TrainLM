@@ -50,6 +50,7 @@ class TrainLMPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules: list[str] = ["TrainLMDecoderLayer"]
     _supports_flash_attn_2 = False
+    _supports_sdpa = True
 
     def _init_weights(self, module: nn.Module) -> None:
         """

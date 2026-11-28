@@ -198,6 +198,43 @@ def test_hub_bin_range_downloads_and_validates_end_to_end(tmp_path, monkeypatch)
     dataset.close()
 
 
+def test_hub_subfolder_with_shard_range_selects_non_overlapping_slice(tmp_path, monkeypatch):
+    revision = "b" * 40
+    files = {}
+    for index, tokens in enumerate(([1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12])):
+        path = tmp_path / f"stream_stage1_w00_shard_{index:05d}.bin"
+        path.write_bytes(struct.pack("<4H", *tokens))
+        files[f"stage1/stream_stage1_w00_shard_{index:05d}.bin"] = path
+    downloads = []
+
+    monkeypatch.setattr(
+        "trainlm.data.public._resolve_hub_revision",
+        lambda repo_id, requested, local_files_only: revision,
+    )
+    monkeypatch.setattr(
+        "trainlm.data.public.discover_hub_subfolder_bins",
+        lambda repo_id, subfolder, revision, max_shards=None: tuple(sorted(files.keys())),
+    )
+
+    def download(**kwargs):
+        downloads.append(kwargs["filename"])
+        return files[kwargs["filename"]]
+
+    monkeypatch.setattr("trainlm.data.public._download_hub_file", download)
+
+    dataset = PackedBinDataset.from_hub(
+        "Dhiraj45/laughlm-135m-shards-v2",
+        subfolder="stage1",
+        shard_range=(2, 3),
+        sequence_length=4,
+        header_bytes=0,
+        vocab_size=32,
+    )
+    assert downloads == ["stage1/stream_stage1_w00_shard_00002.bin"]
+    assert [tuple(ex["input_ids"].tolist()) for ex in dataset] == [(9, 10, 11, 12)]
+    dataset.close()
+
+
 @pytest.mark.parametrize("shard_range", [(2, 2), (-1, 2), range(0, 3, 2)])
 def test_hub_bin_range_rejects_invalid_ranges(shard_range):
     with pytest.raises((TypeError, ValueError), match="shard_range"):

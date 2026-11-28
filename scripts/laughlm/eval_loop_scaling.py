@@ -14,6 +14,12 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 
+from scripts.laughlm.common import (
+    configure_preimport_tpu_compile_cache,
+    resolve_shard_range,
+)
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Evaluate validation loss, perplexity, and tok/s across LaughLM-Loop depths."
@@ -22,14 +28,52 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--repo-id", "--dataset-repo", dest="repo_id", default=None, help="Optional shard Hub dataset repo for eval.")
     parser.add_argument("--gcs-shard-dir", default=None, help="Optional same-region gs://bucket/prefix validation shard directory.")
     parser.add_argument("--cache-dir", default=None, help="Optional local cache dir for gs:// staging.")
+    parser.add_argument(
+        "--compile-cache-dir",
+        default=None,
+        help="XLA/TorchTPU Tier-3 compilation cache directory or gs:// URI exported before PJRT init.",
+    )
     parser.add_argument("--subfolder", default="stage1")
     parser.add_argument("--max-shards", type=int, default=1)
+    parser.add_argument(
+        "--shard-start",
+        "--eval-shard-start",
+        dest="shard_start",
+        type=int,
+        default=0,
+        help="Inclusive held-out eval start shard index.",
+    )
+    parser.add_argument(
+        "--shard-stop",
+        "--eval-shard-stop",
+        dest="shard_stop",
+        type=int,
+        default=None,
+        help="Exclusive held-out eval stop shard index.",
+    )
     parser.add_argument("--seq-len", type=int, default=2048)
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--max-eval-batches", type=int, default=16)
     parser.add_argument("--loops", default="1,2,4,6,8")
     parser.add_argument("--dry-run", action="store_true", help="Run synthetic CPU loop-scaling check.")
-    return parser.parse_args(argv)
+    ns = parser.parse_args(argv)
+    ns.shard_range = resolve_shard_range(ns.shard_start, ns.shard_stop, ns.max_shards)
+    return ns
+
+
+def _synchronize_device(device) -> None:
+    """Synchronize accelerator execution using public PyTorch APIs."""
+    import torch
+
+    if getattr(device, "type", "cpu") == "cpu":
+        return
+    accel_mod = getattr(torch, "accelerator", None)
+    sync_fn = getattr(accel_mod, "synchronize", None)
+    if callable(sync_fn):
+        sync_fn()
+        return
+    if getattr(device, "type", None) == "cuda":
+        torch.cuda.synchronize()
 
 
 def _evaluate_loop_depths(
@@ -48,6 +92,7 @@ def _evaluate_loop_depths(
     for num_loops in loops_list:
         total_loss = 0.0
         total_tokens = 0
+        _synchronize_device(device)
         t0 = time.perf_counter()
         with torch.no_grad():
             for batch in batches:
@@ -66,12 +111,7 @@ def _evaluate_loop_depths(
                 )
                 total_loss += float(loss.item())
                 total_tokens += batch_tokens
-        if device.type == "cuda":
-            torch.cuda.synchronize()
-        elif device.type == "tpu":
-            sync = getattr(getattr(torch, "tpu", None), "synchronize", None)
-            if callable(sync):
-                sync()
+        _synchronize_device(device)
         elapsed = max(1e-9, time.perf_counter() - t0)
         mean_loss = total_loss / max(1, total_tokens)
         ppl = math.exp(min(mean_loss, 20.0))
@@ -136,24 +176,35 @@ def main(argv: list[str] | None = None) -> int:
     if not args.checkpoint:
         raise ValueError("--checkpoint is required unless --dry-run is set.")
 
+    configure_preimport_tpu_compile_cache(args.compile_cache_dir)
+
     import torch
     from trainlm.data import PackedBinDataset
     from trainlm.model import LaughLMLoopForCausalLM
     from scripts.laughlm.common import VOCAB_SIZE, detect_accelerator_kind
 
     accel = detect_accelerator_kind()
+    if accel == "tpu":
+        import torch_tpu  # noqa: F401, PLC0415
+
     device = torch.device("cuda" if accel == "cuda" else ("tpu" if accel == "tpu" else "cpu"))
     dtype = torch.bfloat16 if device.type in {"cuda", "tpu"} else torch.float32
     model = LaughLMLoopForCausalLM.from_pretrained(args.checkpoint).to(device=device, dtype=dtype)
+
+    shard_kwargs: dict[str, object] = {}
+    if args.shard_range is not None:
+        shard_kwargs["shard_range"] = args.shard_range
+    elif args.max_shards is not None:
+        shard_kwargs["max_shards"] = args.max_shards
 
     if args.gcs_shard_dir:
         ds = PackedBinDataset.from_gcs(
             args.gcs_shard_dir,
             cache_dir=args.cache_dir,
-            max_shards=args.max_shards,
             sequence_length=args.seq_len,
             header_bytes=0,
             vocab_size=int(model.config.vocab_size),
+            **shard_kwargs,
         )
         loader = torch.utils.data.DataLoader(ds, batch_size=args.batch_size)
         batches = []
@@ -165,10 +216,10 @@ def main(argv: list[str] | None = None) -> int:
         ds = PackedBinDataset.from_hub(
             args.repo_id,
             subfolder=args.subfolder,
-            max_shards=args.max_shards,
             sequence_length=args.seq_len,
             header_bytes=0,
             vocab_size=int(model.config.vocab_size),
+            **shard_kwargs,
         )
         loader = torch.utils.data.DataLoader(ds, batch_size=args.batch_size)
         batches = []

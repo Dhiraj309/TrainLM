@@ -221,6 +221,8 @@ class LaughLMLoopConfig(TrainLMConfig):
         train_max_loops: int = 4,
         truncated_bptt_steps: int = 4,
         use_pallas_recurrent_norm: bool = True,
+        deep_init_scale: bool = False,
+        loop_depth_schedule: tuple[int, ...] | list[int] | str | None = None,
         **kwargs,
     ):
         self.num_prelude_layers = int(num_prelude_layers)
@@ -233,6 +235,15 @@ class LaughLMLoopConfig(TrainLMConfig):
         if not isinstance(use_pallas_recurrent_norm, bool):
             raise ValueError("'use_pallas_recurrent_norm' must be a boolean.")
         self.use_pallas_recurrent_norm = use_pallas_recurrent_norm
+        if not isinstance(deep_init_scale, bool):
+            raise ValueError("'deep_init_scale' must be a boolean.")
+        self.deep_init_scale = deep_init_scale
+        if isinstance(loop_depth_schedule, str):
+            parts = [p.strip() for p in loop_depth_schedule.split(",") if p.strip()]
+            loop_depth_schedule = tuple(int(p) for p in parts)
+        elif isinstance(loop_depth_schedule, list):
+            loop_depth_schedule = tuple(loop_depth_schedule)
+        self.loop_depth_schedule = loop_depth_schedule
         kwargs.setdefault(
             "num_hidden_layers",
             self.num_prelude_layers + self.num_core_layers + self.num_coda_layers,
@@ -255,6 +266,15 @@ class LaughLMLoopConfig(TrainLMConfig):
             raise ValueError("'train_max_loops' must be >= 'train_min_loops'.")
         if self.truncated_bptt_steps <= 0:
             raise ValueError("'truncated_bptt_steps' must be > 0.")
+        if self.loop_depth_schedule is not None:
+            if not isinstance(self.loop_depth_schedule, tuple) or not self.loop_depth_schedule:
+                raise ValueError("'loop_depth_schedule' must be a non-empty sequence of positive ints.")
+            if any(isinstance(v, bool) or not isinstance(v, int) or v <= 0 for v in self.loop_depth_schedule):
+                raise ValueError("'loop_depth_schedule' entries must be positive integers.")
+            if len(set(self.loop_depth_schedule)) > 6:
+                raise ValueError(
+                    "'loop_depth_schedule' supports at most 6 unique depths to bound XLA compilation cache."
+                )
 
     def effective_num_layers(self, active_loops: int | None = None) -> int:
         """Return total executed transformer layers for ``active_loops`` recurrent passes."""

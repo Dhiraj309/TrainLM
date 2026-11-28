@@ -94,6 +94,8 @@ def build_135m_loop_config(
     max_position_embeddings: int = 2048,
     rope_theta: float = 100000.0,
     use_pallas_recurrent_norm: bool = True,
+    deep_init_scale: bool = False,
+    loop_depth_schedule: tuple[int, ...] | None = None,
 ) -> Any:
     """Return the LaughLM-Loop-135M preset aligned for v5e-1 MXUs."""
     from trainlm.config import LaughLMLoopConfig
@@ -102,6 +104,8 @@ def build_135m_loop_config(
         max_position_embeddings=max_position_embeddings,
         rope_theta=rope_theta,
         use_pallas_recurrent_norm=use_pallas_recurrent_norm,
+        deep_init_scale=deep_init_scale,
+        loop_depth_schedule=loop_depth_schedule,
     )
 
 
@@ -111,6 +115,8 @@ def load_or_init_loop_135m_model(
     max_position_embeddings: int = 2048,
     rope_theta: float = 100000.0,
     use_pallas_recurrent_norm: bool = True,
+    deep_init_scale: bool = False,
+    loop_depth_schedule: tuple[int, ...] | None = None,
 ) -> Any:
     """Initialize a fresh LaughLM-Loop-135M model or load from checkpoint."""
     from trainlm.model import LaughLMLoopForCausalLM
@@ -120,6 +126,8 @@ def load_or_init_loop_135m_model(
         model_dir = ckpt_path / "model" if (ckpt_path / "model").is_dir() else ckpt_path
         model = LaughLMLoopForCausalLM.from_pretrained(str(model_dir))
         model.config.use_pallas_recurrent_norm = bool(use_pallas_recurrent_norm)
+        if loop_depth_schedule is not None:
+            model.config.loop_depth_schedule = tuple(loop_depth_schedule)
         model.config.use_cache = False
         return model
 
@@ -127,6 +135,8 @@ def load_or_init_loop_135m_model(
         max_position_embeddings=max_position_embeddings,
         rope_theta=rope_theta,
         use_pallas_recurrent_norm=use_pallas_recurrent_norm,
+        deep_init_scale=deep_init_scale,
+        loop_depth_schedule=loop_depth_schedule,
     )
     return LaughLMLoopForCausalLM(cfg)
 
@@ -241,3 +251,86 @@ def atomic_save_model_snapshot(model: Any, tokenizer: Any | None, target_dir: Pa
         shutil.rmtree(tmp_dir, ignore_errors=True)
         raise
     return target_dir
+
+
+def extract_cli_option(argv: list[str] | None, names: tuple[str, ...]) -> str | None:
+    """Read an option value from ``argv`` without importing heavy ML packages."""
+    if not argv:
+        return None
+    for idx, token in enumerate(argv):
+        for name in names:
+            if token == name and idx + 1 < len(argv):
+                return argv[idx + 1]
+            if token.startswith(f"{name}="):
+                return token.split("=", 1)[1]
+    return None
+
+
+def configure_preimport_tpu_compile_cache(
+    cache_dir: str | Path | None = None,
+    *,
+    base_env: dict[str, str] | None = None,
+) -> dict[str, str]:
+    """Export XLA/Tier-3 compile cache env vars before importing ``torch`` or ``torch_tpu``."""
+    env = os.environ if base_env is None else base_env
+    raw = (
+        str(cache_dir).strip()
+        if cache_dir is not None and str(cache_dir).strip()
+        else (
+            env.get("TORCH_TPU_TIER3_COMPILATION_CACHE_ROOT")
+            or env.get("XLA_COMPILATION_CACHE_PATH")
+            or env.get("TORCH_TPU_CACHE_DIR")
+            or str(Path.home() / ".cache" / "trainlm" / "tpu_compile")
+        )
+    )
+    if raw.startswith("gs://"):
+        resolved = raw
+    else:
+        path = Path(raw).expanduser()
+        path.mkdir(parents=True, exist_ok=True)
+        resolved = str(path)
+    env.setdefault("TORCH_TPU_CACHE_DIR", resolved)
+    env.setdefault("TORCH_TPU_TIER3_COMPILATION_CACHE_ROOT", resolved)
+    env.setdefault("XLA_COMPILATION_CACHE_PATH", resolved)
+    return env
+
+
+def resolve_shard_range(
+    shard_start: int = 0,
+    shard_stop: int | None = None,
+    max_shards: int | None = None,
+) -> tuple[int, int] | None:
+    """Resolve end-exclusive ``(start, stop)`` shard indices while preserving ``--max-shards``."""
+    if isinstance(shard_start, bool) or not isinstance(shard_start, int) or shard_start < 0:
+        raise ValueError("shard_start must be a non-negative integer.")
+    if shard_stop is not None:
+        if isinstance(shard_stop, bool) or not isinstance(shard_stop, int) or shard_stop <= shard_start:
+            raise ValueError("shard_stop must be greater than shard_start.")
+        return (shard_start, shard_stop)
+    if max_shards is not None:
+        if isinstance(max_shards, bool) or not isinstance(max_shards, int) or max_shards < 1:
+            raise ValueError("max_shards must be a positive integer.")
+        if shard_start > 0:
+            return (shard_start, shard_start + max_shards)
+        return None
+    if shard_start > 0:
+        raise ValueError("Specify --shard-stop or --max-shards when --shard-start > 0.")
+    return None
+
+
+def parse_loop_depth_schedule(raw: str | None) -> tuple[int, ...] | None:
+    """Parse comma-separated loop depths (e.g. ``'2,4,4,6'``) with static cache bounds."""
+    if raw is None:
+        return None
+    parts = [part.strip() for part in str(raw).split(",") if part.strip()]
+    if not parts:
+        raise ValueError("loop_depth_schedule cannot be empty.")
+    values = tuple(int(part) for part in parts)
+    if any(value <= 0 for value in values):
+        raise ValueError("loop_depth_schedule values must be positive integers.")
+    if len(set(values)) > 6:
+        raise ValueError(
+            "loop_depth_schedule supports at most 6 unique depths to bound XLA compilation cache."
+        )
+    return values
+

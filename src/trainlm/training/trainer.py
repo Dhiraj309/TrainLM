@@ -24,6 +24,20 @@ from .loss import Loss
 from .state import TrainerPhase, TrainerState
 
 
+def resolve_scheduled_num_loops(
+    schedule: Sequence[int] | None,
+    *,
+    step: int,
+    micro_idx: int,
+    grad_accum: int,
+) -> int | None:
+    """Resolve deterministic host-side active loop count for DDP-lockstep cycling."""
+    if not schedule:
+        return None
+    idx = (int(step) * max(1, int(grad_accum)) + int(micro_idx)) % len(schedule)
+    return int(schedule[idx])
+
+
 class Trainer:
     """Coordinates the end-to-end training lifecycle."""
 
@@ -102,8 +116,10 @@ class Trainer:
         self._global_tokens_seen: int | None = None
         self._epoch_end_pending = False
         self._compiled_single_step_fn = None
+        self._compiled_single_step_fns: dict[int | None, Any] = {}
         self._compiled_single_step_active = False
         self._compiled_microbatch_step_fn = None
+        self._compiled_microbatch_step_fns: dict[int | None, Any] = {}
         self._compiled_microbatch_step_active = False
         self._compiled_stateless_opt_fn = None
         self._compiled_stateless_opt_active = False
@@ -686,6 +702,7 @@ class Trainer:
             )
             microbatch_limit = min(microbatch_limit, batches_to_epoch_end)
 
+        loop_schedule = getattr(self.config.trainer, "loop_depth_schedule", None)
         if (
             microbatch_limit == 1
             and not self.runtime.is_distributed
@@ -709,7 +726,13 @@ class Trainer:
                     if self._global_tokens_seen is None:
                         raise RuntimeError("Global token budget was not initialized.")
                     self._global_tokens_seen += global_microbatch_tokens
-                step_fn = self._resolve_single_step_fn()
+                active_loops = resolve_scheduled_num_loops(
+                    loop_schedule,
+                    step=self.state.step,
+                    micro_idx=0,
+                    grad_accum=accumulation_steps,
+                )
+                step_fn = self._resolve_single_step_fn(num_loops=active_loops)
                 task_batch = self.runtime.prepare_batch(task_batch)
                 mean_loss, grad_norm = step_fn(task_batch, counts)
                 if not getattr(self.runtime, "compile_optimizer_in_step", True):
@@ -749,6 +772,12 @@ class Trainer:
         )
 
         for micro_idx in range(microbatch_limit):
+            active_loops = resolve_scheduled_num_loops(
+                loop_schedule,
+                step=self.state.step,
+                micro_idx=micro_idx,
+                grad_accum=accumulation_steps,
+            )
             if use_compiled_microbatch:
                 raw_batch = self._next_batch()
                 if self._can_prepare_on_host(raw_batch):
@@ -772,7 +801,7 @@ class Trainer:
                                 raise RuntimeError("Global token budget was not initialized.")
                             self._global_tokens_seen += global_microbatch_tokens
                             stop_after_microbatch = self._global_tokens_seen >= max_tokens
-                        microbatch_fn = self._resolve_microbatch_step_fn()
+                        microbatch_fn = self._resolve_microbatch_step_fn(num_loops=active_loops)
                         task_batch = self.runtime.prepare_batch(task_batch)
                         detached_weighted_loss = microbatch_fn(task_batch, counts)
                         total_tokens += token_count
@@ -787,11 +816,19 @@ class Trainer:
                         continue
                 self._train_iterator = self._prepend_batch(raw_batch)
 
-            result = self.task.training_step(
-                self.model,
-                self._next_batch(),
-                self.runtime,
-            )
+            if active_loops is not None:
+                result = self.task.training_step(
+                    self.model,
+                    self._next_batch(),
+                    self.runtime,
+                    num_loops=active_loops,
+                )
+            else:
+                result = self.task.training_step(
+                    self.model,
+                    self._next_batch(),
+                    self.runtime,
+                )
             self.state.micro_step += 1
             if self._train_batches_per_epoch:
                 self.state.epoch = (
@@ -939,13 +976,18 @@ class Trainer:
         assert self._train_iterator is not None
         return chain((raw_batch,), self._train_iterator)
 
-    def _resolve_single_step_fn(self):
-        if self._compiled_single_step_fn is not None:
+    def _resolve_single_step_fn(self, *, num_loops: int | None = None):
+        key = int(num_loops) if num_loops is not None else None
+        if key is None and self._compiled_single_step_fn is not None:
             return self._compiled_single_step_fn
+        cached = self._compiled_single_step_fns.get(key)
+        if cached is not None:
+            return cached
 
         include_optimizer = bool(
             getattr(self.runtime, "compile_optimizer_in_step", True)
         )
+        static_loops = key
 
         def _single_step_tensors(task_batch, counts):
             step_model = (
@@ -953,12 +995,21 @@ class Trainer:
                 if self._compiled_single_step_active
                 else self.model
             )
-            result = self.task.training_step_prepared(
-                step_model,
-                task_batch,
-                counts,
-                self.runtime,
-            )
+            if static_loops is not None:
+                result = self.task.training_step_prepared(
+                    step_model,
+                    task_batch,
+                    counts,
+                    self.runtime,
+                    num_loops=static_loops,
+                )
+            else:
+                result = self.task.training_step_prepared(
+                    step_model,
+                    task_batch,
+                    counts,
+                    self.runtime,
+                )
             self.runtime.backward(result.loss)
             grad_norm = None
             if include_optimizer:
@@ -974,17 +1025,25 @@ class Trainer:
         if callable(compile_fn):
             compiled = compile_fn(_single_step_tensors)
             self._compiled_single_step_active = compiled is not _single_step_tensors
-            self._compiled_single_step_fn = compiled
         else:
             self._compiled_single_step_active = False
-            self._compiled_single_step_fn = _single_step_tensors
+            compiled = _single_step_tensors
+        self._compiled_single_step_fns[key] = compiled
+        if key is None:
+            self._compiled_single_step_fn = compiled
         if self._compiled_single_step_active and include_optimizer:
             self._sync_optimizer_lr_tensors()
-        return self._compiled_single_step_fn
+        return compiled
 
-    def _resolve_microbatch_step_fn(self):
-        if self._compiled_microbatch_step_fn is not None:
+    def _resolve_microbatch_step_fn(self, *, num_loops: int | None = None):
+        key = int(num_loops) if num_loops is not None else None
+        if key is None and self._compiled_microbatch_step_fn is not None:
             return self._compiled_microbatch_step_fn
+        cached = self._compiled_microbatch_step_fns.get(key)
+        if cached is not None:
+            return cached
+
+        static_loops = key
 
         def _microbatch_step_tensors(task_batch, counts):
             step_model = (
@@ -992,12 +1051,21 @@ class Trainer:
                 if self._compiled_microbatch_step_active
                 else self.model
             )
-            result = self.task.training_step_prepared(
-                step_model,
-                task_batch,
-                counts,
-                self.runtime,
-            )
+            if static_loops is not None:
+                result = self.task.training_step_prepared(
+                    step_model,
+                    task_batch,
+                    counts,
+                    self.runtime,
+                    num_loops=static_loops,
+                )
+            else:
+                result = self.task.training_step_prepared(
+                    step_model,
+                    task_batch,
+                    counts,
+                    self.runtime,
+                )
             weighted_loss = result.loss * counts.supervised_tokens
             self.runtime.backward(weighted_loss)
             return weighted_loss.detach()
@@ -1006,11 +1074,13 @@ class Trainer:
         if callable(compile_fn):
             compiled = compile_fn(_microbatch_step_tensors)
             self._compiled_microbatch_step_active = compiled is not _microbatch_step_tensors
-            self._compiled_microbatch_step_fn = compiled
         else:
             self._compiled_microbatch_step_active = False
-            self._compiled_microbatch_step_fn = _microbatch_step_tensors
-        return self._compiled_microbatch_step_fn
+            compiled = _microbatch_step_tensors
+        self._compiled_microbatch_step_fns[key] = compiled
+        if key is None:
+            self._compiled_microbatch_step_fn = compiled
+        return compiled
 
     def _compiled_lr_tensors_active(self) -> bool:
         return bool(

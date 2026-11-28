@@ -45,6 +45,10 @@ class TrainerConfig:
     # evaluation and checkpoint actions run at an exact epoch end.
     stop_at_epoch_end: bool = False
 
+    # Optional deterministic cyclic schedule of loop depths evaluated host-side
+    # across microbatches so DDP ranks stay lockstep with bounded compiled graphs.
+    loop_depth_schedule: tuple[int, ...] | None = None
+
     def __post_init__(self) -> None:
         if not isinstance(self.stop_at_epoch_end, bool):
             raise ValueError("stop_at_epoch_end must be a boolean.")
@@ -79,3 +83,19 @@ class TrainerConfig:
             or self.seed < 0
         ):
             raise ValueError("seed must be non-negative.")
+        if self.loop_depth_schedule is not None:
+            if not isinstance(self.loop_depth_schedule, tuple) or not self.loop_depth_schedule:
+                raise ValueError(
+                    "loop_depth_schedule must be a non-empty tuple of positive ints."
+                )
+            if any(
+                isinstance(value, bool) or not isinstance(value, int) or value <= 0
+                for value in self.loop_depth_schedule
+            ):
+                raise ValueError(
+                    "loop_depth_schedule entries must be positive integers."
+                )
+            if len(set(self.loop_depth_schedule)) > 6:
+                raise ValueError(
+                    "loop_depth_schedule supports at most 6 unique depths to bound XLA compilation cache."
+                )

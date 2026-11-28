@@ -555,10 +555,32 @@ class TrainLMTrainingArguments:
         "max-autotune",
         "max-autotune-no-cudagraphs",
     ] = "default"
+    loop_depth_schedule: tuple[int, ...] | list[int] | None = None
 
     def __post_init__(self) -> None:
         if isinstance(self.betas, list):
             object.__setattr__(self, "betas", tuple(self.betas))
+        if isinstance(self.loop_depth_schedule, list):
+            object.__setattr__(self, "loop_depth_schedule", tuple(self.loop_depth_schedule))
+        if self.loop_depth_schedule is not None:
+            if (
+                not isinstance(self.loop_depth_schedule, tuple)
+                or not self.loop_depth_schedule
+            ):
+                raise ValueError(
+                    "loop_depth_schedule must be a non-empty sequence of positive ints."
+                )
+            if any(
+                isinstance(value, bool) or not isinstance(value, int) or value <= 0
+                for value in self.loop_depth_schedule
+            ):
+                raise ValueError(
+                    "loop_depth_schedule entries must be positive integers."
+                )
+            if len(set(self.loop_depth_schedule)) > 6:
+                raise ValueError(
+                    "loop_depth_schedule supports at most 6 unique depths to bound XLA compilation cache."
+                )
         if (
             self.use_liger_kernel != "auto"
             and not isinstance(self.use_liger_kernel, bool)
@@ -2035,18 +2057,24 @@ class TrainLMTrainer:
         warmup_fraction = 0.0
         stable_fraction = 1.0
         if self.args.lr_scheduler_type == "wsd":
+            tokens_per_step = (
+                self.args.per_device_train_batch_size
+                * self.args.gradient_accumulation_steps
+                * max(1, self.args.sequence_length)
+            )
             if self.args.max_tokens is not None:
                 horizon_tokens = self.args.max_tokens
             else:
                 steps = horizon_steps or 1
-                tokens_per_step = (
-                    self.args.per_device_train_batch_size
-                    * self.args.gradient_accumulation_steps
-                    * max(1, self.args.sequence_length)
-                )
                 horizon_tokens = max(1, steps * tokens_per_step)
-            if self.args.warmup_steps > 0 and horizon_steps:
-                warmup_fraction = min(1.0, self.args.warmup_steps / horizon_steps)
+            world = max(1, int(getattr(getattr(self, "runtime", None), "world_size", 1) or 1))
+            effective_horizon_steps = (
+                self._effective_max_steps
+                if self._effective_max_steps is not None
+                else max(1, math.ceil(horizon_tokens / max(1, tokens_per_step * world)))
+            )
+            if self.args.warmup_steps > 0 and effective_horizon_steps:
+                warmup_fraction = min(1.0, self.args.warmup_steps / effective_horizon_steps)
                 stable_fraction = max(0.0, 1.0 - warmup_fraction)
             if self.args.wsd_stable_fraction is not None:
                 stable_fraction = min(
@@ -2097,6 +2125,15 @@ class TrainLMTrainer:
                 materialize_loss_every_steps=self.args.logging_steps,
                 max_grad_norm=self.args.max_grad_norm,
                 seed=self.args.seed,
+                loop_depth_schedule=(
+                    self.args.loop_depth_schedule
+                    if self.args.loop_depth_schedule is not None
+                    else getattr(
+                        getattr(self.model, "config", None),
+                        "loop_depth_schedule",
+                        None,
+                    )
+                ),
             ),
             checkpoint=CheckpointConfig(
                 output_dir=Path(self.args.output_dir),
@@ -2490,6 +2527,8 @@ class TrainLMTrainer:
             training_args.pop("early_stopping_threshold", None)
         if self.args.max_grad_norm == 1.0:
             training_args.pop("max_grad_norm", None)
+        if self.args.loop_depth_schedule is None:
+            training_args.pop("loop_depth_schedule", None)
         model_config = getattr(self.model, "config", None)
         model_config_dict = (
             model_config.to_dict()
