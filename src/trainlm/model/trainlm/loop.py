@@ -57,8 +57,16 @@ class LaughLMLoopModel(TrainLMPreTrainedModel):
         with torch.no_grad():
             for block_list in (self.prelude_layers, self.core_layers, self.coda_layers):
                 for layer in block_list:
+                    if getattr(layer, "_deep_init_scaled", False):
+                        continue
                     layer.self_attn.o_proj.weight.mul_(scale)
                     layer.mlp.down_proj.weight.mul_(scale)
+                    layer._deep_init_scaled = True
+
+    def _init_weights(self, module: nn.Module) -> None:
+        if hasattr(module, "_deep_init_scaled"):
+            module._deep_init_scaled = False
+        super()._init_weights(module)
 
     def init_weights(self) -> None:
         super().init_weights()

@@ -143,6 +143,7 @@ def test_stage1_stage2_build_training_args_max_steps_none_and_wsd_warmup(tmp_pat
             "4",
             "--grad-accum",
             "16",
+            "--no-compile",
             "--output-dir",
             str(tmp_path / "s1"),
         ]
@@ -165,7 +166,7 @@ def test_stage1_stage2_build_training_args_max_steps_none_and_wsd_warmup(tmp_pat
     trainer = TrainLMTrainer(model=model, args=t1, train_dataset=ds)
     sched_cfg = trainer._scheduler_config()
     assert sched_cfg.horizon_tokens == 250_000_000
-    assert 0.0 < sched_cfg.warmup_fraction < 1.0 or sched_cfg.warmup_fraction == 1.0
+    assert 0.0 < sched_cfg.warmup_fraction <= 1.0
     # 250M / (4 * 16 * 2048) = 1908 steps; warmup_steps=2000 caps at 1.0,
     # whereas 1B tokens (~7630 steps) keeps warmup_fraction well below 1.0:
     t1_1b = stage1_base_30b.build_training_arguments(
@@ -177,6 +178,7 @@ def test_stage1_stage2_build_training_args_max_steps_none_and_wsd_warmup(tmp_pat
                 "4",
                 "--grad-accum",
                 "16",
+                "--no-compile",
                 "--output-dir",
                 str(tmp_path / "s1_1b"),
             ]
@@ -194,7 +196,7 @@ def test_stage1_stage2_build_training_args_max_steps_none_and_wsd_warmup(tmp_pat
     assert sched_1b.stable_fraction > 0.70
 
     s2_args = stage2_anneal_5b.parse_args(
-        ["--init-checkpoint", "runs/s1/final_model", "--output-dir", str(tmp_path / "s2")]
+        ["--init-checkpoint", "runs/s1/final_model", "--no-compile", "--output-dir", str(tmp_path / "s2")]
     )
     t2 = stage2_anneal_5b.build_training_arguments(
         s2_args,
@@ -210,6 +212,7 @@ def test_stage1_stage2_build_training_args_max_steps_none_and_wsd_warmup(tmp_pat
 
 def test_ddp_safe_host_loop_depth_schedule_and_specializations(tmp_path: Path, monkeypatch):
     from collections import Counter
+    import functools
     from trainlm.training.trainer import resolve_scheduled_num_loops
 
     schedule = (2, 4, 4, 6)
@@ -231,6 +234,7 @@ def test_ddp_safe_host_loop_depth_schedule_and_specializations(tmp_path: Path, m
     observed_loops: list[int | None] = []
     orig_forward = model.model.forward
 
+    @functools.wraps(orig_forward)
     def spy_forward(*args, **kwargs):
         observed_loops.append(kwargs.get("num_loops"))
         return orig_forward(*args, **kwargs)
