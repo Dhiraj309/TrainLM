@@ -584,14 +584,41 @@ public callbacks; worker scripts and stage logs are internal details.
 
 Measured on **Cloud TPU v5e-1** (`16.0 GiB` HBM, `197 TFLOP/s` BF16 peak, `torch==2.14.1+cpu`, `torch-tpu==0.2.0`, `libtpu==0.0.50`, `transformers==5.22.1`, `loss_implementation="chunked_linear"`, `optim="adamw_bf16"`, steady-state Windows 2+, `wait=0.0%`):
 
-| Model | Mode | Batch Size | Throughput | Non-Logit MFU | Total MFU |
-| :--- | :--- | :---: | :---: | :---: | :---: |
-| `SmolLM2-135M` | Eager | 8 | `28,881.3 tok/s` | `15.57%` | `18.06%` |
-| `SmolLM2-135M` | Compiled | 8 | `54,645.4 tok/s` | `29.46%` | `34.17%` |
-| `SmolLM2-360M` | Compiled | 4 | `23,549.2 tok/s` | `31.59%` | `34.98%` |
-| `Qwen2.5-0.5B` | Compiled | 2 | `24,782.6 tok/s` | `33.66%` | `43.94%` |
-| `Qwen3-0.6B` | Compiled | 2 | `11,560.0 tok/s` | `19.64%` | `25.12%` |
-| `LaughLM-Loop-135M` | Compiled (`Pallas Off`, effective 20L) | 4 | `62,873.3 tok/s` | `46.13%` | `54.56%` |
-| `LaughLM-Loop-135M` | Compiled (`Pallas On`, `fused_recurrent_inject_rmsnorm` + Splash) | 4 / 8 | _Pending Colab rerun_ | _Pending_ | _Pending_ |
+| Model | Mode | Batch Size | Throughput | Non-Logit MFU | Total MFU | Host Wait |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: |
+| `SmolLM2-135M` | Eager | 8 | `28,881.3 tok/s` | `15.57%` | `18.06%` | `0.0%` |
+| `SmolLM2-135M` | Compiled | 8 | `54,645.4 tok/s` | `29.46%` | `34.17%` | `0.0%` |
+| `SmolLM2-360M` | Compiled | 4 | `23,549.2 tok/s` | `31.59%` | `34.98%` | `0.0%` |
+| `Qwen2.5-0.5B` | Compiled | 2 | `24,782.6 tok/s` | `33.66%` | `43.94%` | `0.0%` |
+| `Qwen3-0.6B` | Compiled | 2 | `11,560.0 tok/s` | `19.64%` | `25.12%` | `0.0%` |
+| `LaughLM-Loop-135M` | Compiled (`Pallas Off`, `eff_L=20`) | 4 | `62,873.3 tok/s` | `46.13%` | `54.56%` | `0.0%` |
+| `LaughLM-Loop-135M` | Compiled (`Pallas On`, `eff_L=20`) | 4 | **`62,947.8 tok/s`** | **`46.18%`** | **`54.63%`** | **`0.0%`** |
+| `LaughLM-Loop-135M` | Compiled (`Pallas On`, `eff_L=20`) | 8 | `61,004.9 tok/s` | `44.76%` | `52.94%` | `0.0%` |
 
+## Stage-1 Pilot & Held-Out Loop Scaling (`TPU v5e-1`)
 
+End-to-end from-scratch Stage-1 pretraining pilot published at [`Dhiraj45/laughlm-loop-135m-pilot`](https://huggingface.co/Dhiraj45/laughlm-loop-135m-pilot) (model card source: [laughlm-loop-135m-pilot.md](docs/model_cards/laughlm-loop-135m-pilot.md)) on [`Dhiraj45/laughlm-135m-shards-v2`](https://huggingface.co/datasets/Dhiraj45/laughlm-135m-shards-v2):
+
+### Stage-1 Pilot Run Summary (`131.07M` Tokens on `TPU v5e-1`)
+- **Command / Config:** `stage1_base_30b.py --loop-preset pilot-1b --arch laughlm_loop` (`1,000` optimizer steps, `micro_batch_size=4`, `grad_accum=16`, `global_batch=64`, `seq_len=2048` = `131,072` tokens/step; `131,072,000` total tokens on `stream_stage1_w00_shard_00000.bin`).
+- **Sustained Training Throughput:** **`73,240.1 tok/s`** | **`53.73%` non-logit MFU** (**`~63.6%` total MFU**) | **`0.0%` host wait**.
+- **XLA Compilation Cache:** `99.9%` hit rate (`17,145 / 17,157` cache requests, `12` total compilations).
+- **Convergence:** Cross-entropy loss dropped from `10.9748` (`58,384` PPL at step 5) to **`4.2332` (`68.93` PPL at step 1,000; lowest 5-step window `3.9422` / `51.53` PPL at step 885)**.
+
+### Held-Out Test-Time Loop Scaling (`stream_stage1_w00_shard_00029.bin`, `131,072` Tokens)
+| Recurrent Loops ($R$) | Effective Layers | Held-Out Loss | Perplexity ($\text{PPL}$) | $\Delta$ PPL vs. $R=1$ | Eager Eval Throughput |
+| :---: | :---: | :---: | :---: | :---: | :---: |
+| **$R = 1$** *(warmup + eval)* | 8 | `4.8129` | `123.09` | Baseline | `2,414.0 tok/s` *(includes initial XLA trace)* |
+| **$R = 2$** | 12 | `4.7035` | `110.33` | `-10.4%` | `44,089.2 tok/s` |
+| **$R = 4$** *(trained depth)* | **20** | **`4.2198`** | **`68.02`** | **`-44.7%`** | **`30,042.5 tok/s`** |
+| **$R = 6$** *(extrapolated)* | 28 | `4.2892` | `72.91` | `-40.8%` | `22,368.5 tok/s` |
+| **$R = 8$** *(extrapolated)* | 36 | `4.2511` | `70.18` | `-43.0%` | `16,652.9 tok/s` |
+
+### Qualitative Pilot Generations (`R=4, eff_L=20`, `0.37%` of 35B Target)
+Representative completions from the `131.07M`-token pilot (`TTFT ~69–89 ms`, `8.0–9.9 tok/s` eager CPU decode):
+- **Narrative (`Once upon a time, in a quiet village by the sea`):**
+  > `Once upon a time, in a quiet village by the sea, I can see you as an ocean turtle. We visited a 31-mile ship that was built in the 1980s, and the 2024-mile ship that was built in the 1970s. We were also known to have a very large colony` (`TTFT=76.2 ms`, `8.85 tok/s`)
+- **Dialogue / Explanatory (`The key difference between a star and a planet is`):**
+  > `The key difference between a star and a planet is that the universe is not an absolute element of the mind. “We are a complex human and are at the center of the earth,” said Dr. Gaudimrabran, the world's first leader and co-author. “I am able to prove myself as true in this world.”` (`TTFT=88.8 ms`, `8.00 tok/s`)
+- **Academic (`In 1969, engineers at NASA`):**
+  > `In 1969, engineers at NASA in the National Academy of Engineering (2013). By the University of New York (2014), with its own technical language, it is possible to find out more about the science of the study. The researchers have demonstrated that researchers in the United States have been able to produce the data on the` (`TTFT=80.5 ms`, `9.40 tok/s`)

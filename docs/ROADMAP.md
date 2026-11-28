@@ -17,9 +17,18 @@ Colab `TPU v5e-1`: `laughlm-loop-135m-pallas-off-compiled` (`bs=4`, `seq=2048`,
 MFU) | `wait=0.0%`; fixed Mosaic Pallas backward `tc: scatter` lowering error in
 `recurrent_norm.py` (replacing `.at[0:1, :].set()` with `jnp.broadcast_to`), and
 updated `notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb` to force-reinstall
-`feat/laughlm-loop-pallas`, log the resolved revision, and run only the pending
-`laughlm-loop-135m-pallas-on` (`bs=4` / `bs=8`) compiled benchmarks. Live
-`Pallas On` rerun and 8-chip `v5e-8`/`v6e-8` validation remain pending.
+`feat/laughlm-loop-pallas`. Following PR #200 merge (`main` `099d4ad`), live
+Colab `TPU v5e-1` verification completed: `laughlm-loop-135m-pallas-on`
+(`bs=4`) hit `62,947.8 tok/s` | `46.18%` non-logit MFU (`54.63%` total MFU),
+`bs=8` hit `61,004.9 tok/s` | `44.76%` (`52.94%`), and the `131.07M`-token
+Stage-1 pilot (`1,000` steps, `grad_accum=16`) sustained **`73,240.1 tok/s` |
+`53.73%` non-logit MFU (`~63.6%` total MFU) | `0.0%` wait**, converging from
+`10.9748` to `4.2332` loss with held-out shard `00029` perplexity dropping from
+`123.09` (`R=1`) to `68.02` (`R=4`). Published model card in
+`docs/model_cards/laughlm-loop-135m-pilot.md` and guarded `watch_and_upload.py`
+against overwriting root `README.md`. 8-chip `v5e-8`/`v6e-8` validation and
+upstream script fixes (`max_steps=None`, `torch.accelerator.synchronize()`,
+`--shard-start`/`--shard-stop`) remain pending.
 
 **`LaughLM-Loop` + Custom Pallas Recurrent-Norm + `gs://` Shards (2026-11-27):** on
 branch `feat/laughlm-loop-pallas` (from `main` `db74fef`): implemented
