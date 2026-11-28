@@ -60,6 +60,14 @@ class TrainLMConfig(PretrainedConfig):
         # Sequence Limits
         # ------------------------------------------------------------------
         max_position_embeddings: int = 2048,
+        # ------------------------------------------------------------------
+        # Opt-in Architecture & Packed Sequence Controls (default off)
+        # ------------------------------------------------------------------
+        pack_doc_boundary_mask: bool = False,
+        doc_boundary_eos_token_id: int | None = None,
+        use_value_residual: bool = False,
+        use_qk_norm: bool = False,
+        use_attn_output_gate: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(
@@ -116,6 +124,15 @@ class TrainLMConfig(PretrainedConfig):
         # Sequence length
         #
         self.max_position_embeddings = max_position_embeddings
+
+        #
+        # Opt-in architecture & packing controls
+        #
+        self.pack_doc_boundary_mask = pack_doc_boundary_mask
+        self.doc_boundary_eos_token_id = doc_boundary_eos_token_id
+        self.use_value_residual = use_value_residual
+        self.use_qk_norm = use_qk_norm
+        self.use_attn_output_gate = use_attn_output_gate
 
         self._validate()
 
@@ -203,6 +220,21 @@ class TrainLMConfig(PretrainedConfig):
             raise ValueError(
                 "TrainLM v1 requires 'hidden_act=\"silu\"'."
             )
+
+        for flag_name in (
+            "pack_doc_boundary_mask",
+            "use_value_residual",
+            "use_qk_norm",
+            "use_attn_output_gate",
+        ):
+            if not isinstance(getattr(self, flag_name), bool):
+                raise ValueError(f"'{flag_name}' must be a boolean.")
+
+        if self.doc_boundary_eos_token_id is not None:
+            if isinstance(self.doc_boundary_eos_token_id, bool) or not isinstance(
+                self.doc_boundary_eos_token_id, int
+            ) or self.doc_boundary_eos_token_id < 0:
+                raise ValueError("'doc_boundary_eos_token_id' must be a non-negative integer or None.")
 
 
 class LaughLMLoopConfig(TrainLMConfig):

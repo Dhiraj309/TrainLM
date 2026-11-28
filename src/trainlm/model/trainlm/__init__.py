@@ -6,6 +6,7 @@ from .modeling_trainlm import (
     TrainLMForCausalLM,
     TrainLMModel,
     TrainLMPreTrainedModel,
+    compute_packed_doc_ids,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "TrainLMPreTrainedModel",
     "TrainLMModel",
     "TrainLMForCausalLM",
+    "compute_packed_doc_ids",
 ]

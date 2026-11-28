@@ -293,8 +293,18 @@ def _build_splash_ops(
     is_causal: bool,
     block_size: int,
     sliding_window: int | None,
+    has_segment_ids: bool = False,
 ) -> tuple[str, str]:
-    cache_key = (seq_len, kv_seq_len, n_heads, n_kv_heads, is_causal, block_size, sliding_window)
+    cache_key = (
+        seq_len,
+        kv_seq_len,
+        n_heads,
+        n_kv_heads,
+        is_causal,
+        block_size,
+        sliding_window,
+        has_segment_ids,
+    )
     cached = _SPLASH_OP_CACHE.get(cache_key)
     if cached is not None:
         return cached
@@ -356,57 +366,114 @@ def _build_splash_ops(
 
     jax_array_cls = getattr(jax, "Array", Any)
 
-    def splash_fwd(q: Any, k: Any, v: Any) -> tuple[Any, Any]:
-        scale = jnp.array(1.0 / math.sqrt(q.shape[-1]), dtype=q.dtype)
-        q_scaled = q * scale
+    if has_segment_ids:
+        def splash_fwd(q: Any, k: Any, v: Any, segment_ids: Any) -> tuple[Any, Any]:
+            scale = jnp.array(1.0 / math.sqrt(q.shape[-1]), dtype=q.dtype)
+            q_scaled = q * scale
 
-        def _single_fwd(q_b: Any, k_b: Any, v_b: Any) -> tuple[Any, Any]:
-            out_b, (lse_b,) = splash_attention_kernel._splash_attention_forward(
-                fwd_mask_info,
-                q_b,
-                k_b,
-                v_b,
-                segment_ids=None,
-                sinks=None,
-                mask_value=mask_value,
-                is_mqa=is_mqa,
-                block_sizes=block_sizes,
-                residual_checkpoint_name=res_ckpt,
-                save_residuals=True,
-                mask_function=mask_function,
-                attn_logits_soft_cap=soft_cap,
-                interpret=interpret,
-            )
-            return out_b, lse_b.astype(jnp.float32)
+            def _single_fwd(q_b: Any, k_b: Any, v_b: Any, seg_b: Any) -> tuple[Any, Any]:
+                seg_obj = splash_attention_kernel.SegmentIds(q=seg_b, kv=seg_b)
+                out_b, (lse_b,) = splash_attention_kernel._splash_attention_forward(
+                    fwd_mask_info,
+                    q_b,
+                    k_b,
+                    v_b,
+                    segment_ids=seg_obj,
+                    sinks=None,
+                    mask_value=mask_value,
+                    is_mqa=is_mqa,
+                    block_sizes=block_sizes,
+                    residual_checkpoint_name=res_ckpt,
+                    save_residuals=True,
+                    mask_function=mask_function,
+                    attn_logits_soft_cap=soft_cap,
+                    interpret=interpret,
+                )
+                return out_b, lse_b.astype(jnp.float32)
 
-        return jax.vmap(_single_fwd)(q_scaled, k, v)
+            return jax.vmap(_single_fwd, in_axes=(0, 0, 0, 0))(q_scaled, k, v, segment_ids)
 
-    def splash_bwd(
-        q: Any, k: Any, v: Any, out: Any, lse: Any, grad_out: Any
-    ) -> tuple[Any, Any, Any]:
-        scale = jnp.array(1.0 / math.sqrt(q.shape[-1]), dtype=q.dtype)
-        q_scaled = q * scale
-
-        def _single_bwd(
-            q_b: Any, k_b: Any, v_b: Any, out_b: Any, lse_b: Any, g_b: Any
+        def splash_bwd(
+            q: Any, k: Any, v: Any, segment_ids: Any, out: Any, lse: Any, grad_out: Any
         ) -> tuple[Any, Any, Any]:
-            res = (q_b, k_b, v_b, None, None, out_b, lse_b, dq_mask_info, dkv_mask_info)
-            all_grads = splash_attention_kernel._splash_attention_bwd(
-                False,
-                mask_value,
-                is_mqa,
-                block_sizes,
-                res_ckpt,
-                mask_function,
-                soft_cap,
-                interpret,
-                res,
-                g_b,
-            )
-            return all_grads[3], all_grads[4], all_grads[5]
+            scale = jnp.array(1.0 / math.sqrt(q.shape[-1]), dtype=q.dtype)
+            q_scaled = q * scale
 
-        dq_scaled, dk, dv = jax.vmap(_single_bwd)(q_scaled, k, v, out, lse, grad_out)
-        return dq_scaled * scale, dk, dv
+            def _single_bwd(
+                q_b: Any, k_b: Any, v_b: Any, seg_b: Any, out_b: Any, lse_b: Any, g_b: Any
+            ) -> tuple[Any, Any, Any]:
+                seg_obj = splash_attention_kernel.SegmentIds(q=seg_b, kv=seg_b)
+                res = (q_b, k_b, v_b, seg_obj, None, out_b, lse_b, dq_mask_info, dkv_mask_info)
+                all_grads = splash_attention_kernel._splash_attention_bwd(
+                    False,
+                    mask_value,
+                    is_mqa,
+                    block_sizes,
+                    res_ckpt,
+                    mask_function,
+                    soft_cap,
+                    interpret,
+                    res,
+                    g_b,
+                )
+                return all_grads[3], all_grads[4], all_grads[5]
+
+            dq_scaled, dk, dv = jax.vmap(_single_bwd, in_axes=(0, 0, 0, 0, 0, 0, 0))(
+                q_scaled, k, v, segment_ids, out, lse, grad_out
+            )
+            return dq_scaled * scale, dk, dv
+    else:
+        def splash_fwd(q: Any, k: Any, v: Any) -> tuple[Any, Any]:
+            scale = jnp.array(1.0 / math.sqrt(q.shape[-1]), dtype=q.dtype)
+            q_scaled = q * scale
+
+            def _single_fwd(q_b: Any, k_b: Any, v_b: Any) -> tuple[Any, Any]:
+                out_b, (lse_b,) = splash_attention_kernel._splash_attention_forward(
+                    fwd_mask_info,
+                    q_b,
+                    k_b,
+                    v_b,
+                    segment_ids=None,
+                    sinks=None,
+                    mask_value=mask_value,
+                    is_mqa=is_mqa,
+                    block_sizes=block_sizes,
+                    residual_checkpoint_name=res_ckpt,
+                    save_residuals=True,
+                    mask_function=mask_function,
+                    attn_logits_soft_cap=soft_cap,
+                    interpret=interpret,
+                )
+                return out_b, lse_b.astype(jnp.float32)
+
+            return jax.vmap(_single_fwd)(q_scaled, k, v)
+
+        def splash_bwd(
+            q: Any, k: Any, v: Any, out: Any, lse: Any, grad_out: Any
+        ) -> tuple[Any, Any, Any]:
+            scale = jnp.array(1.0 / math.sqrt(q.shape[-1]), dtype=q.dtype)
+            q_scaled = q * scale
+
+            def _single_bwd(
+                q_b: Any, k_b: Any, v_b: Any, out_b: Any, lse_b: Any, g_b: Any
+            ) -> tuple[Any, Any, Any]:
+                res = (q_b, k_b, v_b, None, None, out_b, lse_b, dq_mask_info, dkv_mask_info)
+                all_grads = splash_attention_kernel._splash_attention_bwd(
+                    False,
+                    mask_value,
+                    is_mqa,
+                    block_sizes,
+                    res_ckpt,
+                    mask_function,
+                    soft_cap,
+                    interpret,
+                    res,
+                    g_b,
+                )
+                return all_grads[3], all_grads[4], all_grads[5]
+
+            dq_scaled, dk, dv = jax.vmap(_single_bwd)(q_scaled, k, v, out, lse, grad_out)
+            return dq_scaled * scale, dk, dv
 
     digest = hashlib.sha256(str(cache_key).encode("utf-8")).hexdigest()[:16]
     fwd_name = f"trainlm_splash_fwd_{digest}"
@@ -414,67 +481,129 @@ def _build_splash_ops(
     fwd_qualname = f"trainlm_pallas::{fwd_name}"
     bwd_qualname = f"trainlm_pallas::{bwd_name}"
 
-    fwd_op = register_pallas_jax_op(
-        fwd_qualname,
-        splash_fwd,
-        schema="(Tensor q, Tensor k, Tensor v) -> (Tensor, Tensor)",
-        fake_impl=lambda q, k, v: (
-            torch.empty(q.shape, dtype=q.dtype, device=q.device),
-            torch.empty(
-                q.shape[0], q.shape[1], q.shape[2], dtype=torch.float32, device=q.device
+    if has_segment_ids:
+        fwd_op = register_pallas_jax_op(
+            fwd_qualname,
+            splash_fwd,
+            schema="(Tensor q, Tensor k, Tensor v, Tensor segment_ids) -> (Tensor, Tensor)",
+            fake_impl=lambda q, k, v, segment_ids: (
+                torch.empty(q.shape, dtype=q.dtype, device=q.device),
+                torch.empty(
+                    q.shape[0], q.shape[1], q.shape[2], dtype=torch.float32, device=q.device
+                ),
             ),
-        ),
-        jax_annotations={
-            "q": jax_array_cls,
-            "k": jax_array_cls,
-            "v": jax_array_cls,
-            "return": tuple[jax_array_cls, jax_array_cls],
-        },
-    )
-    bwd_op = register_pallas_jax_op(
-        bwd_qualname,
-        splash_bwd,
-        schema="(Tensor q, Tensor k, Tensor v, Tensor out, Tensor lse, Tensor grad_out) -> (Tensor, Tensor, Tensor)",
-        fake_impl=lambda q, k, v, out, lse, grad_out: (
-            torch.empty(q.shape, dtype=q.dtype, device=q.device),
-            torch.empty(k.shape, dtype=k.dtype, device=k.device),
-            torch.empty(v.shape, dtype=v.dtype, device=v.device),
-        ),
-        jax_annotations={
-            "q": jax_array_cls,
-            "k": jax_array_cls,
-            "v": jax_array_cls,
-            "out": jax_array_cls,
-            "lse": jax_array_cls,
-            "grad_out": jax_array_cls,
-            "return": tuple[jax_array_cls, jax_array_cls, jax_array_cls],
-        },
-    )
-
-    def _setup_ctx(ctx: Any, inputs: Any, output: Any) -> None:
-        q, k, v = inputs
-        out, lse = output
-        ctx.save_for_backward(q, k, v, out, lse)
-
-    def _backward(
-        ctx: Any, grad_out: torch.Tensor | None, grad_lse: torch.Tensor | None
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        del grad_lse
-        q, k, v, out, lse = ctx.saved_tensors
-        safe_grad_out = (
-            torch.zeros(out.shape, dtype=out.dtype, device=out.device)
-            if grad_out is None
-            else grad_out.contiguous()
+            jax_annotations={
+                "q": jax_array_cls,
+                "k": jax_array_cls,
+                "v": jax_array_cls,
+                "segment_ids": jax_array_cls,
+                "return": tuple[jax_array_cls, jax_array_cls],
+            },
         )
-        bwd_caller = _resolve_pallas_op(bwd_name) if bwd_op is None else bwd_op
-        return bwd_caller(q, k, v, out, lse, safe_grad_out)
+        bwd_op = register_pallas_jax_op(
+            bwd_qualname,
+            splash_bwd,
+            schema=(
+                "(Tensor q, Tensor k, Tensor v, Tensor segment_ids, Tensor out, Tensor lse, Tensor grad_out)"
+                " -> (Tensor, Tensor, Tensor)"
+            ),
+            fake_impl=lambda q, k, v, segment_ids, out, lse, grad_out: (
+                torch.empty(q.shape, dtype=q.dtype, device=q.device),
+                torch.empty(k.shape, dtype=k.dtype, device=k.device),
+                torch.empty(v.shape, dtype=v.dtype, device=v.device),
+            ),
+            jax_annotations={
+                "q": jax_array_cls,
+                "k": jax_array_cls,
+                "v": jax_array_cls,
+                "segment_ids": jax_array_cls,
+                "out": jax_array_cls,
+                "lse": jax_array_cls,
+                "grad_out": jax_array_cls,
+                "return": tuple[jax_array_cls, jax_array_cls, jax_array_cls],
+            },
+        )
+
+        def _setup_ctx(ctx: Any, inputs: Any, output: Any) -> None:
+            q, k, v, segment_ids = inputs
+            out, lse = output
+            ctx.save_for_backward(q, k, v, segment_ids, out, lse)
+
+        def _backward(
+            ctx: Any, grad_out: torch.Tensor | None, grad_lse: torch.Tensor | None
+        ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, None]:
+            del grad_lse
+            q, k, v, segment_ids, out, lse = ctx.saved_tensors
+            safe_grad_out = (
+                torch.zeros(out.shape, dtype=out.dtype, device=out.device)
+                if grad_out is None
+                else grad_out.contiguous()
+            )
+            bwd_caller = _resolve_pallas_op(bwd_name) if bwd_op is None else bwd_op
+            dq, dk, dv = bwd_caller(q, k, v, segment_ids, out, lse, safe_grad_out)
+            return dq, dk, dv, None
+    else:
+        fwd_op = register_pallas_jax_op(
+            fwd_qualname,
+            splash_fwd,
+            schema="(Tensor q, Tensor k, Tensor v) -> (Tensor, Tensor)",
+            fake_impl=lambda q, k, v: (
+                torch.empty(q.shape, dtype=q.dtype, device=q.device),
+                torch.empty(
+                    q.shape[0], q.shape[1], q.shape[2], dtype=torch.float32, device=q.device
+                ),
+            ),
+            jax_annotations={
+                "q": jax_array_cls,
+                "k": jax_array_cls,
+                "v": jax_array_cls,
+                "return": tuple[jax_array_cls, jax_array_cls],
+            },
+        )
+        bwd_op = register_pallas_jax_op(
+            bwd_qualname,
+            splash_bwd,
+            schema="(Tensor q, Tensor k, Tensor v, Tensor out, Tensor lse, Tensor grad_out) -> (Tensor, Tensor, Tensor)",
+            fake_impl=lambda q, k, v, out, lse, grad_out: (
+                torch.empty(q.shape, dtype=q.dtype, device=q.device),
+                torch.empty(k.shape, dtype=k.dtype, device=k.device),
+                torch.empty(v.shape, dtype=v.dtype, device=v.device),
+            ),
+            jax_annotations={
+                "q": jax_array_cls,
+                "k": jax_array_cls,
+                "v": jax_array_cls,
+                "out": jax_array_cls,
+                "lse": jax_array_cls,
+                "grad_out": jax_array_cls,
+                "return": tuple[jax_array_cls, jax_array_cls, jax_array_cls],
+            },
+        )
+
+        def _setup_ctx(ctx: Any, inputs: Any, output: Any) -> None:
+            q, k, v = inputs
+            out, lse = output
+            ctx.save_for_backward(q, k, v, out, lse)
+
+        def _backward(
+            ctx: Any, grad_out: torch.Tensor | None, grad_lse: torch.Tensor | None
+        ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+            del grad_lse
+            q, k, v, out, lse = ctx.saved_tensors
+            safe_grad_out = (
+                torch.zeros(out.shape, dtype=out.dtype, device=out.device)
+                if grad_out is None
+                else grad_out.contiguous()
+            )
+            bwd_caller = _resolve_pallas_op(bwd_name) if bwd_op is None else bwd_op
+            return bwd_caller(q, k, v, out, lse, safe_grad_out)
 
     _register_pallas_autograd(fwd_qualname, fwd_op, _backward, setup_context=_setup_ctx)
     _SPLASH_OP_CACHE[cache_key] = (fwd_name, bwd_name)
     return fwd_name, bwd_name
 
 
-_UNSUPPORTED_SPLASH_SPECS: set[tuple[int, int, int, int, int, bool, int, int | None]] = set()
+_UNSUPPORTED_SPLASH_SPECS: set[tuple[Any, ...]] = set()
 
 
 def pallas_splash_attention(
@@ -490,11 +619,13 @@ def pallas_splash_attention(
     block_q: int = 512,
     block_k: int = 512,
     pad_head_dim: bool = False,
+    segment_ids: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """Compute TPU Splash Attention in HF ``(B, H, S, D)`` -> ``(B, S, H, D)`` layout.
 
-    Supports native GQA (``n_heads % n_kv_heads == 0``) without KV head
-    replication. Falls back to ``F.scaled_dot_product_attention`` on CPU, for
+    Supports native GQA (``n_heads % n_kv_heads == 0``) and optional 2D
+    ``(batch_size, seq_len)`` document-boundary ``segment_ids`` via Pallas
+    ``SegmentIds``. Falls back to ``F.scaled_dot_product_attention`` on CPU, for
     sequences or head dimensions unsupported by Pallas Splash (unless
     ``pad_head_dim=True`` zero-pads ``head_dim`` to a 128-multiple), or when
     JAX Splash is absent.
@@ -505,6 +636,12 @@ def pallas_splash_attention(
     seq_len = query.shape[2]
     kv_seq_len = key.shape[2]
     head_dim = query.shape[3]
+    if segment_ids is not None:
+        if segment_ids.ndim != 2 or tuple(segment_ids.shape) != (query.shape[0], seq_len):
+            raise ValueError(
+                "segment_ids must have shape (batch_size, seq_len) matching query."
+            )
+    has_segment_ids = segment_ids is not None
     head_dim_pad = ((-head_dim) % 128) if pad_head_dim and head_dim > 0 else 0
     padded_head_dim = head_dim + head_dim_pad
     block = _resolve_block_size(seq_len, max_block=max(128, min(block_q, block_k)))
@@ -517,17 +654,37 @@ def pallas_splash_attention(
         causal,
         block,
         sliding_window,
+        has_segment_ids,
     )
 
     def _sdpa_fallback() -> torch.Tensor:
-        out = F.scaled_dot_product_attention(
-            query,
-            key,
-            value,
-            is_causal=causal,
-            scale=scale,
-            enable_gqa=(n_heads != n_kv_heads),
-        )
+        if segment_ids is not None:
+            seg_mask = segment_ids[:, None, :, None] == segment_ids[:, None, None, :]
+            if causal:
+                causal_mask = torch.ones(
+                    (seq_len, kv_seq_len), dtype=torch.bool, device=query.device
+                ).tril()
+                attn_mask = causal_mask[None, None, :, :] & seg_mask
+            else:
+                attn_mask = seg_mask
+            out = F.scaled_dot_product_attention(
+                query,
+                key,
+                value,
+                attn_mask=attn_mask,
+                is_causal=False,
+                scale=scale,
+                enable_gqa=(n_heads != n_kv_heads),
+            )
+        else:
+            out = F.scaled_dot_product_attention(
+                query,
+                key,
+                value,
+                is_causal=causal,
+                scale=scale,
+                enable_gqa=(n_heads != n_kv_heads),
+            )
         return out.transpose(1, 2).contiguous()
 
     if (
@@ -552,6 +709,7 @@ def pallas_splash_attention(
             is_causal=causal,
             block_size=block,
             sliding_window=sliding_window,
+            has_segment_ids=has_segment_ids,
         )
     except (RuntimeError, ValueError, TypeError, NotImplementedError):
         _UNSUPPORTED_SPLASH_SPECS.add(spec_key)
@@ -577,13 +735,18 @@ def pallas_splash_attention(
     q_in = q_in.contiguous()
     k_in = k_in.contiguous()
     v_in = v_in.contiguous()
+    seg_in = (
+        segment_ids.to(dtype=torch.int32).contiguous()
+        if segment_ids is not None
+        else None
+    )
 
     is_compiling = getattr(getattr(torch, "compiler", None), "is_compiling", None)
     if callable(is_compiling) and is_compiling():
-        out, _ = fwd_op(q_in, k_in, v_in)
+        out, _ = fwd_op(q_in, k_in, v_in, seg_in) if seg_in is not None else fwd_op(q_in, k_in, v_in)
     else:
         try:
-            out, _ = fwd_op(q_in, k_in, v_in)
+            out, _ = fwd_op(q_in, k_in, v_in, seg_in) if seg_in is not None else fwd_op(q_in, k_in, v_in)
         except (RuntimeError, ValueError, TypeError, NotImplementedError):
             _UNSUPPORTED_SPLASH_SPECS.add(spec_key)
             return _sdpa_fallback()

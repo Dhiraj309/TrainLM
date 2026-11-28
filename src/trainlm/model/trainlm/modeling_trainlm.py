@@ -16,6 +16,36 @@ from trainlm.config import TrainLMConfig
 from .decoder import TrainLMDecoderLayer
 
 
+def compute_packed_doc_ids(
+    input_ids: torch.Tensor,
+    eos_token_id: int,
+) -> torch.Tensor:
+    """Compute per-token ``int32`` packed document IDs with EOS belonging to the finishing doc."""
+    is_new_doc = F.pad(
+        (input_ids[:, :-1] == int(eos_token_id)).to(torch.int32),
+        (1, 0),
+        value=0,
+    )
+    return torch.cumsum(is_new_doc, dim=-1, dtype=torch.int32)
+
+
+def resolve_packed_doc_ids(
+    config: TrainLMConfig,
+    input_ids: torch.Tensor | None,
+) -> torch.Tensor | None:
+    """Return packed document boundary IDs when ``pack_doc_boundary_mask`` is enabled."""
+    if not bool(getattr(config, "pack_doc_boundary_mask", False)) or input_ids is None:
+        return None
+    eos_id = getattr(config, "doc_boundary_eos_token_id", None)
+    if eos_id is None:
+        eos_id = getattr(config, "eos_token_id", None)
+    if eos_id is None:
+        raise ValueError(
+            "pack_doc_boundary_mask=True requires doc_boundary_eos_token_id or config.eos_token_id."
+        )
+    return compute_packed_doc_ids(input_ids, int(eos_id))
+
+
 def _assert_finite(
     tensor: torch.Tensor,
     name: str,
@@ -154,8 +184,8 @@ class TrainLMModel(TrainLMPreTrainedModel):
         )
 
         self.layers = nn.ModuleList(
-            TrainLMDecoderLayer(config)
-            for _ in range(self.num_hidden_layers)
+            TrainLMDecoderLayer(config, is_first_layer=(layer_idx == 0))
+            for layer_idx in range(self.num_hidden_layers)
         )
 
         self.norm = nn.RMSNorm(
@@ -245,12 +275,31 @@ class TrainLMModel(TrainLMPreTrainedModel):
                 .expand(batch_size, sequence_length)
             )
 
+        segment_ids = resolve_packed_doc_ids(self.config, input_ids)
+        use_v_res = bool(getattr(self.config, "use_value_residual", False))
+        v_anchor: torch.Tensor | None = None
+
         for layer_idx, layer in enumerate(self.layers):
-            hidden_states = layer(
-                hidden_states,
-                position_ids,
-                attention_mask,
-            )
+            capture_v = use_v_res and v_anchor is None and layer_idx == 0
+            if segment_ids is not None or v_anchor is not None or capture_v:
+                layer_out = layer(
+                    hidden_states,
+                    position_ids,
+                    attention_mask,
+                    segment_ids=segment_ids,
+                    v_anchor=v_anchor,
+                    return_v_state=capture_v,
+                )
+                if capture_v:
+                    hidden_states, v_anchor = layer_out
+                else:
+                    hidden_states = layer_out
+            else:
+                hidden_states = layer(
+                    hidden_states,
+                    position_ids,
+                    attention_mask,
+                )
             _assert_finite(hidden_states, f"model.layer_{layer_idx}")
 
         hidden_states = self.norm(hidden_states)

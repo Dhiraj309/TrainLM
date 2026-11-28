@@ -16,7 +16,12 @@ from trainlm.config.configuration_trainlm import LaughLMLoopConfig
 from trainlm.kernels.pallas.recurrent_norm import fused_recurrent_inject_rmsnorm
 
 from .decoder import TrainLMDecoderLayer
-from .modeling_trainlm import TrainLMPreTrainedModel, _assert_finite
+from .modeling_trainlm import (
+    TrainLMPreTrainedModel,
+    _assert_finite,
+    compute_packed_doc_ids,
+    resolve_packed_doc_ids,
+)
 
 
 class LaughLMLoopModel(TrainLMPreTrainedModel):
@@ -35,13 +40,22 @@ class LaughLMLoopModel(TrainLMPreTrainedModel):
             self.padding_idx,
         )
         self.prelude_layers = nn.ModuleList(
-            [TrainLMDecoderLayer(config) for _ in range(config.num_prelude_layers)]
+            [
+                TrainLMDecoderLayer(config, is_first_layer=(idx == 0))
+                for idx in range(config.num_prelude_layers)
+            ]
         )
         self.core_layers = nn.ModuleList(
-            [TrainLMDecoderLayer(config) for _ in range(config.num_core_layers)]
+            [
+                TrainLMDecoderLayer(config, is_first_layer=False)
+                for _ in range(config.num_core_layers)
+            ]
         )
         self.coda_layers = nn.ModuleList(
-            [TrainLMDecoderLayer(config) for _ in range(config.num_coda_layers)]
+            [
+                TrainLMDecoderLayer(config, is_first_layer=False)
+                for _ in range(config.num_coda_layers)
+            ]
         )
         self.recurrent_gate = nn.Parameter(torch.zeros(config.hidden_size))
         self.recurrent_norm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -84,17 +98,40 @@ class LaughLMLoopModel(TrainLMPreTrainedModel):
         hidden_states: torch.Tensor,
         position_ids: torch.LongTensor,
         attention_mask: torch.Tensor | None,
-    ) -> torch.Tensor:
+        *,
+        segment_ids: torch.Tensor | None = None,
+        v_anchor: torch.Tensor | None = None,
+        return_v_state: bool = False,
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         if (
             self.gradient_checkpointing
             and self.training
             and torch.is_grad_enabled()
         ):
+            if segment_ids is not None or v_anchor is not None or return_v_state:
+                return self._gradient_checkpointing_func(
+                    layer.__call__,
+                    hidden_states,
+                    position_ids,
+                    attention_mask,
+                    segment_ids,
+                    v_anchor,
+                    return_v_state,
+                )
             return self._gradient_checkpointing_func(
                 layer.__call__,
                 hidden_states,
                 position_ids,
                 attention_mask,
+            )
+        if segment_ids is not None or v_anchor is not None or return_v_state:
+            return layer(
+                hidden_states,
+                position_ids=position_ids,
+                attention_mask=attention_mask,
+                segment_ids=segment_ids,
+                v_anchor=v_anchor,
+                return_v_state=return_v_state,
             )
         return layer(
             hidden_states,
@@ -173,14 +210,29 @@ class LaughLMLoopModel(TrainLMPreTrainedModel):
                 .expand(batch_size, sequence_length)
             )
 
+        segment_ids = resolve_packed_doc_ids(self.config, input_ids)
+        use_v_res = bool(getattr(self.config, "use_value_residual", False))
+        v_anchor: torch.Tensor | None = None
+
         hidden_states = inputs_embeds
         all_hidden_states = (hidden_states,) if output_hidden_states else None
 
         # 1. Prelude layers establish initial latent representation.
-        for layer in self.prelude_layers:
-            hidden_states = self._run_decoder_layer(
-                layer, hidden_states, position_ids, attention_mask
+        for layer_idx, layer in enumerate(self.prelude_layers):
+            capture_v = use_v_res and v_anchor is None and layer_idx == 0
+            layer_out = self._run_decoder_layer(
+                layer,
+                hidden_states,
+                position_ids,
+                attention_mask,
+                segment_ids=segment_ids,
+                v_anchor=v_anchor,
+                return_v_state=capture_v,
             )
+            if capture_v:
+                hidden_states, v_anchor = layer_out
+            else:
+                hidden_states = layer_out
             _assert_finite(hidden_states, "loop.prelude")
             if output_hidden_states and all_hidden_states is not None:
                 all_hidden_states = (*all_hidden_states, hidden_states)
@@ -208,10 +260,21 @@ class LaughLMLoopModel(TrainLMPreTrainedModel):
                 eps=float(self.recurrent_norm.eps),
                 use_pallas=use_pallas_rec_norm,
             )
-            for layer in self.core_layers:
-                hidden_states = self._run_decoder_layer(
-                    layer, hidden_states, position_ids, attention_mask
+            for layer_idx, layer in enumerate(self.core_layers):
+                capture_v = use_v_res and v_anchor is None and step_idx == 0 and layer_idx == 0
+                layer_out = self._run_decoder_layer(
+                    layer,
+                    hidden_states,
+                    position_ids,
+                    attention_mask,
+                    segment_ids=segment_ids,
+                    v_anchor=v_anchor,
+                    return_v_state=capture_v,
                 )
+                if capture_v:
+                    hidden_states, v_anchor = layer_out
+                else:
+                    hidden_states = layer_out
                 _assert_finite(hidden_states, "loop.core")
             if output_hidden_states and all_hidden_states is not None:
                 all_hidden_states = (*all_hidden_states, hidden_states)
@@ -219,7 +282,12 @@ class LaughLMLoopModel(TrainLMPreTrainedModel):
         # 3. Coda layers decode latent trajectory to vocabulary space.
         for layer in self.coda_layers:
             hidden_states = self._run_decoder_layer(
-                layer, hidden_states, position_ids, attention_mask
+                layer,
+                hidden_states,
+                position_ids,
+                attention_mask,
+                segment_ids=segment_ids,
+                v_anchor=v_anchor,
             )
             _assert_finite(hidden_states, "loop.coda")
             if output_hidden_states and all_hidden_states is not None:
@@ -355,4 +423,5 @@ _register_laughlm_loop_model()
 __all__ = [
     "LaughLMLoopForCausalLM",
     "LaughLMLoopModel",
+    "compute_packed_doc_ids",
 ]

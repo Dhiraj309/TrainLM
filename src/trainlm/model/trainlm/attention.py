@@ -165,6 +165,8 @@ class TrainLMAttention(nn.Module):
     def __init__(
         self,
         config: TrainLMConfig,
+        *,
+        is_first_layer: bool = False,
     ) -> None:
         super().__init__()
 
@@ -210,6 +212,35 @@ class TrainLMAttention(nn.Module):
             bias=config.attention_bias,
         )
 
+        if bool(getattr(config, "use_qk_norm", False)):
+            self.q_norm: nn.RMSNorm | None = nn.RMSNorm(
+                self.head_dim,
+                eps=config.rms_norm_eps,
+            )
+            self.k_norm: nn.RMSNorm | None = nn.RMSNorm(
+                self.head_dim,
+                eps=config.rms_norm_eps,
+            )
+        else:
+            self.q_norm = None
+            self.k_norm = None
+
+        if bool(getattr(config, "use_value_residual", False)) and not is_first_layer:
+            self.value_residual_logit: nn.Parameter | None = nn.Parameter(
+                torch.full((self.num_key_value_heads,), -2.0)
+            )
+        else:
+            self.value_residual_logit = None
+
+        if bool(getattr(config, "use_attn_output_gate", False)):
+            self.o_gate_proj: nn.Linear | None = nn.Linear(
+                self.hidden_size,
+                self.num_attention_heads,
+                bias=False,
+            )
+        else:
+            self.o_gate_proj = None
+
         self.rotary_emb = TrainLMRotaryEmbedding(
             config,
         )
@@ -219,7 +250,10 @@ class TrainLMAttention(nn.Module):
         hidden_states: torch.Tensor,
         position_ids: torch.LongTensor,
         attention_mask: torch.Tensor | None = None,
-    ) -> torch.Tensor:
+        segment_ids: torch.Tensor | None = None,
+        v_anchor: torch.Tensor | None = None,
+        return_v_state: bool = False,
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         """
         Apply self-attention.
 
@@ -239,6 +273,15 @@ class TrainLMAttention(nn.Module):
 
             Supported shapes include broadcastable boolean masks
             and additive floating-point masks.
+        segment_ids:
+            Optional ``(batch_size, sequence_length)`` ``int32`` packed document
+            IDs restricting attention to tokens within the same document.
+        v_anchor:
+            Optional first-layer post-``v_proj`` tensor
+            ``(batch_size, num_key_value_heads, sequence_length, head_dim)`` for
+            ``V_1`` value-residual mixing.
+        return_v_state:
+            If True, also return this layer's raw post-``v_proj`` tensor.
         """
 
         batch_size, sequence_length, _ = (
@@ -281,6 +324,11 @@ class TrainLMAttention(nn.Module):
             self.head_dim,
         ).transpose(1, 2)
 
+        if self.q_norm is not None:
+            query_states = self.q_norm(query_states)
+        if self.k_norm is not None:
+            key_states = self.k_norm(key_states)
+
         cos, sin = self.rotary_emb(
             query_states,
             position_ids,
@@ -296,6 +344,15 @@ class TrainLMAttention(nn.Module):
         )
         _assert_finite(query_states, "attention.rotary.query")
         _assert_finite(key_states, "attention.rotary.key")
+
+        raw_value_states = value_states
+        if self.value_residual_logit is not None and v_anchor is not None:
+            alpha = torch.sigmoid(self.value_residual_logit).view(
+                1, self.num_key_value_heads, 1, 1
+            ).to(dtype=value_states.dtype)
+            value_states = (1.0 - alpha) * value_states + alpha * v_anchor.to(
+                dtype=value_states.dtype
+            )
 
         attn_impl = getattr(self.config, "_attn_implementation", None)
         custom_attn_fn = None
@@ -313,21 +370,21 @@ class TrainLMAttention(nn.Module):
                 custom_attn_fn = None
 
         if callable(custom_attn_fn):
+            custom_kwargs: dict[str, object] = {
+                "attention_mask": None,
+                "dropout": self.attention_dropout if self.training else 0.0,
+                "scaling": None,
+            }
+            if segment_ids is not None:
+                custom_kwargs["segment_ids"] = segment_ids
             attn_output, _ = custom_attn_fn(
                 self,
                 query_states,
                 key_states,
                 value_states,
-                attention_mask=None,
-                dropout=self.attention_dropout if self.training else 0.0,
-                scaling=None,
+                **custom_kwargs,
             )
             _assert_finite(attn_output, "attention.custom")
-            attn_output = attn_output.reshape(
-                batch_size,
-                sequence_length,
-                self.hidden_size,
-            )
         else:
             key_states = _repeat_kv(
                 key_states,
@@ -346,6 +403,23 @@ class TrainLMAttention(nn.Module):
                     device=query_states.device,
                 ).tril()
                 sdpa_mask = causal_mask[None, None, :, :] & sdpa_mask.bool()[:, None, None, :]
+            if segment_ids is not None:
+                seg_mask = (
+                    segment_ids[:, None, :, None] == segment_ids[:, None, None, :]
+                )
+                if sdpa_mask is None:
+                    causal_mask = torch.ones(
+                        (sequence_length, sequence_length),
+                        dtype=torch.bool,
+                        device=query_states.device,
+                    ).tril()
+                    sdpa_mask = causal_mask[None, None, :, :] & seg_mask
+                elif sdpa_mask.dtype == torch.bool:
+                    sdpa_mask = sdpa_mask & seg_mask
+                else:
+                    sdpa_mask = sdpa_mask.masked_fill(
+                        ~seg_mask, torch.finfo(sdpa_mask.dtype).min
+                    )
 
             attn_output = F.scaled_dot_product_attention(
                 query_states,
@@ -360,19 +434,28 @@ class TrainLMAttention(nn.Module):
                 is_causal=sdpa_mask is None,
             )
             _assert_finite(attn_output, "attention.sdpa")
+            attn_output = attn_output.transpose(1, 2)
 
-            attn_output = (
-                attn_output.transpose(1, 2)
-                .reshape(
-                    batch_size,
-                    sequence_length,
-                    self.hidden_size,
-                )
-            )
+        if self.o_gate_proj is not None:
+            gate = torch.sigmoid(self.o_gate_proj(hidden_states)).unsqueeze(-1)
+            attn_output = attn_output.reshape(
+                batch_size,
+                sequence_length,
+                self.num_attention_heads,
+                self.head_dim,
+            ) * gate.to(dtype=attn_output.dtype)
+
+        attn_output = attn_output.reshape(
+            batch_size,
+            sequence_length,
+            self.hidden_size,
+        )
 
         attn_output = self.o_proj(
             attn_output,
         )
         _assert_finite(attn_output, "attention.o_proj")
 
+        if return_v_state:
+            return attn_output, raw_value_states
         return attn_output
