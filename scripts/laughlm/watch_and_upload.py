@@ -66,7 +66,7 @@ def upload_new_checkpoints(
                 path_in_repo=ckpt.name,
                 repo_id=hf_repo,
                 repo_type="model",
-                ignore_patterns=["*.tmp", "*.tmp.*", ".*.tmp.*"],
+                ignore_patterns=["*.tmp", "*.tmp.*", ".*.tmp.*", "README.md", "README.*"],
                 commit_message=f"Upload checkpoint {ckpt.name}",
             )
         uploaded.add(ckpt.name)

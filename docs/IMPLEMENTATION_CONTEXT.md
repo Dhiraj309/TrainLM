@@ -25,7 +25,15 @@ after Colab `TPU v5e-1` run logged `62,873.3 tok/s` / `46.13%` non-logit MFU on
 `laughlm-loop-135m-pallas-off-compiled` (`bs=4`), and updated
 `notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb` to `--force-reinstall`
 `feat/laughlm-loop-pallas`, print `remote_revision`/`source_revision`, and
-default `MODELS_TO_RUN` to only the two pending `Pallas-On` runs.
+default `MODELS_TO_RUN` to only the two pending `Pallas-On` runs. Post-PR #200
+(`main` `099d4ad`), live Colab `TPU v5e-1` runs verified `Pallas On` (`bs=4`:
+`62,947.8 tok/s` / `46.18%` non-logit MFU / `54.63%` total; `bs=8`: `61,004.9
+tok/s` / `44.76%` / `52.94%`) and completed a `131.07M`-token (`1,000`-step,
+`grad_accum=16`) Stage-1 pilot at `73,240.1 tok/s` (`53.73%` non-logit /
+`~63.6%` total MFU, `4.2332` final loss, `99.9%` XLA cache hits) plus held-out
+shard `00029` loop scaling (`R=1..8`: `123.09 -> 68.02` PPL at `R=4`); updated
+`README.md`, added `docs/model_cards/laughlm-loop-135m-pilot.md`, and added
+`README.md`/`README.*` to `ignore_patterns` in `scripts/laughlm/watch_and_upload.py`.
 
 **`LaughLM-Loop` + Custom Pallas Recurrent-Norm + `gs://` Shards (2026-11-27):**
 on branch `feat/laughlm-loop-pallas` (from `main` `db74fef`): (1) added
