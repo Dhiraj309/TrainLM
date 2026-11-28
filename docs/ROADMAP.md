@@ -1,5 +1,20 @@
 # TrainLM Roadmap
 
+**LaughLM Script Hardening, Pre-Import TPU Cache, Deep-Init & Multi-Depth Cycling (2026-11-28):**
+on branch `feat/01-laughlm-hardening-and-multidepth` (from merged `main`
+`19ab320`): fixed the silent `max_steps=1000` cap and WSD `warmup_fraction`
+calculation in `stage1_base_30b.py`/`stage2_anneal_5b.py`/`api.py` when running
+`--max-tokens` budgets, added `--shard-start`/`--shard-stop` across `public.py`
+(`from_hub` + `from_gcs`) and the LaughLM CLI scripts, replaced internal
+`torch.tpu.synchronize()` with `torch.accelerator.synchronize()` in
+`eval_loop_scaling.py`, exported `TORCH_TPU_TIER3_COMPILATION_CACHE_ROOT` /
+`XLA_COMPILATION_CACHE_PATH` prior to PJRT init (`configure_preimport_tpu_compile_cache`),
+and added opt-in `deep_init_scale` (`1/sqrt(2*effective_layers)` on `o_proj`/
+`down_proj`) plus DDP-lockstep host-side `loop_depth_schedule` cycling
+(`--loop-depth-schedule`) with per-depth compiled specialization caching.
+Verified on CPU/CI; live `TPU v5e-1` / `v6e-8` validation of multi-depth
+cycling and `deep_init_scale` remains pending.
+
 **Multi-Chip `TorchTPU` Distributed Support (`v5e-8`/`v6e-8`), Race-Free GCS & Loop Smoke Tests (2026-11-27):**
 on branch `feat/laughlm-loop-pallas` (from merged `main` `aa91110`): extended
 `TorchTPURuntime` (`src/trainlm/runtime/torchtpu.py`) to initialize multi-rank

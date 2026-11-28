@@ -128,3 +128,183 @@ def test_laughlm_loop_end_to_end_bin_train_resume_export_and_scaling(tmp_path: P
     losses = [r["loss"] for r in rows]
     assert len({round(val, 6) for val in losses}) >= 2
     assert all(r["tokens_per_second"] > 0 for r in rows)
+
+
+def test_stage1_stage2_build_training_args_max_steps_none_and_wsd_warmup(tmp_path: Path):
+    from scripts.laughlm import stage1_base_30b, stage2_anneal_5b
+
+    s1_args = stage1_base_30b.parse_args(
+        [
+            "--loop-preset",
+            "pilot-1b",
+            "--max-tokens",
+            "250000000",
+            "--micro-batch-size",
+            "4",
+            "--grad-accum",
+            "16",
+            "--output-dir",
+            str(tmp_path / "s1"),
+        ]
+    )
+    t1 = stage1_base_30b.build_training_arguments(
+        s1_args,
+        accel_kind="cpu",
+        rank=0,
+        grad_accum=16,
+        remat="auto",
+        optim_name="adamw_torch",
+        chunk_size=128,
+    )
+    assert t1.max_steps is None
+    assert t1.max_tokens == 250_000_000
+
+    cfg = _tiny_loop_config()
+    model = LaughLMLoopForCausalLM(cfg)
+    ds = [{"input_ids": torch.zeros(16, dtype=torch.long), "labels": torch.zeros(16, dtype=torch.long)}]
+    trainer = TrainLMTrainer(model=model, args=t1, train_dataset=ds)
+    sched_cfg = trainer._scheduler_config()
+    assert sched_cfg.horizon_tokens == 250_000_000
+    assert 0.0 < sched_cfg.warmup_fraction < 1.0 or sched_cfg.warmup_fraction == 1.0
+    # 250M / (4 * 16 * 2048) = 1908 steps; warmup_steps=2000 caps at 1.0,
+    # whereas 1B tokens (~7630 steps) keeps warmup_fraction well below 1.0:
+    t1_1b = stage1_base_30b.build_training_arguments(
+        stage1_base_30b.parse_args(
+            [
+                "--loop-preset",
+                "pilot-1b",
+                "--micro-batch-size",
+                "4",
+                "--grad-accum",
+                "16",
+                "--output-dir",
+                str(tmp_path / "s1_1b"),
+            ]
+        ),
+        accel_kind="cpu",
+        rank=0,
+        grad_accum=16,
+        remat="auto",
+        optim_name="adamw_torch",
+        chunk_size=128,
+    )
+    trainer_1b = TrainLMTrainer(model=model, args=t1_1b, train_dataset=ds)
+    sched_1b = trainer_1b._scheduler_config()
+    assert 0.20 < sched_1b.warmup_fraction < 0.30
+    assert sched_1b.stable_fraction > 0.70
+
+    s2_args = stage2_anneal_5b.parse_args(
+        ["--init-checkpoint", "runs/s1/final_model", "--output-dir", str(tmp_path / "s2")]
+    )
+    t2 = stage2_anneal_5b.build_training_arguments(
+        s2_args,
+        accel_kind="cpu",
+        grad_accum=2,
+        remat="auto",
+        optim_name="adamw_torch",
+        chunk_size=128,
+    )
+    assert t2.max_steps is None
+    assert t2.max_tokens == 5_000_000_000
+
+
+def test_ddp_safe_host_loop_depth_schedule_and_specializations(tmp_path: Path, monkeypatch):
+    from collections import Counter
+    from trainlm.training.trainer import resolve_scheduled_num_loops
+
+    schedule = (2, 4, 4, 6)
+    rank0_seq = [
+        resolve_scheduled_num_loops(schedule, step=step, micro_idx=m, grad_accum=16)
+        for step in range(2)
+        for m in range(16)
+    ]
+    rank1_seq = [
+        resolve_scheduled_num_loops(schedule, step=step, micro_idx=m, grad_accum=16)
+        for step in range(2)
+        for m in range(16)
+    ]
+    assert rank0_seq == rank1_seq
+    assert Counter(rank0_seq[:16]) == {2: 4, 4: 8, 6: 4}
+
+    cfg = _tiny_loop_config()
+    model = LaughLMLoopForCausalLM(cfg)
+    observed_loops: list[int | None] = []
+    orig_forward = model.model.forward
+
+    def spy_forward(*args, **kwargs):
+        observed_loops.append(kwargs.get("num_loops"))
+        return orig_forward(*args, **kwargs)
+
+    monkeypatch.setattr(model.model, "forward", spy_forward)
+    gen = torch.Generator().manual_seed(5)
+    tokens = torch.randint(0, cfg.vocab_size, (16, 16), generator=gen)
+    ds = [{"input_ids": row, "labels": row.clone()} for row in tokens]
+
+    trainer = TrainLMTrainer(
+        model=model,
+        train_dataset=ds,
+        args=TrainLMTrainingArguments(
+            output_dir=str(tmp_path / "sched"),
+            accelerator="cpu",
+            per_device_train_batch_size=2,
+            gradient_accumulation_steps=4,
+            sequence_length=16,
+            max_steps=2,
+            logging_steps=1,
+            save_strategy="no",
+            bf16=False,
+            torch_compile=False,
+            loss_implementation="chunked_linear",
+            logits_chunk_size=32,
+            optim="adamw_torch",
+            loop_depth_schedule=schedule,
+            report_to="none",
+        ),
+    )
+    state = trainer.train()
+    assert state.step == 2
+    assert observed_loops == [2, 4, 4, 6, 2, 4, 4, 6]
+
+    # Verify compiled microbatch path creates only 3 specializations for (2, 4, 4, 6) over 2 steps.
+    observed_loops.clear()
+    compile_calls: list[int] = []
+    compiled_trainer = TrainLMTrainer(
+        model=model,
+        train_dataset=ds,
+        args=TrainLMTrainingArguments(
+            output_dir=str(tmp_path / "sched_compiled"),
+            accelerator="cpu",
+            per_device_train_batch_size=2,
+            gradient_accumulation_steps=4,
+            sequence_length=16,
+            max_steps=2,
+            logging_steps=1,
+            save_strategy="no",
+            bf16=False,
+            torch_compile=False,
+            loss_implementation="chunked_linear",
+            logits_chunk_size=32,
+            optim="adamw_torch",
+            loop_depth_schedule=schedule,
+            report_to="none",
+        ),
+    )
+
+    class _FakeCompiledDevice:
+        type = "tpu"
+
+    compiled_trainer.engine.runtime._compile_enabled = True
+    monkeypatch.setattr(compiled_trainer.engine.runtime, "device", _FakeCompiledDevice(), raising=False)
+    monkeypatch.setattr(
+        compiled_trainer.engine.runtime,
+        "compile_training_step",
+        lambda fn: (compile_calls.append(len(compile_calls)), fn)[1],
+        raising=False,
+    )
+    compiled_state = compiled_trainer.train()
+    assert compiled_state.step == 2
+    assert observed_loops == [2, 4, 4, 6, 2, 4, 4, 6]
+    assert len(compile_calls) == 3
+    assert set(compiled_trainer.engine._compiled_microbatch_step_fns.keys()) == {2, 4, 6}
+
+

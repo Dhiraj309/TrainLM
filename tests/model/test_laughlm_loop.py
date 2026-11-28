@@ -138,3 +138,77 @@ def test_trainer_integration_with_chunked_linear_loss(tmp_path: Path):
     )
     state = trainer.train()
     assert state.step == 2
+
+
+def test_deep_init_scale_scales_output_projections_only():
+    import math
+
+    cfg_base = _tiny_loop_config(
+        num_prelude_layers=1,
+        num_core_layers=2,
+        num_coda_layers=1,
+        num_loop_iterations=4,
+        deep_init_scale=False,
+    )
+    cfg_scaled = _tiny_loop_config(
+        num_prelude_layers=1,
+        num_core_layers=2,
+        num_coda_layers=1,
+        num_loop_iterations=4,
+        deep_init_scale=True,
+    )
+    torch.manual_seed(123)
+    m_base = LaughLMLoopForCausalLM(cfg_base)
+    torch.manual_seed(123)
+    m_scaled = LaughLMLoopForCausalLM(cfg_scaled)
+
+    effective_layers = cfg_scaled.effective_num_layers()
+    assert effective_layers == 1 + 2 * 4 + 1
+    expected_scale = 1.0 / math.sqrt(2.0 * effective_layers)
+
+    assert torch.equal(m_base.model.embed_tokens.weight, m_scaled.model.embed_tokens.weight)
+    for grp_base, grp_scaled in (
+        (m_base.model.prelude_layers, m_scaled.model.prelude_layers),
+        (m_base.model.core_layers, m_scaled.model.core_layers),
+        (m_base.model.coda_layers, m_scaled.model.coda_layers),
+    ):
+        for lb, ls in zip(grp_base, grp_scaled):
+            assert torch.equal(lb.self_attn.q_proj.weight, ls.self_attn.q_proj.weight)
+            assert torch.equal(lb.self_attn.k_proj.weight, ls.self_attn.k_proj.weight)
+            assert torch.equal(lb.self_attn.v_proj.weight, ls.self_attn.v_proj.weight)
+            assert torch.equal(lb.mlp.gate_proj.weight, ls.mlp.gate_proj.weight)
+            assert torch.equal(lb.mlp.up_proj.weight, ls.mlp.up_proj.weight)
+            assert torch.allclose(lb.self_attn.o_proj.weight * expected_scale, ls.self_attn.o_proj.weight)
+            assert torch.allclose(lb.mlp.down_proj.weight * expected_scale, ls.mlp.down_proj.weight)
+
+
+def test_backward_compatibility_for_config_without_new_fields(tmp_path: Path):
+    import json
+
+    cfg = _tiny_loop_config()
+    model = LaughLMLoopForCausalLM(cfg)
+    ckpt = tmp_path / "legacy_ckpt"
+    model.save_pretrained(ckpt)
+
+    cfg_path = ckpt / "config.json"
+    raw = json.loads(cfg_path.read_text(encoding="utf-8"))
+    raw.pop("deep_init_scale", None)
+    raw.pop("loop_depth_schedule", None)
+    cfg_path.write_text(json.dumps(raw) + "\n", encoding="utf-8")
+
+    reloaded = LaughLMLoopForCausalLM.from_pretrained(ckpt)
+    assert reloaded.config.deep_init_scale is False
+    assert reloaded.config.loop_depth_schedule is None
+
+
+def test_explicit_num_loops_respected_under_is_compiling(monkeypatch: pytest.MonkeyPatch):
+    cfg = _tiny_loop_config(num_loop_iterations=4)
+    model = LaughLMLoopForCausalLM(cfg)
+    model.eval()
+    input_ids = torch.randint(0, cfg.vocab_size, (1, 8))
+    monkeypatch.setattr(torch.compiler, "is_compiling", lambda: True)
+    with torch.no_grad():
+        out_r2 = model(input_ids=input_ids, num_loops=2).logits
+        out_r4 = model(input_ids=input_ids, num_loops=4).logits
+    assert not torch.allclose(out_r2, out_r4)
+

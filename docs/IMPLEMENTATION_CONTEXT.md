@@ -1,5 +1,25 @@
 # TrainLM implementation context
 
+**LaughLM Script Hardening, Pre-Import TPU Cache, Deep-Init & Multi-Depth Cycling (2026-11-28):**
+on branch `feat/01-laughlm-hardening-and-multidepth` (from merged `main`
+`19ab320`): (1) added `--max-steps` (default `None`), `--shard-start`/
+`--shard-stop` (`PackedBinDataset.from_hub` / `from_gcs` supporting `subfolder`
++ `shard_range`), and `--compile-cache-dir` across `stage1_base_30b.py`,
+`stage2_anneal_5b.py`, `eval_loop_scaling.py`, and `launch_tpu_slice.py`, plus
+token-horizon WSD `warmup_fraction` computation in `src/trainlm/api.py` when
+`max_steps=None`; (2) fixed `eval_loop_scaling.py` to use
+`torch.accelerator.synchronize()` and standalone `torch_tpu` import; (3) added
+stdlib-only `configure_preimport_tpu_compile_cache()` in
+`scripts/laughlm/common.py` (guarded `gs://` in `TorchTPURuntime`) so PJRT
+receives Tier-3/XLA cache env vars before `import torch`/`torch_tpu`; (4) added
+opt-in `deep_init_scale` to `LaughLMLoopConfig`/`LaughLMLoopModel` (`o_proj`/
+`down_proj` scaled by `1/sqrt(2*effective_layers)` with identical RNG draws);
+(5) added DDP-lockstep host-side `loop_depth_schedule` (`TrainerConfig`,
+`TrainLMTrainingArguments`, `resolve_scheduled_num_loops` in `trainer.py`,
+`CausalLMTask` per-depth `_compiled_hidden_fns`, and `Trainer` per-depth
+`_compiled_single_step_fns`/`_compiled_microbatch_step_fns` caches) with new
+contract, model, data, and smoke tests.
+
 **Multi-Chip `TorchTPU` Distributed Support (`v5e-8`/`v6e-8`), Race-Free GCS & Loop Smoke Tests (2026-11-27):**
 on branch `feat/laughlm-loop-pallas` (from merged `main` `aa91110`): (1) updated
 `TorchTPURuntime` (`src/trainlm/runtime/torchtpu.py`) and `discover_tpu`

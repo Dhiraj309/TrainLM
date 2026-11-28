@@ -277,3 +277,117 @@ def test_watch_and_upload_preserves_hf_model_card_readme():
     assert '"README.md"' in src
     assert '"README.*"' in src
 
+
+def test_stage1_stage2_max_steps_shard_range_and_schedule_contracts():
+    from scripts.laughlm import eval_loop_scaling, launch_tpu_slice, stage1_base_30b, stage2_anneal_5b
+    from scripts.laughlm.common import parse_loop_depth_schedule, resolve_shard_range
+
+    s1_pilot = stage1_base_30b.parse_args(
+        [
+            "--loop-preset",
+            "pilot-1b",
+            "--max-tokens",
+            "250000000",
+            "--shard-start",
+            "0",
+            "--shard-stop",
+            "3",
+            "--deep-init-scale",
+            "--loop-depth-schedule",
+            "2,4,4,6",
+        ]
+    )
+    assert s1_pilot.max_tokens == 250_000_000
+    assert s1_pilot.max_steps is None
+    assert s1_pilot.shard_range == (0, 3)
+    assert s1_pilot.deep_init_scale is True
+    assert s1_pilot.loop_depth_schedule == (2, 4, 4, 6)
+
+    s1_explicit_steps = stage1_base_30b.parse_args(["--loop-preset", "pilot-1b", "--max-steps", "42"])
+    assert s1_explicit_steps.max_steps == 42
+
+    s2_default = stage2_anneal_5b.parse_args(
+        ["--init-checkpoint", "runs/s1/final_model", "--shard-start", "3", "--max-shards", "2"]
+    )
+    assert s2_default.max_steps is None
+    assert s2_default.shard_range == (3, 5)
+    assert stage2_anneal_5b.parse_args(
+        ["--init-checkpoint", "runs/s1/final_model", "--max-steps", "10"]
+    ).max_steps == 10
+
+    eval_heldout = eval_loop_scaling.parse_args(
+        [
+            "--checkpoint",
+            "runs/s1/final_model",
+            "--eval-shard-start",
+            "29",
+            "--eval-shard-stop",
+            "30",
+        ]
+    )
+    assert eval_heldout.shard_range == (29, 30)
+
+    assert resolve_shard_range(0, None, 2) is None
+    assert resolve_shard_range(1, None, 2) == (1, 3)
+    assert resolve_shard_range(2, 5, 1) == (2, 5)
+
+    assert parse_loop_depth_schedule("2,4,4,6") == (2, 4, 4, 6)
+    with pytest.raises(ValueError, match="at most 6 unique depths"):
+        parse_loop_depth_schedule("1,2,3,4,5,6,7")
+
+    slice_args = launch_tpu_slice.parse_args(
+        [
+            "--gcs-shard-dir",
+            "gs://bucket/shards",
+            "--compile-cache-dir",
+            "gs://bucket/xla_cache",
+            "--shard-start",
+            "0",
+            "--shard-stop",
+            "10",
+            "--deep-init-scale",
+            "--loop-depth-schedule",
+            "2,4,4,6",
+        ]
+    )
+    cmd = launch_tpu_slice.build_launch_command(slice_args)
+    assert "--compile-cache-dir" in cmd and "gs://bucket/xla_cache" in cmd
+    assert "--shard-stop" in cmd and "10" in cmd
+    assert "--deep-init-scale" in cmd
+    assert "--loop-depth-schedule" in cmd and "2,4,4,6" in cmd
+
+
+def test_preimport_tpu_cache_and_eval_accelerator_sync(tmp_path: Path):
+    import inspect
+    from scripts.laughlm import eval_loop_scaling
+    from scripts.laughlm.common import configure_preimport_tpu_compile_cache
+
+    cache_dir = tmp_path / "xla_cache"
+    env = configure_preimport_tpu_compile_cache(cache_dir, base_env={})
+    assert cache_dir.is_dir()
+    assert env["TORCH_TPU_CACHE_DIR"] == str(cache_dir)
+    assert env["TORCH_TPU_TIER3_COMPILATION_CACHE_ROOT"] == str(cache_dir)
+    assert env["XLA_COMPILATION_CACHE_PATH"] == str(cache_dir)
+
+    # Explicit user overrides are never clobbered.
+    preserved = configure_preimport_tpu_compile_cache(
+        cache_dir,
+        base_env={
+            "TORCH_TPU_TIER3_COMPILATION_CACHE_ROOT": "gs://user-bucket/tier3",
+            "XLA_COMPILATION_CACHE_PATH": "/custom/xla",
+        },
+    )
+    assert preserved["TORCH_TPU_TIER3_COMPILATION_CACHE_ROOT"] == "gs://user-bucket/tier3"
+    assert preserved["XLA_COMPILATION_CACHE_PATH"] == "/custom/xla"
+    assert preserved["TORCH_TPU_CACHE_DIR"] == str(cache_dir)
+
+    # GCS URIs do not try to create local directories.
+    gcs_env = configure_preimport_tpu_compile_cache("gs://my-bucket/cache", base_env={})
+    assert gcs_env["TORCH_TPU_TIER3_COMPILATION_CACHE_ROOT"] == "gs://my-bucket/cache"
+
+    sync_src = inspect.getsource(eval_loop_scaling._synchronize_device)
+    eval_src = inspect.getsource(eval_loop_scaling._evaluate_loop_depths)
+    assert "torch.tpu" not in sync_src and "torch.tpu" not in eval_src
+    assert "accelerator" in sync_src and "synchronize" in sync_src
+
+
