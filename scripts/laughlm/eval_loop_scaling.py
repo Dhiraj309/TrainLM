@@ -55,6 +55,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--max-eval-batches", type=int, default=16)
     parser.add_argument("--loops", default="1,2,4,6,8")
+    parser.add_argument(
+        "--output-json",
+        default=None,
+        help="Optional JSON path to save loop-scaling evaluation results.",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Run synthetic CPU loop-scaling check.")
     ns = parser.parse_args(argv)
     ns.shard_range = resolve_shard_range(ns.shard_start, ns.shard_stop, ns.max_shards)
@@ -248,6 +253,20 @@ def main(argv: list[str] | None = None) -> int:
             f"ppl={row['ppl']:.2f} | {row['tokens_per_second']:8.1f} tok/s",
             flush=True,
         )
+    if args.output_json:
+        import json  # noqa: PLC0415
+
+        out_path = Path(args.output_json)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "checkpoint": args.checkpoint,
+            "seq_len": args.seq_len,
+            "batch_size": args.batch_size,
+            "shard_range": list(args.shard_range) if args.shard_range is not None else None,
+            "results": rows,
+        }
+        out_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        print(f"Saved loop-scaling results to {out_path}", flush=True)
     return 0
 
 
