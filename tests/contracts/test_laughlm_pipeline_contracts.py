@@ -437,6 +437,23 @@ def test_optin_arch_and_doc_boundary_cli_flags():
     assert s2_on.use_qk_norm is True
     assert s2_on.use_attn_output_gate is True
 
+    from scripts.laughlm import eval_loop_scaling
+
+    ev_ns = eval_loop_scaling.parse_args(
+        [
+            "--checkpoint",
+            "runs/stage1_pilot-1b/final_model",
+            "--eval-shard-start",
+            "29",
+            "--eval-shard-stop",
+            "30",
+            "--output-json",
+            "eval_loop_scaling.json",
+        ]
+    )
+    assert ev_ns.shard_range == (29, 30)
+    assert ev_ns.output_json == "eval_loop_scaling.json"
+
     if (
         importlib.util.find_spec("torch") is not None
         and importlib.util.find_spec("transformers") is not None

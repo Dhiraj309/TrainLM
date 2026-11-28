@@ -1,5 +1,19 @@
 # TrainLM Roadmap
 
+**TPU Benchmark & LaughLM Pilot Notebooks Updated for PR #202 + PR #203 (2026-11-28):**
+on branch `feat/03-update-tpu-notebooks-pr202-pr203` (from merged `main`
+`694d3dc`): updated `notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb` (`BRANCH="main"`,
+pre-import `/tmp/tpu_compile_cache` Tier-3 cache export, THP container-safe
+check, and 5-config PR #203 Architecture & Pallas `SegmentIds` MFU Gate matrix
+at `bs=4, seq=2048`), added `notebooks/LaughLM_Loop_TPU_Pilot.ipynb` (pre-import
+cache + Stage-1 pilot with `--deep-init-scale`, `--loop-depth-schedule`,
+`--doc-boundary-mask`, `--use-value-residual`, `--use-qk-norm`,
+`--use-attn-output-gate`, held-out shard `29..30` `eval_loop_scaling.py` JSON
+report, and `R=4` generation `TTFT`/`tok/s`), and added `--output-json` to
+`scripts/laughlm/eval_loop_scaling.py`. Verified via local nbformat/AST &
+contract tests + CPU CI; live TPU `v5e-1`/`v6e-8` notebook execution remains
+owner-run.
+
 **Opt-In Splash `SegmentIds`, `V_1` Value Residuals, QK-Norm & Attention Output Gate (2026-11-28):**
 on branch `feat/02-laughlm-optin-arch-and-splash-segids` (from merged `main`
 `c773dd8`): added strictly opt-in (`False`/`None` by default, zero legacy state-dict
