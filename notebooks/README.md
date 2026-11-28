@@ -40,11 +40,22 @@
 - [v5e-1 LLM MFU benchmark](TrainLM_v5e1_MFU_Benchmark.ipynb)
   ([open in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb))
   runs a focused, standalone LLM training and MFU bottleneck check across
-  `SmolLM2-135M`, `SmolLM2-360M`, `Qwen2.5-0.5B`, and `Qwen3-0.6B` on a single
-  `TPU v5e-1`, separating cold Window 1 from steady-state MFU, capturing
-  `torch.profiler` host ops, using `jax.vmap` for Splash backward, and
-  preferring XLA-fused `chunked_linear` during `torch.compile(backend="tpu")`
-  (`TRAINLM_ENABLE_PALLAS_CE=1` opts compiled TPU steps into Pallas CE).
+  `SmolLM2-135M`, `SmolLM2-360M`, `Qwen2.5-0.5B`, `Qwen3-0.6B`, and
+  `LaughLM-Loop-135M` (including the PR #202 + PR #203 5-config opt-in
+  architecture and Pallas Splash `SegmentIds` MFU gate) on a single `TPU v5e-1`
+  or `v6e`, exporting pre-import Tier-3 `/tmp/tpu_compile_cache`, separating
+  cold Window 1 from steady-state MFU, capturing `torch.profiler` host ops,
+  using `jax.vmap` for Splash backward, and preferring XLA-fused `chunked_linear`
+  during `torch.compile(backend="tpu")`.
+- [LaughLM-Loop TPU pilot](LaughLM_Loop_TPU_Pilot.ipynb)
+  ([open in Colab](https://colab.research.google.com/github/Dhiraj309/TrainLM/blob/main/notebooks/LaughLM_Loop_TPU_Pilot.ipynb))
+  runs an end-to-end Stage-1 pilot (`scripts/laughlm/stage1_base_30b.py`) on
+  TPU with pre-import Tier-3 compile caching and toggleable PR #202 + PR #203
+  features (`--deep-init-scale`, `--loop-depth-schedule`, `--doc-boundary-mask`,
+  `--use-value-residual`, `--use-qk-norm`, `--use-attn-output-gate`), followed
+  by held-out shard `29..30` loop-scaling evaluation (`R=1..8`, saving
+  `eval_loop_scaling.json`) and qualitative `R=4` generation timing (`TTFT` and
+  decode `tok/s`).
 
 These notebooks collect evidence for their stated scope; CPU runs and
 standalone probes do not certify end-to-end TPU training or performance.
