@@ -298,7 +298,8 @@ def test_ddp_safe_host_loop_depth_schedule_and_specializations(tmp_path: Path, m
         type = "tpu"
 
     compiled_trainer.engine.runtime._compile_enabled = True
-    monkeypatch.setattr(compiled_trainer.engine.runtime, "device", _FakeCompiledDevice(), raising=False)
+    monkeypatch.setattr(compiled_trainer.engine.runtime, "_device", _FakeCompiledDevice())
+    monkeypatch.setattr(compiled_trainer.engine.runtime, "prepare_batch", lambda batch: batch)
     monkeypatch.setattr(
         compiled_trainer.engine.runtime,
         "compile_training_step",
