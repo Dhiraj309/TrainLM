@@ -17,11 +17,14 @@ from scripts.laughlm.common import (
     DEFAULT_TOKENIZER_ID,
     VOCAB_SIZE,
     atomic_save_model_snapshot,
+    configure_preimport_tpu_compile_cache,
     load_or_init_135m_model,
     load_or_init_loop_135m_model,
     load_tokenizer,
     make_synthetic_dataset,
+    parse_loop_depth_schedule,
     resolve_loss_rematerialization,
+    resolve_shard_range,
 )
 
 LOOP_PRESETS: dict[str, dict[str, int | bool]] = {
@@ -87,8 +90,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--repo-id", "--dataset-repo", dest="repo_id", default=DEFAULT_SHARD_REPO)
     parser.add_argument("--gcs-shard-dir", default=None, help="Same-region gs://bucket/prefix shard directory.")
     parser.add_argument("--cache-dir", default=None, help="Optional local cache dir for gs:// staging.")
+    parser.add_argument(
+        "--compile-cache-dir",
+        default=None,
+        help="XLA/TorchTPU Tier-3 compilation cache directory or gs:// URI exported before PJRT init.",
+    )
     parser.add_argument("--subfolder", default="stage1")
     parser.add_argument("--max-shards", type=int, default=None)
+    parser.add_argument("--shard-start", type=int, default=0, help="Inclusive start shard index (default: 0).")
+    parser.add_argument("--shard-stop", type=int, default=None, help="Exclusive stop shard index.")
     parser.add_argument("--tokenizer-id", default=DEFAULT_TOKENIZER_ID)
     parser.add_argument("--arch", default=None, choices=("dense", "laughlm_loop"))
     parser.add_argument(
@@ -102,11 +112,22 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Disable custom Pallas recurrent_inject_rmsnorm kernel for ablations.",
     )
+    parser.add_argument(
+        "--deep-init-scale",
+        action="store_true",
+        help="Scale residual o_proj/down_proj weights by 1/sqrt(2*effective_layers) at init.",
+    )
+    parser.add_argument(
+        "--loop-depth-schedule",
+        default=None,
+        help="Optional comma-separated host-side loop cycle (e.g. '2,4,4,6').",
+    )
     parser.add_argument("--distributed-strategy", default="auto", choices=("auto", "ddp", "fsdp2", "none"))
     parser.add_argument("--seq-len", type=int, default=None)
     parser.add_argument("--micro-batch-size", type=int, default=128)
     parser.add_argument("--grad-accum", type=int, default=None, help="Defaults to max(1, 256 // (micro_batch_size * world_size)).")
     parser.add_argument("--max-tokens", type=int, default=None)
+    parser.add_argument("--max-steps", type=int, default=None, help="Optional step cap; defaults to None so --max-tokens governs.")
     parser.add_argument("--peak-lr", type=float, default=3e-3)
     parser.add_argument("--warmup-steps", type=int, default=2000)
     parser.add_argument("--save-steps", type=int, default=None)
@@ -136,11 +157,61 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     ns.use_pallas_recurrent_norm = (
         False if ns.no_pallas_recurrent_norm else bool(preset["use_pallas_recurrent_norm"] if preset else True)
     )
+    ns.shard_range = resolve_shard_range(ns.shard_start, ns.shard_stop, ns.max_shards)
+    ns.loop_depth_schedule = parse_loop_depth_schedule(ns.loop_depth_schedule)
     return ns
+
+
+def build_training_arguments(
+    args: argparse.Namespace,
+    *,
+    accel_kind: str,
+    rank: int,
+    grad_accum: int,
+    remat: str,
+    optim_name: str,
+    chunk_size: int,
+) -> Any:
+    """Build ``TrainLMTrainingArguments`` honoring ``--max-tokens`` without a 1,000-step cap."""
+    from trainlm import TrainLMTrainingArguments  # noqa: PLC0415
+
+    return TrainLMTrainingArguments(
+        output_dir=args.output_dir,
+        accelerator="native_tpu" if accel_kind == "tpu" else ("cuda" if accel_kind == "cuda" else "cpu"),
+        distributed_strategy=args.distributed_strategy,
+        per_device_train_batch_size=args.micro_batch_size,
+        gradient_accumulation_steps=grad_accum,
+        sequence_length=args.seq_len,
+        max_steps=args.max_steps,
+        max_tokens=args.max_tokens,
+        warmup_steps=args.warmup_steps,
+        learning_rate=args.peak_lr,
+        weight_decay=0.1,
+        max_grad_norm=1.0,
+        lr_scheduler_type="wsd",
+        wsd_stable_fraction=1.0,
+        save_strategy="steps" if rank == 0 else "no",
+        save_steps=args.save_steps,
+        logging_steps=args.logging_steps,
+        bf16=True,
+        torch_compile=not args.no_compile,
+        torch_compile_mode=args.torch_compile_mode,
+        tpu_compile_cache_dir=args.compile_cache_dir or "auto",
+        attn_implementation="sdpa" if accel_kind != "tpu" else "auto",
+        loss_implementation="chunked_linear",
+        logits_chunk_size=chunk_size,
+        loss_rematerialization=remat,
+        optim=optim_name,
+        loop_depth_schedule=args.loop_depth_schedule,
+        report_to="none",
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    if not args.dry_run:
+        configure_preimport_tpu_compile_cache(args.compile_cache_dir)
+
     from trainlm import TrainLMTrainer, TrainLMTrainingArguments
 
     if args.dry_run:
@@ -161,6 +232,8 @@ def main(argv: list[str] | None = None) -> int:
                     num_coda_layers=1,
                     max_position_embeddings=64,
                     use_pallas_recurrent_norm=args.use_pallas_recurrent_norm,
+                    deep_init_scale=args.deep_init_scale,
+                    loop_depth_schedule=args.loop_depth_schedule,
                 )
                 model = LaughLMLoopForCausalLM(cfg)
             else:
@@ -183,6 +256,7 @@ def main(argv: list[str] | None = None) -> int:
                 lr_scheduler_type="wsd",
                 wsd_stable_fraction=1.0,
                 warmup_steps=1,
+                loop_depth_schedule=args.loop_depth_schedule,
                 report_to="none",
             )
             trainer = TrainLMTrainer(model=model, args=t_args, train_dataset=ds)
@@ -213,61 +287,50 @@ def main(argv: list[str] | None = None) -> int:
     optim_name = resolve_optim(accel_kind)
     chunk_size = resolve_logits_chunk_size(args.logits_chunk_size, accel_kind=accel_kind)
     tokenizer = load_tokenizer(args.tokenizer_id)
+    shard_kwargs: dict[str, object] = {}
+    if args.shard_range is not None:
+        shard_kwargs["shard_range"] = args.shard_range
+    elif args.max_shards is not None:
+        shard_kwargs["max_shards"] = args.max_shards
     if args.gcs_shard_dir:
         dataset = PackedBinDataset.from_gcs(
             args.gcs_shard_dir,
             cache_dir=args.cache_dir,
-            max_shards=args.max_shards,
             sequence_length=args.seq_len,
             header_bytes=0,
             vocab_size=VOCAB_SIZE,
             rank=rank,
             world_size=world_size,
+            **shard_kwargs,
         )
     else:
         dataset = PackedBinDataset.from_hub(
             args.repo_id,
             subfolder=args.subfolder,
-            max_shards=args.max_shards,
             sequence_length=args.seq_len,
             header_bytes=0,
             vocab_size=VOCAB_SIZE,
             rank=rank,
             world_size=world_size,
+            **shard_kwargs,
         )
     if args.arch == "laughlm_loop":
         model = load_or_init_loop_135m_model(
             max_position_embeddings=max(4096, args.seq_len),
             use_pallas_recurrent_norm=args.use_pallas_recurrent_norm,
+            deep_init_scale=args.deep_init_scale,
+            loop_depth_schedule=args.loop_depth_schedule,
         )
     else:
         model = load_or_init_135m_model(max_position_embeddings=max(4096, args.seq_len))
-    t_args = TrainLMTrainingArguments(
-        output_dir=args.output_dir,
-        accelerator="native_tpu" if accel_kind == "tpu" else ("cuda" if accel_kind == "cuda" else "cpu"),
-        distributed_strategy=args.distributed_strategy,
-        per_device_train_batch_size=args.micro_batch_size,
-        gradient_accumulation_steps=grad_accum,
-        sequence_length=args.seq_len,
-        max_tokens=args.max_tokens,
-        warmup_steps=args.warmup_steps,
-        learning_rate=args.peak_lr,
-        weight_decay=0.1,
-        max_grad_norm=1.0,
-        lr_scheduler_type="wsd",
-        wsd_stable_fraction=1.0,
-        save_strategy="steps" if rank == 0 else "no",
-        save_steps=args.save_steps,
-        logging_steps=args.logging_steps,
-        bf16=True,
-        torch_compile=not args.no_compile,
-        torch_compile_mode=args.torch_compile_mode,
-        attn_implementation="sdpa" if accel_kind != "tpu" else "auto",
-        loss_implementation="chunked_linear",
-        logits_chunk_size=chunk_size,
-        loss_rematerialization=remat,
-        optim=optim_name,
-        report_to="none",
+    t_args = build_training_arguments(
+        args,
+        accel_kind=accel_kind,
+        rank=rank,
+        grad_accum=grad_accum,
+        remat=remat,
+        optim_name=optim_name,
+        chunk_size=chunk_size,
     )
     trainer = TrainLMTrainer(
         model=model, args=t_args, train_dataset=dataset, processing_class=tokenizer
