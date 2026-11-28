@@ -75,8 +75,9 @@ class CausalLMTask:
             )
         self._dispatcher_model: nn.Module | None = None
         self._dispatcher: ForwardBatchDispatcher | None = None
-        self._compiled_hidden_key: tuple[int, int] | None = None
+        self._compiled_hidden_key: tuple[Any, ...] | None = None
         self._compiled_hidden_fn: Any = None
+        self._compiled_hidden_fns: dict[tuple[Any, ...], Any] = {}
         self._compiled_loss_key: tuple[Any, ...] | None = None
         self._compiled_loss_fn: Any = None
 
@@ -85,8 +86,10 @@ class CausalLMTask:
         model: nn.Module,
         batch: Any,
         backend: ExecutionBackend,
+        *,
+        num_loops: int | None = None,
     ) -> TaskResult:
-        return self._step(model, batch, backend)
+        return self._step(model, batch, backend, num_loops=num_loops)
 
     def evaluation_step(
         self,
@@ -173,9 +176,13 @@ class CausalLMTask:
         model: nn.Module,
         batch: Any,
         backend: ExecutionBackend,
+        *,
+        num_loops: int | None = None,
     ) -> TaskResult:
         task_batch, counts = self._prepare_task_batch(batch)
-        return self.training_step_prepared(model, task_batch, counts, backend)
+        return self.training_step_prepared(
+            model, task_batch, counts, backend, num_loops=num_loops
+        )
 
     def prepare_batch_on_host(self, batch: Any) -> tuple[dict[str, Any], TokenCounts]:
         """Apply masks and count tokens before asynchronous device transfer."""
@@ -193,6 +200,8 @@ class CausalLMTask:
         task_batch: Mapping[str, Any],
         counts: TokenCounts,
         backend: ExecutionBackend,
+        *,
+        num_loops: int | None = None,
     ) -> TaskResult:
         """Consume this task's prepared tensors and unchanged host counts."""
         if not isinstance(counts, TokenCounts) or not counts.exact:
@@ -214,17 +223,21 @@ class CausalLMTask:
         model_labels = task_batch["labels"]
         labels = model_labels[..., 1:]
         loss_mask = task_batch.get("loss_mask")
-        model_inputs = {
+        model_inputs: dict[str, Any] = {
             key: value
             for key, value in task_batch.items()
             if key not in {"labels", "loss_mask"}
         }
+        if num_loops is not None:
+            model_inputs["num_loops"] = int(num_loops)
         if self.loss_implementation == "chunked_linear":
             assert self.training_view is not None
             # When host preparation already proved ignored_tokens == 0, omit the
             # mask tensor transfer, device torch.where, and denominator sync.
             chunk_loss_mask = None if skip_chunk_loss_mask else loss_mask
-            hidden_state_fn = self._resolve_compiled_hidden_fn(model, backend)
+            hidden_state_fn = self._resolve_compiled_hidden_fn(
+                model, backend, num_loops=num_loops
+            )
             compiled_loss_fn = self._resolve_compiled_chunked_loss_fn(model, backend)
             with backend.autocast():
                 if compiled_loss_fn is not None:
@@ -307,25 +320,36 @@ class CausalLMTask:
         )
 
     def _resolve_compiled_hidden_fn(
-        self, model: nn.Module, backend: ExecutionBackend | None = None
+        self,
+        model: nn.Module,
+        backend: ExecutionBackend | None = None,
+        *,
+        num_loops: int | None = None,
     ):
         if self.training_view is None:
             return None
         if getattr(model, "_orig_mod", None) is None:
             return None
         dev_type = getattr(getattr(backend, "device", None), "type", None)
-        key = (id(model), id(self.training_view), dev_type)
-        if self._compiled_hidden_key != key:
+        static_loops = int(num_loops) if num_loops is not None else None
+        key = (id(model), id(self.training_view), dev_type, static_loops)
+        cached = self._compiled_hidden_fns.get(key)
+        if cached is None:
             provider = self.training_view.hidden_state_provider
-            fn = lambda cur, inputs: provider(cur, inputs)
-            if dev_type == "tpu":
-                self._compiled_hidden_fn = torch.compile(
-                    fn, backend="tpu", dynamic=False
-                )
+            if static_loops is None:
+                fn = lambda cur, inputs: provider(cur, inputs)
             else:
-                self._compiled_hidden_fn = torch.compile(fn)
-            self._compiled_hidden_key = key
-        return self._compiled_hidden_fn
+                fn = lambda cur, inputs, _nl=static_loops: provider(
+                    cur, {**inputs, "num_loops": _nl}
+                )
+            if dev_type == "tpu":
+                cached = torch.compile(fn, backend="tpu", dynamic=False)
+            else:
+                cached = torch.compile(fn)
+            self._compiled_hidden_fns[key] = cached
+        self._compiled_hidden_key = key
+        self._compiled_hidden_fn = cached
+        return cached
 
     def _resolve_compiled_chunked_loss_fn(
         self, model: nn.Module, backend: ExecutionBackend | None = None

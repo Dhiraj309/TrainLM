@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Optional
 
 import torch
@@ -47,6 +48,21 @@ class LaughLMLoopModel(TrainLMPreTrainedModel):
         self.norm = nn.RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.gradient_checkpointing = False
         self.post_init()
+
+    def _apply_deep_init_scale(self) -> None:
+        if not bool(getattr(self.config, "deep_init_scale", False)):
+            return
+        effective_layers = max(1, int(self.config.effective_num_layers()))
+        scale = 1.0 / math.sqrt(2.0 * effective_layers)
+        with torch.no_grad():
+            for block_list in (self.prelude_layers, self.core_layers, self.coda_layers):
+                for layer in block_list:
+                    layer.self_attn.o_proj.weight.mul_(scale)
+                    layer.mlp.down_proj.weight.mul_(scale)
+
+    def init_weights(self) -> None:
+        super().init_weights()
+        self._apply_deep_init_scale()
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -229,6 +245,10 @@ class LaughLMLoopForCausalLM(TrainLMPreTrainedModel):
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.post_init()
+
+    def init_weights(self) -> None:
+        super().init_weights()
+        self.model._apply_deep_init_scale()
 
     def get_input_embeddings(self):
         return self.model.get_input_embeddings()

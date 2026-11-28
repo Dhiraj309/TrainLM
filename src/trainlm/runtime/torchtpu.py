@@ -349,9 +349,13 @@ class TorchTPURuntime(TorchRuntime):
             return
         from pathlib import Path
 
-        path = Path(cache_dir).expanduser()
-        path.mkdir(parents=True, exist_ok=True)
-        resolved = str(path)
+        raw = str(cache_dir).strip()
+        if raw.startswith("gs://"):
+            resolved = raw
+        else:
+            path = Path(raw).expanduser()
+            path.mkdir(parents=True, exist_ok=True)
+            resolved = str(path)
         os.environ.setdefault("TORCH_TPU_CACHE_DIR", resolved)
         os.environ.setdefault("TORCH_TPU_TIER3_COMPILATION_CACHE_ROOT", resolved)
         os.environ.setdefault("XLA_COMPILATION_CACHE_PATH", resolved)
