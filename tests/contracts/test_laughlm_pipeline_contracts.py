@@ -267,3 +267,13 @@ def test_laughlm_loop_stage1_presets_and_eval_scaling_contracts():
     assert slice_args.gcs_shard_dir == "gs://bucket/shards"
     assert launch_tpu_slice.main(["--gcs-shard-dir", "gs://bucket/shards", "--dry-run"]) == 0
 
+
+def test_watch_and_upload_preserves_hf_model_card_readme():
+    import inspect
+    from scripts.laughlm import watch_and_upload
+
+    src = inspect.getsource(watch_and_upload.upload_new_checkpoints)
+    assert "path_in_repo=ckpt.name" in src
+    assert '"README.md"' in src
+    assert '"README.*"' in src
+
