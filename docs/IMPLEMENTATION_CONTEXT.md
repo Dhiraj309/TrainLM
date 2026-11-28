@@ -1,5 +1,24 @@
 # TrainLM implementation context
 
+**TPU Benchmark & LaughLM Pilot Notebooks Updated for PR #202 + PR #203 (2026-11-28):**
+on branch `feat/03-update-tpu-notebooks-pr202-pr203` (from merged `main`
+`694d3dc`): (1) updated `notebooks/TrainLM_v5e1_MFU_Benchmark.ipynb` to target
+`BRANCH="main"`, export `TORCH_TPU_CACHE_DIR` /
+`TORCH_TPU_TIER3_COMPILATION_CACHE_ROOT` / `XLA_COMPILATION_CACHE_PATH` to
+`/tmp/tpu_compile_cache` prior to importing `torch`/`torch_tpu` (+ container-safe
+THP inspection), and add the 5-config PR #203 Architecture & Pallas Kernel MFU
+Gate (`Baseline`, `+ SegmentIds`, `+ V_1 Value Residual`, `+ QK-Norm & Sigmoid Attn Gate`,
+and `Full Candidate`, `bs=4`, `seq=2048`, `>=50%` total MFU gate summary); (2)
+added `notebooks/LaughLM_Loop_TPU_Pilot.ipynb` covering pre-import cache +
+TPU discovery, toggleable Stage-1 `stage1_base_30b.py` pilot invocation with
+PR #202 + PR #203 flags, held-out shard `29..30` `eval_loop_scaling.py`
+execution saving `eval_loop_scaling.json`, and 4-prompt `R=4` generation with
+`TTFT`/`tok/s` timing; (3) added optional `--output-json` to
+`scripts/laughlm/eval_loop_scaling.py`; and (4) updated `notebooks/README.md`
+and `tests/contracts/test_v5e1_mfu_benchmark_notebook.py` +
+`tests/contracts/test_laughlm_pipeline_contracts.py`. Live TPU execution of
+these notebooks remains owner-run.
+
 **Opt-In Splash `SegmentIds`, `V_1` Value Residuals, QK-Norm & Attention Output Gate (2026-11-28):**
 on branch `feat/02-laughlm-optin-arch-and-splash-segids` (from merged `main`
 `c773dd8`): (1) added `pack_doc_boundary_mask` / `doc_boundary_eos_token_id` to

@@ -15,7 +15,7 @@ def test_v5e1_mfu_benchmark_notebook_is_runnable_and_focused():
         for cell in notebook["cells"]
     )
     code_cells = [cell for cell in notebook["cells"] if cell["cell_type"] == "code"]
-    assert len(code_cells) == 8
+    assert len(code_cells) == 9
     assert all(cell.get("execution_count") is None for cell in code_cells)
     assert all(not cell.get("outputs") for cell in code_cells)
 
@@ -34,15 +34,24 @@ def test_v5e1_mfu_benchmark_notebook_is_runnable_and_focused():
         "RUN_EAGER",
         "RUN_COMPILED",
         "RUN_PROFILER",
+        "RUN_OPTIN_MFU_GATE",
+        "OPTIN_GATE_KEYS",
+        "TORCH_TPU_TIER3_COMPILATION_CACHE_ROOT",
+        "XLA_COMPILATION_CACHE_PATH",
+        "pack_doc_boundary_mask",
+        "use_value_residual",
+        "use_qk_norm",
+        "use_attn_output_gate",
         "USE_SYNTHETIC_DATA",
         "chunked_linear",
         "torch.profiler.profile",
         "trainlm_v5e1_mfu_benchmark.json",
         "--force-reinstall",
-        "feat/laughlm-loop-pallas",
+        'BRANCH = "main"',
         "remote_revision",
         "laughlm-loop-135m-pallas-on",
         "laughlm-loop-135m-pallas-on-bs8",
+        "laughlm-loop-135m-gate-full",
         "is_pallas_recurrent_norm_available()",
         "is_pallas_splash_available()",
     ):
@@ -53,7 +62,54 @@ def test_v5e1_mfu_benchmark_notebook_is_runnable_and_focused():
     assert "RUN_EAGER = False" in config_src
     assert "RUN_COMPILED = True" in config_src
     assert "RUN_PROFILER = False" in config_src
+    assert "RUN_OPTIN_MFU_GATE = True" in config_src
     assert "LinearCausalLMTrainingView" not in source
     assert 'accelerator="auto"' not in source
     assert "native_tpu" in source
+
+
+def test_laughlm_loop_tpu_pilot_notebook_contracts():
+    pilot_path = Path("notebooks/LaughLM_Loop_TPU_Pilot.ipynb")
+    notebook = json.loads(pilot_path.read_text(encoding="utf-8"))
+    assert notebook["nbformat"] == 4
+    assert all(
+        re.fullmatch(r"[a-zA-Z0-9-_]+", cell.get("id", ""))
+        for cell in notebook["cells"]
+    )
+    code_cells = [cell for cell in notebook["cells"] if cell["cell_type"] == "code"]
+    assert len(code_cells) == 4
+    assert all(cell.get("execution_count") is None for cell in code_cells)
+    assert all(not cell.get("outputs") for cell in code_cells)
+    for index, cell in enumerate(code_cells):
+        ast.parse("".join(cell["source"]), filename=f"{pilot_path}:cell-{index}")
+
+    source = "\n".join("".join(cell["source"]) for cell in notebook["cells"])
+    for required in (
+        "TORCH_TPU_TIER3_COMPILATION_CACHE_ROOT",
+        "XLA_COMPILATION_CACHE_PATH",
+        "/tmp/tpu_compile_cache",
+        "discover_tpu",
+        "scripts/laughlm/stage1_base_30b.py",
+        "scripts/laughlm/eval_loop_scaling.py",
+        "--loop-preset",
+        "--shard-start",
+        "--shard-stop",
+        "--max-tokens",
+        "--deep-init-scale",
+        "--loop-depth-schedule",
+        "--doc-boundary-mask",
+        "--use-value-residual",
+        "--use-qk-norm",
+        "--use-attn-output-gate",
+        "--eval-shard-start",
+        "--eval-shard-stop",
+        "--output-json",
+        "eval_loop_scaling.json",
+        "Once upon a time",
+        "The key difference between",
+        "def fibonacci(n):",
+        "In 1969, engineers",
+    ):
+        assert required in source, f"Missing {required!r} in {pilot_path}"
+
 
