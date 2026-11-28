@@ -96,6 +96,10 @@ def build_135m_loop_config(
     use_pallas_recurrent_norm: bool = True,
     deep_init_scale: bool = False,
     loop_depth_schedule: tuple[int, ...] | None = None,
+    pack_doc_boundary_mask: bool = False,
+    use_value_residual: bool = False,
+    use_qk_norm: bool = False,
+    use_attn_output_gate: bool = False,
 ) -> Any:
     """Return the LaughLM-Loop-135M preset aligned for v5e-1 MXUs."""
     from trainlm.config import LaughLMLoopConfig
@@ -106,6 +110,10 @@ def build_135m_loop_config(
         use_pallas_recurrent_norm=use_pallas_recurrent_norm,
         deep_init_scale=deep_init_scale,
         loop_depth_schedule=loop_depth_schedule,
+        pack_doc_boundary_mask=pack_doc_boundary_mask,
+        use_value_residual=use_value_residual,
+        use_qk_norm=use_qk_norm,
+        use_attn_output_gate=use_attn_output_gate,
     )
 
 
@@ -117,6 +125,10 @@ def load_or_init_loop_135m_model(
     use_pallas_recurrent_norm: bool = True,
     deep_init_scale: bool = False,
     loop_depth_schedule: tuple[int, ...] | None = None,
+    pack_doc_boundary_mask: bool = False,
+    use_value_residual: bool = False,
+    use_qk_norm: bool = False,
+    use_attn_output_gate: bool = False,
 ) -> Any:
     """Initialize a fresh LaughLM-Loop-135M model or load from checkpoint."""
     from trainlm.model import LaughLMLoopForCausalLM
@@ -126,6 +138,8 @@ def load_or_init_loop_135m_model(
         model_dir = ckpt_path / "model" if (ckpt_path / "model").is_dir() else ckpt_path
         model = LaughLMLoopForCausalLM.from_pretrained(str(model_dir))
         model.config.use_pallas_recurrent_norm = bool(use_pallas_recurrent_norm)
+        if pack_doc_boundary_mask:
+            model.config.pack_doc_boundary_mask = True
         if loop_depth_schedule is not None:
             model.config.loop_depth_schedule = tuple(loop_depth_schedule)
         model.config.use_cache = False
@@ -137,6 +151,10 @@ def load_or_init_loop_135m_model(
         use_pallas_recurrent_norm=use_pallas_recurrent_norm,
         deep_init_scale=deep_init_scale,
         loop_depth_schedule=loop_depth_schedule,
+        pack_doc_boundary_mask=pack_doc_boundary_mask,
+        use_value_residual=use_value_residual,
+        use_qk_norm=use_qk_norm,
+        use_attn_output_gate=use_attn_output_gate,
     )
     return LaughLMLoopForCausalLM(cfg)
 

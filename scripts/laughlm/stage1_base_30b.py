@@ -118,6 +118,27 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Scale residual o_proj/down_proj weights by 1/sqrt(2*effective_layers) at init.",
     )
     parser.add_argument(
+        "--doc-boundary-mask",
+        dest="pack_doc_boundary_mask",
+        action="store_true",
+        help="Mask packed sequences at EOS document boundaries (Splash SegmentIds / SDPA mask).",
+    )
+    parser.add_argument(
+        "--use-value-residual",
+        action="store_true",
+        help="Enable opt-in V1 value residuals from first layer into later blocks.",
+    )
+    parser.add_argument(
+        "--use-qk-norm",
+        action="store_true",
+        help="Enable opt-in RMSNorm on query and key heads before RoPE.",
+    )
+    parser.add_argument(
+        "--use-attn-output-gate",
+        action="store_true",
+        help="Enable opt-in per-head sigmoid attention output gate before o_proj.",
+    )
+    parser.add_argument(
         "--loop-depth-schedule",
         default=None,
         help="Optional comma-separated host-side loop cycle (e.g. '2,4,4,6').",
@@ -234,6 +255,10 @@ def main(argv: list[str] | None = None) -> int:
                     use_pallas_recurrent_norm=args.use_pallas_recurrent_norm,
                     deep_init_scale=args.deep_init_scale,
                     loop_depth_schedule=args.loop_depth_schedule,
+                    pack_doc_boundary_mask=args.pack_doc_boundary_mask,
+                    use_value_residual=args.use_value_residual,
+                    use_qk_norm=args.use_qk_norm,
+                    use_attn_output_gate=args.use_attn_output_gate,
                 )
                 model = LaughLMLoopForCausalLM(cfg)
             else:
@@ -320,6 +345,10 @@ def main(argv: list[str] | None = None) -> int:
             use_pallas_recurrent_norm=args.use_pallas_recurrent_norm,
             deep_init_scale=args.deep_init_scale,
             loop_depth_schedule=args.loop_depth_schedule,
+            pack_doc_boundary_mask=args.pack_doc_boundary_mask,
+            use_value_residual=args.use_value_residual,
+            use_qk_norm=args.use_qk_norm,
+            use_attn_output_gate=args.use_attn_output_gate,
         )
     else:
         model = load_or_init_135m_model(max_position_embeddings=max(4096, args.seq_len))

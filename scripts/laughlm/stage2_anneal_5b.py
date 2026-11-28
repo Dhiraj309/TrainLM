@@ -61,6 +61,27 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--torch-compile-mode", default="default", choices=("default",))
     parser.add_argument("--no-compile", action="store_true")
     parser.add_argument("--deep-init-scale", action="store_true")
+    parser.add_argument(
+        "--doc-boundary-mask",
+        dest="pack_doc_boundary_mask",
+        action="store_true",
+        help="Mask packed sequences at EOS document boundaries (Splash SegmentIds / SDPA mask).",
+    )
+    parser.add_argument(
+        "--use-value-residual",
+        action="store_true",
+        help="Enable opt-in V1 value residuals from first layer into later blocks.",
+    )
+    parser.add_argument(
+        "--use-qk-norm",
+        action="store_true",
+        help="Enable opt-in RMSNorm on query and key heads before RoPE.",
+    )
+    parser.add_argument(
+        "--use-attn-output-gate",
+        action="store_true",
+        help="Enable opt-in per-head sigmoid attention output gate before o_proj.",
+    )
     parser.add_argument("--loop-depth-schedule", default=None)
     parser.add_argument("--resume", default=None, help="Stage 2 checkpoint path or 'latest'.")
     parser.add_argument("--dry-run", action="store_true", help="Run a 2-step CPU/synthetic preflight check.")
@@ -125,11 +146,44 @@ def main(argv: list[str] | None = None) -> int:
         ds = make_synthetic_dataset(8, 128, vocab_size=VOCAB_SIZE)
         with tempfile.TemporaryDirectory() as tmp:
             init_arg = None if args.init_checkpoint == "synthetic" else args.init_checkpoint
-            model = load_or_init_135m_model(
-                init_checkpoint=init_arg,
-                max_position_embeddings=128,
-                rope_theta=args.rope_theta,
-            )
+            if init_arg is None and any(
+                (
+                    args.pack_doc_boundary_mask,
+                    args.use_value_residual,
+                    args.use_qk_norm,
+                    args.use_attn_output_gate,
+                )
+            ):
+                from trainlm.config import LaughLMLoopConfig
+                from trainlm.model import LaughLMLoopForCausalLM
+
+                cfg = LaughLMLoopConfig.laughlm_loop_135m(
+                    vocab_size=VOCAB_SIZE,
+                    hidden_size=128,
+                    intermediate_size=256,
+                    num_attention_heads=2,
+                    num_key_value_heads=1,
+                    num_prelude_layers=1,
+                    num_core_layers=1,
+                    num_coda_layers=1,
+                    max_position_embeddings=128,
+                    use_pallas_recurrent_norm=False,
+                    deep_init_scale=args.deep_init_scale,
+                    loop_depth_schedule=args.loop_depth_schedule,
+                    pack_doc_boundary_mask=args.pack_doc_boundary_mask,
+                    use_value_residual=args.use_value_residual,
+                    use_qk_norm=args.use_qk_norm,
+                    use_attn_output_gate=args.use_attn_output_gate,
+                )
+                model = LaughLMLoopForCausalLM(cfg)
+            else:
+                model = load_or_init_135m_model(
+                    init_checkpoint=init_arg,
+                    max_position_embeddings=128,
+                    rope_theta=args.rope_theta,
+                )
+                if args.pack_doc_boundary_mask:
+                    model.config.pack_doc_boundary_mask = True
             t_args = TrainLMTrainingArguments(
                 output_dir=tmp,
                 accelerator="cpu",
@@ -198,6 +252,8 @@ def main(argv: list[str] | None = None) -> int:
         max_position_embeddings=args.seq_len,
         rope_theta=args.rope_theta,
     )
+    if args.pack_doc_boundary_mask:
+        model.config.pack_doc_boundary_mask = True
     t_args = build_training_arguments(
         args,
         accel_kind=accel_kind,
