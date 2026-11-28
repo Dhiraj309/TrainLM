@@ -391,3 +391,83 @@ def test_preimport_tpu_cache_and_eval_accelerator_sync(tmp_path: Path):
     assert "accelerator" in sync_src and "synchronize" in sync_src
 
 
+def test_optin_arch_and_doc_boundary_cli_flags():
+    import importlib.util
+    from scripts.laughlm import stage1_base_30b, stage2_anneal_5b
+
+    s1_off = stage1_base_30b.parse_args(["--loop-preset", "pilot-1b"])
+    assert s1_off.pack_doc_boundary_mask is False
+    assert s1_off.use_value_residual is False
+    assert s1_off.use_qk_norm is False
+    assert s1_off.use_attn_output_gate is False
+
+    s1_on = stage1_base_30b.parse_args(
+        [
+            "--loop-preset",
+            "pilot-1b",
+            "--doc-boundary-mask",
+            "--use-value-residual",
+            "--use-qk-norm",
+            "--use-attn-output-gate",
+        ]
+    )
+    assert s1_on.pack_doc_boundary_mask is True
+    assert s1_on.use_value_residual is True
+    assert s1_on.use_qk_norm is True
+    assert s1_on.use_attn_output_gate is True
+
+    s2_off = stage2_anneal_5b.parse_args(["--init-checkpoint", "runs/s1/final_model"])
+    assert s2_off.pack_doc_boundary_mask is False
+    assert s2_off.use_value_residual is False
+    assert s2_off.use_qk_norm is False
+    assert s2_off.use_attn_output_gate is False
+
+    s2_on = stage2_anneal_5b.parse_args(
+        [
+            "--init-checkpoint",
+            "runs/s1/final_model",
+            "--doc-boundary-mask",
+            "--use-value-residual",
+            "--use-qk-norm",
+            "--use-attn-output-gate",
+        ]
+    )
+    assert s2_on.pack_doc_boundary_mask is True
+    assert s2_on.use_value_residual is True
+    assert s2_on.use_qk_norm is True
+    assert s2_on.use_attn_output_gate is True
+
+    if (
+        importlib.util.find_spec("torch") is not None
+        and importlib.util.find_spec("transformers") is not None
+    ):
+        assert (
+            stage1_base_30b.main(
+                [
+                    "--loop-preset",
+                    "pilot-1b",
+                    "--doc-boundary-mask",
+                    "--use-value-residual",
+                    "--use-qk-norm",
+                    "--use-attn-output-gate",
+                    "--dry-run",
+                ]
+            )
+            == 0
+        )
+        assert (
+            stage2_anneal_5b.main(
+                [
+                    "--init-checkpoint",
+                    "synthetic",
+                    "--doc-boundary-mask",
+                    "--use-value-residual",
+                    "--use-qk-norm",
+                    "--use-attn-output-gate",
+                    "--dry-run",
+                ]
+            )
+            == 0
+        )
+
+

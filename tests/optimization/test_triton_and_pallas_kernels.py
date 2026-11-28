@@ -767,3 +767,132 @@ def test_splash_bwd_uses_vmap_and_compiled_tpu_prefers_xla_chunked_loss(monkeypa
     # Only first 64 cols are non-zero sqrt(2), remaining 64 zero-padded -> mean = sqrt(2) / 2.
     assert abs(seen_shapes[0][1] - (2.0 ** 0.5) / 2.0) < 1e-4
 
+
+def test_pallas_splash_attention_segment_ids_sdpa_and_tpu_bridge(monkeypatch) -> None:
+    import types
+    from trainlm.kernels.pallas import splash_attention as sa_mod
+
+    # 1. CPU SDPA fallback respects 2D segment_ids (doc 2 outputs invariant to doc 1 prefix).
+    torch.manual_seed(0)
+    q1 = torch.randn(1, 2, 8, 16)
+    k1 = torch.randn(1, 1, 8, 16)
+    v1 = torch.randn(1, 1, 8, 16)
+    q2 = q1.clone()
+    k2 = k1.clone()
+    v2 = v1.clone()
+    k2[:, :, :4, :] = torch.randn(1, 1, 4, 16)
+    v2[:, :, :4, :] = torch.randn(1, 1, 4, 16)
+    seg = torch.tensor([[0, 0, 0, 0, 1, 1, 1, 1]], dtype=torch.int32)
+
+    out1 = sa_mod.pallas_splash_attention(q1, k1, v1, causal=True, segment_ids=seg)
+    out2 = sa_mod.pallas_splash_attention(q2, k2, v2, causal=True, segment_ids=seg)
+    torch.testing.assert_close(out1[:, 4:, :, :], out2[:, 4:, :, :], atol=1e-6, rtol=1e-6)
+
+    with pytest.raises(ValueError, match="segment_ids"):
+        sa_mod.pallas_splash_attention(q1, k1, v1, causal=True, segment_ids=seg.squeeze(0))
+
+    # 2. TPU Pallas bridge passes has_segment_ids=True and int32 segment_ids to fwd_op.
+    class _FakeTPUTensor(torch.Tensor):
+        @property
+        def device(self):  # type: ignore[override]
+            return types.SimpleNamespace(type="tpu")
+
+    seen_calls: list[tuple[bool | None, torch.dtype, tuple[int, ...]]] = []
+
+    def fake_fwd_seg(q, k, v, segment_ids):
+        del k, v
+        seen_calls.append((True, segment_ids.dtype, tuple(segment_ids.shape)))
+        return q.clone(), torch.zeros(q.shape[0], q.shape[1], q.shape[2], dtype=torch.float32)
+
+    monkeypatch.setattr(sa_mod, "is_pallas_splash_available", lambda: True)
+    monkeypatch.setattr(
+        sa_mod,
+        "_build_splash_ops",
+        lambda **kwargs: (
+            seen_calls.append((kwargs.get("has_segment_ids"), torch.int32, ()))
+            or ("fake_fwd_seg", "fake_bwd_seg")
+        ),
+    )
+    monkeypatch.setattr(sa_mod, "_resolve_pallas_op", lambda name: fake_fwd_seg)
+
+    q_t = torch.randn(2, 4, 128, 128).as_subclass(_FakeTPUTensor)
+    k_t = torch.randn(2, 1, 128, 128).as_subclass(_FakeTPUTensor)
+    v_t = torch.randn(2, 1, 128, 128).as_subclass(_FakeTPUTensor)
+    seg_t = torch.ones((2, 128), dtype=torch.int64).as_subclass(_FakeTPUTensor)
+    out_t = sa_mod.pallas_splash_attention(q_t, k_t, v_t, causal=True, segment_ids=seg_t)
+    assert out_t.shape == (2, 128, 4, 128)
+    assert seen_calls == [(True, torch.int32, ()), (True, torch.int32, (2, 128))]
+
+
+def test_pallas_splash_jax_segment_ids_interpret_optional() -> None:
+    jax = pytest.importorskip("jax")
+    import jax.numpy as jnp
+    from jax.experimental.pallas.ops.tpu.splash_attention import (
+        splash_attention_kernel,
+        splash_attention_mask,
+    )
+    from jax.experimental.pallas.ops.tpu.splash_attention.splash_attention_kernel import (
+        QKVLayout,
+    )
+
+    block_sizes = splash_attention_kernel.BlockSizes(
+        block_q=128,
+        block_kv=128,
+        block_kv_compute=128,
+        block_q_dkv=128,
+        block_kv_dkv=128,
+        block_kv_dkv_compute=128,
+        use_fused_bwd_kernel=True,
+        q_layout=QKVLayout.HEAD_DIM_MINOR,
+        k_layout=QKVLayout.HEAD_DIM_MINOR,
+        v_layout=QKVLayout.HEAD_DIM_MINOR,
+    )
+    multi_head_mask = splash_attention_mask.MultiHeadMask(
+        masks=(splash_attention_mask.CausalMask(shape=(128, 128)),) * 2
+    )
+    splash_kernel = splash_attention_kernel.make_splash_mqa(
+        mask=multi_head_mask,
+        head_shards=1,
+        q_seq_shards=1,
+        block_sizes=block_sizes,
+        interpret=True,
+    )
+    key = jax.random.PRNGKey(0)
+    k1, k2, k3 = jax.random.split(key, 3)
+    q = jax.random.normal(k1, (2, 128, 128), dtype=jnp.float32) * (128.0 ** -0.5)
+    k = jax.random.normal(k2, (128, 128), dtype=jnp.float32)
+    v = jax.random.normal(k3, (128, 128), dtype=jnp.float32)
+    seg = jnp.concatenate([jnp.zeros(64, dtype=jnp.int32), jnp.ones(64, dtype=jnp.int32)])
+    seg_obj = splash_attention_kernel.SegmentIds(q=seg, kv=seg)
+    try:
+        out, _ = splash_attention_kernel._splash_attention_forward(
+            splash_kernel.fwd_mask_info,
+            q,
+            k,
+            v,
+            segment_ids=seg_obj,
+            sinks=None,
+            mask_value=splash_attention_kernel.DEFAULT_MASK_VALUE,
+            is_mqa=True,
+            block_sizes=block_sizes,
+            save_residuals=True,
+            interpret=True,
+        )
+    except Exception as exc:
+        pytest.skip(f"JAX Splash CPU interpret unavailable: {exc}")
+    ref_out = torch.nn.functional.scaled_dot_product_attention(
+        torch.from_numpy(jax.device_get(q)[None, ...]),
+        torch.from_numpy(jax.device_get(k)[None, None, ...]),
+        torch.from_numpy(jax.device_get(v)[None, None, ...]),
+        attn_mask=(
+            torch.ones((128, 128), dtype=torch.bool).tril()[None, None, :, :]
+            & (
+                torch.from_numpy(jax.device_get(seg))[None, None, :, None]
+                == torch.from_numpy(jax.device_get(seg))[None, None, None, :]
+            )
+        ),
+        scale=1.0,
+        enable_gqa=True,
+    ).squeeze(0)
+    torch.testing.assert_close(torch.from_numpy(jax.device_get(out)), ref_out, atol=1e-3, rtol=1e-3)
+

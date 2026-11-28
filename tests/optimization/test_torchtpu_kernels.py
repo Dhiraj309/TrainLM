@@ -126,3 +126,65 @@ def test_loss_catalog_plans_for_torchtpu_backend():
 
     assert plan.decisions[0].selected_provider == "trainlm.chunked_linear_ce"
     assert probe_torchtpu_splash_kernel() is None or callable(probe_torchtpu_splash_kernel())
+
+
+def test_torchtpu_splash_provider_accepts_and_forwards_segment_ids():
+    seen = []
+
+    def kernel(
+        query,
+        key,
+        value,
+        *,
+        causal,
+        scale,
+        query_heads,
+        key_value_heads,
+        sliding_window,
+        block_q,
+        block_k,
+        segment_ids=None,
+    ):
+        seen.append((segment_ids, causal, query_heads, key_value_heads, block_q, block_k))
+        return query.transpose(1, 2)
+
+    runtime = TorchTPUSplashAttentionRuntime(
+        torch_tpu_version="0.2.0",
+        tested_torch_tpu_versions=("0.2.0",),
+        kernel=kernel,
+        backward_verified=True,
+    )
+    spec = CanonicalAttentionSpec(
+        schema_version=1,
+        layout="mqa",
+        query_heads=4,
+        key_value_heads=1,
+        head_dim=8,
+        position_encoding="rope",
+        mask=AttentionMaskSpec(layout="causal", segment_ids=True),
+    )
+    provider = torchtpu_splash_attention_provider(runtime, spec)
+    assert provider.supports_segments is True
+
+    q = torch.randn(2, 4, 6, 8)
+    k = torch.randn(2, 1, 6, 8)
+    v = torch.randn(2, 1, 6, 8)
+    seg = torch.tensor([[0, 0, 0, 1, 1, 1], [0, 0, 1, 1, 2, 2]], dtype=torch.int32)
+    out, weights = provider.attention_forward(object(), q, k, v, segment_ids=seg)
+    assert weights is None
+    assert out.shape == (2, 6, 4, 8)
+    assert len(seen) == 1 and torch.equal(seen[0][0], seg)
+
+    with pytest.raises(ValueError, match="2D"):
+        provider.attention_forward(object(), q, k, v, segment_ids=seg.reshape(-1))
+
+    unverified = TorchTPUSplashAttentionRuntime(
+        torch_tpu_version="0.2.0",
+        tested_torch_tpu_versions=("0.2.0",),
+        kernel=kernel,
+        backward_verified=True,
+        segment_ids_verified=False,
+    )
+    with pytest.raises(RuntimeError, match="segment_ids_verified"):
+        torchtpu_splash_attention_provider(unverified, spec)
+

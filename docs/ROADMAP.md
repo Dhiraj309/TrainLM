@@ -1,5 +1,18 @@
 # TrainLM Roadmap
 
+**Opt-In Splash `SegmentIds`, `V_1` Value Residuals, QK-Norm & Attention Output Gate (2026-11-28):**
+on branch `feat/02-laughlm-optin-arch-and-splash-segids` (from merged `main`
+`c773dd8`): added strictly opt-in (`False`/`None` by default, zero legacy state-dict
+key changes) `pack_doc_boundary_mask` / `doc_boundary_eos_token_id` +
+`compute_packed_doc_ids()` (`SegmentIds` support in `splash_attention.py`
+fwd/bwd, `torchtpu_attention.py`, and SDPA fallback mask), `use_value_residual`
+(per-KV-head `value_residual_logit` init `-2.0` mixing from layer-0 `v_anchor`),
+`use_qk_norm` (pre-RoPE head-dim `RMSNorm`), and `use_attn_output_gate`
+(per-head sigmoid output gate before `o_proj`), wired with `--doc-boundary-mask`,
+`--use-value-residual`, `--use-qk-norm`, and `--use-attn-output-gate` CLI flags
+on `stage1_base_30b.py` and `stage2_anneal_5b.py`. Verified on CPU/CI; live TPU
+`v5e-1` / `v6e-8` Pallas Splash `SegmentIds` and training validation remain pending.
+
 **LaughLM Script Hardening, Pre-Import TPU Cache, Deep-Init & Multi-Depth Cycling (2026-11-28):**
 on branch `feat/01-laughlm-hardening-and-multidepth` (from merged `main`
 `19ab320`): fixed the silent `max_steps=1000` cap and WSD `warmup_fraction`
