@@ -37,6 +37,7 @@ from .trainlm import (
     TrainLMForCausalLM,
     TrainLMModel,
     TrainLMPreTrainedModel,
+    compute_packed_doc_ids,
 )
 
 __all__ = [
@@ -58,6 +59,7 @@ __all__ = [
     "TrainLMPreTrainedModel",
     "TrainLMModel",
     "TrainLMForCausalLM",
+    "compute_packed_doc_ids",
     "dispatch_model_batch",
     "explain_huggingface_compatibility",
     "load_huggingface_causal_lm",

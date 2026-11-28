@@ -193,7 +193,10 @@ def _canonical_attention_spec(
         key_value_heads=kv_heads,
         head_dim=head_dim,
         position_encoding=pos_kind,
-        mask=AttentionMaskSpec(layout="causal"),
+        mask=AttentionMaskSpec(
+            layout="causal",
+            segment_ids=bool(getattr(config, "pack_doc_boundary_mask", False)),
+        ),
     )
 
 

@@ -27,6 +27,8 @@ class TrainLMDecoderLayer(nn.Module):
     def __init__(
         self,
         config: TrainLMConfig,
+        *,
+        is_first_layer: bool = False,
     ) -> None:
         super().__init__()
 
@@ -39,6 +41,7 @@ class TrainLMDecoderLayer(nn.Module):
 
         self.self_attn = TrainLMAttention(
             config,
+            is_first_layer=is_first_layer,
         )
 
         self.post_attention_layernorm = nn.RMSNorm(
@@ -55,7 +58,10 @@ class TrainLMDecoderLayer(nn.Module):
         hidden_states: torch.Tensor,
         position_ids: torch.LongTensor,
         attention_mask: torch.Tensor | None = None,
-    ) -> torch.Tensor:
+        segment_ids: torch.Tensor | None = None,
+        v_anchor: torch.Tensor | None = None,
+        return_v_state: bool = False,
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         """
         Apply a decoder layer.
 
@@ -72,22 +78,41 @@ class TrainLMDecoderLayer(nn.Module):
         attention_mask:
             Optional attention mask accepted by
             torch.nn.functional.scaled_dot_product_attention().
+        segment_ids:
+            Optional packed document boundary IDs of shape
+            ``(batch_size, sequence_length)``.
+        v_anchor:
+            Optional first-layer value tensor for ``V_1`` residual mixing.
+        return_v_state:
+            If True, return ``(hidden_states, raw_value_states)``.
 
         Returns
         -------
-        torch.Tensor
-            Shape:
-                (batch_size, sequence_length, hidden_size)
+        torch.Tensor or tuple[torch.Tensor, torch.Tensor]
+            Updated hidden states (and optional raw ``v_proj`` states).
         """
 
-        hidden_states = hidden_states + self.self_attn(
+        attn_res = self.self_attn(
             self.input_layernorm(hidden_states),
             position_ids,
             attention_mask,
+            segment_ids=segment_ids,
+            v_anchor=v_anchor,
+            return_v_state=return_v_state,
         )
+        if return_v_state:
+            attn_out, v_state = attn_res
+        else:
+            attn_out = attn_res
+            v_state = None
+
+        hidden_states = hidden_states + attn_out
 
         hidden_states = hidden_states + self.mlp(
             self.post_attention_layernorm(hidden_states),
         )
 
+        if return_v_state:
+            assert v_state is not None
+            return hidden_states, v_state
         return hidden_states

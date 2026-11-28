@@ -22,6 +22,7 @@ class TorchTPUSplashAttentionRuntime:
     backward_verified: bool
     grouped_query_verified: bool = True
     sliding_window_verified: bool = False
+    segment_ids_verified: bool = True
     block_q: int = 128
     block_k: int = 128
 
@@ -36,7 +37,12 @@ class TorchTPUSplashAttentionRuntime:
             raise ValueError("tested_torch_tpu_versions must contain versions.")
         if not callable(self.kernel):
             raise TypeError("kernel must be callable.")
-        for name in ("backward_verified", "grouped_query_verified", "sliding_window_verified"):
+        for name in (
+            "backward_verified",
+            "grouped_query_verified",
+            "sliding_window_verified",
+            "segment_ids_verified",
+        ):
             if not isinstance(getattr(self, name), bool):
                 raise TypeError(f"{name} must be boolean.")
         for name in ("block_q", "block_k"):
@@ -69,8 +75,10 @@ def torchtpu_splash_attention_provider(
         raise RuntimeError(
             "Grouped-query Splash Attention requires grouped_query_verified=True."
         )
-    if spec.mask.segment_ids:
-        raise ValueError("TorchTPU Splash Attention does not support segment masks.")
+    if spec.mask.segment_ids and not runtime.segment_ids_verified:
+        raise RuntimeError(
+            "Segmented Splash Attention requires segment_ids_verified=True."
+        )
     if (
         spec.mask.layout == "causal_sliding_window"
         and not runtime.sliding_window_verified
@@ -83,10 +91,17 @@ def torchtpu_splash_attention_provider(
 
     mapping = KVHeadMapping(spec.query_heads, spec.key_value_heads)
     supports_pad_head_dim = False
+    supports_segment_ids = False
     try:
-        supports_pad_head_dim = "pad_head_dim" in inspect.signature(runtime.kernel).parameters
+        kernel_sig = inspect.signature(runtime.kernel)
+        supports_pad_head_dim = "pad_head_dim" in kernel_sig.parameters
+        supports_segment_ids = "segment_ids" in kernel_sig.parameters or any(
+            param.kind == inspect.Parameter.VAR_KEYWORD
+            for param in kernel_sig.parameters.values()
+        )
     except (TypeError, ValueError):
         supports_pad_head_dim = False
+        supports_segment_ids = False
     pad_head_dim = os.environ.get("TRAINLM_SPLASH_PAD_HEAD_DIM", "") == "1"
 
     def attention_forward(
@@ -97,9 +112,12 @@ def torchtpu_splash_attention_provider(
         attention_mask: Any | None = None,
         dropout: float = 0.0,
         scaling: float | None = None,
+        segment_ids: Any | None = None,
         **kwargs: Any,
     ) -> tuple[Any, None]:
-        del module, kwargs
+        del module
+        if segment_ids is None:
+            segment_ids = kwargs.get("segment_ids")
         if attention_mask is not None:
             raise ValueError(
                 "TorchTPU Splash Attention uses its registered causal mask."
@@ -115,6 +133,24 @@ def torchtpu_splash_attention_provider(
             "block_q": runtime.block_q,
             "block_k": runtime.block_k,
         }
+        if segment_ids is not None:
+            if not runtime.segment_ids_verified:
+                raise RuntimeError(
+                    "Segmented Splash Attention requires segment_ids_verified=True."
+                )
+            if not supports_segment_ids:
+                raise ValueError(
+                    "Active TorchTPU Splash Attention kernel does not accept segment_ids."
+                )
+            seg_shape = getattr(segment_ids, "shape", None)
+            if getattr(segment_ids, "ndim", None) != 2 or seg_shape != (
+                query.shape[0],
+                query.shape[2],
+            ):
+                raise ValueError(
+                    "segment_ids must be a 2D (batch_size, seq_len) tensor matching query."
+                )
+            kernel_kwargs["segment_ids"] = segment_ids
         if supports_pad_head_dim and pad_head_dim:
             kernel_kwargs["pad_head_dim"] = True
         output = runtime.kernel(query, key, value, **kernel_kwargs)
@@ -131,6 +167,7 @@ def torchtpu_splash_attention_provider(
         layouts=(spec.layout,),
         mask_layouts=(spec.mask.layout,),
         position_encodings=(spec.position_encoding,),
+        supports_segments=runtime.segment_ids_verified,
     )
 
 

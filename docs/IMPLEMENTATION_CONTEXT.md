@@ -1,5 +1,31 @@
 # TrainLM implementation context
 
+**Opt-In Splash `SegmentIds`, `V_1` Value Residuals, QK-Norm & Attention Output Gate (2026-11-28):**
+on branch `feat/02-laughlm-optin-arch-and-splash-segids` (from merged `main`
+`c773dd8`): (1) added `pack_doc_boundary_mask` / `doc_boundary_eos_token_id` to
+`TrainLMConfig` (`src/trainlm/config/configuration_trainlm.py`), implemented
+`compute_packed_doc_ids()` (`EOS` stays in finishing doc, next token increments
+`int32` segment ID) in `modeling_trainlm.py` (re-exported from `loop.py` and
+`trainlm.model`), wired 2D `segment_ids` through `TrainLMModel`,
+`LaughLMLoopModel`, `TrainLMDecoderLayer`, `TrainLMAttention`,
+`torchtpu_splash_attention_provider` (`src/trainlm/optimization/torchtpu_attention.py`),
+`torchtpu_kernels.py`, and Pallas Splash forward/backward (`SegmentIds` +
+4-input custom-op schema when `has_segment_ids=True`, preserving zero-overhead
+3-input fast path when disabled) plus CPU/CUDA SDPA causal+segment mask; (2)
+added opt-in `use_value_residual` capturing layer-0 raw `v_proj` `v_anchor`
+(`prelude_layers[0]` when `num_prelude_layers > 0` or `core_layers[0]` pass 0)
+and registering per-KV-head `value_residual_logit` (init `-2.0`) on subsequent
+blocks; (3) added opt-in `use_qk_norm` (pre-RoPE `nn.RMSNorm(head_dim)`) and
+`use_attn_output_gate` (`o_gate_proj` per-head sigmoid gate prior to `o_proj`)
+in `src/trainlm/model/trainlm/attention.py`; (4) exposed `--doc-boundary-mask`,
+`--use-value-residual`, `--use-qk-norm`, and `--use-attn-output-gate` in
+`stage1_base_30b.py`, `stage2_anneal_5b.py`, and `scripts/laughlm/common.py`;
+and (5) added backward-compatibility, cross-doc leak-freedom, gradient/`torch.compile`,
+Splash provider/kernel, and CLI tests in `tests/model/test_laughlm_loop.py`,
+`tests/optimization/`, and `tests/contracts/test_laughlm_pipeline_contracts.py`.
+Live TPU validation of Pallas Splash `SegmentIds` and these opt-in features
+remains pending on owner TPU hardware.
+
 **LaughLM Script Hardening, Pre-Import TPU Cache, Deep-Init & Multi-Depth Cycling (2026-11-28):**
 on branch `feat/01-laughlm-hardening-and-multidepth` (from merged `main`
 `19ab320`): (1) added `--max-steps` (default `None`), `--shard-start`/
